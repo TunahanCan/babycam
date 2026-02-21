@@ -1,6 +1,6 @@
 package com.example.babycam.ui.theme
 
-import android.graphics.Color
+import androidx.compose.ui.graphics.Color
 
 val Purple80 = Color(0xFFD0BCFF)
 val PurpleGrey80 = Color(0xFFCCC2DC)
