@@ -14,6 +14,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -56,10 +57,12 @@ class MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 // repeatOnLifecycle ile yalnızca ekran görünür durumdayken log akışını
                 // toplayıp UI'yı güncelliyoruz; bu enerji tüketimini azaltır.
-                AppLogBuffer.logs.collectLatest { logs ->
+                AppLogBuffer.logs
+                    .sample(300)
+                    .collectLatest { logs ->
                     // Tüm logları tek bir metin halinde gösteriyoruz. Yeni kayıt geldiğinde
                     // otomatik kaydırma yaparak en son mesajın görünür kalmasını sağlıyoruz.
-                    tvLogs.text = logs.joinToString("\n")
+                    tvLogs.text = logs.takeLast(120).joinToString("\n")
                     logScrollView.post { logScrollView.fullScroll(View.FOCUS_DOWN) }
                 }
             }

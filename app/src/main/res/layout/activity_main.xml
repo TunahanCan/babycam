@@ -1,35 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
+    android:background="#0B1220"
     android:padding="16dp">
 
-    <TextView
-        android:id="@+id/tvInfo"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Durum: Başlatılıyor..."
-        android:paddingTop="8dp"
-        android:textSize="14sp" />
+        android:orientation="vertical"
+        android:background="#162235"
+        android:padding="16dp"
+        android:layout_marginBottom="12dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BabyCam"
+            android:textStyle="bold"
+            android:textSize="22sp"
+            android:textColor="#E6EEFF" />
+
+        <TextView
+            android:id="@+id/tvInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Durum: Başlatılıyor..."
+            android:textColor="#C9D8FF"
+            android:lineSpacingExtra="2dp"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Canlı Log Akışı"
+        android:textStyle="bold"
+        android:textColor="#DDE7FF"
+        android:textSize="14sp"
+        android:layout_marginBottom="8dp" />
 
     <androidx.core.widget.NestedScrollView
         android:id="@+id/logScrollView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:fillViewport="true">
+        android:fillViewport="true"
+        android:background="#111A2B"
+        android:padding="12dp">
 
         <TextView
             android:id="@+id/tvLogs"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingTop="8dp"
             android:text="Loglar burada görünecek"
+            android:textColor="#B9C8E8"
             android:textIsSelectable="true"
-            android:textSize="13sp"
+            android:textSize="12sp"
+            android:lineSpacingExtra="1dp"
             android:typeface="monospace" />
     </androidx.core.widget.NestedScrollView>
 
