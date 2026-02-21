@@ -11,6 +11,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.util.ArrayDeque
 import java.util.Locale
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutorService
@@ -18,6 +19,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.max
 
 /**
  * Basit bir HTTP sunucusu üzerinden MJPEG video ve PCM ses akışı sağlar.
@@ -40,6 +42,17 @@ class LiveStreamServer(
     private val serverSocketRef = AtomicReference<ServerSocket?>()
     private val acceptThreadRef = AtomicReference<Thread?>()
     private val clientExecutorRef = AtomicReference<ExecutorService?>()
+    private val broadcastExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "LiveStreamServer-Broadcast").apply { isDaemon = true }
+    }
+    private val frameDispatchLock = Any()
+    @Volatile private var pendingVideoFrame: ByteArray? = null
+    @Volatile private var videoDispatchScheduled = false
+
+    private val audioDispatchLock = Any()
+    private val pendingAudioChunks = ArrayDeque<ByteArray>()
+    @Volatile private var audioDispatchScheduled = false
+    private val maxQueuedAudioChunks = 8
 
     @Throws(IOException::class)
     fun startServer() {
@@ -93,6 +106,8 @@ class LiveStreamServer(
         clientExecutorRef.getAndSet(null)?.shutdownNow()
 
         acceptThreadRef.getAndSet(null)?.joinSafely()
+
+        broadcastExecutor.shutdownNow()
 
         videoClients.forEach { it.close() }
         videoClients.clear()
@@ -157,20 +172,91 @@ class LiveStreamServer(
     }
 
     fun pushVideoFrame(jpegData: ByteArray) {
-        if (jpegData.isEmpty()) return
+        if (jpegData.isEmpty() || !isRunning.get()) return
 
+        synchronized(frameDispatchLock) {
+            pendingVideoFrame = jpegData
+            if (videoDispatchScheduled) return
+            videoDispatchScheduled = true
+        }
+
+        dispatchVideoFrames()
+    }
+
+    fun pushAudioChunk(pcmData: ByteArray) {
+        if (pcmData.isEmpty() || !isRunning.get()) return
+
+        synchronized(audioDispatchLock) {
+            if (pendingAudioChunks.size >= maxQueuedAudioChunks) {
+                val dropCount = max(1, pendingAudioChunks.size - maxQueuedAudioChunks + 1)
+                repeat(dropCount) {
+                    if (pendingAudioChunks.isNotEmpty()) pendingAudioChunks.removeFirst()
+                }
+            }
+            pendingAudioChunks.addLast(pcmData)
+            if (audioDispatchScheduled) return
+            audioDispatchScheduled = true
+        }
+
+        dispatchAudioChunks()
+    }
+
+    private fun dispatchVideoFrames() {
+        try {
+            broadcastExecutor.execute {
+                while (true) {
+                    val frame = synchronized(frameDispatchLock) {
+                        val next = pendingVideoFrame
+                        pendingVideoFrame = null
+                        if (next == null) {
+                            videoDispatchScheduled = false
+                            return@execute
+                        }
+                        next
+                    }
+                    broadcastVideoFrame(frame)
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            synchronized(frameDispatchLock) {
+                videoDispatchScheduled = false
+            }
+        }
+    }
+
+    private fun dispatchAudioChunks() {
+        try {
+            broadcastExecutor.execute {
+                while (true) {
+                    val chunk = synchronized(audioDispatchLock) {
+                        if (pendingAudioChunks.isEmpty()) {
+                            audioDispatchScheduled = false
+                            return@execute
+                        }
+                        pendingAudioChunks.removeFirst()
+                    }
+                    broadcastAudioChunk(chunk)
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            synchronized(audioDispatchLock) {
+                audioDispatchScheduled = false
+                pendingAudioChunks.clear()
+            }
+        }
+    }
+
+    private fun broadcastVideoFrame(jpegData: ByteArray) {
         if (videoClients.isNotEmpty()) {
+            val header = ("\r\n--frame\r\n" +
+                "Content-Type: image/jpeg\r\n" +
+                "Content-Length: ${jpegData.size}\r\n\r\n").toByteArray()
             for (client in videoClients.toList()) {
                 try {
-                    val header = buildString {
-                        append("\r\n--frame\r\n")
-                        append("Content-Type: image/jpeg\r\n")
-                        append("Content-Length: ${jpegData.size}\r\n\r\n")
-                    }.toByteArray()
                     client.output.write(header)
                     client.output.write(jpegData)
                     client.output.flush()
-                } catch (ioe: IOException) {
+                } catch (_: IOException) {
                     videoClients.remove(client)
                     client.close()
                     AppLogBuffer.log("Video istemcisi bağlantısı kesildi: ${client.address}")
@@ -191,14 +277,12 @@ class LiveStreamServer(
         }
     }
 
-    fun pushAudioChunk(pcmData: ByteArray) {
-        if (pcmData.isEmpty()) return
-
+    private fun broadcastAudioChunk(pcmData: ByteArray) {
         if (audioClients.isNotEmpty()) {
             for (client in audioClients.toList()) {
                 try {
                     client.writePcmChunk(pcmData)
-                } catch (ioe: IOException) {
+                } catch (_: IOException) {
                     audioClients.remove(client)
                     client.close()
                     AppLogBuffer.log("Ses istemcisi bağlantısı kesildi: ${client.address}")
