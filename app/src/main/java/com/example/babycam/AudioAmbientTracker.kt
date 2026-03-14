@@ -5,8 +5,8 @@ package com.example.babycam
  */
 class AudioAmbientTracker(
     private var ambientDb: Double = -55.0,
-    private var ambientBandBalance: Double = -12.0
-) {
+    private var ambientBandBalance: Double = -12.0)
+{
 
     fun update(rmsDb: Double, bandBalanceDb: Double) {
         ambientDb = if (rmsDb < ambientDb) {
@@ -21,7 +21,6 @@ class AudioAmbientTracker(
             ambientBandBalance * 0.99 + bandBalanceDb * 0.01
         }
     }
-
     fun ambientDb(): Double = ambientDb
     fun ambientBandBalance(): Double = ambientBandBalance
 }

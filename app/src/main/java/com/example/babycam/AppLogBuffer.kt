@@ -28,9 +28,11 @@ object AppLogBuffer {
             // StateFlow'u kopyalayarak güncel tutuyoruz. Maksimum log sayısı aşılırsa en eski
             // kayıtları atıp daima son MAX_LOG_COUNT öğeyi koruyoruz.
             val updated = current + timestamped
-            if (updated.size > MAX_LOG_COUNT) {
+            if (updated.size > MAX_LOG_COUNT)
+            {
                 updated.takeLast(MAX_LOG_COUNT)
-            } else {
+            }
+            else {
                 updated
             }
         }
