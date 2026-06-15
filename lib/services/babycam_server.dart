@@ -91,7 +91,7 @@ class BabyCamServer {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now - _lastAudioDebugLog > 5000) {
       _lastAudioDebugLog = now;
-      onLog('Ses: ${result.dbfs.toStringAsFixed(1)} dBFS, zcr=${result.zeroCrossRate.toStringAsFixed(2)}, cry=${result.cryScore.toStringAsFixed(2)}, moan=${result.moanScore.toStringAsFixed(2)}');
+      onLog('Ses analizi: ${result.summary}');
     }
 
     final score = result.cryScore > result.moanScore ? result.cryScore : result.moanScore;
@@ -103,7 +103,7 @@ class BabyCamServer {
     }
 
     if (_cryAboveThresholdSince != 0 && now - _cryAboveThresholdSince >= config.cryMinDurationMs) {
-      _notifyOnce('🔊 ${result.reason}: skor ${(score * 100).round()}%, seviye ${result.dbfs.toStringAsFixed(1)} dBFS');
+      _notifyOnce('🔊 ${result.reason}. Güven ${(score * 100).round()}%. ${result.summary}');
       _cryAboveThresholdSince = 0;
     }
   }
