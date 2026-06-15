@@ -237,6 +237,9 @@ class BabyCamServer {
       case protocol_v2.BabyCamProtocolV2.pairConfirm:
         await _handlePairConfirm(request);
         return;
+      case protocol_v2.BabyCamProtocolV2.authRenew:
+        await _handleAuthRenew(request);
+        return;
       case protocol_v2.BabyCamProtocolV2.sessionStart:
         if (!await _requireAuth(request)) return;
         await startMediaRuntime();
@@ -285,12 +288,42 @@ class BabyCamServer {
         await request.response.close();
         return;
       }
-      final token = tokenService.issueSessionToken(clientName: json['clientName']?.toString() ?? 'Client', deviceId: json['deviceId']?.toString() ?? 'client');
-      await _writeJson(request.response, {'sessionToken': token});
+      final token = tokenService.issueTrustedClientToken(clientName: json['clientName']?.toString() ?? 'Client', deviceId: json['deviceId']?.toString() ?? 'client');
+      await _writeJson(request.response, {
+        'serverDeviceId': 'server_local',
+        'serverName': 'Bebek Odası',
+        'clientId': token.clientId,
+        'trustedClientToken': token.token,
+        'trustedClientTokenExpiresAtMs': token.expiresAtMs,
+        'capabilities': {'video': 'mjpeg', 'audio': 'pcm16le', 'events': 'json'},
+        'sessionToken': token.token,
+      });
     } catch (_) {
       request.response.statusCode = HttpStatus.badRequest;
       await request.response.close();
     }
+  }
+
+
+  Future<void> _handleAuthRenew(HttpRequest request) async {
+    final header = request.headers.value(HttpHeaders.authorizationHeader);
+    final token = header != null && header.startsWith('Bearer ') ? header.substring(7) : null;
+    if (token == null) {
+      request.response.statusCode = HttpStatus.unauthorized;
+      await request.response.close();
+      return;
+    }
+    final renewed = tokenService.renewTrustedClientToken(token);
+    if (renewed == null) {
+      request.response.statusCode = HttpStatus.unauthorized;
+      await request.response.close();
+      return;
+    }
+    await _writeJson(request.response, {
+      'clientId': renewed.clientId,
+      'trustedClientToken': renewed.token,
+      'expiresAtMs': renewed.expiresAtMs,
+    });
   }
 
   bool _isAuthorized(HttpRequest request) {
