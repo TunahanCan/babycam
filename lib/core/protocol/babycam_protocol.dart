@@ -1,6 +1,7 @@
 class BabyCamProtocolV2 {
   static const schemaVersion = 1;
   static const pairConfirm = '/pair/confirm';
+  static const authRenew = '/auth/renew';
   static const sessionStart = '/session/start';
   static const sessionStop = '/session/stop';
   static const video = '/video';

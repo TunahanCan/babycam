@@ -21,6 +21,7 @@ dependencies:
   wakelock_plus: ^1.2.8
   image: ^4.2.0
   record: ^5.1.2
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:

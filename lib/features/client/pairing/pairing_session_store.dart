@@ -9,7 +9,17 @@ class PairingSessionStore {
   PairingSessionStore(this._preferences);
   static const _key = 'pairing_session';
   final SharedPreferences _preferences;
-  Future<void> save(PairingSession session) => _preferences.setString(_key, jsonEncode({'payload': session.payload.toJson(), 'token': session.sessionToken}));
+
+  Future<void> save(PairingSession session) => _preferences.setString(
+        _key,
+        jsonEncode({
+          'payload': session.payload.toJson(),
+          'token': session.sessionToken,
+          'clientId': session.clientId,
+          'trustedClientTokenExpiresAtMs': session.trustedClientTokenExpiresAtMs,
+        }),
+      );
+
   PairingSession? load() {
     final raw = _preferences.getString(_key);
     if (raw == null) return null;
@@ -17,7 +27,15 @@ class PairingSessionStore {
     if (json is! Map) return null;
     final payload = PairingPayload.fromJson(Map<String, Object?>.from(json['payload'] as Map));
     final token = json['token'];
-    return payload != null && token is String ? PairingSession(payload: payload, sessionToken: token) : null;
+    return payload != null && token is String
+        ? PairingSession(
+            payload: payload,
+            sessionToken: token,
+            clientId: json['clientId']?.toString() ?? 'client_local',
+            trustedClientTokenExpiresAtMs: json['trustedClientTokenExpiresAtMs'] is int ? json['trustedClientTokenExpiresAtMs'] as int : 0,
+          )
+        : null;
   }
+
   Future<void> clear() => _preferences.remove(_key);
 }
