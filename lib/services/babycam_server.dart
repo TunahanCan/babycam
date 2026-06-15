@@ -7,6 +7,7 @@ import 'package:camera/camera.dart';
 import 'package:record/record.dart';
 
 import '../core/babycam_protocol.dart';
+import '../l10n/app_strings.dart';
 import 'audio_analyzer.dart';
 import 'configuration_service.dart';
 import 'discovery_service.dart';
@@ -15,16 +16,18 @@ import 'network_address_provider.dart';
 import 'telegram_service.dart';
 
 class BabyCamServer {
-  BabyCamServer({required this.config, required this.onLog, required this.onAlert})
-      : _telegram = TelegramService(config, onLog: onLog);
+  BabyCamServer({required this.config, required this.strings, required this.onLog, required this.onAlert})
+      : _telegram = TelegramService(config, strings: strings, onLog: onLog),
+        _audioAnalyzer = AudioAnalyzer(strings: strings);
 
   final ConfigurationService config;
+  final AppStrings strings;
   final void Function(String message) onLog;
   final void Function(String message) onAlert;
   final TelegramService _telegram;
   final _discovery = DiscoveryService();
   final _audioRecorder = AudioRecorder();
-  final _audioAnalyzer = AudioAnalyzer();
+  final AudioAnalyzer _audioAnalyzer;
   final _motionAnalyzer = MotionAnalyzer();
   final _webSockets = <WebSocket>{};
   final _mjpegClients = <HttpResponse>{};
@@ -47,7 +50,7 @@ class BabyCamServer {
 
   Future<String> start() async {
     final cameras = await availableCameras();
-    if (cameras.isEmpty) throw StateError('Kamera bulunamadı.');
+    if (cameras.isEmpty) throw StateError(strings.cameraNotFound);
 
     cameraController = CameraController(cameras.first, ResolutionPreset.medium, enableAudio: false);
     await cameraController!.initialize();
@@ -59,14 +62,14 @@ class BabyCamServer {
 
     final address = await NetworkAddressProvider.localHttpAddress() ?? '${InternetAddress.loopbackIPv4.address}:${BabyCamProtocol.httpPort}';
     await _discovery.advertise(address);
-    onLog('Server başladı: http://$address/');
-    await _telegram.sendMessage('👋 Merhaba! Baby monitor servisi başlatıldı. Yayın: http://$address/');
+    onLog(strings.serverStartedLog('http://$address/'));
+    await _telegram.sendMessage(strings.telegramServerStarted('http://$address/'));
     return 'http://$address/';
   }
 
   Future<void> _startAudioAnalysis() async {
     if (!await _audioRecorder.hasPermission()) {
-      onLog('Mikrofon izni yok; ses analizi devre dışı.');
+      onLog(strings.microphonePermissionMissing);
       return;
     }
     final stream = await _audioRecorder.startStream(const RecordConfig(
@@ -91,7 +94,7 @@ class BabyCamServer {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now - _lastAudioDebugLog > 5000) {
       _lastAudioDebugLog = now;
-      onLog('Ses analizi: ${result.summary}');
+      onLog(strings.audioAnalysisLog(result.summary));
     }
 
     final score = result.cryScore > result.moanScore ? result.cryScore : result.moanScore;
@@ -103,7 +106,7 @@ class BabyCamServer {
     }
 
     if (_cryAboveThresholdSince != 0 && now - _cryAboveThresholdSince >= config.cryMinDurationMs) {
-      _notifyOnce('🔊 ${result.reason}. Güven ${(score * 100).round()}%. ${result.summary}');
+      _notifyOnce(strings.audioAlert(result.reason, (score * 100).round(), result.summary));
       _cryAboveThresholdSince = 0;
     }
   }
@@ -133,7 +136,7 @@ class BabyCamServer {
     }
 
     if (_motionAboveThresholdSince != 0 && now - _motionAboveThresholdSince >= config.motionMinDurationMs) {
-      _notifyOnce('👶 Hareket algılandı. Skor: ${(score * 100).round()}%');
+      _notifyOnce(strings.motionAlert((score * 100).round()));
       _motionAboveThresholdSince = 0;
     }
   }
@@ -153,7 +156,7 @@ class BabyCamServer {
       final socket = await WebSocketTransformer.upgrade(request);
       _webSockets.add(socket);
       socket.done.whenComplete(() => _webSockets.remove(socket));
-      onLog('WebSocket client bağlandı: ${request.connectionInfo?.remoteAddress.address}');
+      onLog(strings.webSocketClientConnected(request.connectionInfo?.remoteAddress.address ?? 'unknown'));
       return;
     }
 
@@ -210,7 +213,7 @@ class BabyCamServer {
     response.write('''<!doctype html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>BabyCam</title></head>
 <body style="margin:0;background:#111;color:white;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
-  <main style="padding:16px"><h1>BabyCam Flutter</h1><img src="/video" style="width:100%;max-width:900px;border-radius:16px"><p>LAN MJPEG yayını aktif.</p><p><a style="color:#ff8ab3" href="/audio">Sadece WAV ses akışı</a></p></main>
+  <main style="padding:16px"><h1>${strings.appTitle}</h1><img src="/video" style="width:100%;max-width:900px;border-radius:16px"><p>${strings.streamActiveHtml}</p><p><a style="color:#ff8ab3" href="/audio">${strings.audioOnlyHtml}</a></p></main>
 </body></html>''');
     await response.close();
   }

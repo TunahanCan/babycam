@@ -1,6 +1,11 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../l10n/app_strings.dart';
+
 class NotificationService {
+  NotificationService(this._strings);
+
+  final AppStrings _strings;
   final _plugin = FlutterLocalNotificationsPlugin();
 
   Future<void> initialize() => _plugin.initialize(const InitializationSettings(
@@ -10,12 +15,12 @@ class NotificationService {
 
   Future<void> showAlert(String message) => _plugin.show(
         2001,
-        'BabyCam uyarısı',
+        _strings.notificationTitle,
         message,
-        const NotificationDetails(
+        NotificationDetails(
           android: AndroidNotificationDetails(
             'babycam_alerts',
-            'BabyCam Uyarıları',
+            _strings.notificationChannelName,
             importance: Importance.high,
             priority: Priority.high,
           ),
