@@ -16,6 +16,8 @@ import '../analysis/video/luma_frame.dart';
 import '../analysis/video/motion_analysis_config.dart';
 import '../analysis/video/motion_analyzer_v2.dart';
 import '../core/babycam_protocol.dart';
+import '../core/protocol/babycam_protocol.dart' as protocol_v2;
+import '../features/server/pairing/pairing_token_service.dart';
 import '../l10n/app_strings.dart';
 import 'configuration_service.dart';
 import 'discovery_service.dart';
@@ -34,7 +36,9 @@ class BabyCamServer {
     required this.onAlert,
     this.enableLegacyWebSocketMediaPackets = false,
     this.enableAudioAutoCalibration = true,
-  }) : _telegram = TelegramService(config, strings: strings, onLog: onLog);
+    PairingTokenService? tokenService,
+  })  : tokenService = tokenService ?? PairingTokenService(),
+        _telegram = TelegramService(config, strings: strings, onLog: onLog);
 
   final bool enableLegacyWebSocketMediaPackets;
   final bool enableAudioAutoCalibration;
@@ -44,6 +48,7 @@ class BabyCamServer {
   final void Function(String message) onLog;
   final void Function(String message) onAlert;
   final TelegramService _telegram;
+  final PairingTokenService tokenService;
   final _discovery = DiscoveryService();
   final _audioRecorder = AudioRecorder();
   MediaAnalysisCoordinator? _analysisCoordinator;
@@ -55,6 +60,7 @@ class BabyCamServer {
 
   CameraController? cameraController;
   HttpServer? _httpServer;
+  bool _httpServerListening = false;
   StreamSubscription<Uint8List>? _audioSubscription;
   Uint8List? _latestJpeg;
   bool _encodingFrame = false;
@@ -64,6 +70,24 @@ class BabyCamServer {
   static const _audioBitsPerSample = 16;
 
   Future<String> start() async {
+    final address = await startPairingMode();
+    await startMediaRuntime();
+    return address;
+  }
+
+  Future<String> startPairingMode() async {
+    _httpServer ??= await HttpServer.bind(InternetAddress.anyIPv4, BabyCamProtocol.httpPort, shared: true);
+    if (!_httpServerListening) {
+      _httpServerListening = true;
+      _httpServer!.listen(_handleRequest);
+    }
+    final address = await NetworkAddressProvider.localHttpAddress() ?? '${InternetAddress.loopbackIPv4.address}:${BabyCamProtocol.httpPort}';
+    onLog(strings.serverStartedLog('http://$address/'));
+    return 'http://$address/';
+  }
+
+  Future<void> startMediaRuntime() async {
+    if (cameraController != null) return;
     final cameras = await availableCameras();
     if (cameras.isEmpty) throw StateError(strings.cameraNotFound);
 
@@ -74,14 +98,9 @@ class BabyCamServer {
     await cameraController!.startImageStream(_handleCameraFrame);
     await _startAudioAnalysis();
 
-    _httpServer = await HttpServer.bind(InternetAddress.anyIPv4, BabyCamProtocol.httpPort, shared: true);
-    _httpServer!.listen(_handleRequest);
-
     final address = await NetworkAddressProvider.localHttpAddress() ?? '${InternetAddress.loopbackIPv4.address}:${BabyCamProtocol.httpPort}';
     await _discovery.advertise(address);
-    onLog(strings.serverStartedLog('http://$address/'));
     await _telegram.sendMessage(strings.telegramServerStarted('http://$address/'));
-    return 'http://$address/';
   }
 
   void _initializeAnalysisPipeline() {
@@ -201,7 +220,12 @@ class BabyCamServer {
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
-    if (request.uri.path == '/ws/stream' && WebSocketTransformer.isUpgradeRequest(request)) {
+    if ((request.uri.path == '/ws/stream' || request.uri.path == protocol_v2.BabyCamProtocolV2.events) && WebSocketTransformer.isUpgradeRequest(request)) {
+      if (!_isAuthorized(request)) {
+        request.response.statusCode = HttpStatus.unauthorized;
+        await request.response.close();
+        return;
+      }
       final socket = await WebSocketTransformer.upgrade(request);
       _webSockets.add(socket);
       socket.done.whenComplete(() => _webSockets.remove(socket));
@@ -210,13 +234,34 @@ class BabyCamServer {
     }
 
     switch (request.uri.path) {
+      case protocol_v2.BabyCamProtocolV2.pairConfirm:
+        await _handlePairConfirm(request);
+        return;
+      case protocol_v2.BabyCamProtocolV2.sessionStart:
+        if (!await _requireAuth(request)) return;
+        await startMediaRuntime();
+        await _writeJson(request.response, {'ok': true});
+        return;
+      case protocol_v2.BabyCamProtocolV2.sessionStop:
+        if (!await _requireAuth(request)) return;
+        await stopMediaRuntime();
+        await _writeJson(request.response, {'ok': true});
+        return;
+      case protocol_v2.BabyCamProtocolV2.statusPublic:
+        await _writeJson(request.response, {'service': 'babycam', 'pairing': true});
+        return;
       case '/video':
+        if (!await _requireAuth(request)) return;
+        await startMediaRuntime();
         await _handleMjpeg(request.response);
         return;
       case '/audio':
+        if (!await _requireAuth(request)) return;
+        await startMediaRuntime();
         await _handleAudio(request.response);
         return;
       case '/status':
+        if (!await _requireAuth(request)) return;
         await _writeJson(request.response, {
           'videoClients': _mjpegClients.length,
           'audioClients': _audioClients.length,
@@ -229,6 +274,49 @@ class BabyCamServer {
         await _writeLandingPage(request.response);
         return;
     }
+  }
+
+  Future<void> _handlePairConfirm(HttpRequest request) async {
+    try {
+      final body = await utf8.decoder.bind(request).join();
+      final json = jsonDecode(body);
+      if (json is! Map || tokenService.validateAndConsumeNonce(json['pairingNonce']?.toString() ?? '') == false) {
+        request.response.statusCode = HttpStatus.unauthorized;
+        await request.response.close();
+        return;
+      }
+      final token = tokenService.issueSessionToken(clientName: json['clientName']?.toString() ?? 'Client', deviceId: json['deviceId']?.toString() ?? 'client');
+      await _writeJson(request.response, {'sessionToken': token});
+    } catch (_) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+    }
+  }
+
+  bool _isAuthorized(HttpRequest request) {
+    final header = request.headers.value(HttpHeaders.authorizationHeader);
+    final token = header != null && header.startsWith('Bearer ') ? header.substring(7) : request.uri.queryParameters['token'];
+    // TODO: Replace query stream token with Authorization header when native viewer is used.
+    return token != null && tokenService.validateSessionToken(token);
+  }
+
+  Future<bool> _requireAuth(HttpRequest request) async {
+    if (_isAuthorized(request)) return true;
+    request.response.statusCode = HttpStatus.unauthorized;
+    await request.response.close();
+    return false;
+  }
+
+  Future<void> stopMediaRuntime() async {
+    await _audioSubscription?.cancel();
+    _audioSubscription = null;
+    await _alertSubscription?.cancel();
+    _alertSubscription = null;
+    await _analysisCoordinator?.dispose();
+    _analysisCoordinator = null;
+    await cameraController?.dispose();
+    cameraController = null;
+    _latestJpeg = null;
   }
 
   Future<void> _handleMjpeg(HttpResponse response) async {
@@ -301,6 +389,7 @@ class BabyCamServer {
   }
 
   Future<void> dispose() async {
+    tokenService.revokeAll();
     await _audioSubscription?.cancel();
     _audioSubscription = null;
     await _alertSubscription?.cancel();
