@@ -23,6 +23,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
+import androidx.lifecycle.lifecycleScope
 import okhttp3.*
 import java.io.IOException
 import java.net.Inet4Address
@@ -52,6 +53,7 @@ class BabyMonitorService : LifecycleService() {
     private val isAudioRecording = AtomicBoolean(false)
     private var liveStreamServer: LiveStreamServer? = null
     private var streamAddress: String? = null
+    private val discovery by lazy { BabyCamDiscovery(lifecycleScope) }
     @Volatile private var lastFrameSentAt = 0L
     private val frameIntervalMs = 100L
 
@@ -86,7 +88,7 @@ class BabyMonitorService : LifecycleService() {
         get() = ConfigurationHelper.getCryWindowMs(this)
     private val audioBitsPerSample = 16
     private val audioChannelCount = 1
-    private val streamPort = 8080
+    private val streamPort = BabyCamProtocol.HTTP_PORT
     private val audioAnalyzer = AudioPatternAnalyzer(sampleRate)
     @Volatile private var cryScoreAboveThresholdSince = 0L
     @Volatile private var lastAudioDebugLog = 0L
@@ -143,6 +145,7 @@ class BabyMonitorService : LifecycleService() {
         }
 
         stopAudioCapture()
+        discovery.stopAll()
         stopLiveStreamServer()
         releaseWakeLock()
 
@@ -303,6 +306,7 @@ class BabyMonitorService : LifecycleService() {
             val msg = "👶 Baby monitor uyarısı: $reason"
             Log.d(TAG, "Telegram bildirimi: $msg")
             AppLogBuffer.log(msg)
+            liveStreamServer?.pushAlert(msg)
             sendTelegramMessage(msg)
         }
     }
@@ -510,10 +514,11 @@ class BabyMonitorService : LifecycleService() {
         try {
             server.startServer()
             streamAddress = determineServerAddress()
+            discovery.startBroadcasting { streamAddress }
             val addressText = streamAddress?.let { "Canlı yayın: http://$it" } ?: "Canlı yayın hazırlanıyor..."
             updateNotification(addressText)
             Log.i(TAG, "Canlı yayın sunucusu http://${streamAddress ?: "127.0.0.1:$streamPort"} adresinde hazır")
-            streamAddress?.let { AppLogBuffer.log("Canlı yayın sunucusu hazır: http://$it") }
+            streamAddress?.let { AppLogBuffer.log("Canlı yayın sunucusu hazır: http://$it — client'lar otomatik keşfedebilir veya QR/URL ile bağlanabilir.") }
                 ?: AppLogBuffer.log("Canlı yayın sunucusu hazırlanıyor...")
         } catch (e: IOException) {
             Log.e(TAG, "Canlı yayın sunucusu başlatılamadı", e)
