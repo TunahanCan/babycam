@@ -6,19 +6,38 @@ import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:record/record.dart';
 
+import '../analysis/alert/alert_config.dart';
+import '../analysis/alert/alert_engine.dart';
+import '../analysis/alert/alert_event.dart';
+import '../analysis/audio/audio_analysis_config.dart';
+import '../analysis/audio/audio_chunk.dart';
+import '../analysis/audio/cry_audio_analyzer_v2.dart';
+import '../analysis/video/luma_frame.dart';
+import '../analysis/video/motion_analysis_config.dart';
+import '../analysis/video/motion_analyzer_v2.dart';
 import '../core/babycam_protocol.dart';
 import '../l10n/app_strings.dart';
-import 'audio_analyzer.dart';
 import 'configuration_service.dart';
 import 'discovery_service.dart';
-import 'motion_analyzer.dart';
+import 'motion_analyzer.dart' show CameraImageJpegEncoder;
+import 'server/alert_protocol_adapter.dart';
+import 'server/media_analysis_coordinator.dart';
+import 'server/media_analysis_metrics.dart';
 import 'network_address_provider.dart';
 import 'telegram_service.dart';
 
 class BabyCamServer {
-  BabyCamServer({required this.config, required this.strings, required this.onLog, required this.onAlert})
-      : _telegram = TelegramService(config, strings: strings, onLog: onLog),
-        _audioAnalyzer = AudioAnalyzer(strings: strings);
+  BabyCamServer({
+    required this.config,
+    required this.strings,
+    required this.onLog,
+    required this.onAlert,
+    this.enableLegacyWebSocketMediaPackets = false,
+    this.enableAudioAutoCalibration = true,
+  }) : _telegram = TelegramService(config, strings: strings, onLog: onLog);
+
+  final bool enableLegacyWebSocketMediaPackets;
+  final bool enableAudioAutoCalibration;
 
   final ConfigurationService config;
   final AppStrings strings;
@@ -27,8 +46,9 @@ class BabyCamServer {
   final TelegramService _telegram;
   final _discovery = DiscoveryService();
   final _audioRecorder = AudioRecorder();
-  final AudioAnalyzer _audioAnalyzer;
-  final _motionAnalyzer = MotionAnalyzer();
+  MediaAnalysisCoordinator? _analysisCoordinator;
+  MediaAnalysisMetrics? _analysisMetrics;
+  StreamSubscription<AlertEvent>? _alertSubscription;
   final _webSockets = <WebSocket>{};
   final _mjpegClients = <HttpResponse>{};
   final _audioClients = <HttpResponse>{};
@@ -38,11 +58,6 @@ class BabyCamServer {
   StreamSubscription<Uint8List>? _audioSubscription;
   Uint8List? _latestJpeg;
   bool _encodingFrame = false;
-  int _motionAboveThresholdSince = 0;
-  int _cryAboveThresholdSince = 0;
-  int _lastMotionTime = 0;
-  int _lastCryTime = 0;
-  int _lastNotifyTime = 0;
   int _lastAudioDebugLog = 0;
   static const _audioSampleRate = 16000;
   static const _audioChannels = 1;
@@ -51,6 +66,8 @@ class BabyCamServer {
   Future<String> start() async {
     final cameras = await availableCameras();
     if (cameras.isEmpty) throw StateError(strings.cameraNotFound);
+
+    _initializeAnalysisPipeline();
 
     cameraController = CameraController(cameras.first, ResolutionPreset.medium, enableAudio: false);
     await cameraController!.initialize();
@@ -67,6 +84,39 @@ class BabyCamServer {
     return 'http://$address/';
   }
 
+  void _initializeAnalysisPipeline() {
+    final motionConfig = MotionAnalysisConfig(
+      motionOnThreshold: config.motionThreshold,
+      minMotionDurationMs: config.motionMinDurationMs,
+    );
+    final audioConfig = AudioAnalysisConfig(
+      sampleRate: _audioSampleRate,
+      cryOnThreshold: config.cryScoreThreshold,
+      minCryDurationMs: config.cryMinDurationMs,
+    );
+    final alertConfig = AlertConfig(
+      cryCooldownMs: config.notifyCooldownMs,
+      motionCooldownMs: config.notifyCooldownMs,
+      cryAlertThreshold: config.cryScoreThreshold,
+      motionAlertThreshold: config.motionThreshold,
+    );
+    final audioAnalyzer = CryAudioAnalyzerV2(config: audioConfig);
+    if (enableAudioAutoCalibration) {
+      audioAnalyzer.startCalibration(timestampMs: DateTime.now().millisecondsSinceEpoch);
+    }
+    final metrics = MediaAnalysisMetrics(motionTargetFps: motionConfig.analysisFps);
+    final coordinator = MediaAnalysisCoordinator(
+      motionAnalyzer: MotionAnalyzerV2(config: motionConfig),
+      audioAnalyzer: audioAnalyzer,
+      alertEngine: AlertEngine(config: alertConfig),
+      metrics: metrics,
+      onLog: onLog,
+    );
+    _analysisMetrics = metrics;
+    _analysisCoordinator = coordinator;
+    _alertSubscription = coordinator.alerts.listen(_handleAlertEvent);
+  }
+
   Future<void> _startAudioAnalysis() async {
     if (!await _audioRecorder.hasPermission()) {
       onLog(strings.microphonePermissionMissing);
@@ -78,77 +128,76 @@ class BabyCamServer {
       numChannels: _audioChannels,
     ));
     _audioSubscription = stream.listen((chunk) {
-      final result = _audioAnalyzer.analyzePcm16(chunk);
-      _broadcastBinary([BabyCamProtocol.packetAudioPcm16Le, ...chunk]);
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      _analysisCoordinator?.onAudioChunk(AudioChunk(
+        pcm16le: chunk,
+        sampleRate: _audioSampleRate,
+        channels: _audioChannels,
+        timestampMs: nowMs,
+      ));
+      if (enableLegacyWebSocketMediaPackets) {
+        _broadcastBinary([BabyCamProtocol.packetAudioPcm16Le, ...chunk]);
+      }
       for (final client in _audioClients.toList()) {
         client.add(chunk);
         client.flush().catchError((Object _) {
           _audioClients.remove(client);
         });
       }
-      _handleAudioResult(result);
+      _logAudioDiagnostics();
     });
   }
 
-  void _handleAudioResult(AudioAnalysisResult result) {
+  void _logAudioDiagnostics() {
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (now - _lastAudioDebugLog > 5000) {
-      _lastAudioDebugLog = now;
-      onLog(strings.audioAnalysisLog(result.summary));
-    }
+    if (now - _lastAudioDebugLog <= 5000) return;
+    _lastAudioDebugLog = now;
+    final audio = _analysisMetrics?.toJson()['audio'];
+    if (audio != null) onLog(strings.audioAnalysisLog(audio.toString()));
+  }
 
-    final score = result.cryScore > result.moanScore ? result.cryScore : result.moanScore;
-    if (score >= config.cryScoreThreshold) {
-      _cryAboveThresholdSince = _cryAboveThresholdSince == 0 ? now : _cryAboveThresholdSince;
-      _lastCryTime = now;
-    } else if (now - _lastCryTime > config.cryWindowMs) {
-      _cryAboveThresholdSince = 0;
-    }
-
-    if (_cryAboveThresholdSince != 0 && now - _cryAboveThresholdSince >= config.cryMinDurationMs) {
-      _notifyOnce(strings.audioAlert(result.reason, (score * 100).round(), result.summary));
-      _cryAboveThresholdSince = 0;
-    }
+  void _handleAlertEvent(AlertEvent event) {
+    _analysisMetrics?.recordAlert(event);
+    final message = event.message;
+    onLog(message);
+    onAlert(message);
+    _broadcastBinary(AlertProtocolAdapter.toLegacyAlertPacket(event));
+    _telegram.sendMessage(message);
   }
 
   void _handleCameraFrame(CameraImage frame) {
     if (_encodingFrame) return;
     _encodingFrame = true;
-    final analysis = _motionAnalyzer.analyze(frame);
-    _latestJpeg = analysis.jpeg;
-    _broadcastBinary([BabyCamProtocol.packetVideoMjpeg, ...analysis.jpeg]);
-    for (final client in _mjpegClients.toList()) {
-      _writeMjpegFrame(client, analysis.jpeg).catchError((Object _) {
-        _mjpegClients.remove(client);
+    try {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final jpeg = CameraImageJpegEncoder.encode(frame);
+      _latestJpeg = jpeg;
+      if (enableLegacyWebSocketMediaPackets) {
+        _broadcastBinary([BabyCamProtocol.packetVideoMjpeg, ...jpeg]);
+      }
+      for (final client in _mjpegClients.toList()) {
+        _writeMjpegFrame(client, jpeg).catchError((Object _) {
+          _mjpegClients.remove(client);
+        });
+      }
+      _analysisCoordinator?.onCameraFrame(_toLumaFrame(frame, nowMs));
+    } finally {
+      Future<void>.delayed(const Duration(milliseconds: 100), () {
+        _encodingFrame = false;
       });
     }
-    _handleMotionScore(analysis.score);
-    Future<void>.delayed(const Duration(milliseconds: 100), () => _encodingFrame = false);
   }
 
-  void _handleMotionScore(double score) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    if (score >= config.motionThreshold) {
-      _motionAboveThresholdSince = _motionAboveThresholdSince == 0 ? now : _motionAboveThresholdSince;
-      _lastMotionTime = now;
-    } else if (now - _lastMotionTime > config.motionWindowMs) {
-      _motionAboveThresholdSince = 0;
-    }
-
-    if (_motionAboveThresholdSince != 0 && now - _motionAboveThresholdSince >= config.motionMinDurationMs) {
-      _notifyOnce(strings.motionAlert((score * 100).round()));
-      _motionAboveThresholdSince = 0;
-    }
-  }
-
-  void _notifyOnce(String message) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    if (now - _lastNotifyTime < config.notifyCooldownMs) return;
-    _lastNotifyTime = now;
-    onLog(message);
-    onAlert(message);
-    _broadcastBinary(BabyCamProtocol.alertFrame(message));
-    _telegram.sendMessage(message);
+  LumaFrame _toLumaFrame(CameraImage frame, int timestampMs) {
+    final yPlane = frame.planes.first;
+    return LumaFrame(
+      yPlane: yPlane.bytes,
+      width: frame.width,
+      height: frame.height,
+      rowStride: yPlane.bytesPerRow,
+      pixelStride: yPlane.bytesPerPixel ?? 1,
+      timestampMs: timestampMs,
+    );
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
@@ -173,6 +222,7 @@ class BabyCamServer {
           'audioClients': _audioClients.length,
           'webSocketClients': _webSockets.length,
           'hasFrame': _latestJpeg != null,
+          if (_analysisCoordinator != null) ..._analysisCoordinator!.diagnostics(),
         });
         return;
       default:
@@ -252,6 +302,12 @@ class BabyCamServer {
 
   Future<void> dispose() async {
     await _audioSubscription?.cancel();
+    _audioSubscription = null;
+    await _alertSubscription?.cancel();
+    _alertSubscription = null;
+    await _analysisCoordinator?.dispose();
+    _analysisCoordinator = null;
+    _analysisMetrics?.reset();
     await _audioRecorder.dispose();
     await cameraController?.dispose();
     cameraController = null;
