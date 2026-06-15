@@ -2,19 +2,21 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../l10n/app_strings.dart';
 import 'configuration_service.dart';
 
 class TelegramService {
-  TelegramService(this._config, {this.onLog});
+  TelegramService(this._config, {required AppStrings strings, this.onLog}) : _strings = strings;
 
   final ConfigurationService _config;
+  final AppStrings _strings;
   final void Function(String message)? onLog;
 
   Future<void> sendMessage(String text) async {
     final token = _config.telegramBotToken;
     final chatId = _config.telegramChatId;
     if (token.isEmpty || chatId.isEmpty) {
-      onLog?.call('Telegram bilgileri boş; mesaj gönderilmedi.');
+      onLog?.call(_strings.telegramMissingConfig);
       return;
     }
 
@@ -25,12 +27,12 @@ class TelegramService {
       request.write(jsonEncode({'chat_id': chatId, 'text': text}));
       final response = await request.close().timeout(const Duration(seconds: 10));
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        onLog?.call('Telegram hata kodu: ${response.statusCode}');
+        onLog?.call(_strings.telegramStatusCode(response.statusCode));
       }
     } on SocketException catch (error) {
-      onLog?.call('Telegram bağlantı hatası: ${error.message}');
+      onLog?.call(_strings.telegramConnectionError(error.message));
     } on TimeoutException {
-      onLog?.call('Telegram zaman aşımı.');
+      onLog?.call(_strings.telegramTimeout);
     } finally {
       client.close(force: true);
     }

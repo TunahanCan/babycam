@@ -1,8 +1,12 @@
 import 'dart:math';
 import 'dart:typed_data';
+import 'dart:ui';
+
+import '../l10n/app_strings.dart';
 
 class AudioAnalysisResult {
-  const AudioAnalysisResult({
+  AudioAnalysisResult({
+    required AppStrings strings,
     required this.rms,
     required this.dbfs,
     required this.ambientRms,
@@ -16,8 +20,9 @@ class AudioAnalysisResult {
     required this.voiceActivityScore,
     required this.alert,
     required this.reason,
-  });
+  }) : _strings = strings;
 
+  final AppStrings _strings;
   final double rms;
   final double dbfs;
   final double ambientRms;
@@ -32,14 +37,21 @@ class AudioAnalysisResult {
   final bool alert;
   final String reason;
 
-  String get dominantSound => cryScore >= moanScore ? 'ağlama' : 'inleme';
+  String get dominantSound => cryScore >= moanScore ? _strings.cryingSound : _strings.moaningSound;
 
   String get summary {
-    final f0 = fundamentalHz > 0 ? '${fundamentalHz.round()} Hz' : 'belirsiz';
-    return 'seviye ${dbfs.toStringAsFixed(1)} dBFS, ortam ${(20 * log(max(ambientRms, 1e-6)) / ln10).toStringAsFixed(1)} dBFS, '
-        'F0 $f0, merkez ${spectralCentroidHz.round()} Hz, bant ${spectralBandwidthHz.round()} Hz, '
-        'ZCR ${zeroCrossRate.toStringAsFixed(2)}, entropi ${spectralEntropy.toStringAsFixed(2)}, '
-        'ağlama ${(cryScore * 100).round()}%, inleme ${(moanScore * 100).round()}%';
+    final f0 = fundamentalHz > 0 ? '${fundamentalHz.round()} Hz' : _strings.unknownFundamentalFrequency;
+    return _strings.audioSummary(
+      dbfs: dbfs,
+      ambientDbfs: 20 * log(max(ambientRms, 1e-6)) / ln10,
+      f0: f0,
+      centroidHz: spectralCentroidHz.round(),
+      bandwidthHz: spectralBandwidthHz.round(),
+      zcr: zeroCrossRate,
+      entropy: spectralEntropy,
+      cryPercent: (cryScore * 100).round(),
+      moanPercent: (moanScore * 100).round(),
+    );
   }
 }
 
@@ -70,7 +82,9 @@ class _SpectralShape {
 }
 
 class AudioAnalyzer {
-  AudioAnalyzer({this.sampleRate = 16000});
+  AudioAnalyzer({this.sampleRate = 16000, AppStrings? strings}) : _strings = strings ?? AppStrings(const Locale('tr'));
+
+  final AppStrings _strings;
 
   final int sampleRate;
   double _ambientRms = 0.015;
@@ -140,6 +154,7 @@ class AudioAnalyzer {
     if (alert) _lastAlert = now;
 
     return AudioAnalysisResult(
+      strings: _strings,
       rms: rms,
       dbfs: dbfs,
       ambientRms: _ambientRms,
@@ -161,6 +176,7 @@ class AudioAnalyzer {
   }
 
   AudioAnalysisResult _empty() => AudioAnalysisResult(
+        strings: _strings,
         rms: 0,
         dbfs: -120,
         ambientRms: _ambientRms,
@@ -173,7 +189,7 @@ class AudioAnalyzer {
         fundamentalHz: 0,
         voiceActivityScore: _sustainedVoiceActivity,
         alert: false,
-        reason: 'Ses yok',
+        reason: _strings.noSoundReason,
       );
 
   List<double> _decodePcm16Le(Uint8List bytes) {
@@ -328,10 +344,10 @@ class AudioAnalyzer {
     required double fundamentalHz,
     required _SpectralShape spectral,
   }) {
-    final pitch = fundamentalHz > 0 ? ', temel frekans ${fundamentalHz.round()} Hz' : '';
+    final pitch = _strings.pitchSuffix(fundamentalHz.round());
     if (cryLike) {
-      return 'Ağlama benzeri vokal ses$pitch, parlaklık ${spectral.centroidHz.round()} Hz';
+      return _strings.cryLikeReason(pitch, spectral.centroidHz.round());
     }
-    return 'İnleme benzeri düşük frekanslı sürekli ses$pitch, merkez ${spectral.centroidHz.round()} Hz';
+    return _strings.moanLikeReason(pitch, spectral.centroidHz.round());
   }
 }
