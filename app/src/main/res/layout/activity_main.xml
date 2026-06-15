@@ -28,11 +28,112 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Durum: Başlatılıyor..."
+            android:text="Rol seçimi bekleniyor..."
             android:textColor="#C9D8FF"
             android:lineSpacingExtra="2dp"
             android:textSize="14sp" />
+
+        <LinearLayout
+            android:id="@+id/modeSelectionPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnServerMode"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Server" />
+
+            <Button
+                android:id="@+id/btnClientMode"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:text="Client" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/serverSharePanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvServerUrl"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#C9D8FF"
+                android:textIsSelectable="true"
+                android:textSize="13sp" />
+
+            <ImageView
+                android:id="@+id/imgServerQr"
+                android:layout_width="180dp"
+                android:layout_height="180dp"
+                android:layout_marginTop="10dp"
+                android:background="#FFFFFF"
+                android:contentDescription="Server bağlantı QR kodu"
+                android:padding="8dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/clientPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvDiscoveryStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="Ağda BabyCam server aranıyor..."
+                android:textColor="#C9D8FF"
+                android:textSize="13sp" />
+
+            <EditText
+                android:id="@+id/etServerAddress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Server IP veya adres (örn. 192.168.1.25:8080)"
+                android:inputType="textUri"
+                android:singleLine="true"
+                android:textColor="#E6EEFF"
+                android:textColorHint="#7F8CA8" />
+
+            <Button
+                android:id="@+id/btnConnectClient"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Server'a Bağlan" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnResetMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Rolü Değiştir"
+            android:visibility="gone" />
     </LinearLayout>
+
+    <WebView
+        android:id="@+id/streamWebView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="2"
+        android:background="#000000"
+        android:visibility="gone" />
 
     <TextView
         android:layout_width="wrap_content"
@@ -41,6 +142,7 @@
         android:textStyle="bold"
         android:textColor="#DDE7FF"
         android:textSize="14sp"
+        android:layout_marginTop="8dp"
         android:layout_marginBottom="8dp" />
 
     <androidx.core.widget.NestedScrollView

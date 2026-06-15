@@ -201,6 +201,20 @@ class LiveStreamServer(
         dispatchAudioChunks()
     }
 
+
+    fun pushAlert(message: String) {
+        if (message.isBlank() || !isRunning.get()) return
+        for (client in avWebSocketClients.toList()) {
+            try {
+                client.sendAlert(message)
+            } catch (_: IOException) {
+                avWebSocketClients.remove(client)
+                client.close()
+                AppLogBuffer.log("WebSocket uyarı istemcisi bağlantısı kesildi: ${client.address}")
+            }
+        }
+    }
+
     private fun dispatchVideoFrames() {
         try {
             broadcastExecutor.execute {
@@ -1209,7 +1223,10 @@ class LiveStreamServer(
             val metadataJson = "{" +
                 "\"sampleRate\":$sampleRate," +
                 "\"channels\":$channelCount," +
-                "\"bitsPerSample\":$bitsPerSample" +
+                "\"bitsPerSample\":$bitsPerSample," +
+                "\"videoCodec\":\"mjpeg\"," +
+                "\"audioCodec\":\"pcm16le\"," +
+                "\"protocol\":\"babycam.v1\"" +
                 "}"
             val payload = metadataJson.toByteArray(StandardCharsets.UTF_8)
             sendFrame(TYPE_METADATA, payload)
@@ -1225,6 +1242,12 @@ class LiveStreamServer(
         fun sendVideoFrame(jpegData: ByteArray) {
             if (jpegData.isEmpty()) return
             sendFrame(TYPE_VIDEO, jpegData)
+        }
+
+        @Throws(IOException::class)
+        fun sendAlert(message: String) {
+            if (message.isBlank()) return
+            sendFrame(TYPE_ALERT, message.toByteArray(StandardCharsets.UTF_8))
         }
 
         fun listenForControl(onClosed: () -> Unit) {
@@ -1370,9 +1393,10 @@ class LiveStreamServer(
 
         companion object {
             private const val MAX_PAYLOAD_LENGTH = 8L * 1024 * 1024 // 8 MB
-            private const val TYPE_METADATA: Byte = 0
-            private const val TYPE_AUDIO: Byte = 1
-            private const val TYPE_VIDEO: Byte = 2
+            private const val TYPE_METADATA: Byte = BabyCamProtocol.PACKET_METADATA
+            private const val TYPE_AUDIO: Byte = BabyCamProtocol.PACKET_AUDIO_PCM16LE
+            private const val TYPE_VIDEO: Byte = BabyCamProtocol.PACKET_VIDEO_MJPEG
+            private const val TYPE_ALERT: Byte = BabyCamProtocol.PACKET_ALERT_TEXT
         }
     }
 

@@ -79,8 +79,11 @@ dependencies {
     // LifecycleService (servis için)
     implementation("androidx.lifecycle:lifecycle-service:2.8.6")
 
-    // OkHttp (Telegram için)
+    // OkHttp (Telegram ve client websocket için)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // QR kod üretimi (server adresini client cihazlara hızlı aktarmak için)
+    implementation("com.google.zxing:core:3.5.3")
 
     // Kotlin Coroutines (UI log akışı için)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
