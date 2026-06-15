@@ -1,0 +1,29 @@
+name: babycam
+version: 1.0.0+1
+publish_to: 'none'
+description: LAN tabanli Flutter bebek kamera server/client uygulamasi.
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  camera: ^0.11.0+2
+  permission_handler: ^11.3.1
+  shared_preferences: ^2.2.3
+  qr_flutter: ^4.1.0
+  webview_flutter: ^4.8.0
+  web_socket_channel: ^3.0.1
+  flutter_local_notifications: ^17.2.2
+  wakelock_plus: ^1.2.8
+  image: ^4.2.0
+  record: ^5.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
