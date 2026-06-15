@@ -1,131 +1,390 @@
 # BabyCam Flutter
 
-BabyCam Flutter, aynı Flutter/Dart kod tabanını **Server** ve **Client** rollerinde çalıştıran LAN tabanlı bebek kamera uygulamasıdır. Server cihaz kamera ve mikrofon verisini işler; Client cihaz aynı yerel ağ üzerinden canlı yayını izler ve uyarıları yerel bildirim olarak alır.
+BabyCam, tek Flutter/Dart kod tabanından çalışan **LAN odaklı bebek kamera** uygulamasıdır. Uygulama ilk açılışta **Server** veya **Client** rolünü seçtirir; Server cihaz kamera/mikrofon yayınını ve analiz pipeline'ını çalıştırır, Client cihaz ise QR ile eşleşip aynı yerel ağ üzerinden görüntü, ses ve uyarı akışlarını tüketir.
 
-Uygulama internet yayını için tasarlanmamıştır. Varsayılan kurgu aynı Wi‑Fi/LAN içindeki cihazlar arasındadır. Telegram entegrasyonu opsiyoneldir ve yalnızca uyarı mesajlarını Bot API üzerinden göndermek için kullanılır.
+> **Güvenlik notu:** BabyCam internet yayını için tasarlanmamıştır. Varsayılan kurgu aynı Wi‑Fi/LAN içindeki cihazlardır. Doğrudan internete açmak yerine VPN veya güvenli tünel kullanın.
 
 ---
 
 ## İçindekiler
 
-1. [Öne çıkan özellikler](#öne-çıkan-özellikler)
-2. [Güncel mimari](#güncel-mimari)
-3. [Çalışma modeli](#çalışma-modeli)
-4. [Protokoller ve endpointler](#protokoller-ve-endpointler)
-5. [Analiz pipeline'ı](#analiz-pipelineı)
-6. [Uyarı motoru ve cooldown](#uyarı-motoru-ve-cooldown)
-7. [Konfigürasyon](#konfigürasyon)
-8. [Bildirimler ve Telegram](#bildirimler-ve-telegram)
-9. [Platform izinleri](#platform-izinleri)
-10. [Kurulum ve çalıştırma](#kurulum-ve-çalıştırma)
-11. [Testler](#testler)
-12. [Sorun giderme](#sorun-giderme)
-13. [Geliştirici notları](#geliştirici-notları)
+1. [Kapsam ve özellikler](#kapsam-ve-özellikler)
+2. [Mimari özet](#mimari-özet)
+3. [Dizin mimarisi](#dizin-mimarisi)
+4. [Uygulama açılış akışı](#uygulama-açılış-akışı)
+5. [Server mimarisi](#server-mimarisi)
+6. [Client mimarisi](#client-mimarisi)
+7. [Eşleşme, oturum ve yetkilendirme](#eşleşme-oturum-ve-yetkilendirme)
+8. [Medya akışları](#medya-akışları)
+9. [Analiz pipeline'ı](#analiz-pipelineı)
+10. [Uyarılar ve bildirimler](#uyarılar-ve-bildirimler)
+11. [Protokoller ve endpointler](#protokoller-ve-endpointler)
+12. [Konfigürasyon](#konfigürasyon)
+13. [Platform izinleri](#platform-izinleri)
+14. [Kurulum ve çalıştırma](#kurulum-ve-çalıştırma)
+15. [Test ve kalite kontrolleri](#test-ve-kalite-kontrolleri)
+16. [Sorun giderme](#sorun-giderme)
+17. [Geliştirici notları](#geliştirici-notları)
 
 ---
 
-## Öne çıkan özellikler
+## Kapsam ve özellikler
 
-- **Server/Client rol seçimi:** İlk açılışta rol seçilir; seçim `SharedPreferences` ile saklanır.
-- **LAN HTTP server:** Server modunda uygulama `0.0.0.0:8080` üzerinde dinler.
-- **MJPEG video yayını:** Kamera frame'leri JPEG'e çevrilir ve `/video` endpointinden `multipart/x-mixed-replace` olarak yayınlanır.
-- **WAV/PCM ses yayını:** Mikrofon PCM16 little-endian mono ses üretir; `/audio` endpointi canlı WAV akışı verir.
-- **WebSocket uyarı kanalı:** `/ws/stream` üzerinden uyarı paketleri yayınlanır; Client tarafı bu paketleri yerel bildirime dönüştürür.
-- **UDP discovery:** Server, `255.255.255.255:45678` adresine BabyCam discovery paketi yayınlar; Client aynı porttan server adresini otomatik bulur.
-- **V2 medya analizi:** Hareket ve ses analizi artık `MediaAnalysisCoordinator` üzerinden `MotionAnalyzerV2`, `CryAudioAnalyzerV2` ve `AlertEngine` bileşenleriyle yürütülür.
-- **FPS gate ve yoğunluk koruması:** Hareket analizi hedef FPS ile sınırlandırılır; analiz meşgulse frame düşürülür ve metriklere yazılır.
-- **Otomatik ses kalibrasyonu:** Server başlarken ses analizörü ortam seviyesini kalibre etmeye başlar.
-- **Tanılama metrikleri:** `/status` endpointi video, ses, hareket, alert ve analiz motoru tanı verilerini döndürür.
-- **Cooldown'lu uyarılar:** Ağlama ve hareket uyarıları tip bazlı cooldown ile tekrar spam'ine karşı korunur.
-- **Çift dil:** Uygulama metinleri Türkçe ve İngilizce için `AppStrings` sınıfında tutulur.
+- **Tek kod tabanı, iki rol:** Aynı Flutter uygulaması Server veya Client olarak çalışır.
+- **Kalıcı rol seçimi:** Seçilen rol `SharedPreferences` içinde saklanır; kullanıcı rolü sıfırlayabilir.
+- **Feature tabanlı yapı:** Server, Client ve Role Selection ekranları ayrı feature klasörlerinde tutulur.
+- **QR tabanlı eşleşme:** Server kısa ömürlü nonce içeren `babycam://pair?...` payload'ı üretir; Client bu payload ile oturum token'ı alır.
+- **Token korumalı endpointler:** Medya, durum ve event akışları session token doğrulaması ister.
+- **LAN HTTP server:** Server `0.0.0.0:8080` üzerinde HTTP endpointleri sunar.
+- **MJPEG video:** Kamera frame'leri JPEG'e dönüştürülür ve `/video` üzerinden `multipart/x-mixed-replace` olarak yayınlanır.
+- **WAV/PCM ses:** Mikrofon PCM16 mono ses üretir; `/audio` WAV header + canlı PCM chunk stream'i verir.
+- **WebSocket event kanalı:** `/ws/events` ve legacy `/ws/stream` endpointleri uyarı/event iletimi için kullanılır.
+- **UDP discovery desteği:** Server LAN broadcast ile kendini duyurabilir; legacy/yardımcı servis olarak korunur.
+- **V2 medya analizi:** Hareket ve ağlama algılama `MediaAnalysisCoordinator`, `MotionAnalyzerV2`, `CryAudioAnalyzerV2` ve `AlertEngine` ile yürütülür.
+- **Cooldown'lu uyarılar:** Ağlama ve hareket uyarıları tip bazlı cooldown ile spam'e karşı korunur.
+- **Telegram opsiyonu:** Build-time veya kaydedilmiş ayarlar varsa uyarılar Telegram Bot API'ye gönderilebilir.
+- **TR/EN yerelleştirme:** UI metinleri `AppStrings` üzerinden Türkçe ve İngilizce destekler.
 
 ---
 
-## Güncel mimari
+## Mimari özet
+
+```text
++----------------------+         QR / Pair Confirm          +----------------------+
+| Server cihaz         | <------------------------------->  | Client cihaz         |
+|----------------------|                                    |----------------------|
+| Role: server         |                                    | Role: client         |
+| AppBootstrap         |                                    | AppBootstrap         |
+| ServerRuntime        |                                    | ClientRuntime        |
+| BabyCamServer        |                                    | QRPairingClient      |
+| HTTP :8080           | ---- /video MJPEG -------------->  | Watch/Viewer katmanı |
+| Camera + Microphone  | ---- /audio WAV/PCM ------------>  | Audio katmanı        |
+| Analysis pipeline    | ---- /ws/events alert ---------->  | Alert listener       |
+| Alert + Telegram     |                                    | Local notification   |
++----------------------+                                    +----------------------+
+```
+
+Uygulama mimarisi üç ana katmana ayrılır:
+
+1. **App katmanı:** Bootstrap, tema, lifecycle, rol çözümleme ve rol repository işlemleri.
+2. **Feature katmanı:** Server, Client ve Role Selection akışlarının UI, runtime ve composition root bileşenleri.
+3. **Servis/Domain katmanı:** HTTP server, protokol modelleri, analiz algoritmaları, konfigürasyon, discovery, Telegram ve platform servisleri.
+
+---
+
+## Dizin mimarisi
 
 ```text
 lib/
+├── app/                         # Bootstrap, role resolver/repository, lifecycle yardımcıları
 ├── analysis/
-│   ├── alert/                  # AlertEngine, AlertEvent, cooldown ve tip modelleri
-│   ├── audio/                  # CryAudioAnalyzerV2, ring buffer, PCM reader, Goertzel band analizi
-│   └── video/                  # MotionAnalyzerV2, luma frame/downsample, frame-rate gate
-├── core/                       # Protokol sabitleri ve uygulama log tamponu
-├── l10n/                       # TR/EN metinler
-├── services/
-│   ├── babycam_server.dart     # Server orkestrasyonu, HTTP/MJPEG/WAV/WebSocket
-│   ├── server/                 # Medya analiz koordinasyonu, metrikler, protocol adapter
-│   ├── configuration_service.dart
-│   ├── discovery_service.dart
-│   ├── network_address_provider.dart
-│   ├── notification_service.dart
-│   └── telegram_service.dart
-└── ui/
-    └── home_page.dart          # Rol seçimi, lifecycle, WebView, QR ve log paneli
+│   ├── alert/                   # AlertEngine, AlertEvent, AlertConfig, cooldown policy
+│   ├── audio/                   # CryAudioAnalyzerV2, PCM reader, ring buffer, Goertzel analizleri
+│   └── video/                   # MotionAnalyzerV2, luma frame/downsample, FPS gate
+├── core/
+│   ├── protocol/                # V2 endpoint sabitleri, PairingPayload, PairingSession, alert DTO
+│   ├── theme/                   # BabyCam renkleri ve temaları
+│   └── app_log.dart             # Uygulama log tamponu
+├── features/
+│   ├── role_selection/          # Rol seçimi ekranı ve controller
+│   ├── server/                  # Server shell, runtime, pairing, media, alerts, status
+│   └── client/                  # Client shell, runtime, pairing, media, alerts
+├── l10n/                        # TR/EN AppStrings
+├── services/                    # BabyCamServer, config, discovery, notification, Telegram, adapters
+└── main.dart                    # Flutter entrypoint
 ```
 
-### Ana sorumluluklar
+### Önemli bileşenler
 
-- **`lib/services/babycam_server.dart`**: Kamera, mikrofon, HTTP endpointleri, WebSocket client listesi, MJPEG/WAV akışları, discovery, Telegram ve analiz pipeline'ını başlatan ana orkestratördür.
-- **`lib/services/server/media_analysis_coordinator.dart`**: Kamera luma frame'lerini ve ses chunk'larını V2 analizörlere taşır, FPS gate uygular, hataları throttled log'lar ve alert stream'ini dışarı açar.
-- **`lib/services/server/media_analysis_metrics.dart`**: Alınan/analyzed/dropped frame sayıları, ses pencereleri, son skorlar, hata sayıları, ortalama işlem süreleri ve son alert bilgilerini tutar.
-- **`lib/services/server/alert_protocol_adapter.dart`**: Yeni `AlertEvent` modelini mevcut WebSocket alert frame formatına dönüştürür.
-- **`lib/analysis/video/motion_analyzer_v2.dart`**: Luma tabanlı downsample, adaptif arka plan, aktif alan oranı, global ışık değişimi ve skor üretimi yapar.
-- **`lib/analysis/audio/cry_audio_analyzer_v2.dart`**: PCM16LE ses stream'ini ring buffer üzerinden pencereler, ortam kalibrasyonu ve spektral özelliklerle ağlama olasılığı üretir.
-- **`lib/analysis/alert/alert_engine.dart`**: Ses/hareket analiz sonuçlarını alert kararlarına dönüştürür ve tip bazlı cooldown uygular.
+| Bileşen | Sorumluluk |
+| --- | --- |
+| `BabyCamApp` | MaterialApp, locale delegate'leri ve `AppBootstrap` başlangıcı. |
+| `AppBootstrap` | SharedPreferences yükler, rolü çözer, doğru app shell'i ve runtime'ı oluşturur. |
+| `ServerCompositionRoot` | Server tarafı dependency graph'ını kurar: token service, `BabyCamServer`, QR builder, media controller, runtime. |
+| `ClientCompositionRoot` | Client tarafı pairing, stream session, alert listener, notification ve runtime bağlantılarını kurar. |
+| `BabyCamServer` | HTTP endpointleri, kamera/mikrofon runtime'ı, analiz pipeline'ı, WebSocket broadcast, Telegram ve discovery orkestrasyonu. |
+| `ServerRuntime` | Server ekranının durum makinesi: pairing, client paired, media starting/active/idle. |
+| `ClientRuntime` | Client ekranının durum makinesi: unpaired, pairing, paired idle, watching, alert only. |
+| `MediaAnalysisCoordinator` | Kamera ve ses girdilerini analizörlere dağıtır, FPS gate uygular, metrik tutar, alert stream üretir. |
+| `AlertProtocolAdapter` | V2 `AlertEvent` modelini legacy binary WebSocket alert paketine dönüştürür. |
 
 ---
 
-## Çalışma modeli
+## Uygulama açılış akışı
 
 ```text
-+----------------------+                         +----------------------+
-| Server cihaz         |                         | Client cihaz         |
-|----------------------|                         |----------------------|
-| Kamera + mikrofon    |                         | WebView              |
-| HTTP :8080           | <---- HTTP/MJPEG ----   | / adresini açar      |
-| /video MJPEG         | <---- /video ---------- | yayını izler         |
-| /audio WAV           | <---- /audio ---------- | opsiyonel ses        |
-| /ws/stream           | ---- alert paketleri -> | yerel bildirim       |
-| UDP broadcast :45678 | ---- discovery -------> | otomatik keşif       |
-+----------------------+                         +----------------------+
+main()
+  ↓
+BabyCamApp
+  ↓
+AppBootstrap
+  ├─ SharedPreferences.getInstance()
+  ├─ SharedPreferencesRoleRepository
+  ├─ RoleResolver.resolve()
+  └─ role switch
+      ├─ null          → RoleSelectionScreen
+      ├─ AppRole.server → ServerAppShell + ServerRuntime
+      └─ AppRole.client → ClientAppShell + ClientRuntime
 ```
 
-Server cihaz canlı yayın üretirken aynı anda medya analizini çalıştırır. Client cihaz server'ın HTTP sayfasını WebView içinde açar ve WebSocket üzerinden gelen alert paketlerini yerel bildirime çevirir.
+- Rol yoksa kullanıcı Server/Client seçer.
+- Rol seçilince repository'ye kaydedilir ve ilgili composition root runtime üretir.
+- Rol sıfırlanınca aktif runtime dispose edilir ve rol seçimi ekranına dönülür.
+- Server ve Client runtime'ları UI'dan bağımsız durum makineleri olarak test edilebilir.
+
+---
+
+## Server mimarisi
+
+Server tarafı iki parçadan oluşur:
+
+1. **Feature/runtime kabuğu**
+   - `ServerAppShell`: Server UI için MaterialApp/tema kabuğu.
+   - `ServerHomeScreen`: Pairing QR ve runtime durumunu kullanıcıya gösterir.
+   - `ServerRuntime`: Pairing ve medya yaşam döngüsünü state stream ile yönetir.
+   - `MediaRuntimeController`: Start/stop çağrılarını soyutlar.
+
+2. **Servis orkestrasyonu**
+   - `BabyCamServer.startPairingMode()` HTTP server'ı açar ve pairing adresini üretir.
+   - `BabyCamServer.startMediaRuntime()` kamera, mikrofon, analiz pipeline'ı, discovery ve Telegram başlangıç mesajını başlatır.
+   - `BabyCamServer.stopMediaRuntime()` medya kaynaklarını ve analiz pipeline'ını kapatır.
+   - `BabyCamServer.dispose()` token'ları revoke eder, HTTP/WebSocket/UDP/kamera/mikrofon kaynaklarını temizler.
+
+Server runtime fazları:
+
+| Faz | Anlamı |
+| --- | --- |
+| `stopped` | Server kaynakları kapalı. |
+| `pairingActive` | QR payload üretildi ve eşleşme bekleniyor. |
+| `clientPaired` | Client eşleşti, medya henüz aktif olmayabilir. |
+| `mediaStarting` | Kamera/mikrofon başlatılıyor. |
+| `mediaActive` | En az bir aktif session için medya runtime çalışıyor. |
+| `mediaIdle` | Aktif client kalmadığı için medya durduruldu. |
+| `error` | UI tarafından hata göstermek için ayrılmış faz. |
+
+---
+
+## Client mimarisi
+
+Client tarafı QR eşleşme, oturum saklama, izleme ve uyarı dinleme akışlarını ayırır:
+
+- `ClientAppShell`: Client UI için MaterialApp/tema kabuğu.
+- `ClientHomeScreen`: Eşleşme, izleme ve uyarı modlarını sunar.
+- `QRPairingClient`: QR payload içindeki host/port/nonce ile `/pair/confirm` çağrısı yapar ve session token alır.
+- `PairingSessionStore`: Session bilgisini `SharedPreferences` ile saklamak/temizlemek için kullanılır.
+- `StreamSessionController`: İzleme session'ının aktif/pasif durumunu yönetir.
+- `ClientAlertListener`: Alert WebSocket akışı için client tarafı giriş noktasıdır.
+- `ClientNotificationService`: Client cihazda yerel bildirim altyapısını hazırlar.
+- `AlertShareService`: Alert paylaşımı gibi client yardımcı davranışları için ayrılmıştır.
+
+Client runtime fazları:
+
+| Faz | Anlamı |
+| --- | --- |
+| `unpaired` | Henüz server session'ı yok. |
+| `scanningQr` | QR tarama akışı için ayrılmış faz. |
+| `pairing` | `/pair/confirm` isteği sürüyor. |
+| `pairedIdle` | Session var; izleme veya alert-only mod başlamadı. |
+| `watching` | Medya izleme modu aktif. |
+| `alertOnly` | Sadece uyarı dinleme modu aktif. |
+| `reconnecting`, `offline`, `error` | Dayanıklılık ve hata UI'ları için ayrılmış fazlar. |
+
+---
+
+## Eşleşme, oturum ve yetkilendirme
+
+### QR payload
+
+Server pairing başlatınca `ServerQrPayloadBuilder` kısa ömürlü bir payload üretir:
+
+```json
+{
+  "schemaVersion": 1,
+  "host": "192.168.1.20",
+  "port": 8080,
+  "deviceId": "server_local",
+  "deviceName": "Bebek Odası",
+  "pairingNonce": "...",
+  "expiresAtMs": 1710000000000,
+  "capabilities": {
+    "video": "mjpeg",
+    "audio": "pcm16le",
+    "events": "json"
+  }
+}
+```
+
+Payload, `babycam://pair?payload=<base64url-json>` URI formatına çevrilir. Client bu URI'yi parse eder; schema, süre ve zorunlu alanlar geçerliyse eşleşme isteği yapar.
+
+### Pair confirm
+
+```text
+Client QRPairingClient
+  ↓ POST /pair/confirm
+     { pairingNonce, clientName, deviceId }
+  ↓
+Server PairingTokenService
+  ├─ nonce geçerli mi?
+  ├─ nonce tek kullanımlık olarak tüketilir
+  └─ sessionToken üretilir
+```
+
+Nonce varsayılan olarak 2 dakika geçerlidir ve tek kullanımlıktır. Session token bellekte tutulur; server dispose olduğunda tüm token'lar revoke edilir.
+
+### Yetkilendirme
+
+Korumalı endpointler session token ister:
+
+- Tercih edilen yöntem: `Authorization: Bearer <sessionToken>`
+- Geçiş/legacy stream yöntemi: `?token=<sessionToken>` query parametresi
+
+---
+
+## Medya akışları
+
+### Video
+
+```text
+CameraController.startImageStream
+  ↓
+BabyCamServer._handleCameraFrame
+  ├─ CameraImageJpegEncoder.encode(frame)
+  ├─ _latestJpeg güncellenir
+  ├─ /video MJPEG client'larına frame yazılır
+  ├─ legacy WebSocket media açıksa binary video paketi yayınlanır
+  └─ Y plane → LumaFrame → analiz pipeline'ı
+```
+
+Video endpointi `multipart/x-mixed-replace; boundary=frame` döndürür. Her parça `Content-Type: image/jpeg` ve `Content-Length` başlıklarıyla yazılır.
+
+### Ses
+
+```text
+AudioRecorder.startStream(PCM16, 16 kHz, mono)
+  ↓
+BabyCamServer._startAudioAnalysis listener
+  ├─ AudioChunk → analiz pipeline'ı
+  ├─ /audio WAV client'larına PCM chunk yazılır
+  ├─ legacy WebSocket media açıksa binary audio paketi yayınlanır
+  └─ periyodik audio diagnostics log'u
+```
+
+Audio endpointi önce WAV header yazar, sonra canlı PCM16 little-endian mono chunk'ları stream eder.
+
+---
+
+## Analiz pipeline'ı
+
+Server medya runtime başlarken V2 analiz pipeline'ı kurulur:
+
+```text
+MotionAnalysisConfig        AudioAnalysisConfig        AlertConfig
+        ↓                           ↓                      ↓
+MotionAnalyzerV2       CryAudioAnalyzerV2          AlertEngine
+        \                     |                       /
+         \                    |                      /
+          +--------- MediaAnalysisCoordinator -------+
+                              ↓
+                    Stream<AlertEvent>
+                              ↓
+                       BabyCamServer
+```
+
+### Hareket analizi
+
+- Kamera frame'lerinin Y plane verisi `LumaFrame` olarak taşınır.
+- `FrameRateGate` hedef analiz FPS'ini uygular.
+- Coordinator meşgulse frame düşürür ve metriklere yazar.
+- `MotionAnalyzerV2` downsample edilmiş luma görüntüsüyle adaptif arka plan, aktif alan oranı, global ışık değişimi ve smoothing uygular.
+- Sonuç `AlertEngine.onMotionResult` ile uyarı kararına girer.
+
+### Ağlama/ses analizi
+
+- Mikrofon PCM16LE stream'i `AudioChunk` olarak analizöre verilir.
+- `CryAudioAnalyzerV2` ring buffer üzerinde 1000 ms pencere ve 250 ms hop mantığıyla çalışır.
+- Enerji, ağlama bandı, zero-cross rate, spectral centroid, spectral flux ve ortam dBFS özellikleri kullanılır.
+- Otomatik kalibrasyon açıksa başlangıçta ambient seviye öğrenilir.
+- Sonuç `AlertEngine.onAudioResult` ile uyarı kararına girer.
+
+### Metrikler ve diagnostics
+
+`MediaAnalysisMetrics` şu bilgileri tutar:
+
+- Alınan, analiz edilen, skipped ve dropped frame sayıları.
+- Audio chunk ve analiz penceresi sayıları.
+- Son hareket/ağlama skorları ve son dBFS değeri.
+- Ortalama işlem süreleri ve hata sayaçları.
+- Son alert tipi ve zamanı.
+
+Bu bilgiler `/status` cevabına analizör diagnostics çıktılarıyla birlikte eklenir.
+
+---
+
+## Uyarılar ve bildirimler
+
+Alert akışı:
+
+```text
+MotionAnalyzerV2 / CryAudioAnalyzerV2
+  ↓
+AlertEngine
+  ├─ threshold kontrolü
+  ├─ minimum süre kontrolü
+  ├─ tip bazlı cooldown kontrolü
+  └─ AlertEvent
+       ↓
+BabyCamServer._handleAlertEvent
+  ├─ metrics.recordAlert
+  ├─ server log
+  ├─ server local alert callback
+  ├─ WebSocket binary alert packet
+  └─ TelegramService.sendMessage
+```
+
+Client tarafında WebSocket alert paketi alındığında paket tipi doğrulanır, payload UTF‑8 mesaja çevrilir ve yerel bildirim/alert geçmişi katmanlarına aktarılır.
 
 ---
 
 ## Protokoller ve endpointler
 
-### Sabit portlar
+### Portlar
 
 | Amaç | Değer |
-| --- | --- |
+| --- | ---: |
 | HTTP server | `8080` |
 | UDP discovery | `45678` |
 | Discovery service adı | `babycam.v1` |
 
-### HTTP endpointleri
+### V2 endpointleri
+
+| Endpoint | Auth | Açıklama |
+| --- | --- | --- |
+| `/status/public` | Hayır | Pairing/servis canlılığı için halka açık minimal JSON. |
+| `/pair/confirm` | Hayır, nonce ister | QR nonce doğrular ve session token üretir. |
+| `/session/start` | Evet | Medya runtime'ı başlatır. |
+| `/session/stop` | Evet | Medya runtime'ı durdurur. |
+| `/video` | Evet | MJPEG canlı video stream'i. |
+| `/audio` | Evet | WAV header + PCM16 canlı ses stream'i. |
+| `/ws/events` | Evet | V2 event WebSocket endpointi. |
+| `/status` | Evet | Server bağlantı, medya ve analiz diagnostics JSON çıktısı. |
+
+### Legacy/uyumluluk endpointleri
 
 | Endpoint | Açıklama |
 | --- | --- |
-| `/` | Basit HTML landing page; `/video` görüntüsünü ve `/audio` linkini içerir. |
-| `/video` | MJPEG canlı video stream'i. |
-| `/audio` | WAV header + canlı PCM16 mono ses stream'i. |
-| `/status` | JSON durum ve tanılama bilgileri. Video/audio/WebSocket client sayıları, frame varlığı, analiz metrikleri ve analizör diagnostics alanlarını içerir. |
-| `/ws/stream` | WebSocket upgrade endpointi. Alert frame'leri için kullanılır. |
+| `/` | Basit HTML landing page; video ve audio linklerini içerir. |
+| `/ws/stream` | Legacy WebSocket alert endpointi; `/ws/events` ile aynı auth kontrolünü kullanır. |
 
-### WebSocket paketleri
-
-`BabyCamProtocol` hâlâ legacy binary paket tiplerini tanımlar:
+### Legacy binary WebSocket paketleri
 
 | Paket tipi | Değer | İçerik |
 | --- | ---: | --- |
-| Metadata | `0` | Ayrılmış/gelecek kullanım |
+| Metadata | `0` | Ayrılmış/gelecek kullanım. |
 | Audio PCM16LE | `1` | Legacy medya paketi; varsayılan olarak kapalıdır. |
 | Video MJPEG | `2` | Legacy medya paketi; varsayılan olarak kapalıdır. |
-| Alert text | `3` | İlk byte packet type, devamı UTF‑8 uyarı metni |
+| Alert text | `3` | İlk byte paket tipi, devamı UTF‑8 uyarı metni. |
 
-Yeni server entegrasyonunda WebSocket üzerinden varsayılan olarak alert paketleri yayınlanır. Legacy video/ses WebSocket medya paketleri `enableLegacyWebSocketMediaPackets` ile açılabilir; görüntü için ana yol HTTP/MJPEG'dir.
+Legacy video/ses WebSocket medya paketleri `enableLegacyWebSocketMediaPackets` ile açılabilir. Güncel ana medya yolu HTTP/MJPEG ve HTTP/WAV stream'dir.
 
 ### UDP discovery payload
 
@@ -139,97 +398,25 @@ Yeni server entegrasyonunda WebSocket üzerinden varsayılan olarak alert paketl
 }
 ```
 
-Client yalnızca `service` alanı `babycam.v1` olan paketleri kabul eder ve `address` alanını bağlantı adresi olarak kullanır.
-
----
-
-## Analiz pipeline'ı
-
-Server başlarken `BabyCamServer` V2 analiz pipeline'ını kurar:
-
-1. `MotionAnalysisConfig`, runtime hareket eşiği ve minimum hareket süresiyle oluşturulur.
-2. `AudioAnalysisConfig`, 16 kHz mono PCM ayarları, ağlama eşiği ve minimum ağlama süresiyle oluşturulur.
-3. `AlertConfig`, ağlama/hareket cooldown ve eşikleriyle oluşturulur.
-4. `CryAudioAnalyzerV2` başlatılır ve otomatik kalibrasyon aktifse ortam kalibrasyonuna girer.
-5. `MediaAnalysisCoordinator`, `MotionAnalyzerV2`, `CryAudioAnalyzerV2`, `AlertEngine` ve `MediaAnalysisMetrics` bileşenlerini bağlar.
-6. Coordinator alert stream'i server tarafından dinlenir; alert oluşunca WebSocket, yerel bildirim callback'i ve Telegram akışı tetiklenir.
-
-### Kamera frame akışı
-
-```text
-CameraController.startImageStream
-  ↓
-BabyCamServer._handleCameraFrame
-  ├─ CameraImageJpegEncoder.encode(frame) → /video MJPEG
-  └─ frame Y plane → LumaFrame
-       ↓
-     MediaAnalysisCoordinator.onCameraFrame
-       ├─ FrameRateGate hedef FPS kontrolü
-       ├─ meşgulse drop metriği
-       ├─ MotionAnalyzerV2.analyze
-       ├─ MediaAnalysisMetrics.recordMotion
-       └─ AlertEngine.onMotionResult
-```
-
-`MotionAnalyzerV2` downsample edilmiş luma verisiyle çalışır. Varsayılan yapı 80×60 çözünürlükte, 3 FPS hedef analiz hızıyla arka plan modeli, piksel farkı, aktif alan oranı, global ışık değişimi ve smoothing kullanır.
-
-### Mikrofon chunk akışı
-
-```text
-AudioRecorder.startStream(PCM16, 16 kHz, mono)
-  ↓
-BabyCamServer._startAudioAnalysis listener
-  ├─ AudioChunk oluşturulur
-  ├─ MediaAnalysisCoordinator.onAudioChunk
-  │   ├─ CryAudioAnalyzerV2.addChunk
-  │   ├─ MediaAnalysisMetrics.recordAudio
-  │   └─ AlertEngine.onAudioResult
-  └─ /audio WAV client'larına PCM chunk yazılır
-```
-
-`CryAudioAnalyzerV2` 1000 ms pencere ve 250 ms hop ile çalışır. Enerji, ağlama bandı, zero-cross rate, spectral centroid, spectral flux, ortam dBFS ve kalibrasyon durumunu kullanarak ağlama skorunu üretir.
-
-### `/status` tanılama alanları
-
-`/status` endpointi temel bağlantı bilgilerine ek olarak şu başlıkları döndürür:
-
-- `analysis.motion`: hedef FPS, alınan/analyzed/skipped/dropped frame sayıları, hata sayısı, son hareket skoru ve işlem süresi.
-- `analysis.audio`: alınan chunk sayısı, analiz edilen pencere sayısı, son ağlama skoru, son dBFS, ambient dBFS, kalibrasyon durumu ve işlem süresi.
-- `analysis.alerts`: üretilen alert sayısı, son alert tipi ve zamanı.
-- `motionAnalyzer`, `audioAnalyzer`, `alertEngine`: ilgili bileşenlerin diagnostics çıktıları.
-
----
-
-## Uyarı motoru ve cooldown
-
-`AlertEngine`, analiz sonuçlarını tek noktada değerlendirir:
-
-- **Ağlama uyarısı:** `CryAudioAnalyzerV2` skoru `cryAlertThreshold` değerini geçip minimum süre koşulunu sağladığında üretilir.
-- **Hareket uyarısı:** `MotionAnalyzerV2` sonucu `motionAlertThreshold` değerini geçip minimum süre koşulunu sağladığında üretilir.
-- **Cooldown:** Ağlama ve hareket için ayrı cooldown alanları vardır; server entegrasyonunda ikisi de `ConfigurationService.notifyCooldownMs` değerinden beslenir.
-- **Opsiyonel uyarılar:** `AlertConfig` loud sound ve global light change için alanlar içerir; varsayılan entegrasyonda bunlar bilgi/alert olarak kapalıdır.
-
-Alert oluştuğunda sırasıyla log'a yazılır, server cihazda yerel bildirim callback'i tetiklenir, WebSocket alert frame yayınlanır ve Telegram yapılandırıldıysa mesaj gönderilir.
+Discovery, QR pairing akışının yanında ağ içi adres bulmayı kolaylaştıran yardımcı mekanizmadır.
 
 ---
 
 ## Konfigürasyon
 
-`ConfigurationService`, runtime değerleri `SharedPreferences` içinde saklar. Mevcut UI ayrıntılı ayar ekranı sunmasa da servis katmanı bu değerleri okumaya/yazmaya hazırdır.
+`ConfigurationService`, runtime ayarlarını `SharedPreferences` üzerinden okur/yazar.
 
 | Ayar | Varsayılan | Kullanım |
 | --- | ---: | --- |
-| `motion_threshold` | `0.22` | Server entegrasyonunda `MotionAnalysisConfig.motionOnThreshold` ve `AlertConfig.motionAlertThreshold` değerlerini besler. |
-| `motion_min_duration_ms` | `2000` | Minimum hareket süresi. |
-| `cry_score_threshold` | `0.65` | `AudioAnalysisConfig.cryOnThreshold` ve `AlertConfig.cryAlertThreshold` değerlerini besler. |
-| `cry_min_duration_ms` | `1500` | Minimum ağlama süresi. |
+| `motion_threshold` | `0.22` | `MotionAnalysisConfig.motionOnThreshold` ve `AlertConfig.motionAlertThreshold`. |
+| `motion_min_duration_ms` | `2000` | Hareket alert'i için minimum süre. |
+| `cry_score_threshold` | `0.65` | `AudioAnalysisConfig.cryOnThreshold` ve `AlertConfig.cryAlertThreshold`. |
+| `cry_min_duration_ms` | `1500` | Ağlama alert'i için minimum süre. |
 | `notify_cooldown_ms` | `60000` | Ağlama ve hareket alert cooldown süresi. |
-| `motion_window_ms` | `3000` | Eski/uyumluluk ayarı; V2 pipeline ana kararını analizör + alert engine üzerinden verir. |
-| `cry_window_ms` | `5000` | Eski/uyumluluk ayarı; V2 pipeline ana kararını analizör + alert engine üzerinden verir. |
+| `motion_window_ms` | `3000` | Eski/uyumluluk ayarı. |
+| `cry_window_ms` | `5000` | Eski/uyumluluk ayarı. |
 
-### Telegram build-time konfigürasyonu
-
-Telegram token ve chat id uygulama derlenirken Dart define ile verilebilir:
+### Telegram Dart define değerleri
 
 ```bash
 flutter run \
@@ -237,34 +424,13 @@ flutter run \
   --dart-define=TELEGRAM_CHAT_ID=123456789
 ```
 
-APK build örneği:
-
 ```bash
 flutter build apk \
   --dart-define=TELEGRAM_BOT_TOKEN=123456:ABCDEF \
   --dart-define=TELEGRAM_CHAT_ID=123456789
 ```
 
-Build-time değerler boş değilse `SharedPreferences` değerlerinin önüne geçer.
-
----
-
-## Bildirimler ve Telegram
-
-Server tarafında alert oluştuğunda:
-
-1. `AlertEngine` cooldown kararını verir.
-2. `BabyCamServer` alert mesajını log'a yazar.
-3. Server cihaz için yerel bildirim callback'i çağrılır.
-4. `AlertProtocolAdapter.toLegacyAlertPacket()` ile WebSocket alert frame yayınlanır.
-5. Telegram token/chat id varsa Bot API'ye mesaj gönderilir.
-
-Client tarafında WebSocket alert frame alınırsa:
-
-1. Paket tipinin `packetAlertText` olduğu doğrulanır.
-2. Payload UTF‑8 metne çevrilir.
-3. Client cihazda yerel bildirim gösterilir.
-4. Mesaj log'a eklenir.
+Build-time değerler boş değilse kaydedilmiş runtime değerlerinin önüne geçer.
 
 ---
 
@@ -272,7 +438,7 @@ Client tarafında WebSocket alert frame alınırsa:
 
 ### Android
 
-`android/app/src/main/AndroidManifest.xml` içinde şu izinler bulunur:
+`android/app/src/main/AndroidManifest.xml` içinde kullanılan temel izinler:
 
 - `CAMERA`
 - `RECORD_AUDIO`
@@ -287,7 +453,7 @@ LAN içi `http://ip:8080` kullanımı için cleartext traffic açıktır.
 
 ### iOS
 
-`ios/Runner/Info.plist` içinde kamera, mikrofon, yerel ağ ve Bonjour açıklamaları bulunur. iOS tarafında yerel ağ ve kamera/mikrofon izinleri sistem tarafından kullanıcıdan istenir.
+`ios/Runner/Info.plist` kamera, mikrofon, yerel ağ ve Bonjour açıklamalarını içerir. iOS tarafında kamera/mikrofon/yerel ağ izinleri sistem izin akışıyla kullanıcıdan istenir.
 
 ---
 
@@ -295,9 +461,9 @@ LAN içi `http://ip:8080` kullanımı için cleartext traffic açıktır.
 
 ### Gereksinimler
 
-- Flutter SDK (`>=3.4.0` ile uyumlu Dart SDK)
-- Android Studio/Android SDK veya Xcode
-- Aynı LAN/Wi‑Fi üzerinde en az bir server ve bir client cihaz
+- Flutter SDK ve Dart SDK (`pubspec.yaml` ortamı: `>=3.4.0 <4.0.0`)
+- Android Studio/Android SDK veya iOS için macOS + Xcode
+- Aynı LAN/Wi‑Fi üzerinde en az bir Server ve bir Client cihaz
 
 ### Bağımlılıkları yükleme
 
@@ -305,48 +471,52 @@ LAN içi `http://ip:8080` kullanımı için cleartext traffic açıktır.
 flutter pub get
 ```
 
-### Android çalıştırma
+### Android
 
 ```bash
 flutter run -d <android-device-id>
 ```
 
-### iOS çalıştırma
+### iOS
 
 ```bash
 flutter run -d <ios-device-id>
 ```
 
-> iOS build için macOS ve Xcode gerekir.
-
 ### Tipik kullanım
 
-1. Bir cihazda uygulamayı açın ve **Server** seçin.
-2. Kamera/mikrofon/bildirim izinlerini verin.
-3. Ekranda görünen URL'yi veya QR kodu not edin.
-4. İkinci cihazda uygulamayı açın ve **Client** seçin.
-5. Client otomatik discovery ile adresi bulamazsa `IP:8080` formatında elle girin.
-6. Yayını WebView içinde izleyin ve uyarıları yerel bildirim olarak alın.
+1. Bebek odasındaki cihazda uygulamayı açın ve **Server** rolünü seçin.
+2. Kamera, mikrofon ve bildirim izinlerini verin.
+3. Server ekranındaki QR kodu açık bırakın.
+4. Ebeveyn cihazında uygulamayı açın ve **Client** rolünü seçin.
+5. QR kodu okutun; Client `/pair/confirm` ile session token alır.
+6. İzleme modunu başlatın; Client `/video`, `/audio` ve `/ws/events` akışlarını token ile tüketir.
+7. Uyarılar local notification ve opsiyonel Telegram mesajı olarak iletilir.
 
 ---
 
-## Testler
+## Test ve kalite kontrolleri
 
-Test kapsamı V2 analiz bileşenlerini ve server metriklerini içerir:
+Ana test grupları:
 
-- `test/analysis/audio/*`: PCM reader, ring buffer, Goertzel band analizi ve `CryAudioAnalyzerV2` davranışları.
-- `test/analysis/video/*`: Luma downsample, frame-rate gate ve `MotionAnalyzerV2` davranışları.
-- `test/analysis/alert/*`: `AlertEngine` ve cooldown policy davranışları.
+- `test/app/*`: Rol izolasyonu ve bootstrap davranışları.
+- `test/features/server/*`: Server runtime lifecycle ve pairing token servis davranışları.
+- `test/features/client/*`: Client runtime lifecycle davranışları.
+- `test/features/role_selection/*`: Rol seçim ekranı testleri.
+- `test/core/*`: Pairing payload parse/serialize testleri.
+- `test/analysis/audio/*`: PCM reader, ring buffer, Goertzel ve `CryAudioAnalyzerV2` testleri.
+- `test/analysis/video/*`: Luma downsample, frame-rate gate ve `MotionAnalyzerV2` testleri.
+- `test/analysis/alert/*`: Alert engine ve cooldown policy testleri.
 - `test/services_media_analysis_metrics_test.dart`: Server analiz metriklerinin JSON/record/reset davranışları.
-- `test/audio_analyzer_test.dart`: Eski servis analizörünün regresyon testleri.
+- `test/audio_analyzer_test.dart`: Legacy audio analyzer regresyon testleri.
 
-Çalıştırmak için:
+Çalıştırma:
 
 ```bash
 flutter test
 ```
 
-Statik analiz için:
+Statik analiz:
 
 ```bash
 flutter analyze
@@ -356,83 +526,78 @@ flutter analyze
 
 ## Sorun giderme
 
-### Client server'ı otomatik bulamıyor
+### Client QR ile eşleşemiyor
 
-- İki cihazın aynı Wi‑Fi/LAN üzerinde olduğundan emin olun.
-- Bazı modemler UDP broadcast veya client isolation nedeniyle discovery paketlerini engelleyebilir.
-- Client adres alanına server ekranındaki `IP:8080` değerini elle girin.
+- Server ve Client cihazların aynı LAN/Wi‑Fi üzerinde olduğundan emin olun.
+- QR payload süresi varsayılan 2 dakikadır; süre dolduysa yeni QR üretin.
+- Server IP'sinin Client tarafından erişilebilir olduğunu kontrol edin.
+- Modem/client isolation özelliği LAN cihazlarının birbirini görmesini engelleyebilir.
 
-### WebView yayın açmıyor
+### 401 Unauthorized alıyorum
 
-- Server cihazda URL'nin göründüğünden emin olun.
-- Client cihaz tarayıcısında `http://IP:8080/` adresini elle deneyin.
-- VPN, captive portal veya firewall olmadığını kontrol edin.
-- Android için cleartext traffic açıktır; iOS tarafında yerel ağ izni verilmelidir.
+- `/video`, `/audio`, `/status`, `/session/*` ve WebSocket event endpointleri session token ister.
+- QR eşleşmesi tamamlanmadan medya endpointlerine doğrudan girmek beklenen şekilde 401 döndürür.
+- Server yeniden başlatıldıysa bellek içi session token'lar silinir; yeniden eşleşin.
 
-### Kamera açılmıyor
+### Video açılmıyor
 
-- Kamera izninin verildiğini kontrol edin.
-- Emülatörlerde kamera stream desteği sınırlı olabilir; fiziksel cihazla test edin.
-- Başka bir uygulama kamerayı kullanıyorsa kapatın.
+- Server'da medya runtime'ın başladığından emin olun.
+- Kamera iznini kontrol edin.
+- Fiziksel cihazla test edin; emülatör kamera stream desteği sınırlı olabilir.
+- Client cihazdan `http://SERVER_IP:8080/status/public` adresini deneyerek server erişimini doğrulayın.
 
-### Mikrofon veya ses analizi çalışmıyor
+### Ses veya ağlama analizi çalışmıyor
 
-- Mikrofon izninin verildiğini kontrol edin.
-- Server loglarında “mikrofon izni yok” benzeri mesaj olup olmadığına bakın.
-- `/status` çıktısındaki `analysis.audio` ve `audioAnalyzer` alanlarını kontrol edin.
-- İlk çalıştırmada otomatik kalibrasyon nedeniyle skorların oturması için kısa süre bekleyin.
+- Mikrofon izni verildi mi kontrol edin.
+- Server loglarında mikrofon izni veya recorder hatası olup olmadığına bakın.
+- İlk çalıştırmada otomatik kalibrasyon nedeniyle birkaç saniye bekleyin.
+- `/status` çıktısındaki `analysis.audio` ve `audioAnalyzer` diagnostics alanlarını inceleyin.
 
-### Hareket uyarısı beklenenden farklı çalışıyor
+### Hareket uyarısı beklenenden farklı
 
-- `/status` çıktısındaki `analysis.motion` alanında skipped/dropped frame sayılarını kontrol edin.
-- Ani ışık değişimleri global light change olarak sınıflanabilir ve hareket skorunu etkileyebilir.
-- Kamera açısı, düşük ışık ve otomatik pozlama hareket skorlarını değiştirebilir.
+- Düşük ışık, otomatik pozlama ve ani ışık değişimleri skorları etkileyebilir.
+- `/status` içindeki `analysis.motion` alanında skipped/dropped frame sayılarını kontrol edin.
+- Kamera açısını ve hareket eşiği konfigürasyonunu gözden geçirin.
 
 ### Telegram mesajı gitmiyor
 
 - `TELEGRAM_BOT_TOKEN` ve `TELEGRAM_CHAT_ID` değerlerini doğru verdiğinizden emin olun.
 - Botun ilgili chat'e mesaj atma yetkisi olmalıdır.
-- Server loglarında HTTP hata kodu, bağlantı hatası veya timeout mesajı olup olmadığını kontrol edin.
+- Server loglarında HTTP hata kodu veya timeout var mı kontrol edin.
 
 ---
 
 ## Geliştirici notları
 
-### Eski Kotlin uygulamasından port
+### Porting matrisi
 
-`docs/kotlin_to_flutter_porting_matrix.md`, eski Kotlin/Android sorumluluklarının Flutter/Dart karşılıklarını listeler. Yeni geliştirme yaparken bu matrisi kontrol etmek, eski davranışların sessizce düşmesini engeller.
+`docs/kotlin_to_flutter_porting_matrix.md`, eski Kotlin/Android uygulamasındaki sorumlulukların Flutter/Dart karşılıklarını listeler. Yeni geliştirmelerde davranış parity kontrolü için bu matrisi gözden geçirin.
 
 ### Legacy servisler
 
-`lib/services/audio_analyzer.dart` ve `lib/services/motion_analyzer.dart` geçmiş servis katmanlarını ve JPEG encode yardımcılarını içerir. Güncel server alert kararı V2 analiz pipeline'ından gelir; `CameraImageJpegEncoder` ise MJPEG yayın için kullanılmaya devam eder.
+`lib/services/audio_analyzer.dart` ve `lib/services/motion_analyzer.dart` geçmiş servis katmanı ve yardımcı kodları içerir. Güncel alert kararı V2 analiz pipeline'ından gelir; `CameraImageJpegEncoder` ise MJPEG yayınında aktif olarak kullanılmaya devam eder.
 
 ### Kaynak yönetimi
 
-Server/client geçişlerinde şu kaynakların kapatılmasına özellikle dikkat edilir:
+Yeni servis eklenirken şu kaynakların lifecycle'a dahil edildiğinden emin olun:
 
-- WebSocket sink/socket
-- UDP discovery subscription/socket
-- HTTP server
+- HTTP server ve WebSocket bağlantıları
+- UDP discovery soketleri/subscription'ları
 - CameraController
-- AudioRecorder subscription
-- MediaAnalysisCoordinator, AlertEngine ve analizör durumları
-- Wakelock
+- AudioRecorder stream subscription
+- MediaAnalysisCoordinator, AlertEngine ve analizör state'leri
+- SharedPreferences-backed runtime state
+- Notification ve Telegram yardımcıları
 
-Yeni servis eklenirse `dispose()` akışına dahil edilmelidir.
+### Sınırlar
 
-### Güvenlik notu
-
-Uygulama LAN içi kullanım için sade HTTP ve UDP broadcast kullanır. İnternete doğrudan açmak önerilmez. Uzaktan erişim gerekiyorsa VPN veya güvenli tünel gibi ek güvenlik katmanları kullanılmalıdır.
-
-### Bilinen sınırlamalar
-
-- WebSocket üzerinden legacy video/audio paketleri opsiyonel olarak desteklenir; mevcut client UI görüntü için WebView'deki HTTP/MJPEG sayfasını kullanır.
-- Ayar değerleri için servis katmanı hazırdır; kullanıcı arayüzünde ayrıntılı ayar ekranı yoktur.
-- Kamera seçimi platformlar arası basitlik için ilk uygun kamerayı kullanır.
-- Ağlama/hareket algılama heuristiktir; profesyonel veya tıbbi izleme yerine geçmez.
+- Algılama heuristiktir; profesyonel/tıbbi bebek izleme sistemi yerine geçmez.
+- Varsayılan mimari LAN içi sade HTTP kullanır.
+- Token'lar bellek içidir; server dispose/restart sonrası yeniden eşleşme gerekir.
+- Ayrıntılı ayar UI'ı sınırlıdır; servis katmanı ayarları okumaya/yazmaya hazırdır.
 
 ---
 
 ## Lisans ve yayınlama
 
-`pubspec.yaml` içinde `publish_to: 'none'` tanımlıdır; paket pub.dev'e yayınlanmak üzere yapılandırılmamıştır. Uygulama proje içi/mobile build çıktısı olarak kullanılmak üzere hazırlanmıştır.
+`pubspec.yaml` içinde `publish_to: 'none'` tanımlıdır. Proje pub.dev paketi olarak değil, mobil uygulama build çıktısı olarak kullanılmak üzere yapılandırılmıştır.
