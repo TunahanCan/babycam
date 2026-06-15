@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleDevelopmentRegion</key><string>$(DEVELOPMENT_LANGUAGE)</string>
+  <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
+  <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>BabyCam</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>$(FLUTTER_BUILD_NAME)</string>
+  <key>CFBundleVersion</key><string>$(FLUTTER_BUILD_NUMBER)</string>
+  <key>LSRequiresIPhoneOS</key><true/>
+  <key>NSCameraUsageDescription</key><string>BabyCam server modu kamera yayını için kameraya ihtiyaç duyar.</string>
+  <key>NSMicrophoneUsageDescription</key><string>BabyCam server modu ses analizi ve yayın için mikrofona ihtiyaç duyar.</string>
+  <key>NSLocalNetworkUsageDescription</key><string>BabyCam aynı yerel ağdaki client/server cihazlarını bulur.</string>
+  <key>NSBonjourServices</key><array><string>_babycam._tcp</string></array>
+  <key>UIViewControllerBasedStatusBarAppearance</key><false/>
+</dict></plist>
