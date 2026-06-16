@@ -1,2 +1,4 @@
 # Project exclude paths
 /.gradle/
+# Android/Gradle build output
+android/.gradle/
