@@ -8,6 +8,9 @@ class BabyCamColors {
   static const brandPinkDark = Color(0xFFD84B93);
   static const brandPinkSoft = Color(0xFFFFEEF7);
   static const background = Color(0xFFFFFFFF);
+  static const navy = Color(0xFF17324F);
+  static const slate = Color(0xFF6B7A93);
+  static const mutedBlue = Color(0xFF9EB4CF);
   static const textPrimary = Color(0xFF1F2937);
   static const textSecondary = Color(0xFF6B7280);
   static const danger = Color(0xFFEF4444);
