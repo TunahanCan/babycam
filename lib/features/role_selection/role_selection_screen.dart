@@ -1,43 +1,44 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_role.dart';
-import '../../core/theme/babycam_colors.dart';
 
-class RoleSelectionScreen extends StatefulWidget {
+class RoleSelectionScreen extends StatelessWidget {
   const RoleSelectionScreen({super.key, required this.onRoleSelected});
   final ValueChanged<AppRole> onRoleSelected;
 
   @override
-  State<RoleSelectionScreen> createState() => _RoleSelectionScreenState();
-}
-
-class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
-  AppRole _selected = AppRole.server;
-
-  @override
   Widget build(BuildContext context) => Scaffold(
-        body: _GradientPage(
+        body: _LightShell(
           child: SafeArea(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(22, 18, 22, 28),
+              padding: const EdgeInsets.fromLTRB(26, 18, 26, 28),
               children: [
                 const _StatusBar(),
-                const SizedBox(height: 34),
-                Text('BabyCam', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: BabyCamColors.brandPinkDark, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 16),
-                Text('Bu cihaz ne olarak\nçalışacak?', style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.w900, color: BabyCamColors.navy, height: 1.08)),
-                const SizedBox(height: 14),
-                const Text('Rol seçildikten sonra uygulama sadece o role ait ekranları gösterir.', style: TextStyle(color: BabyCamColors.slate, fontSize: 18, height: 1.3)),
-                const SizedBox(height: 34),
-                _RoleCard(selected: _selected == AppRole.server, title: 'Bebek odası cihazı', mode: 'Server modu', description: 'Kamera ve mikrofon bu cihazda açılır. QR üretir, token verir, video/ses/uyarı yayınlar.', icon: Icons.camera_alt_rounded, color: BabyCamColors.brandBlueDark, chips: const ['QR üretir', 'LAN 8080'], onTap: () => setState(() => _selected = AppRole.server)),
-                const SizedBox(height: 20),
-                _RoleCard(selected: _selected == AppRole.client, title: 'Ebeveyn cihazı', mode: 'Client modu', description: 'Server QR kodunu okutur, session token alır; video, ses ve bildirimleri tüketir.', icon: Icons.bubble_chart_rounded, color: BabyCamColors.brandPinkDark, chips: const ['QR okutur', 'Bildirim alır'], onTap: () => setState(() => _selected = AppRole.client)),
-                const SizedBox(height: 26),
-                _InfoCard(),
-                const SizedBox(height: 32),
-                SizedBox(height: 64, child: FilledButton(onPressed: () => widget.onRoleSelected(_selected), style: FilledButton.styleFrom(backgroundColor: BabyCamColors.navy, shape: const StadiumBorder()), child: const Text('Seçimi kaydet ve devam et', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)))),
-                const SizedBox(height: 22),
-                const Center(child: Text('Daha sonra Ayarlar > Rolü sıfırla ile değiştirilebilir.', style: TextStyle(color: BabyCamColors.mutedBlue, fontSize: 14))),
+                const SizedBox(height: 48),
+                const Text('Bu cihaz ne olacak?', style: _titleStyle),
+                const SizedBox(height: 6),
+                const Text('Rolü daha sonra Ayarlar > Rolü değiştir bölümünden\ndeğiştirebilirsin.', style: _subtitleStyle),
+                const SizedBox(height: 44),
+                _RoleChoiceCard(
+                  dark: true,
+                  badge: 'S',
+                  title: 'Bebek odası cihazı',
+                  description: 'Kamera ve mikrofon bu telefonda açılır. Yayın URL\nve QR kod ile paylaşılır.',
+                  chip: 'Önerilen',
+                  button: 'Server olarak kur',
+                  onPressed: () => onRoleSelected(AppRole.server),
+                ),
+                const SizedBox(height: 28),
+                _RoleChoiceCard(
+                  badge: 'C',
+                  title: 'Ebeveyn cihazı',
+                  description: 'Aynı Wi‑Fi içinde server bulunur, canlı yayın izlenir\nve uyarılar bildirim olur.',
+                  chip: 'İzleyici',
+                  button: 'Client olarak bağlan',
+                  onPressed: () => onRoleSelected(AppRole.client),
+                ),
+                const SizedBox(height: 180),
+                _InfoStrip(title: 'Güvenlik notu', text: 'Bu uygulama doğrudan internete açılmak için\ntasarlanmadı. Aynı Wi‑Fi/LAN içinde kullan.'),
               ],
             ),
           ),
@@ -45,14 +46,17 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
       );
 }
 
-class _RoleCard extends StatelessWidget {
-  const _RoleCard({required this.selected, required this.title, required this.mode, required this.description, required this.icon, required this.color, required this.chips, required this.onTap});
-  final bool selected; final String title; final String mode; final String description; final IconData icon; final Color color; final List<String> chips; final VoidCallback onTap;
-  @override Widget build(BuildContext context) => InkWell(onTap: onTap, borderRadius: BorderRadius.circular(28), child: Container(padding: const EdgeInsets.all(22), decoration: _cardDecoration(selected), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Container(width: 70, height: 58, decoration: BoxDecoration(color: color.withOpacity(.9), borderRadius: BorderRadius.circular(14)), child: Icon(icon, color: Colors.white, size: 34)), const SizedBox(width: 18), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(color: BabyCamColors.navy, fontSize: 22, fontWeight: FontWeight.w900)), const SizedBox(height: 4), Text(mode, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w900))]))]), const SizedBox(height: 22), Text(description, style: const TextStyle(color: BabyCamColors.slate, fontSize: 17, height: 1.35)), const SizedBox(height: 18), Wrap(spacing: 12, runSpacing: 10, children: [for (final chip in chips) _Pill(text: chip, color: chip.contains('LAN') || chip.contains('Bildirim') ? BabyCamColors.brandPinkDark : BabyCamColors.brandBlueDark)])])));
+class _RoleChoiceCard extends StatelessWidget {
+  const _RoleChoiceCard({this.dark = false, required this.badge, required this.title, required this.description, required this.chip, required this.button, required this.onPressed});
+  final bool dark; final String badge; final String title; final String description; final String chip; final String button; final VoidCallback onPressed;
+  @override Widget build(BuildContext context) => Container(padding: const EdgeInsets.all(30), decoration: _cardDecoration(dark: dark), child: Column(children: [Row(crossAxisAlignment: CrossAxisAlignment.start, children: [CircleAvatar(radius: 40, backgroundColor: dark ? _pink : _mint, child: Text(badge, style: TextStyle(color: _navy, fontSize: 32, fontWeight: FontWeight.w900))), const SizedBox(width: 28), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: TextStyle(color: dark ? Colors.white : _navy, fontSize: 30, fontWeight: FontWeight.w900)), const SizedBox(height: 12), Text(description, style: TextStyle(color: dark ? Colors.white70 : _slate, fontSize: 18, height: 1.25))])), _Chip(text: chip, color: _pinkSoft)]), const SizedBox(height: 34), SizedBox(width: double.infinity, height: 74, child: FilledButton(onPressed: onPressed, style: FilledButton.styleFrom(backgroundColor: dark ? _pink : _navy, shape: const StadiumBorder()), child: Text(button, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900))))]));
 }
 
-class _InfoCard extends StatelessWidget { @override Widget build(BuildContext context) => Container(padding: const EdgeInsets.all(22), decoration: _cardDecoration(false).copyWith(color: Colors.white.withOpacity(.72)), child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [ _Pill(text: 'Güvenlik', color: Color(0xFF18BBA8)), SizedBox(height: 18), Text('Aynı Wi‑Fi/LAN içinde çalışır. İnternete doğrudan açmayın; uzaktan erişim için VPN veya güvenli tünel kullanın.', style: TextStyle(color: BabyCamColors.slate, fontSize: 17, height: 1.35))])); }
-class _Pill extends StatelessWidget { const _Pill({required this.text, required this.color}); final String text; final Color color; @override Widget build(BuildContext context) => Container(padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10), decoration: ShapeDecoration(color: color.withOpacity(.16), shape: const StadiumBorder()), child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w900))); }
-class _StatusBar extends StatelessWidget { const _StatusBar(); @override Widget build(BuildContext context) => const Row(children: [Text('09:41', style: TextStyle(color: BabyCamColors.navy, fontWeight: FontWeight.w900, fontSize: 18)), Spacer(), Icon(Icons.battery_5_bar_rounded, color: BabyCamColors.navy)]); }
-class _GradientPage extends StatelessWidget { const _GradientPage({required this.child}); final Widget child; @override Widget build(BuildContext context) => Container(decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topRight, end: Alignment.bottomLeft, colors: [Color(0xFFEAF4FF), Color(0xFFFFFFFF), Color(0xFFFFEEF7)])), child: child); }
-BoxDecoration _cardDecoration(bool selected) => BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28), border: Border.all(color: selected ? const Color(0xFFD8E8FA) : const Color(0xFFE4EEF8), width: 1.5), boxShadow: const [BoxShadow(color: Color(0x1A16324F), blurRadius: 22, offset: Offset(0, 12))]);
+class _InfoStrip extends StatelessWidget { const _InfoStrip({required this.title, required this.text}); final String title; final String text; @override Widget build(BuildContext context) => Container(padding: const EdgeInsets.all(26), decoration: _cardDecoration(), child: Row(children: [const CircleAvatar(radius: 30, backgroundColor: _mintSoft, child: Text('!', style: TextStyle(color: _navy, fontSize: 28, fontWeight: FontWeight.w900))), const SizedBox(width: 24), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(color: _navy, fontSize: 24, fontWeight: FontWeight.w900)), const SizedBox(height: 8), Text(text, style: const TextStyle(color: _slate, fontSize: 18, height: 1.25))]))])); }
+class _LightShell extends StatelessWidget { const _LightShell({required this.child}); final Widget child; @override Widget build(BuildContext context) => Container(decoration: const BoxDecoration(gradient: RadialGradient(center: Alignment(.55, -.78), radius: .8, colors: [_mintSoft, Color(0xFFFDF7F4), Color(0xFFF9F7FC)])), child: child); }
+class _StatusBar extends StatelessWidget { const _StatusBar(); @override Widget build(BuildContext context) => const Row(children: [Text('09:41', style: TextStyle(color: _navy, fontWeight: FontWeight.w900, fontSize: 18)), Spacer(), Icon(Icons.signal_cellular_alt_rounded, color: _navy), SizedBox(width: 12), Icon(Icons.battery_5_bar_rounded, color: _navy)]); }
+class _Chip extends StatelessWidget { const _Chip({required this.text, required this.color}); final String text; final Color color; @override Widget build(BuildContext context) => Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7), decoration: ShapeDecoration(color: color, shape: const StadiumBorder()), child: Text(text, style: const TextStyle(color: _navy, fontWeight: FontWeight.w800))); }
+BoxDecoration _cardDecoration({bool dark = false}) => BoxDecoration(color: dark ? _navy : Colors.white, borderRadius: BorderRadius.circular(34), border: Border.all(color: const Color(0xFFE2E8F0)), boxShadow: const [BoxShadow(color: Color(0x24111827), blurRadius: 28, offset: Offset(0, 16))]);
+const _navy = Color(0xFF101B31); const _slate = Color(0xFF6E7686); const _pink = Color(0xFFFF708B); const _pinkSoft = Color(0xFFFFDCE6); const _mint = Color(0xFF87D8CC); const _mintSoft = Color(0xFFD9F7F1);
+const _titleStyle = TextStyle(color: _navy, fontSize: 42, height: 1.05, fontWeight: FontWeight.w900);
+const _subtitleStyle = TextStyle(color: _slate, fontSize: 22, height: 1.18);
