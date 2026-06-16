@@ -27,6 +27,19 @@ void main() {
     expect(critical.cameraPresetKey, 'low');
   });
 
+  test('legacy cihaz mükemmel ağda kontrollü 480p deneme profiline çıkar', () {
+    final base = MediaQualityProfile.forDeviceTier(DeviceCapabilityTier.legacy);
+    final excellent = base.adaptForNetwork(NetworkQualityTier.excellent);
+    final weak = base.adaptForNetwork(NetworkQualityTier.weak);
+
+    expect(excellent.height, 480);
+    expect(excellent.targetFps, 10);
+    expect(excellent.cameraPresetKey, 'medium');
+    expect(excellent.audioFirst, isFalse);
+    expect(weak.height, 360);
+    expect(weak.audioFirst, isTrue);
+  });
+
   test('network classifier rtt ve hata sayısına göre tier üretir', () {
     const classifier = NetworkQualityClassifier();
 

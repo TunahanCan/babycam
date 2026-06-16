@@ -418,8 +418,12 @@ class MimiCamServer {
       if (json is! Map) throw const FormatException('Invalid quality report');
       final tier = NetworkQualityTier.fromName(json['tier']?.toString());
       final previousProfile = _activeMediaProfile;
-      _activeMediaProfile =
+      final nextProfile =
           MediaQualityProfile.forDeviceTier(_deviceTier).adaptForNetwork(tier);
+      if (previousProfile.cameraPresetKey != nextProfile.cameraPresetKey) {
+        await _restartCameraWithProfile(nextProfile);
+      }
+      _activeMediaProfile = nextProfile;
       _frameBudget.updateMinInterval(_activeMediaProfile.frameInterval);
       if (previousProfile.id != _activeMediaProfile.id) {
         onLog('Medya profili: ${_activeMediaProfile.summary}');
@@ -433,6 +437,39 @@ class MimiCamServer {
     } catch (_) {
       request.response.statusCode = HttpStatus.badRequest;
       await request.response.close();
+    }
+  }
+
+  Future<void> _restartCameraWithProfile(MediaQualityProfile profile) async {
+    final previousController = cameraController;
+    if (previousController == null) return;
+    cameraController = null;
+    _latestJpeg = null;
+    _frameBudget.reset();
+    await previousController.dispose();
+    if (_disposed) return;
+
+    final cameras = await availableCameras();
+    if (_disposed) return;
+    if (cameras.isEmpty) throw StateError(strings.cameraNotFound);
+
+    final nextController = CameraController(
+      cameras.first,
+      _resolutionPresetFor(profile),
+      enableAudio: false,
+    );
+    try {
+      await nextController.initialize();
+      if (_disposed) {
+        await nextController.dispose();
+        return;
+      }
+      cameraController = nextController;
+      await nextController.startImageStream(_handleCameraFrame);
+    } catch (_) {
+      if (cameraController == nextController) cameraController = null;
+      await nextController.dispose();
+      rethrow;
     }
   }
 

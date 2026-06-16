@@ -91,4 +91,38 @@ void main() {
     expect(runtime.currentState.networkQuality?.tier, NetworkQualityTier.weak);
     expect(runtime.currentState.mediaProfile?.audioFirst, isTrue);
   });
+
+  test('eşleşme sonrası kalite ölçümü canlı ekran açılmadan başlar', () async {
+    final updates = StreamController<NetworkQualityUpdate>();
+    var watchStarted = 0;
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      watchNetworkQuality: (_) {
+        watchStarted++;
+        return updates.stream;
+      },
+    );
+    addTearDown(updates.close);
+
+    await runtime.pairWithServer(payload());
+
+    expect(watchStarted, 1);
+
+    updates.add(NetworkQualityUpdate(
+      snapshot: NetworkQualitySnapshot(
+        tier: NetworkQualityTier.excellent,
+        rttMs: 60,
+        measuredAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+      serverProfile: MediaQualityProfile.forDeviceTier(
+        DeviceCapabilityTier.legacy,
+      ).adaptForNetwork(NetworkQualityTier.excellent),
+    ));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
+    expect(runtime.currentState.networkQuality?.tier,
+        NetworkQualityTier.excellent);
+    expect(runtime.currentState.mediaProfile?.height, 480);
+  });
 }

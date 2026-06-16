@@ -98,6 +98,7 @@ class ClientRuntime {
       session: session,
       mediaProfile: mediaProfile,
     ));
+    _startNetworkQuality(session);
   }
 
   Future<void> renewTokenIfNeeded({DateTime? now}) async {
@@ -108,12 +109,14 @@ class ClientRuntime {
         phase: ClientRuntimePhase.renewingToken, session: session));
     final renewed = await _renew?.call(session);
     if (_disposed) return;
+    final nextSession = renewed ?? session;
     _emit(ClientRuntimeState(
       phase: ClientRuntimePhase.pairedIdle,
-      session: renewed ?? session,
+      session: nextSession,
       networkQuality: _state.networkQuality,
       mediaProfile: _state.mediaProfile,
     ));
+    _startNetworkQuality(nextSession);
   }
 
   Future<void> startWatching({bool audioEnabled = false}) async {
@@ -124,7 +127,6 @@ class ClientRuntime {
       await _stopStream?.call(session);
       return;
     }
-    _startNetworkQuality(session);
     _emit(ClientRuntimeState(
       phase: ClientRuntimePhase.watching,
       session: session,
@@ -134,8 +136,6 @@ class ClientRuntime {
   }
 
   Future<void> stopWatching() async {
-    await _networkQualitySubscription?.cancel();
-    _networkQualitySubscription = null;
     final session = _state.session;
     if (session != null) await _stopStream?.call(session);
     if (_disposed) return;
@@ -177,6 +177,8 @@ class ClientRuntime {
     if (_disposed) return;
     await stopWatching();
     await stopAlertListening();
+    await _networkQualitySubscription?.cancel();
+    _networkQualitySubscription = null;
     await _clearStore?.call();
     _emit(const ClientRuntimeState(phase: ClientRuntimePhase.unpaired));
   }

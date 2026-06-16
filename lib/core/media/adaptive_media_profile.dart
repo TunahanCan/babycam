@@ -121,7 +121,19 @@ class MediaQualityProfile {
   MediaQualityProfile adaptForNetwork(NetworkQualityTier tier) {
     final baseIsLegacy = cameraPresetKey == 'low';
     return switch (tier) {
-      NetworkQualityTier.unknown || NetworkQualityTier.excellent => this,
+      NetworkQualityTier.unknown => this,
+      NetworkQualityTier.excellent => baseIsLegacy
+          ? copyWith(
+              id: '${id}_excellent_trial',
+              label: 'Dengeli deneme',
+              width: 854,
+              height: 480,
+              targetFps: 10,
+              jpegQuality: 58,
+              cameraPresetKey: 'medium',
+              audioFirst: false,
+            )
+          : this,
       NetworkQualityTier.good => copyWith(
           id: '${id}_good',
           label: '$label / stabil',
