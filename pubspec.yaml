@@ -20,7 +20,7 @@ dependencies:
   flutter_local_notifications: ^17.2.2
   wakelock_plus: ^1.2.8
   image: ^4.2.0
-  record: ^5.1.2
+  record: ^7.1.0
   crypto: ^3.0.3
 
 dev_dependencies:

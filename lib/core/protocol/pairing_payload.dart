@@ -30,7 +30,7 @@ class PairingPayload {
     final expiresAtMs = json['expiresAtMs'];
     final certificateFingerprintSha256 = json['certificateFingerprintSha256'] ?? '';
     final capabilities = json['capabilities'];
-    if (schemaVersion != BabyCamProtocolV2.schemaVersion || scheme is! String || host is! String || port is! int || deviceId is! String || deviceName is! String || pairingNonce is! String || expiresAtMs is! int || certificateFingerprintSha256 is! String || capabilities is! Map) return null;
+    if (schemaVersion is! int || schemaVersion != BabyCamProtocolV2.schemaVersion || scheme is! String || host is! String || port is! int || deviceId is! String || deviceName is! String || pairingNonce is! String || expiresAtMs is! int || certificateFingerprintSha256 is! String || capabilities is! Map) return null;
     return PairingPayload(schemaVersion: schemaVersion, scheme: scheme, host: host, port: port, deviceId: deviceId, deviceName: deviceName, pairingNonce: pairingNonce, expiresAtMs: expiresAtMs, certificateFingerprintSha256: certificateFingerprintSha256, capabilities: Map<String, Object?>.from(capabilities));
   }
 
