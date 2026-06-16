@@ -98,17 +98,88 @@ Varsayılan implementasyon `SharedPreferencesRoleRepository` kullanır. Rol sıf
 
 ---
 
-## Tema ve UI
+## Ekranlar ve kullanıcı akışları
+
+BabyCam ekranları artık teknik servis listesinden çok, kullanıcının adım adım ne yapacağını anlayacağı akışlar olarak tasarlanır. Her ekranda tek ana aksiyon, kısa açıklama, görünür durum etiketi ve gerekirse güvenli geri dönüş bulunur.
 
 Merkezi tema dosyaları:
 
 - `BabyCamColors`: mavi/pembe marka renkleri, success/danger ve metin renkleri.
 - `BabyCamTheme`: server, client ve neutral tema üreticileri.
 
-Role selection ekranı iki büyük kart gösterir:
+### 1. İlk açılış: rol seçimi
 
-1. **Ebeveyn Cihazı** — QR okut, canlı izle, bildirim al — mavi tema.
-2. **Bebek Odası Cihazı** — QR göster, kamera/mikrofon yayını başlat, ağlama ve hareket algıla — pembe tema.
+Kullanıcıya önce **“Bu cihaz ne olarak çalışacak?”** sorulur. Seçim kartları teknik terimden kaçınır ve cihazın gerçek görevini anlatır:
+
+1. **Bebek odası cihazı** — kamerayı/mikrofonu bu cihaz açar, QR üretir, video/ses/uyarı yayınlar.
+2. **Ebeveyn cihazı** — server QR kodunu okutur; video, ses ve bildirimleri izler.
+
+Rol kaydedildikten sonra uygulama yalnızca seçilen role ait ekranları ve dependency graph'ı açar. Kullanıcı yanlış seçim yaptıysa **Rolü sıfırla** aksiyonu ile güvenli şekilde başa dönebilir.
+
+### 2. Bebek odası cihazı akışı
+
+Server ekranı, ebeveynin yapması gereken sırayı açıkça gösterir:
+
+```text
+Bebek odası cihazı
+  ↓
+QR ile eşleştir
+  ↓
+Ebeveyn cihazı bağlanır
+  ↓
+Medya runtime açılır
+  ↓
+/video + /audio + /ws/events akışları başlar
+  ↓
+Analiz özeti ve son uyarı görünür
+```
+
+Kullanıcı dostu davranışlar:
+
+- QR kartı nonce süresini ve tek kullanımlık olduğunu belirtir.
+- Durum rozetleri `pairingActive`, `clientPaired`, `mediaActive` gibi anlık fazı görünür kılar.
+- Medya runtime kartı kamera, mikrofon, analiz ve event akışlarının ne zaman açıldığını anlatır.
+- Analiz özeti cry/motion skorlarını eşiklerle birlikte gösterir.
+- **Yayını durdur** aksiyonu canlı izleme yoksa medya kaynaklarını kapatır.
+- Ayarlar/log gibi ikincil işlemler ana akışı bölmeden ayrı sheet içinde düşünülür.
+
+### 3. Ebeveyn cihazı akışı
+
+Client ekranı, eşleşme öncesi ve sonrası aynı mantıkla ilerler:
+
+```text
+Ebeveyn cihazı
+  ↓
+Server QR kodunu okut
+  ↓
+/pair/confirm ile trusted token al
+  ↓
+İzle + dinle veya sadece bildirim seç
+  ↓
+Watch ekranında video/ses/uyarı akışlarını tüket
+  ↓
+İzlemeyi durdurunca /session/stop ve stream dispose
+```
+
+Kullanıcı dostu davranışlar:
+
+- Eşleşme yoksa ana aksiyon **QR tara** olarak görünür.
+- Eşleşme varsa ana aksiyon **İzle + dinle** olur.
+- QR yoksa manuel IP/discovery yardımcı yol olarak sunulur; ana güven modeli hâlâ QR + nonce + token'dır.
+- Watch ekranında video alanı, ses/bildirim/WebSocket bağlantı rozetleri ve son uyarı tek yerde gösterilir.
+- **İzlemeyi durdur** butonu ekranı kapatır, video/audio stream'i durdurur ve server'a session stop bildirir.
+- Uyarı paylaşımı manuel kullanıcı aksiyonudur; token olmadan video/ses linki açılmaz.
+
+### 4. Ekran durumları
+
+| Ekran | Ana durumlar | Kullanıcının gördüğü ana aksiyon |
+| --- | --- | --- |
+| Rol seçimi | rol seçilmedi, server seçildi, client seçildi | Seçimi kaydet ve devam et |
+| Server home | `pairingActive`, `pairingIdle`, `clientPaired`, `mediaActive` | QR ile eşleştir / Yayını durdur |
+| Client home | eşleşmedi, eşleşti, alert-only bekleme | QR tara / İzle + dinle |
+| Watch | watching, alertOnly, reconnecting | İzlemeyi durdur / bildirimi paylaş |
+
+Bu akış metinleri ürün dilinin temelidir: kısa cümleler, teknik ayrıntıyı destekleyici açıklama olarak verme, ana butonu her ekranda tek ve anlaşılır tutma.
 
 ---
 
