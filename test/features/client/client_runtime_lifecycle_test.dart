@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mimicam/core/media/adaptive_media_profile.dart';
 import 'package:mimicam/core/protocol/pairing_payload.dart';
 import 'package:mimicam/core/protocol/pairing_session.dart';
 import 'package:mimicam/features/client/client_runtime.dart';
@@ -23,8 +26,8 @@ void main() {
     var cleared = 0;
     final runtime = ClientRuntime(
         pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
-        startStream: () async => streamStarted++,
-        stopStream: () async => streamStopped++,
+        startStream: (_) async => streamStarted++,
+        stopStream: (_) async => streamStopped++,
         clearStore: () async => cleared++);
     await runtime.pairWithServer(payload());
     expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
@@ -42,7 +45,7 @@ void main() {
     var streamStarted = 0;
     final runtime = ClientRuntime(
       pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
-      startStream: () async => streamStarted++,
+      startStream: (_) async => streamStarted++,
     );
 
     await runtime.startWatching();
@@ -61,5 +64,31 @@ void main() {
 
     expect(runtime.currentState.phase, ClientRuntimePhase.error);
     expect(runtime.currentState.error, isA<StateError>());
+  });
+
+  test('canlı izleme sırasında ağ kalite update state içine yazılır', () async {
+    final updates = StreamController<NetworkQualityUpdate>();
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      watchNetworkQuality: (_) => updates.stream,
+    );
+    addTearDown(updates.close);
+
+    await runtime.pairWithServer(payload());
+    await runtime.startWatching();
+    updates.add(NetworkQualityUpdate(
+      snapshot: NetworkQualitySnapshot(
+        tier: NetworkQualityTier.weak,
+        rttMs: 550,
+        measuredAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+      serverProfile: MediaQualityProfile.forDeviceTier(
+        DeviceCapabilityTier.modern,
+      ).adaptForNetwork(NetworkQualityTier.weak),
+    ));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(runtime.currentState.networkQuality?.tier, NetworkQualityTier.weak);
+    expect(runtime.currentState.mediaProfile?.audioFirst, isTrue);
   });
 }

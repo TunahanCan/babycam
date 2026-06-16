@@ -371,6 +371,10 @@ class _ServerHeroCard extends StatelessWidget {
                 label: '${state.activeClients} ebeveyn',
                 color: MimiCamDesignTokens.pink,
               ),
+              _ServerPill(
+                label: state.mediaProfile?.label ?? 'Kalite ölçülüyor',
+                color: MimiCamDesignTokens.amber,
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -786,6 +790,12 @@ class _RuntimeStats extends StatelessWidget {
           label: 'Mikrofon',
           value: state.microphoneActive ? 'Dinliyor' : 'Kapalı',
           color: MimiCamDesignTokens.amber),
+      _Stat(
+          label: 'Kalite',
+          value: state.mediaProfile == null
+              ? 'Otomatik'
+              : '${state.mediaProfile!.height}p · ${state.mediaProfile!.targetFps}fps',
+          color: MimiCamDesignTokens.mint),
     ];
 
     return LayoutBuilder(
@@ -842,6 +852,11 @@ class _DetectionCard extends StatelessWidget {
                 state.motionAnalyzerActive ? 'Hazır' : 'Kapalı'),
             const SizedBox(height: 10),
             _KeyVal('Çalışma modu', _powerModeLabel(state.powerMode.name)),
+            const SizedBox(height: 10),
+            _KeyVal(
+              'Yayın profili',
+              state.mediaProfile?.summary ?? 'Otomatik ölçülüyor',
+            ),
           ],
         ),
       ),

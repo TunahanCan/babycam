@@ -1,13 +1,23 @@
 import 'dart:async';
 
+import '../../core/media/adaptive_media_profile.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../core/protocol/pairing_session.dart';
 
 class ClientRuntimeState {
-  const ClientRuntimeState({required this.phase, this.session, this.error});
+  const ClientRuntimeState({
+    required this.phase,
+    this.session,
+    this.error,
+    this.networkQuality,
+    this.mediaProfile,
+  });
+
   final ClientRuntimePhase phase;
   final PairingSession? session;
   final Object? error;
+  final NetworkQualitySnapshot? networkQuality;
+  final MediaQualityProfile? mediaProfile;
 }
 
 enum ClientRuntimePhase {
@@ -28,8 +38,10 @@ class ClientRuntime {
   ClientRuntime({
     required Future<PairingSession> Function(PairingPayload payload) pair,
     Future<PairingSession?> Function(PairingSession session)? renew,
-    Future<void> Function()? startStream,
-    Future<void> Function()? stopStream,
+    Future<void> Function(PairingSession session)? startStream,
+    Future<void> Function(PairingSession session)? stopStream,
+    Stream<NetworkQualityUpdate> Function(PairingSession session)?
+        watchNetworkQuality,
     Future<void> Function()? startAlerts,
     Future<void> Function()? stopAlerts,
     Future<void> Function()? clearStore,
@@ -37,20 +49,24 @@ class ClientRuntime {
         _renew = renew,
         _startStream = startStream,
         _stopStream = stopStream,
+        _watchNetworkQuality = watchNetworkQuality,
         _startAlerts = startAlerts,
         _stopAlerts = stopAlerts,
         _clearStore = clearStore;
 
   final Future<PairingSession> Function(PairingPayload payload) _pair;
   final Future<PairingSession?> Function(PairingSession session)? _renew;
-  final Future<void> Function()? _startStream;
-  final Future<void> Function()? _stopStream;
+  final Future<void> Function(PairingSession session)? _startStream;
+  final Future<void> Function(PairingSession session)? _stopStream;
+  final Stream<NetworkQualityUpdate> Function(PairingSession session)?
+      _watchNetworkQuality;
   final Future<void> Function()? _startAlerts;
   final Future<void> Function()? _stopAlerts;
   final Future<void> Function()? _clearStore;
   final _states = StreamController<ClientRuntimeState>.broadcast();
   ClientRuntimeState _state =
       const ClientRuntimeState(phase: ClientRuntimePhase.unpaired);
+  StreamSubscription<NetworkQualityUpdate>? _networkQualitySubscription;
   bool _disposed = false;
 
   ClientRuntimeState get currentState => _state;
@@ -75,8 +91,13 @@ class ClientRuntime {
       rethrow;
     }
     if (_disposed) return;
+    final mediaProfile = MediaQualityProfile.fromJson(
+        session.payload.capabilities['mediaProfile']);
     _emit(ClientRuntimeState(
-        phase: ClientRuntimePhase.pairedIdle, session: session));
+      phase: ClientRuntimePhase.pairedIdle,
+      session: session,
+      mediaProfile: mediaProfile,
+    ));
   }
 
   Future<void> renewTokenIfNeeded({DateTime? now}) async {
@@ -88,25 +109,42 @@ class ClientRuntime {
     final renewed = await _renew?.call(session);
     if (_disposed) return;
     _emit(ClientRuntimeState(
-        phase: ClientRuntimePhase.pairedIdle, session: renewed ?? session));
+      phase: ClientRuntimePhase.pairedIdle,
+      session: renewed ?? session,
+      networkQuality: _state.networkQuality,
+      mediaProfile: _state.mediaProfile,
+    ));
   }
 
   Future<void> startWatching({bool audioEnabled = false}) async {
     if (_disposed || _state.session == null) return;
-    await _startStream?.call();
+    final session = _state.session!;
+    await _startStream?.call(session);
     if (_disposed) {
-      await _stopStream?.call();
+      await _stopStream?.call(session);
       return;
     }
+    _startNetworkQuality(session);
     _emit(ClientRuntimeState(
-        phase: ClientRuntimePhase.watching, session: _state.session));
+      phase: ClientRuntimePhase.watching,
+      session: session,
+      networkQuality: _state.networkQuality,
+      mediaProfile: _state.mediaProfile,
+    ));
   }
 
   Future<void> stopWatching() async {
-    await _stopStream?.call();
+    await _networkQualitySubscription?.cancel();
+    _networkQualitySubscription = null;
+    final session = _state.session;
+    if (session != null) await _stopStream?.call(session);
     if (_disposed) return;
     _emit(ClientRuntimeState(
-        phase: ClientRuntimePhase.pairedIdle, session: _state.session));
+      phase: ClientRuntimePhase.pairedIdle,
+      session: session,
+      networkQuality: _state.networkQuality,
+      mediaProfile: _state.mediaProfile,
+    ));
   }
 
   Future<void> startAlertListening() async {
@@ -117,14 +155,22 @@ class ClientRuntime {
       return;
     }
     _emit(ClientRuntimeState(
-        phase: ClientRuntimePhase.alertOnly, session: _state.session));
+      phase: ClientRuntimePhase.alertOnly,
+      session: _state.session,
+      networkQuality: _state.networkQuality,
+      mediaProfile: _state.mediaProfile,
+    ));
   }
 
   Future<void> stopAlertListening() async {
     await _stopAlerts?.call();
     if (_disposed) return;
     _emit(ClientRuntimeState(
-        phase: ClientRuntimePhase.pairedIdle, session: _state.session));
+      phase: ClientRuntimePhase.pairedIdle,
+      session: _state.session,
+      networkQuality: _state.networkQuality,
+      mediaProfile: _state.mediaProfile,
+    ));
   }
 
   Future<void> clearPairing() async {
@@ -138,9 +184,27 @@ class ClientRuntime {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
-    await _stopStream?.call();
+    await _networkQualitySubscription?.cancel();
+    final session = _state.session;
+    if (session != null) await _stopStream?.call(session);
     await _stopAlerts?.call();
     await _states.close();
+  }
+
+  void _startNetworkQuality(PairingSession session) {
+    final watch = _watchNetworkQuality;
+    if (watch == null) return;
+    _networkQualitySubscription?.cancel();
+    _networkQualitySubscription = watch(session).listen((update) {
+      if (_disposed || _state.session != session) return;
+      _emit(ClientRuntimeState(
+        phase: _state.phase,
+        session: _state.session,
+        error: _state.error,
+        networkQuality: update.snapshot,
+        mediaProfile: update.serverProfile ?? _state.mediaProfile,
+      ));
+    });
   }
 
   void _emit(ClientRuntimeState state) {

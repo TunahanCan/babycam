@@ -16,6 +16,7 @@ import '../analysis/audio/cry_audio_analyzer_v2.dart';
 import '../analysis/video/luma_frame.dart';
 import '../analysis/video/motion_analysis_config.dart';
 import '../analysis/video/motion_analyzer_v2.dart';
+import '../core/media/adaptive_media_profile.dart';
 import '../core/mimicam_protocol.dart';
 import '../core/protocol/mimicam_protocol.dart' as protocol_v2;
 import '../features/server/pairing/pairing_token_service.dart';
@@ -26,6 +27,7 @@ import 'server/alert_protocol_adapter.dart';
 import 'server/media_analysis_coordinator.dart';
 import 'server/media_frame_policy.dart';
 import 'server/media_analysis_metrics.dart';
+import 'platform/device_capability_probe.dart';
 import 'platform/foreground_service_controller.dart';
 import 'network_address_provider.dart';
 
@@ -37,8 +39,14 @@ class MimiCamServer {
     required this.onAlert,
     this.enableLegacyWebSocketMediaPackets = false,
     this.enableAudioAutoCalibration = true,
+    this.onMediaProfileChanged,
+    DeviceCapabilityTier? deviceTier,
     PairingTokenService? tokenService,
-  }) : tokenService = tokenService ?? PairingTokenService();
+  })  : tokenService = tokenService ?? PairingTokenService(),
+        _deviceTier = deviceTier ?? DeviceCapabilityProbe.detectTier() {
+    _activeMediaProfile = MediaQualityProfile.forDeviceTier(_deviceTier);
+    _frameBudget.updateMinInterval(_activeMediaProfile.frameInterval);
+  }
 
   final bool enableLegacyWebSocketMediaPackets;
   final bool enableAudioAutoCalibration;
@@ -47,6 +55,7 @@ class MimiCamServer {
   final AppStrings strings;
   final void Function(String message) onLog;
   final void Function(String message) onAlert;
+  final void Function(MediaQualityProfile profile)? onMediaProfileChanged;
   final PairingTokenService tokenService;
   final _audioRecorder = AudioRecorder();
   MediaAnalysisCoordinator? _analysisCoordinator;
@@ -57,6 +66,10 @@ class MimiCamServer {
   final _audioClients = <HttpResponse>{};
 
   CameraController? cameraController;
+  DeviceCapabilityTier get deviceTier => _deviceTier;
+  MediaQualityProfile get activeMediaProfile => _activeMediaProfile;
+  Map<String, Object?> get mediaCapabilities => _mediaCapabilities();
+
   HttpServer? _httpServer;
   bool _httpServerListening = false;
   bool _disposed = false;
@@ -65,6 +78,8 @@ class MimiCamServer {
   int _lastAudioDebugLog = 0;
   final _frameBudget = MediaFrameBudget();
   final _encodingPolicy = const MediaEncodingPolicy();
+  final DeviceCapabilityTier _deviceTier;
+  late MediaQualityProfile _activeMediaProfile;
   static const _audioSampleRate = 16000;
   static const _audioChannels = 1;
   static const _audioBitsPerSample = 16;
@@ -107,8 +122,11 @@ class MimiCamServer {
 
     _initializeAnalysisPipeline();
 
-    cameraController = CameraController(cameras.first, ResolutionPreset.medium,
-        enableAudio: false);
+    cameraController = CameraController(
+      cameras.first,
+      _resolutionPresetFor(_activeMediaProfile),
+      enableAudio: false,
+    );
     await cameraController!.initialize();
     if (_disposed) {
       await cameraController?.dispose();
@@ -151,7 +169,7 @@ class MimiCamServer {
     final coordinator = MediaAnalysisCoordinator(
       motionAnalyzer: MotionAnalyzerV2(config: motionConfig),
       audioAnalyzer: audioAnalyzer,
-      alertEngine: AlertEngine(config: alertConfig),
+      alertEngine: AlertEngine(config: alertConfig, strings: strings),
       metrics: metrics,
       onLog: onLog,
     );
@@ -227,7 +245,10 @@ class MimiCamServer {
         legacyWebSocketEnabled: enableLegacyWebSocketMediaPackets,
       );
       if (shouldEncodeJpeg) {
-        final jpeg = CameraImageJpegEncoder.encode(frame);
+        final jpeg = CameraImageJpegEncoder.encode(
+          frame,
+          quality: _activeMediaProfile.jpegQuality,
+        );
         _latestJpeg = jpeg;
         if (enableLegacyWebSocketMediaPackets) {
           _broadcastBinary([MimiCamProtocol.packetVideoMjpeg, ...jpeg]);
@@ -294,6 +315,10 @@ class MimiCamServer {
         await stopMediaRuntime();
         await _writeJson(request.response, {'ok': true});
         return;
+      case protocol_v2.MimiCamProtocolV2.qualityReport:
+        if (!await _requireAuth(request)) return;
+        await _handleQualityReport(request);
+        return;
       case protocol_v2.MimiCamProtocolV2.statusPublic:
         await _writeJson(request.response, {
           'service': 'mimicam',
@@ -301,12 +326,7 @@ class MimiCamServer {
           'serverDeviceId': 'server_local',
           'serverName': 'Bebek Odası',
           'pairingNonce': tokenService.createPairingNonce(),
-          'capabilities': {
-            'video': 'mjpeg',
-            'audio': 'pcm16le',
-            'events': 'json',
-            'transport': 'http',
-          },
+          'capabilities': _mediaCapabilities(),
         });
         return;
       case '/video':
@@ -326,6 +346,8 @@ class MimiCamServer {
           'audioClients': _audioClients.length,
           'webSocketClients': _webSockets.length,
           'hasFrame': _latestJpeg != null,
+          'deviceTier': _deviceTier.name,
+          'mediaProfile': _activeMediaProfile.toJson(),
           if (_analysisCoordinator != null)
             ..._analysisCoordinator!.diagnostics(),
         });
@@ -357,11 +379,7 @@ class MimiCamServer {
         'clientId': token.clientId,
         'trustedClientToken': token.token,
         'trustedClientTokenExpiresAtMs': token.expiresAtMs,
-        'capabilities': {
-          'video': 'mjpeg',
-          'audio': 'pcm16le',
-          'events': 'json'
-        },
+        'capabilities': _mediaCapabilities(),
         'sessionToken': token.token,
       });
     } catch (_) {
@@ -392,6 +410,50 @@ class MimiCamServer {
       'expiresAtMs': renewed.expiresAtMs,
     });
   }
+
+  Future<void> _handleQualityReport(HttpRequest request) async {
+    try {
+      final body = await utf8.decoder.bind(request).join();
+      final json = jsonDecode(body);
+      if (json is! Map) throw const FormatException('Invalid quality report');
+      final tier = NetworkQualityTier.fromName(json['tier']?.toString());
+      final previousProfile = _activeMediaProfile;
+      _activeMediaProfile =
+          MediaQualityProfile.forDeviceTier(_deviceTier).adaptForNetwork(tier);
+      _frameBudget.updateMinInterval(_activeMediaProfile.frameInterval);
+      if (previousProfile.id != _activeMediaProfile.id) {
+        onLog('Medya profili: ${_activeMediaProfile.summary}');
+        onMediaProfileChanged?.call(_activeMediaProfile);
+      }
+      await _writeJson(request.response, {
+        'ok': true,
+        'deviceTier': _deviceTier.name,
+        'mediaProfile': _activeMediaProfile.toJson(),
+      });
+    } catch (_) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+    }
+  }
+
+  Map<String, Object?> _mediaCapabilities() => {
+        'video': _activeMediaProfile.videoCodec,
+        'videoPreferred': _activeMediaProfile.preferredVideoCodec,
+        'audio': _activeMediaProfile.audioCodec,
+        'audioPreferred': _activeMediaProfile.preferredAudioCodec,
+        'events': 'json',
+        'transport': 'http',
+        'transportPreferred': 'webrtc',
+        'deviceTier': _deviceTier.name,
+        'mediaProfile': _activeMediaProfile.toJson(),
+      };
+
+  ResolutionPreset _resolutionPresetFor(MediaQualityProfile profile) =>
+      switch (profile.cameraPresetKey) {
+        'low' => ResolutionPreset.low,
+        'high' => ResolutionPreset.high,
+        _ => ResolutionPreset.medium,
+      };
 
   bool _isAuthorized(HttpRequest request) {
     final header = request.headers.value(HttpHeaders.authorizationHeader);

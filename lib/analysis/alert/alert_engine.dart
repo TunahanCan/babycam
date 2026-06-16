@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../audio/audio_analysis_result.dart';
 import '../video/motion_analysis_result.dart';
+import '../../l10n/app_strings.dart';
 import 'alert_config.dart';
 import 'alert_event.dart';
 import 'alert_severity.dart';
@@ -10,7 +11,7 @@ import 'cooldown_policy.dart';
 
 /// Converts analyzer results into structured, transport-agnostic alerts.
 class AlertEngine {
-  AlertEngine({this.config = const AlertConfig()})
+  AlertEngine({this.config = const AlertConfig(), AppStrings? strings})
       : _cooldownPolicy = CooldownPolicy(
           cooldownMsByType: {
             AlertType.cryDetected: config.cryCooldownMs,
@@ -18,9 +19,11 @@ class AlertEngine {
             AlertType.loudSound: config.loudSoundCooldownMs,
             AlertType.globalLightChange: config.globalLightChangeCooldownMs,
           },
-        );
+        ),
+        _strings = strings;
 
   final AlertConfig config;
+  final AppStrings? _strings;
   final CooldownPolicy _cooldownPolicy;
   final StreamController<AlertEvent> _controller =
       StreamController<AlertEvent>.broadcast();
@@ -44,7 +47,7 @@ class AlertEngine {
       return _tryEmit(
         type: AlertType.globalLightChange,
         severity: AlertSeverity.info,
-        message: 'Işık değişimi algılandı',
+        message: _globalLightMessage(result),
         score: result.score,
         timestampMs: result.timestampMs,
         metadata: _motionMetadata(result),
@@ -58,7 +61,7 @@ class AlertEngine {
     return _tryEmit(
       type: AlertType.motionDetected,
       severity: AlertSeverity.info,
-      message: 'Hareket algılandı',
+      message: _motionMessage(result),
       score: result.score,
       timestampMs: result.timestampMs,
       metadata: _motionMetadata(result),
@@ -71,19 +74,20 @@ class AlertEngine {
       return _tryEmit(
         type: AlertType.cryDetected,
         severity: AlertSeverity.warning,
-        message: 'Ağlama algılandı',
+        message: _cryMessage(result),
         score: result.cryScore,
         timestampMs: result.timestampMs,
         metadata: _audioMetadata(result),
       );
     }
 
-    final isLoudSound = result.isLoudSound || result.dbfs >= config.loudSoundDbfs;
+    final isLoudSound =
+        result.isLoudSound || result.dbfs >= config.loudSoundDbfs;
     if (config.emitLoudSoundAlerts && isLoudSound) {
       return _tryEmit(
         type: AlertType.loudSound,
         severity: AlertSeverity.info,
-        message: 'Yüksek ses algılandı',
+        message: _loudSoundMessage(result),
         score: result.dbfs,
         timestampMs: result.timestampMs,
         metadata: _audioMetadata(result),
@@ -168,24 +172,68 @@ class AlertEngine {
 
   Map<String, Object?> _audioMetadata(AudioAnalysisResult result) => {
         'cryScore': result.cryScore,
+        'confidencePercent': _percent(result.cryScore),
         'rawCryScore': result.rawCryScore,
         'dbfs': result.dbfs,
         'ambientDbfs': result.ambientDbfs,
         'ambientDeltaDb': result.ambientDeltaDb,
         'cryBandRatio': result.cryBandRatio,
+        'cryBandPercent': _percent(result.cryBandRatio),
         'zeroCrossingRate': result.zeroCrossingRate,
         'spectralCentroid': result.spectralCentroid,
         'isCalibrated': result.isCalibrated,
         'isLoudSound': result.isLoudSound,
+        'suggestedChecks': const [
+          'hunger',
+          'diaper',
+          'gas',
+          'temperature',
+          'comfort',
+        ],
       };
 
   Map<String, Object?> _motionMetadata(MotionAnalysisResult result) => {
         'score': result.score,
+        'scorePercent': _percent(result.score),
         'rawScore': result.rawScore,
         'activeAreaRatio': result.activeAreaRatio,
+        'activeAreaPercent': _percent(result.activeAreaRatio),
         'meanDiff': result.meanDiff,
         'globalLumaShift': result.globalLumaShift,
         'currentMeanLuma': result.currentMeanLuma,
         'backgroundMeanLuma': result.backgroundMeanLuma,
       };
+
+  String _cryMessage(AudioAnalysisResult result) =>
+      _strings?.parentCryAlert(
+        confidencePercent: _percent(result.cryScore),
+        ambientDeltaDb: result.ambientDeltaDb,
+        cryBandPercent: _percent(result.cryBandRatio),
+        calibrated: result.isCalibrated,
+      ) ??
+      'Ağlama algılandı';
+
+  String _loudSoundMessage(AudioAnalysisResult result) =>
+      _strings?.parentLoudSoundAlert(
+        dbfs: result.dbfs,
+        ambientDeltaDb: result.ambientDeltaDb,
+      ) ??
+      'Yüksek ses algılandı';
+
+  String _motionMessage(MotionAnalysisResult result) =>
+      _strings?.parentMotionAlert(
+        scorePercent: _percent(result.score),
+        activeAreaPercent: _percent(result.activeAreaRatio),
+        meanDiff: result.meanDiff,
+      ) ??
+      'Hareket algılandı';
+
+  String _globalLightMessage(MotionAnalysisResult result) =>
+      _strings?.parentLightChangeAlert(
+        scorePercent: _percent(result.score),
+        lumaShift: result.globalLumaShift,
+      ) ??
+      'Işık değişimi algılandı';
+
+  int _percent(double value) => (value.clamp(0.0, 1.0) * 100).round();
 }

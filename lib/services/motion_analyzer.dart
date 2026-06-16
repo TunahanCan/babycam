@@ -37,7 +37,8 @@ class MotionAnalyzer {
       score = _scoreCalculator.calculate(rawScore);
     }
 
-    return MotionAnalysisResult(score: score, jpeg: CameraImageJpegEncoder.encode(image));
+    return MotionAnalysisResult(
+        score: score, jpeg: CameraImageJpegEncoder.encode(image));
   }
 }
 
@@ -75,7 +76,9 @@ class MotionScoreCalculator {
   }
 
   double calculate(double rawScore) {
-    _motionNoiseEstimate = rawScore < _motionNoiseEstimate ? _motionNoiseEstimate * 0.9 + rawScore * 0.1 : _motionNoiseEstimate * 0.995 + rawScore * 0.005;
+    _motionNoiseEstimate = rawScore < _motionNoiseEstimate
+        ? _motionNoiseEstimate * 0.9 + rawScore * 0.1
+        : _motionNoiseEstimate * 0.995 + rawScore * 0.005;
     final adjusted = max(0.0, rawScore - _motionNoiseEstimate);
     final dynamicRange = max(1e-3, 1.0 - _motionNoiseEstimate);
     final normalized = (adjusted / dynamicRange).clamp(0.0, 1.0);
@@ -85,12 +88,15 @@ class MotionScoreCalculator {
 }
 
 class CameraImageJpegEncoder {
-  static Uint8List encode(CameraImage image) {
-    if (image.planes.length >= 3) return _encodeYuv420(image);
-    return _encodeLuma(image);
+  static Uint8List encode(CameraImage image, {int quality = 70}) {
+    final safeQuality = quality.clamp(35, 85);
+    if (image.planes.length >= 3) {
+      return _encodeYuv420(image, quality: safeQuality);
+    }
+    return _encodeLuma(image, quality: safeQuality);
   }
 
-  static Uint8List _encodeYuv420(CameraImage frame) {
+  static Uint8List _encodeYuv420(CameraImage frame, {required int quality}) {
     final out = img.Image(width: frame.width, height: frame.height);
     final yPlane = frame.planes[0];
     final uPlane = frame.planes[1];
@@ -100,20 +106,23 @@ class CameraImageJpegEncoder {
     for (var y = 0; y < frame.height; y++) {
       for (var x = 0; x < frame.width; x++) {
         final yIndex = y * yPlane.bytesPerRow + x;
-        final uvIndex = (y ~/ 2) * uPlane.bytesPerRow + (x ~/ 2) * uvPixelStride;
+        final uvIndex =
+            (y ~/ 2) * uPlane.bytesPerRow + (x ~/ 2) * uvPixelStride;
         final yy = yIndex < yPlane.bytes.length ? yPlane.bytes[yIndex] : 0;
-        final uu = uvIndex < uPlane.bytes.length ? uPlane.bytes[uvIndex] - 128 : 0;
-        final vv = uvIndex < vPlane.bytes.length ? vPlane.bytes[uvIndex] - 128 : 0;
+        final uu =
+            uvIndex < uPlane.bytes.length ? uPlane.bytes[uvIndex] - 128 : 0;
+        final vv =
+            uvIndex < vPlane.bytes.length ? vPlane.bytes[uvIndex] - 128 : 0;
         final r = (yy + 1.402 * vv).round().clamp(0, 255);
         final g = (yy - 0.344136 * uu - 0.714136 * vv).round().clamp(0, 255);
         final b = (yy + 1.772 * uu).round().clamp(0, 255);
         out.setPixelRgb(x, y, r, g, b);
       }
     }
-    return Uint8List.fromList(img.encodeJpg(out, quality: 70));
+    return Uint8List.fromList(img.encodeJpg(out, quality: quality));
   }
 
-  static Uint8List _encodeLuma(CameraImage frame) {
+  static Uint8List _encodeLuma(CameraImage frame, {required int quality}) {
     final out = img.Image(width: frame.width, height: frame.height);
     final yPlane = frame.planes.first;
     for (var y = 0; y < frame.height; y++) {
@@ -123,6 +132,6 @@ class CameraImageJpegEncoder {
         out.setPixelRgb(x, y, luma, luma, luma);
       }
     }
-    return Uint8List.fromList(img.encodeJpg(out, quality: 70));
+    return Uint8List.fromList(img.encodeJpg(out, quality: quality));
   }
 }

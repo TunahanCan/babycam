@@ -16,7 +16,8 @@ class ServerQrPayloadBuilder {
   PairingPayload build(
           {required String host,
           int port = MimiCamProtocol.httpPort,
-          Duration ttl = const Duration(minutes: 2)}) =>
+          Duration ttl = const Duration(minutes: 2),
+          Map<String, Object?>? capabilities}) =>
       PairingPayload(
         schemaVersion: 1,
         host: host,
@@ -26,11 +27,12 @@ class ServerQrPayloadBuilder {
         pairingNonce: tokenService.createPairingNonce(),
         expiresAtMs: DateTime.now().add(ttl).millisecondsSinceEpoch,
         certificateFingerprintSha256: certificateFingerprintSha256,
-        capabilities: const {
-          'video': 'mjpeg',
-          'audio': 'pcm16le',
-          'events': 'json',
-          'transport': 'http'
-        },
+        capabilities: capabilities ??
+            const {
+              'video': 'mjpeg',
+              'audio': 'pcm16le',
+              'events': 'json',
+              'transport': 'http'
+            },
       );
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/media/adaptive_media_profile.dart';
 import '../client_runtime.dart';
 
 class WatchScreen extends StatefulWidget {
@@ -17,32 +18,41 @@ class _WatchScreenState extends State<WatchScreen> {
   @override
   void initState() {
     super.initState();
-    widget.runtime.startWatching();
+    widget.runtime.startWatching().catchError((Object _) {});
   }
 
   @override
   void dispose() {
-    widget.runtime.stopWatching();
+    widget.runtime.stopWatching().catchError((Object _) {});
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final child = switch (_tab) {
-      0 => _DarkShell(child: _watch(context)),
-      1 => _LightShell(child: _history()),
-      _ => _LightShell(child: _settings()),
-    };
-    return Scaffold(
-      body: child,
-      bottomNavigationBar: _PinnedNav(
-        dark: _tab == 0,
-        child: _Nav(tab: _tab, onTap: (i) => setState(() => _tab = i)),
-      ),
+    return StreamBuilder<ClientRuntimeState>(
+      stream: widget.runtime.states,
+      initialData: widget.runtime.currentState,
+      builder: (context, snapshot) {
+        final state = snapshot.data ?? widget.runtime.currentState;
+        final child = switch (_tab) {
+          0 => _DarkShell(child: _watch(context, state)),
+          1 => _LightShell(child: _history()),
+          _ => _LightShell(child: _settings(state)),
+        };
+        return Scaffold(
+          body: child,
+          bottomNavigationBar: _PinnedNav(
+            dark: _tab == 0,
+            child: _Nav(tab: _tab, onTap: (i) => setState(() => _tab = i)),
+          ),
+        );
+      },
     );
   }
 
-  Widget _watch(BuildContext context) {
+  Widget _watch(BuildContext context, ClientRuntimeState state) {
+    final quality = state.networkQuality;
+    final profile = state.mediaProfile;
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 88),
@@ -56,7 +66,9 @@ class _WatchScreenState extends State<WatchScreen> {
           const SizedBox(height: 14),
           const _LightPill('Bağlı'),
           const SizedBox(height: 16),
-          const _VideoPanel(),
+          _VideoPanel(quality: quality, profile: profile),
+          const SizedBox(height: 12),
+          _NetworkQualityCard(quality: quality, profile: profile),
           const SizedBox(height: 16),
           const _Event(
               label: 'Son uyarı',
@@ -151,7 +163,8 @@ class _WatchScreenState extends State<WatchScreen> {
     );
   }
 
-  Widget _settings() {
+  Widget _settings(ClientRuntimeState state) {
+    final profile = state.mediaProfile;
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 88),
@@ -164,6 +177,8 @@ class _WatchScreenState extends State<WatchScreen> {
               'Gürültü, hareket, bildirim ve entegrasyonları sade kontrollerle yönet.',
               style: _subtitle),
           const SizedBox(height: 18),
+          _QualityPreferenceCard(profile: profile),
+          const SizedBox(height: 12),
           const _SliderCard('Bildirim cooldown',
               'Tekrarlayan uyarıları sınırlar.', '60 sn', _pink, .68),
           const SizedBox(height: 12),
@@ -197,10 +212,16 @@ class _WatchScreenState extends State<WatchScreen> {
 }
 
 class _VideoPanel extends StatelessWidget {
-  const _VideoPanel();
+  const _VideoPanel({required this.quality, required this.profile});
+
+  final NetworkQualitySnapshot? quality;
+  final MediaQualityProfile? profile;
 
   @override
   Widget build(BuildContext context) {
+    final networkLabel = quality?.tier.label ?? 'Ölçülüyor';
+    final latencyLabel = quality?.rttMs == null ? '—' : '${quality!.rttMs}ms';
+    final audioLabel = profile?.audioFirst == true ? 'Öncelikli' : 'Açık';
     return AspectRatio(
       aspectRatio: 4 / 3,
       child: Container(
@@ -211,16 +232,122 @@ class _VideoPanel extends StatelessWidget {
         ),
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
         alignment: Alignment.bottomCenter,
-        child: const Wrap(
+        child: Wrap(
           alignment: WrapAlignment.center,
           spacing: 18,
           runSpacing: 8,
           children: [
-            _VideoMetric('Ses: Açık'),
-            _VideoMetric('Gecikme: 0.4 sn'),
-            _VideoMetric('WS: Aktif'),
+            _VideoMetric('Ses: $audioLabel'),
+            _VideoMetric('Gecikme: $latencyLabel'),
+            _VideoMetric('Ağ: $networkLabel'),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _NetworkQualityCard extends StatelessWidget {
+  const _NetworkQualityCard({required this.quality, required this.profile});
+
+  final NetworkQualitySnapshot? quality;
+  final MediaQualityProfile? profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final isAudioFirst =
+        quality?.tier.shouldPreferAudio == true || profile?.audioFirst == true;
+    final title = isAudioFirst ? 'Ses öncelikli mod' : 'Bağlantı dengede';
+    final text = isAudioFirst
+        ? 'Wi‑Fi zayıflayınca görüntü FPS/kalite düşer; ses ve uyarılar korunur.'
+        : 'Ağ ölçülüyor; server kaliteyi otomatik ayarlıyor.';
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDecoration(dark: true),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 21,
+            backgroundColor: isAudioFirst ? _amber : _mint,
+            child: Icon(
+              isAudioFirst
+                  ? Icons.hearing_rounded
+                  : Icons.network_check_rounded,
+              color: _navy,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  text,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.25,
+                  ),
+                ),
+                if (profile != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    profile!.summary,
+                    style: const TextStyle(
+                      color: _mint,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QualityPreferenceCard extends StatelessWidget {
+  const _QualityPreferenceCard({required this.profile});
+
+  final MediaQualityProfile? profile;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Otomatik kalite',
+            style: TextStyle(
+              color: _navy,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            profile == null
+                ? 'Server eski/yeni cihaz ve Wi‑Fi durumuna göre profili seçer.'
+                : profile!.summary,
+            style: const TextStyle(color: _slate, fontSize: 14.5, height: 1.25),
+          ),
+        ],
       ),
     );
   }

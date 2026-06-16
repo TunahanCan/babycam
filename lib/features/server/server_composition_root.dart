@@ -18,31 +18,39 @@ class ServerCompositionRoot {
       Future<void> Function()? stopOverride}) {
     createCount++;
     final tokenService = PairingTokenService();
+    void Function()? notifyMediaProfileChanged;
     final server = MimiCamServer(
         config: config,
         strings: strings,
         onLog: onLog ?? (_) {},
         onAlert: (_) {},
+        onMediaProfileChanged: (_) => notifyMediaProfileChanged?.call(),
         tokenService: tokenService);
     final qrBuilder = ServerQrPayloadBuilder(tokenService: tokenService);
     String? lastAddress;
     final media = MediaRuntimeController(
         onStart: startMediaOverride ?? server.startMediaRuntime,
         onStop: server.stopMediaRuntime);
-    return ServerRuntime(
+    final runtime = ServerRuntime(
       mediaRuntime: media,
       previewSource: () => server.cameraController,
+      mediaProfile: () => server.activeMediaProfile,
       onSettingsChanged: server.reloadAnalysisConfig,
       onStartPairing: startPairingOverride ??
           () async {
             final url = await server.startPairingMode();
             final uri = Uri.parse(url);
             lastAddress = uri.host;
-            final payload = qrBuilder.build(host: lastAddress ?? '127.0.0.1');
+            final payload = qrBuilder.build(
+              host: lastAddress ?? '127.0.0.1',
+              capabilities: server.mediaCapabilities,
+            );
             return payload.toUriString();
           },
       onStop: stopOverride ?? server.dispose,
     );
+    notifyMediaProfileChanged = runtime.refreshMediaProfile;
+    return runtime;
   }
 
   static String buildQrUri(PairingPayload payload) => payload.toUriString();

@@ -4,6 +4,7 @@ class MimiCamProtocolV2 {
   static const authRenew = '/auth/renew';
   static const sessionStart = '/session/start';
   static const sessionStop = '/session/stop';
+  static const qualityReport = '/quality/report';
   static const video = '/video';
   static const audio = '/audio';
   static const events = '/ws/events';

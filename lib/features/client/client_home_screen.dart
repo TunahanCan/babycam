@@ -263,6 +263,14 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       if (nonce == null || nonce.isEmpty) {
         throw StateError('Server pairing nonce üretmedi');
       }
+      final capabilities = json['capabilities'] is Map
+          ? Map<String, Object?>.from(json['capabilities'] as Map)
+          : const <String, Object?>{
+              'video': 'mjpeg',
+              'audio': 'pcm16le',
+              'events': 'json',
+              'transport': 'http',
+            };
       return PairingPayload(
         schemaVersion: MimiCamProtocolV2.schemaVersion,
         host: address.host,
@@ -273,12 +281,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
         expiresAtMs: DateTime.now()
             .add(const Duration(minutes: 2))
             .millisecondsSinceEpoch,
-        capabilities: const {
-          'video': 'mjpeg',
-          'audio': 'pcm16le',
-          'events': 'json',
-          'transport': 'http',
-        },
+        capabilities: capabilities,
       );
     } finally {
       client.close(force: true);

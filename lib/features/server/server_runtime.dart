@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../core/media/adaptive_media_profile.dart';
 import 'media/media_resource_counter.dart';
 import 'media/media_runtime_controller.dart';
 import 'media/server_power_mode.dart';
@@ -19,6 +20,7 @@ class ServerRuntimeState {
     this.qrPayload,
     this.lastAlert,
     this.errorMessage,
+    this.mediaProfile,
   });
 
   final ServerRuntimePhase phase;
@@ -34,6 +36,7 @@ class ServerRuntimeState {
   final String? qrPayload;
   final String? lastAlert;
   final String? errorMessage;
+  final MediaQualityProfile? mediaProfile;
 }
 
 enum ServerRuntimePhase {
@@ -60,17 +63,20 @@ class ServerRuntime {
     Future<void> Function()? onStop,
     Future<void> Function()? onSettingsChanged,
     Object? Function()? previewSource,
+    MediaQualityProfile Function()? mediaProfile,
   })  : _mediaRuntime = mediaRuntime,
         _onStartPairing = onStartPairing,
         _onStop = onStop,
         _onSettingsChanged = onSettingsChanged,
-        _previewSource = previewSource;
+        _previewSource = previewSource,
+        _mediaProfile = mediaProfile;
 
   final MediaRuntimeController _mediaRuntime;
   final Future<String> Function()? _onStartPairing;
   final Future<void> Function()? _onStop;
   final Future<void> Function()? _onSettingsChanged;
   final Object? Function()? _previewSource;
+  final MediaQualityProfile Function()? _mediaProfile;
   final _states = StreamController<ServerRuntimeState>.broadcast();
   final _activeSessions = <String, StreamSessionOptions>{};
   final _notificationClients = <String, ({bool cry, bool motion})>{};
@@ -82,6 +88,7 @@ class ServerRuntime {
   Stream<ServerRuntimeState> get states => _states.stream;
   ServerRuntimeState get currentState => _state;
   Object? get previewSource => _previewSource?.call();
+  MediaQualityProfile? get mediaProfile => _mediaProfile?.call();
 
   Future<void> startPairingOnly() => startPairingMode();
 
@@ -91,7 +98,10 @@ class ServerRuntime {
       final qr = await _onStartPairing?.call();
       if (_disposed) return;
       _emit(ServerRuntimeState(
-          phase: ServerRuntimePhase.pairingActive, qrPayload: qr));
+        phase: ServerRuntimePhase.pairingActive,
+        qrPayload: qr,
+        mediaProfile: mediaProfile,
+      ));
       await startLocalPreview();
     } catch (error) {
       if (_disposed) return;
@@ -99,6 +109,7 @@ class ServerRuntime {
         phase: ServerRuntimePhase.error,
         qrPayload: _state.qrPayload,
         errorMessage: error.toString(),
+        mediaProfile: mediaProfile,
       ));
     }
   }
@@ -187,6 +198,11 @@ class ServerRuntime {
     _emit(_stateForPhase(_state.phase));
   }
 
+  void refreshMediaProfile() {
+    if (_disposed) return;
+    _emit(_stateForPhase(_state.phase));
+  }
+
   Future<void> _recomputeResources(
       {required bool startMediaIfNeeded,
       required ServerRuntimePhase phase}) async {
@@ -232,6 +248,7 @@ class ServerRuntime {
       qrPayload: _state.qrPayload,
       lastAlert: _state.lastAlert,
       errorMessage: _state.errorMessage,
+      mediaProfile: mediaProfile,
     );
   }
 

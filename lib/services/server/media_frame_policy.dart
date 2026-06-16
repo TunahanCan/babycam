@@ -1,17 +1,26 @@
 class MediaFrameBudget {
-  MediaFrameBudget({this.minInterval = const Duration(milliseconds: 120)});
+  MediaFrameBudget({Duration minInterval = const Duration(milliseconds: 120)})
+      : _minInterval = minInterval;
 
-  final Duration minInterval;
+  Duration _minInterval;
   int? _lastAcceptedMs;
+
+  Duration get minInterval => _minInterval;
 
   bool shouldProcess(int timestampMs) {
     final lastAcceptedMs = _lastAcceptedMs;
     if (lastAcceptedMs != null &&
-        timestampMs - lastAcceptedMs < minInterval.inMilliseconds) {
+        timestampMs - lastAcceptedMs < _minInterval.inMilliseconds) {
       return false;
     }
     _lastAcceptedMs = timestampMs;
     return true;
+  }
+
+  void updateMinInterval(Duration minInterval) {
+    if (_minInterval == minInterval) return;
+    _minInterval = minInterval;
+    reset();
   }
 
   void reset() {

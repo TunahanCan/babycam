@@ -24,6 +24,19 @@ void main() {
 
       expect(budget.shouldProcess(1011), isTrue);
     });
+
+    test('minimum aralık güncellenince bütçe resetlenir', () {
+      final budget =
+          MediaFrameBudget(minInterval: const Duration(milliseconds: 120));
+
+      expect(budget.shouldProcess(1000), isTrue);
+      budget.updateMinInterval(const Duration(milliseconds: 250));
+
+      expect(budget.minInterval, const Duration(milliseconds: 250));
+      expect(budget.shouldProcess(1010), isTrue);
+      expect(budget.shouldProcess(1200), isFalse);
+      expect(budget.shouldProcess(1260), isTrue);
+    });
   });
 
   group('MediaEncodingPolicy', () {

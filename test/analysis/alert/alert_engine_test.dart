@@ -6,6 +6,8 @@ import 'package:mimicam/analysis/alert/alert_type.dart';
 import 'package:mimicam/analysis/audio/audio_analysis_result.dart';
 import 'package:mimicam/analysis/audio/audio_calibration_state.dart';
 import 'package:mimicam/analysis/video/motion_analysis_result.dart';
+import 'package:mimicam/l10n/app_strings.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -36,9 +38,11 @@ void main() {
       );
       addTearDown(engine.dispose);
 
-      expect(engine.onAudioResult(fakeAudioResult(timestampMs: 1000)), isNotNull);
+      expect(
+          engine.onAudioResult(fakeAudioResult(timestampMs: 1000)), isNotNull);
       expect(engine.onAudioResult(fakeAudioResult(timestampMs: 1500)), isNull);
-      expect(engine.onAudioResult(fakeAudioResult(timestampMs: 2000)), isNotNull);
+      expect(
+          engine.onAudioResult(fakeAudioResult(timestampMs: 2000)), isNotNull);
     });
 
     test('metadata contains basic audio features', () {
@@ -47,17 +51,36 @@ void main() {
 
       final event = engine.onAudioResult(fakeAudioResult())!;
 
-      expect(event.metadata.keys, containsAll(<String>[
-        'cryScore',
-        'rawCryScore',
-        'dbfs',
-        'ambientDbfs',
-        'ambientDeltaDb',
-        'cryBandRatio',
-        'zeroCrossingRate',
-        'spectralCentroid',
-        'isCalibrated',
-      ]));
+      expect(
+          event.metadata.keys,
+          containsAll(<String>[
+            'cryScore',
+            'rawCryScore',
+            'dbfs',
+            'ambientDbfs',
+            'ambientDeltaDb',
+            'cryBandRatio',
+            'zeroCrossingRate',
+            'spectralCentroid',
+            'isCalibrated',
+            'confidencePercent',
+            'cryBandPercent',
+            'suggestedChecks',
+          ]));
+    });
+
+    test('localized parent message explains evidence without diagnosis', () {
+      final engine = AlertEngine(strings: AppStrings(const Locale('zh')));
+      addTearDown(engine.dispose);
+
+      final event = engine.onAudioResult(fakeAudioResult())!;
+
+      expect(event.message, contains('哭声可能性较高'));
+      expect(event.message, contains('请安全查看房间'));
+      expect(event.message, isNot(contains('诊断')));
+      expect(event.metadata['confidencePercent'], 80);
+      expect(event.metadata['cryBandPercent'], 60);
+      expect(event.metadata['suggestedChecks'], contains('diaper'));
     });
 
     test('dispose makes future handling a safe no-op', () async {
@@ -123,7 +146,8 @@ void main() {
         engine.onMotionResult(fakeMotionResult(timestampMs: 1000)),
         isNotNull,
       );
-      expect(engine.onMotionResult(fakeMotionResult(timestampMs: 1500)), isNull);
+      expect(
+          engine.onMotionResult(fakeMotionResult(timestampMs: 1500)), isNull);
     });
 
     test('metadata contains basic motion features', () {
@@ -132,11 +156,26 @@ void main() {
 
       final event = engine.onMotionResult(fakeMotionResult())!;
 
-      expect(event.metadata.keys, containsAll(<String>[
-        'activeAreaRatio',
-        'meanDiff',
-        'globalLumaShift',
-      ]));
+      expect(
+          event.metadata.keys,
+          containsAll(<String>[
+            'activeAreaRatio',
+            'activeAreaPercent',
+            'scorePercent',
+            'meanDiff',
+            'globalLumaShift',
+          ]));
+    });
+
+    test('localized motion message includes area and practical check', () {
+      final engine = AlertEngine(strings: AppStrings(const Locale('tr')));
+      addTearDown(engine.dispose);
+
+      final event = engine.onMotionResult(fakeMotionResult())!;
+
+      expect(event.message, contains('Görüntünün yaklaşık %10'));
+      expect(event.message, contains('pozisyonunu'));
+      expect(event.metadata['activeAreaPercent'], 10);
     });
   });
 

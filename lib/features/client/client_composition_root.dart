@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'alerts/client_alert_listener.dart';
 import 'alerts/client_notification_service.dart';
 import 'client_runtime.dart';
+import 'media/network_quality_monitor.dart';
 import 'media/stream_session_controller.dart';
 import 'pairing/pairing_session_store.dart';
 import 'pairing/qr_pairing_client.dart';
@@ -18,6 +19,7 @@ class ClientCompositionRoot {
     final pairingClient = QRPairingClient();
     final store = PairingSessionStore(preferences);
     final streams = StreamSessionController();
+    final networkQuality = NetworkQualityMonitor();
     final alerts = ClientAlertListener();
     final notifications = ClientNotificationService();
     return ClientRuntime(
@@ -28,6 +30,7 @@ class ClientCompositionRoot {
       },
       startStream: streams.start,
       stopStream: streams.stop,
+      watchNetworkQuality: networkQuality.watch,
       startAlerts: () async {
         await notifications.initialize(strings: strings);
         await alerts.start();
