@@ -1,12 +1,12 @@
-# BabyCam — İnternetsiz, Güvenli ve Yerel Bebek Kamerası
+# MimiCam — İnternetsiz, Güvenli ve Yerel Bebek Kamerası
 
-**BabyCam**, evinizdeki iki telefonu ya da tableti saniyeler içinde güvenli bir bebek kamerasına dönüştüren Flutter uygulamasıdır. Bir cihaz **Bebek Odası Cihazı** olur; kamera, mikrofon ve akıllı uyarıları yönetir. Diğer cihaz **Ebeveyn Cihazı** olur; canlı görüntüyü, sesi ve uyarıları aynı Wi‑Fi ağı içinde takip eder.
+**MimiCam**, evinizdeki iki telefonu ya da tableti saniyeler içinde güvenli bir bebek kamerasına dönüştüren Flutter uygulamasıdır. Bir cihaz **Bebek Odası Cihazı** olur; kamera, mikrofon ve akıllı uyarıları yönetir. Diğer cihaz **Ebeveyn Cihazı** olur; canlı görüntüyü, sesi ve uyarıları aynı Wi‑Fi ağı içinde takip eder.
 
-Cloud hesabı yok. Abonelik yok. İnternete yayın yok. BabyCam, ebeveynlerin ihtiyaç duyduğu temel şeyi yapar: **bebek odasını yerel ağda, kontrollü ve güvenli şekilde izletir.**
+Cloud hesabı yok. Abonelik yok. İnternete yayın yok. MimiCam, ebeveynlerin ihtiyaç duyduğu temel şeyi yapar: **bebek odasını yerel ağda, kontrollü ve güvenli şekilde izletir.**
 
 ---
 
-## Neden BabyCam?
+## Neden MimiCam?
 
 - **Aynı Wi‑Fi içinde çalışır:** Video, ses ve uyarılar ev ağınızdan çıkmadan cihazlar arasında akar.
 - **QR ile kolay kurulum:** Bebek odasındaki cihaz QR üretir; ebeveyn cihazı okutur ve güvenli eşleşme tamamlanır.
@@ -18,9 +18,9 @@ Cloud hesabı yok. Abonelik yok. İnternete yayın yok. BabyCam, ebeveynlerin ih
 
 ---
 
-## BabyCam nasıl çalışır?
+## MimiCam nasıl çalışır?
 
-BabyCam aynı kod tabanından iki farklı ürün deneyimi sunar:
+MimiCam aynı kod tabanından iki farklı ürün deneyimi sunar:
 
 ### 1. Bebek Odası Cihazı
 
@@ -64,7 +64,7 @@ Yanlış rol seçilirse uygulama içinden rol sıfırlanabilir. Rol sıfırlanı
 
 ## Güvenlik yaklaşımı
 
-BabyCam güveni IP adresine veya cloud hesabına bağlamaz. Güven modeli şu üç parçaya dayanır:
+MimiCam güveni IP adresine veya cloud hesabına bağlamaz. Güven modeli şu üç parçaya dayanır:
 
 ```text
 serverDeviceId + certificateFingerprintSha256 + trustedClientToken
@@ -100,7 +100,7 @@ Temel güvenlik ilkeleri:
 
 ## Kime uygun?
 
-BabyCam özellikle şunlar için tasarlanır:
+MimiCam özellikle şunlar için tasarlanır:
 
 - Kullanmadığı ikinci telefonu bebek kamerası yapmak isteyen ebeveynler.
 - Cloud kamera veya abonelik kullanmak istemeyen aileler.
@@ -175,9 +175,9 @@ flutter test
 
 ---
 
-## BabyCam ne değildir?
+## MimiCam ne değildir?
 
-BabyCam bir internet kamerası, cloud kayıt sistemi veya uzak erişim servisi değildir. Uygulama bilinçli olarak şu hedefleri dışarıda bırakır:
+MimiCam bir internet kamerası, cloud kayıt sistemi veya uzak erişim servisi değildir. Uygulama bilinçli olarak şu hedefleri dışarıda bırakır:
 
 - Cloud backend
 - İnternete yayın
@@ -186,4 +186,4 @@ BabyCam bir internet kamerası, cloud kayıt sistemi veya uzak erişim servisi d
 - Enterprise OAuth akışları
 - Abonelik veya hesap zorunluluğu
 
-BabyCam'in odağı net: **aynı ağda, QR ile eşleşen iki cihaz arasında güvenli bebek izleme deneyimi.**
+MimiCam'in odağı net: **aynı ağda, QR ile eşleşen iki cihaz arasında güvenli bebek izleme deneyimi.**

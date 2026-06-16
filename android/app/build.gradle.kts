@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.babycam"
+    namespace = "com.example.mimicam"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
     defaultConfig {
-        applicationId = "com.example.babycam"
+        applicationId = "com.example.mimicam"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

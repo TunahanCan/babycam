@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../core/theme/babycam_theme.dart';
+import '../core/theme/mimicam_theme.dart';
 import '../features/client/client_app_shell.dart';
 import '../features/client/client_composition_root.dart';
 import '../features/client/client_runtime.dart';
@@ -80,26 +80,31 @@ class _AppBootstrapState extends State<AppBootstrap> {
   @override
   Widget build(BuildContext context) {
     if (!_loaded) {
-      return MaterialApp(
-        theme: BabyCamTheme.neutralTheme(),
-        home: const Scaffold(body: Center(child: CircularProgressIndicator())),
+      return Theme(
+        data: MimiCamTheme.neutralTheme(),
+        child: const Scaffold(body: Center(child: CircularProgressIndicator())),
       );
     }
+    final prefs = _prefs!;
+    final config = ConfigurationService(prefs);
     return switch (_role) {
       AppRole.server => ServerAppShell(
           runtime: (_runtime ??= ServerCompositionRoot.create(
-            config: ConfigurationService(_prefs!),
+            config: config,
             strings: AppStrings.of(context),
           )) as ServerRuntime,
+          config: config,
           onResetRole: _reset,
         ),
       AppRole.client => ClientAppShell(
-          runtime: (_runtime ??= ClientCompositionRoot.create(preferences: _prefs!)) as ClientRuntime,
+          runtime: (_runtime ??=
+                  ClientCompositionRoot.create(preferences: prefs))
+              as ClientRuntime,
           onResetRole: _reset,
         ),
-      null => MaterialApp(
-          theme: BabyCamTheme.neutralTheme(),
-          home: RoleSelectionScreen(onRoleSelected: _select),
+      null => Theme(
+          data: MimiCamTheme.neutralTheme(),
+          child: RoleSelectionScreen(onRoleSelected: _select),
         ),
     };
   }

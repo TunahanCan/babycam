@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:babycam/analysis/audio/audio_ring_buffer.dart';
+import 'package:mimicam/analysis/audio/audio_ring_buffer.dart';
 
 void main() {
   test('window fill and latest window with overwrite', () {

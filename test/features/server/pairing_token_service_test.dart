@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:babycam/features/server/pairing/pairing_token_service.dart';
+import 'package:mimicam/features/server/pairing/pairing_token_service.dart';
 
 void main() {
   test('pairing nonce tek kullanımlıktır', () {

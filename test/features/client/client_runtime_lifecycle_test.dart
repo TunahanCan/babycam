@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:babycam/core/protocol/pairing_payload.dart';
-import 'package:babycam/core/protocol/pairing_session.dart';
-import 'package:babycam/features/client/client_runtime.dart';
+import 'package:mimicam/core/protocol/pairing_payload.dart';
+import 'package:mimicam/core/protocol/pairing_session.dart';
+import 'package:mimicam/features/client/client_runtime.dart';
 
 void main() {
   PairingPayload payload() => PairingPayload(schemaVersion: 1, host: 'h', port: 1, deviceId: 's', deviceName: 'd', pairingNonce: 'n', expiresAtMs: DateTime.now().add(const Duration(minutes: 1)).millisecondsSinceEpoch, capabilities: const {});

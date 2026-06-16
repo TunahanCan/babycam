@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:babycam/core/protocol/pairing_payload.dart';
+import 'package:mimicam/core/protocol/pairing_payload.dart';
 
 void main() {
   PairingPayload payload({int? expiresAtMs, int schemaVersion = 1}) => PairingPayload(

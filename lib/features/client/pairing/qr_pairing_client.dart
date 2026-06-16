@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../../../core/protocol/babycam_protocol.dart';
+import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_payload.dart';
 import '../../../core/protocol/pairing_session.dart';
 
@@ -19,7 +19,7 @@ class QRPairingClient {
           scheme: 'https',
           host: payload.host,
           port: payload.port,
-          path: BabyCamProtocolV2.pairConfirm,
+          path: MimiCamProtocolV2.pairConfirm,
         ),
       );
       request.headers.contentType = ContentType.json;
@@ -35,13 +35,17 @@ class QRPairingClient {
       final body = await utf8.decoder.bind(response).join();
       final json = jsonDecode(body);
       if (json is! Map) throw StateError('Invalid pairing response');
-      final token = (json['trustedClientToken'] ?? json['sessionToken'])?.toString();
+      final token =
+          (json['trustedClientToken'] ?? json['sessionToken'])?.toString();
       if (token == null) throw StateError('Invalid pairing response');
       return PairingSession(
         payload: payload,
         sessionToken: token,
         clientId: json['clientId']?.toString() ?? 'client_local',
-        trustedClientTokenExpiresAtMs: json['trustedClientTokenExpiresAtMs'] is int ? json['trustedClientTokenExpiresAtMs'] as int : 0,
+        trustedClientTokenExpiresAtMs:
+            json['trustedClientTokenExpiresAtMs'] is int
+                ? json['trustedClientTokenExpiresAtMs'] as int
+                : 0,
       );
     } finally {
       client.close(force: true);

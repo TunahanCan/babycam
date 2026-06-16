@@ -1,4 +1,4 @@
-package com.example.babycam
+package com.example.mimicam
 
 import io.flutter.embedding.android.FlutterActivity
 

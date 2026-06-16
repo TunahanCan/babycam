@@ -19,12 +19,12 @@ class NotificationService {
         message,
         NotificationDetails(
           android: AndroidNotificationDetails(
-            'babycam_alerts',
+            'mimicam_alerts',
             _strings.notificationChannelName,
             importance: Importance.high,
             priority: Priority.high,
           ),
-          iOS: DarwinNotificationDetails(),
+          iOS: const DarwinNotificationDetails(),
         ),
       );
 }

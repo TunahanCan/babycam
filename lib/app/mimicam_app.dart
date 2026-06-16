@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import '../core/theme/mimicam_theme.dart';
 import '../l10n/app_strings.dart';
 import 'app_bootstrap.dart';
 
-class BabyCamApp extends StatelessWidget {
-  const BabyCamApp({super.key});
+class MimiCamApp extends StatelessWidget {
+  const MimiCamApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'BabyCam',
+      title: 'MimiCam',
+      theme: MimiCamTheme.neutralTheme(),
       supportedLocales: AppStrings.supportedLocales,
       localizationsDelegates: const [
         AppStrings.delegate,

@@ -2,7 +2,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:babycam/services/audio_analyzer.dart';
+import 'package:mimicam/services/audio_analyzer.dart';
 
 void main() {
   test('high mid-band sustained tone increases cry score', () {

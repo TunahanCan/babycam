@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-class BabyCamDesignTokens {
-  const BabyCamDesignTokens._();
+class MimiCamDesignTokens {
+  const MimiCamDesignTokens._();
 
   static const navy = Color(0xFF101B31);
   static const slate = Color(0xFF6E7686);

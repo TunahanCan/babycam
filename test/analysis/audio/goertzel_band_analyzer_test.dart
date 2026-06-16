@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:babycam/analysis/audio/goertzel_band_analyzer.dart';
-import 'package:babycam/analysis/audio/pcm16le_reader.dart';
+import 'package:mimicam/analysis/audio/goertzel_band_analyzer.dart';
+import 'package:mimicam/analysis/audio/pcm16le_reader.dart';
 import 'test_audio_generators.dart';
 
 void main() {

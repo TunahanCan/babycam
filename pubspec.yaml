@@ -1,4 +1,4 @@
-name: babycam
+name: mimicam
 version: 1.0.0+1
 publish_to: 'none'
 description: LAN tabanli Flutter bebek kamera server/client uygulamasi.

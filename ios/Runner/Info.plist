@@ -5,14 +5,14 @@
   <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
   <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-  <key>CFBundleName</key><string>BabyCam</string>
+  <key>CFBundleName</key><string>MimiCam</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$(FLUTTER_BUILD_NAME)</string>
   <key>CFBundleVersion</key><string>$(FLUTTER_BUILD_NUMBER)</string>
   <key>LSRequiresIPhoneOS</key><true/>
-  <key>NSCameraUsageDescription</key><string>BabyCam server modu kamera yayını için kameraya ihtiyaç duyar.</string>
-  <key>NSMicrophoneUsageDescription</key><string>BabyCam server modu ses analizi ve yayın için mikrofona ihtiyaç duyar.</string>
-  <key>NSLocalNetworkUsageDescription</key><string>BabyCam aynı yerel ağdaki client/server cihazlarını bulur.</string>
-  <key>NSBonjourServices</key><array><string>_babycam._tcp</string></array>
+  <key>NSCameraUsageDescription</key><string>MimiCam server modu kamera yayını için kameraya ihtiyaç duyar.</string>
+  <key>NSMicrophoneUsageDescription</key><string>MimiCam server modu ses analizi ve yayın için mikrofona ihtiyaç duyar.</string>
+  <key>NSLocalNetworkUsageDescription</key><string>MimiCam aynı yerel ağdaki client/server cihazlarını bulur.</string>
+  <key>NSBonjourServices</key><array><string>_mimicam._tcp</string></array>
   <key>UIViewControllerBasedStatusBarAppearance</key><false/>
 </dict></plist>

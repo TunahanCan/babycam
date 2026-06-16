@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:babycam/analysis/audio/pcm16le_reader.dart';
+import 'package:mimicam/analysis/audio/pcm16le_reader.dart';
 
 void main() {
   test('reads zero sample', () {

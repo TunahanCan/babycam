@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:babycam/analysis/audio/audio_analysis_config.dart';
-import 'package:babycam/analysis/audio/audio_calibration_state.dart';
-import 'package:babycam/analysis/audio/audio_chunk.dart';
-import 'package:babycam/analysis/audio/cry_audio_analyzer_v2.dart';
+import 'package:mimicam/analysis/audio/audio_analysis_config.dart';
+import 'package:mimicam/analysis/audio/audio_calibration_state.dart';
+import 'package:mimicam/analysis/audio/audio_chunk.dart';
+import 'package:mimicam/analysis/audio/cry_audio_analyzer_v2.dart';
 import 'test_audio_generators.dart';
 
 void main() {

@@ -2,7 +2,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'alerts/client_alert_listener.dart';
 import 'alerts/client_notification_service.dart';
-import 'alerts/alert_share_service.dart';
 import 'client_runtime.dart';
 import 'media/stream_session_controller.dart';
 import 'pairing/pairing_session_store.dart';
@@ -17,7 +16,6 @@ class ClientCompositionRoot {
     final streams = StreamSessionController();
     final alerts = ClientAlertListener();
     final notifications = ClientNotificationService();
-    final share = AlertShareService();
     return ClientRuntime(
       pair: (payload) async { final session = await pairingClient.pair(payload); await store.save(session); return session; },
       startStream: streams.start,

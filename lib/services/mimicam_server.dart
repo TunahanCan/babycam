@@ -15,8 +15,8 @@ import '../analysis/audio/cry_audio_analyzer_v2.dart';
 import '../analysis/video/luma_frame.dart';
 import '../analysis/video/motion_analysis_config.dart';
 import '../analysis/video/motion_analyzer_v2.dart';
-import '../core/babycam_protocol.dart';
-import '../core/protocol/babycam_protocol.dart' as protocol_v2;
+import '../core/mimicam_protocol.dart';
+import '../core/protocol/mimicam_protocol.dart' as protocol_v2;
 import '../features/server/pairing/pairing_token_service.dart';
 import '../l10n/app_strings.dart';
 import 'configuration_service.dart';
@@ -28,8 +28,8 @@ import 'server/media_analysis_metrics.dart';
 import 'network_address_provider.dart';
 import 'telegram_service.dart';
 
-class BabyCamServer {
-  BabyCamServer({
+class MimiCamServer {
+  MimiCamServer({
     required this.config,
     required this.strings,
     required this.onLog,
@@ -76,12 +76,15 @@ class BabyCamServer {
   }
 
   Future<String> startPairingMode() async {
-    _httpServer ??= await HttpServer.bind(InternetAddress.anyIPv4, BabyCamProtocol.httpPort, shared: true);
+    _httpServer ??= await HttpServer.bind(
+        InternetAddress.anyIPv4, MimiCamProtocol.httpPort,
+        shared: true);
     if (!_httpServerListening) {
       _httpServerListening = true;
       _httpServer!.listen(_handleRequest);
     }
-    final address = await NetworkAddressProvider.localHttpAddress() ?? '${InternetAddress.loopbackIPv4.address}:${BabyCamProtocol.httpPort}';
+    final address = await NetworkAddressProvider.localHttpAddress() ??
+        '${InternetAddress.loopbackIPv4.address}:${MimiCamProtocol.httpPort}';
     onLog(strings.serverStartedLog('http://$address/'));
     return 'http://$address/';
   }
@@ -93,14 +96,17 @@ class BabyCamServer {
 
     _initializeAnalysisPipeline();
 
-    cameraController = CameraController(cameras.first, ResolutionPreset.medium, enableAudio: false);
+    cameraController = CameraController(cameras.first, ResolutionPreset.medium,
+        enableAudio: false);
     await cameraController!.initialize();
     await cameraController!.startImageStream(_handleCameraFrame);
     await _startAudioAnalysis();
 
-    final address = await NetworkAddressProvider.localHttpAddress() ?? '${InternetAddress.loopbackIPv4.address}:${BabyCamProtocol.httpPort}';
+    final address = await NetworkAddressProvider.localHttpAddress() ??
+        '${InternetAddress.loopbackIPv4.address}:${MimiCamProtocol.httpPort}';
     await _discovery.advertise(address);
-    await _telegram.sendMessage(strings.telegramServerStarted('http://$address/'));
+    await _telegram
+        .sendMessage(strings.telegramServerStarted('http://$address/'));
   }
 
   void _initializeAnalysisPipeline() {
@@ -121,9 +127,11 @@ class BabyCamServer {
     );
     final audioAnalyzer = CryAudioAnalyzerV2(config: audioConfig);
     if (enableAudioAutoCalibration) {
-      audioAnalyzer.startCalibration(timestampMs: DateTime.now().millisecondsSinceEpoch);
+      audioAnalyzer.startCalibration(
+          timestampMs: DateTime.now().millisecondsSinceEpoch);
     }
-    final metrics = MediaAnalysisMetrics(motionTargetFps: motionConfig.analysisFps);
+    final metrics =
+        MediaAnalysisMetrics(motionTargetFps: motionConfig.analysisFps);
     final coordinator = MediaAnalysisCoordinator(
       motionAnalyzer: MotionAnalyzerV2(config: motionConfig),
       audioAnalyzer: audioAnalyzer,
@@ -134,6 +142,16 @@ class BabyCamServer {
     _analysisMetrics = metrics;
     _analysisCoordinator = coordinator;
     _alertSubscription = coordinator.alerts.listen(_handleAlertEvent);
+  }
+
+  Future<void> reloadAnalysisConfig() async {
+    if (cameraController == null && _audioSubscription == null) return;
+    await _alertSubscription?.cancel();
+    _alertSubscription = null;
+    await _analysisCoordinator?.dispose();
+    _analysisCoordinator = null;
+    _analysisMetrics?.reset();
+    _initializeAnalysisPipeline();
   }
 
   Future<void> _startAudioAnalysis() async {
@@ -155,7 +173,7 @@ class BabyCamServer {
         timestampMs: nowMs,
       ));
       if (enableLegacyWebSocketMediaPackets) {
-        _broadcastBinary([BabyCamProtocol.packetAudioPcm16Le, ...chunk]);
+        _broadcastBinary([MimiCamProtocol.packetAudioPcm16Le, ...chunk]);
       }
       for (final client in _audioClients.toList()) {
         client.add(chunk);
@@ -192,7 +210,7 @@ class BabyCamServer {
       final jpeg = CameraImageJpegEncoder.encode(frame);
       _latestJpeg = jpeg;
       if (enableLegacyWebSocketMediaPackets) {
-        _broadcastBinary([BabyCamProtocol.packetVideoMjpeg, ...jpeg]);
+        _broadcastBinary([MimiCamProtocol.packetVideoMjpeg, ...jpeg]);
       }
       for (final client in _mjpegClients.toList()) {
         _writeMjpegFrame(client, jpeg).catchError((Object _) {
@@ -220,7 +238,9 @@ class BabyCamServer {
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
-    if ((request.uri.path == '/ws/stream' || request.uri.path == protocol_v2.BabyCamProtocolV2.events) && WebSocketTransformer.isUpgradeRequest(request)) {
+    if ((request.uri.path == '/ws/stream' ||
+            request.uri.path == protocol_v2.MimiCamProtocolV2.events) &&
+        WebSocketTransformer.isUpgradeRequest(request)) {
       if (!_isAuthorized(request)) {
         request.response.statusCode = HttpStatus.unauthorized;
         await request.response.close();
@@ -229,29 +249,31 @@ class BabyCamServer {
       final socket = await WebSocketTransformer.upgrade(request);
       _webSockets.add(socket);
       socket.done.whenComplete(() => _webSockets.remove(socket));
-      onLog(strings.webSocketClientConnected(request.connectionInfo?.remoteAddress.address ?? 'unknown'));
+      onLog(strings.webSocketClientConnected(
+          request.connectionInfo?.remoteAddress.address ?? 'unknown'));
       return;
     }
 
     switch (request.uri.path) {
-      case protocol_v2.BabyCamProtocolV2.pairConfirm:
+      case protocol_v2.MimiCamProtocolV2.pairConfirm:
         await _handlePairConfirm(request);
         return;
-      case protocol_v2.BabyCamProtocolV2.authRenew:
+      case protocol_v2.MimiCamProtocolV2.authRenew:
         await _handleAuthRenew(request);
         return;
-      case protocol_v2.BabyCamProtocolV2.sessionStart:
+      case protocol_v2.MimiCamProtocolV2.sessionStart:
         if (!await _requireAuth(request)) return;
         await startMediaRuntime();
         await _writeJson(request.response, {'ok': true});
         return;
-      case protocol_v2.BabyCamProtocolV2.sessionStop:
+      case protocol_v2.MimiCamProtocolV2.sessionStop:
         if (!await _requireAuth(request)) return;
         await stopMediaRuntime();
         await _writeJson(request.response, {'ok': true});
         return;
-      case protocol_v2.BabyCamProtocolV2.statusPublic:
-        await _writeJson(request.response, {'service': 'babycam', 'pairing': true});
+      case protocol_v2.MimiCamProtocolV2.statusPublic:
+        await _writeJson(
+            request.response, {'service': 'mimicam', 'pairing': true});
         return;
       case '/video':
         if (!await _requireAuth(request)) return;
@@ -270,7 +292,8 @@ class BabyCamServer {
           'audioClients': _audioClients.length,
           'webSocketClients': _webSockets.length,
           'hasFrame': _latestJpeg != null,
-          if (_analysisCoordinator != null) ..._analysisCoordinator!.diagnostics(),
+          if (_analysisCoordinator != null)
+            ..._analysisCoordinator!.diagnostics(),
         });
         return;
       default:
@@ -283,19 +306,28 @@ class BabyCamServer {
     try {
       final body = await utf8.decoder.bind(request).join();
       final json = jsonDecode(body);
-      if (json is! Map || tokenService.validateAndConsumeNonce(json['pairingNonce']?.toString() ?? '') == false) {
+      if (json is! Map ||
+          tokenService.validateAndConsumeNonce(
+                  json['pairingNonce']?.toString() ?? '') ==
+              false) {
         request.response.statusCode = HttpStatus.unauthorized;
         await request.response.close();
         return;
       }
-      final token = tokenService.issueTrustedClientToken(clientName: json['clientName']?.toString() ?? 'Client', deviceId: json['deviceId']?.toString() ?? 'client');
+      final token = tokenService.issueTrustedClientToken(
+          clientName: json['clientName']?.toString() ?? 'Client',
+          deviceId: json['deviceId']?.toString() ?? 'client');
       await _writeJson(request.response, {
         'serverDeviceId': 'server_local',
         'serverName': 'Bebek Odası',
         'clientId': token.clientId,
         'trustedClientToken': token.token,
         'trustedClientTokenExpiresAtMs': token.expiresAtMs,
-        'capabilities': {'video': 'mjpeg', 'audio': 'pcm16le', 'events': 'json'},
+        'capabilities': {
+          'video': 'mjpeg',
+          'audio': 'pcm16le',
+          'events': 'json'
+        },
         'sessionToken': token.token,
       });
     } catch (_) {
@@ -304,10 +336,11 @@ class BabyCamServer {
     }
   }
 
-
   Future<void> _handleAuthRenew(HttpRequest request) async {
     final header = request.headers.value(HttpHeaders.authorizationHeader);
-    final token = header != null && header.startsWith('Bearer ') ? header.substring(7) : null;
+    final token = header != null && header.startsWith('Bearer ')
+        ? header.substring(7)
+        : null;
     if (token == null) {
       request.response.statusCode = HttpStatus.unauthorized;
       await request.response.close();
@@ -328,7 +361,9 @@ class BabyCamServer {
 
   bool _isAuthorized(HttpRequest request) {
     final header = request.headers.value(HttpHeaders.authorizationHeader);
-    final token = header != null && header.startsWith('Bearer ') ? header.substring(7) : request.uri.queryParameters['token'];
+    final token = header != null && header.startsWith('Bearer ')
+        ? header.substring(7)
+        : request.uri.queryParameters['token'];
     // TODO: Replace query stream token with Authorization header when native viewer is used.
     return token != null && tokenService.validateSessionToken(token);
   }
@@ -353,7 +388,8 @@ class BabyCamServer {
   }
 
   Future<void> _handleMjpeg(HttpResponse response) async {
-    response.headers.set(HttpHeaders.contentTypeHeader, 'multipart/x-mixed-replace; boundary=frame');
+    response.headers.set(HttpHeaders.contentTypeHeader,
+        'multipart/x-mixed-replace; boundary=frame');
     _mjpegClients.add(response);
     final firstFrame = _latestJpeg;
     if (firstFrame != null) await _writeMjpegFrame(response, firstFrame);
@@ -361,19 +397,24 @@ class BabyCamServer {
 
   Future<void> _handleAudio(HttpResponse response) async {
     response.headers.contentType = ContentType('audio', 'wav');
-    response.add(_wavHeader(sampleRate: _audioSampleRate, channels: _audioChannels, bitsPerSample: _audioBitsPerSample));
+    response.add(_wavHeader(
+        sampleRate: _audioSampleRate,
+        channels: _audioChannels,
+        bitsPerSample: _audioBitsPerSample));
     _audioClients.add(response);
     await response.flush();
   }
 
   Future<void> _writeMjpegFrame(HttpResponse response, Uint8List jpeg) async {
-    response.add(utf8.encode('--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.length}\r\n\r\n'));
+    response.add(utf8.encode(
+        '--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.length}\r\n\r\n'));
     response.add(jpeg);
     response.add(utf8.encode('\r\n'));
     await response.flush();
   }
 
-  Future<void> _writeJson(HttpResponse response, Map<String, Object?> body) async {
+  Future<void> _writeJson(
+      HttpResponse response, Map<String, Object?> body) async {
     response.headers.contentType = ContentType.json;
     response.write(jsonEncode(body));
     await response.close();
@@ -382,14 +423,17 @@ class BabyCamServer {
   Future<void> _writeLandingPage(HttpResponse response) async {
     response.headers.contentType = ContentType.html;
     response.write('''<!doctype html>
-<html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>BabyCam</title></head>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>MimiCam</title></head>
 <body style="margin:0;background:#111;color:white;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
   <main style="padding:16px"><h1>${strings.appTitle}</h1><img src="/video" style="width:100%;max-width:900px;border-radius:16px"><p>${strings.streamActiveHtml}</p><p><a style="color:#ff8ab3" href="/audio">${strings.audioOnlyHtml}</a></p></main>
 </body></html>''');
     await response.close();
   }
 
-  Uint8List _wavHeader({required int sampleRate, required int channels, required int bitsPerSample}) {
+  Uint8List _wavHeader(
+      {required int sampleRate,
+      required int channels,
+      required int bitsPerSample}) {
     final byteRate = sampleRate * channels * bitsPerSample ~/ 8;
     final blockAlign = channels * bitsPerSample ~/ 8;
     final data = ByteData(44);

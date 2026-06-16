@@ -1,12 +1,12 @@
-# BabyCam Mimari Dokümantasyonu
+# MimiCam Mimari Dokümantasyonu
 
-Bu doküman BabyCam uygulamasının teknik mimarisini uçtan uca anlatır. Amaç, projeye yeni giren bir geliştiricinin uygulamanın rol modelini, güvenlik yaklaşımını, runtime yaşam döngüsünü, medya/analiz boru hatlarını ve dizin yapısını adım adım anlayabilmesidir.
+Bu doküman MimiCam uygulamasının teknik mimarisini uçtan uca anlatır. Amaç, projeye yeni giren bir geliştiricinin uygulamanın rol modelini, güvenlik yaklaşımını, runtime yaşam döngüsünü, medya/analiz boru hatlarını ve dizin yapısını adım adım anlayabilmesidir.
 
 ---
 
 ## 1. Mimari prensipler
 
-BabyCam mimarisi şu prensiplerle tasarlanır:
+MimiCam mimarisi şu prensiplerle tasarlanır:
 
 1. **Strict role isolation:** Uygulama açılışında yalnızca seçilen rolün graph'ı kurulur.
 2. **Local-first çalışma:** Video, ses, status ve event akışları aynı Wi‑Fi/LAN içinde kalır.
@@ -52,7 +52,7 @@ lib/
 ├── app/
 │   ├── app_bootstrap.dart
 │   ├── app_role.dart
-│   ├── babycam_app.dart
+│   ├── mimicam_app.dart
 │   ├── role_repository.dart
 │   ├── role_resolver.dart
 │   └── app_lifecycle_observer.dart
@@ -61,7 +61,7 @@ lib/
 │   ├── security/
 │   ├── theme/
 │   ├── app_log.dart
-│   └── babycam_protocol.dart
+│   └── mimicam_protocol.dart
 ├── analysis/
 │   ├── audio/
 │   ├── video/
@@ -90,7 +90,7 @@ Rol bağımsız temel katmandır.
 
 - `protocol/`: Pairing payload, pairing session, endpoint sabitleri ve alert DTO'ları.
 - `security/`: Certificate fingerprint, token üretimi ve local TLS soyutlamaları.
-- `theme/`: BabyCam renkleri ve rol bazlı tema üretimi.
+- `theme/`: MimiCam renkleri ve rol bazlı tema üretimi.
 
 ### 3.3 `analysis/`
 
@@ -125,7 +125,7 @@ Client rolünün UI, runtime, pairing, stream ve alert bileşenlerini içerir.
 
 Mevcut entegrasyon ve legacy servisler burada durur.
 
-- `BabyCamServer`: Server entegrasyon merkezi.
+- `MimiCamServer`: Server entegrasyon merkezi.
 - `ConfigurationService`: Kalıcı ayarlar.
 - `DiscoveryService`: Ağ keşfi yardımcıları.
 - `TelegramService`: Manuel paylaşım/entegrasyon hedefleri için ayrılmış servis.
@@ -170,12 +170,12 @@ Adımlar:
 Yanlış mimari şudur:
 
 ```text
-BabyCamServer oluştur
-BabyCamClient oluştur
+MimiCamServer oluştur
+MimiCamClient oluştur
 UI'da birini gizle
 ```
 
-BabyCam bunu yapmaz. Doğru yaklaşım:
+MimiCam bunu yapmaz. Doğru yaklaşım:
 
 ```text
 role == server → sadece server graph
@@ -200,7 +200,7 @@ ServerCompositionRoot.create
   ↓
 PairingTokenService
   ↓
-BabyCamServer
+MimiCamServer
   ↓
 ServerQrPayloadBuilder
   ↓
@@ -212,7 +212,7 @@ ServerRuntime
 Detaylı adımlar:
 
 1. `PairingTokenService` nonce ve trusted token üretiminden sorumludur.
-2. `BabyCamServer` server entegrasyon merkezidir.
+2. `MimiCamServer` server entegrasyon merkezidir.
 3. `ServerQrPayloadBuilder` QR payload üretir.
 4. `MediaRuntimeController` medya runtime start/stop davranışını sarar.
 5. `ServerRuntime`, UI'nın kullanacağı sade komutları sunar.
@@ -263,7 +263,7 @@ Detaylı adımlar:
 
 ## 8. Pairing mimarisi
 
-Pairing, BabyCam güven modelinin ilk adımıdır.
+Pairing, MimiCam güven modelinin ilk adımıdır.
 
 ```text
 Server
@@ -283,7 +283,7 @@ Client
 QR URI formatı:
 
 ```text
-babycam://pair?payload=<base64url-json>
+mimicam://pair?payload=<base64url-json>
 ```
 
 Payload alanları:
@@ -291,7 +291,7 @@ Payload alanları:
 ```json
 {
   "schemaVersion": 1,
-  "scheme": "babycam",
+  "scheme": "mimicam",
   "host": "192.168.1.20",
   "port": 8443,
   "deviceId": "server_local",
@@ -747,7 +747,7 @@ Yeni özellik eklerken önerilen sıra:
 
 ## 24. Mimari karar özeti
 
-BabyCam'in temel kararı şudur: **aynı uygulama iki rolü taşıyabilir, ancak aynı anda iki rol gibi davranmamalıdır.**
+MimiCam'in temel kararı şudur: **aynı uygulama iki rolü taşıyabilir, ancak aynı anda iki rol gibi davranmamalıdır.**
 
 Bu karar sayesinde:
 

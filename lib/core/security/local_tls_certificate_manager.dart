@@ -6,7 +6,10 @@ import 'certificate_fingerprint.dart';
 import 'secure_random_token_generator.dart';
 
 class LocalTlsIdentity {
-  const LocalTlsIdentity({required this.certificatePem, required this.privateKeyPem, required this.fingerprintSha256});
+  const LocalTlsIdentity(
+      {required this.certificatePem,
+      required this.privateKeyPem,
+      required this.fingerprintSha256});
   final String certificatePem;
   final String privateKeyPem;
   final String fingerprintSha256;
@@ -22,14 +25,17 @@ abstract class LocalTlsCertificateManager {
 /// This manager deliberately avoids a shared hardcoded certificate and provides
 /// a stable fingerprint/pinning abstraction. Replacing `_createIdentity` with
 /// native/platform certificate generation keeps all callers unchanged.
-class SharedPreferencesLocalTlsCertificateManager implements LocalTlsCertificateManager {
-  SharedPreferencesLocalTlsCertificateManager(this._prefs, {SecureRandomTokenGenerator? tokenGenerator}) : _tokenGenerator = tokenGenerator ?? SecureRandomTokenGenerator();
+class SharedPreferencesLocalTlsCertificateManager
+    implements LocalTlsCertificateManager {
+  SharedPreferencesLocalTlsCertificateManager(this._prefs,
+      {SecureRandomTokenGenerator? tokenGenerator})
+      : _tokenGenerator = tokenGenerator ?? SecureRandomTokenGenerator();
 
   final SharedPreferences _prefs;
   final SecureRandomTokenGenerator _tokenGenerator;
 
-  static const _certificateKey = 'babycam.localTls.certificatePem';
-  static const _privateKeyKey = 'babycam.localTls.privateKeyPem';
+  static const _certificateKey = 'mimicam.localTls.certificatePem';
+  static const _privateKeyKey = 'mimicam.localTls.privateKeyPem';
 
   @override
   Future<LocalTlsIdentity> loadOrCreateIdentity() async {
@@ -44,18 +50,22 @@ class SharedPreferencesLocalTlsCertificateManager implements LocalTlsCertificate
     return LocalTlsIdentity(
       certificatePem: certificate,
       privateKeyPem: privateKey,
-      fingerprintSha256: CertificateFingerprint.sha256Hex(utf8.encode(certificate)),
+      fingerprintSha256:
+          CertificateFingerprint.sha256Hex(utf8.encode(certificate)),
     );
   }
 
   LocalTlsIdentity _createIdentity() {
     final seed = _tokenGenerator.generateHex(byteCount: 64);
-    final certificate = '-----BEGIN BABYCAM LOCAL CERTIFICATE-----\n$seed\n-----END BABYCAM LOCAL CERTIFICATE-----';
-    final privateKey = '-----BEGIN BABYCAM LOCAL PRIVATE KEY-----\n${_tokenGenerator.generateHex(byteCount: 64)}\n-----END BABYCAM LOCAL PRIVATE KEY-----';
+    final certificate =
+        '-----BEGIN MIMICAM LOCAL CERTIFICATE-----\n$seed\n-----END MIMICAM LOCAL CERTIFICATE-----';
+    final privateKey =
+        '-----BEGIN MIMICAM LOCAL PRIVATE KEY-----\n${_tokenGenerator.generateHex(byteCount: 64)}\n-----END MIMICAM LOCAL PRIVATE KEY-----';
     return LocalTlsIdentity(
       certificatePem: certificate,
       privateKeyPem: privateKey,
-      fingerprintSha256: CertificateFingerprint.sha256Hex(utf8.encode(certificate)),
+      fingerprintSha256:
+          CertificateFingerprint.sha256Hex(utf8.encode(certificate)),
     );
   }
 }

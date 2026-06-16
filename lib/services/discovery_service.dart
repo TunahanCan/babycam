@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../core/babycam_protocol.dart';
+import '../core/mimicam_protocol.dart';
 
 class DiscoveryService {
   RawDatagramSocket? _listener;
@@ -12,7 +12,7 @@ class DiscoveryService {
   Stream<String> listen() async* {
     _listener = await RawDatagramSocket.bind(
       InternetAddress.anyIPv4,
-      BabyCamProtocol.discoveryPort,
+      MimiCamProtocol.discoveryPort,
       reuseAddress: true,
       reusePort: true,
     );
@@ -20,7 +20,7 @@ class DiscoveryService {
       if (event != RawSocketEvent.read) continue;
       final datagram = _listener!.receive();
       if (datagram == null) continue;
-      final address = BabyCamProtocol.parseDiscoveryAddress(datagram.data);
+      final address = MimiCamProtocol.parseDiscoveryAddress(datagram.data);
       if (address != null) yield address;
     }
   }
@@ -28,13 +28,15 @@ class DiscoveryService {
   Future<void> advertise(String address) async {
     _advertiser = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
     _advertiser!.broadcastEnabled = true;
-    final payload = utf8.encode(BabyCamProtocol.discoveryPayload(address));
+    final payload = utf8.encode(MimiCamProtocol.discoveryPayload(address));
     _timer?.cancel();
     _timer = Timer.periodic(
       const Duration(seconds: 2),
-      (_) => _advertiser?.send(payload, InternetAddress('255.255.255.255'), BabyCamProtocol.discoveryPort),
+      (_) => _advertiser?.send(payload, InternetAddress('255.255.255.255'),
+          MimiCamProtocol.discoveryPort),
     );
-    _advertiser?.send(payload, InternetAddress('255.255.255.255'), BabyCamProtocol.discoveryPort);
+    _advertiser?.send(payload, InternetAddress('255.255.255.255'),
+        MimiCamProtocol.discoveryPort);
   }
 
   void dispose() {

@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:babycam/analysis/video/luma_downsampler.dart';
-import 'package:babycam/analysis/video/luma_frame.dart';
+import 'package:mimicam/analysis/video/luma_downsampler.dart';
+import 'package:mimicam/analysis/video/luma_frame.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

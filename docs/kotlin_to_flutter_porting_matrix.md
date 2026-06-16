@@ -5,20 +5,20 @@ Bu dosya eski Android/Kotlin kaynaklarının her birinin Flutter/Dart karşılı
 | Eski Kotlin dosyası | Sorumluluk | Flutter/Dart karşılığı |
 | --- | --- | --- |
 | `AppLogBuffer.kt` | Zaman damgalı ekran log tamponu | `lib/core/app_log.dart` |
-| `BabyCamProtocol.kt` | Portlar, paket tipleri, discovery payload parse/serialize | `lib/core/babycam_protocol.dart` |
+| `MimiCamProtocol.kt` | Portlar, paket tipleri, discovery payload parse/serialize | `lib/core/mimicam_protocol.dart` |
 | `AudioNormalizer.kt` | PCM16 normalize, RMS dB, zero-cross rate | `lib/services/audio_analyzer.dart` |
 | `AudioAmbientTracker.kt` | Ortam ses seviyesini adaptif izleme | `lib/services/audio_analyzer.dart` |
 | `AudioBandEnergyCalculator.kt` | Goertzel frekans/bant enerjisi | `lib/services/audio_analyzer.dart` |
 | `AudioPatternAnalyzer.kt` | Cry score, band balance, smoothing | `lib/services/audio_analyzer.dart` |
 | `LumaDownsampler.kt` | Luma stride farkındalıklı downsample | `lib/services/motion_analyzer.dart` |
 | `MotionScoreCalculator.kt` | Hareket gürültü tahmini ve smoothing | `lib/services/motion_analyzer.dart` |
-| `MotionAnalyzer.kt` | Kamera frame analizi, background update, JPEG callback | `lib/services/motion_analyzer.dart` + `lib/services/babycam_server.dart` |
+| `MotionAnalyzer.kt` | Kamera frame analizi, background update, JPEG callback | `lib/services/motion_analyzer.dart` + `lib/services/mimicam_server.dart` |
 | `ImageUtils.kt` | Kamera frame -> JPEG dönüşümü | `CameraImageJpegEncoder` (`lib/services/motion_analyzer.dart`) |
 | `NetworkAddressProvider.kt` | Yerel IPv4 `ip:port` bulma | `lib/services/network_address_provider.dart` |
-| `BabyCamDiscovery.kt` | UDP broadcast/listener | `lib/services/discovery_service.dart` |
-| `LiveStreamServer.kt` | HTTP `/`, `/video`, `/audio`, `/status`, WebSocket AV/alert | `lib/services/babycam_server.dart` |
+| `MimiCamDiscovery.kt` | UDP broadcast/listener | `lib/services/discovery_service.dart` |
+| `LiveStreamServer.kt` | HTTP `/`, `/video`, `/audio`, `/status`, WebSocket AV/alert | `lib/services/mimicam_server.dart` |
 | `ConfigurationHelper.kt` | Telegram ve eşik ayarları | `lib/services/configuration_service.dart` |
-| `BabyMonitorService.kt` | Kamera/mikrofon yakalama, motion/cry duration windows, cooldown, Telegram/client alert | `lib/services/babycam_server.dart` + `lib/services/telegram_service.dart` |
+| `BabyMonitorService.kt` | Kamera/mikrofon yakalama, motion/cry duration windows, cooldown, Telegram/client alert | `lib/services/mimicam_server.dart` + `lib/services/telegram_service.dart` |
 | `MainActivity.kt` | İzinler, rol/UI, log akışı, client WebView/alert | `lib/ui/home_page.dart` |
 | `ui/theme/Color.kt` | Material renkleri | `ThemeData(colorSchemeSeed: Colors.pink)` (`lib/main.dart`) |
 | `ui/theme/Theme.kt` | Material tema seçimi | `ThemeData(... useMaterial3: true)` (`lib/main.dart`) |

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-class BabyCamColors {
+class MimiCamColors {
   static const brandBlue = Color(0xFF5AA9FF);
   static const brandBlueDark = Color(0xFF246BFE);
   static const brandBlueSoft = Color(0xFFEAF4FF);

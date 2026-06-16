@@ -1,11 +1,11 @@
-import 'package:babycam/analysis/alert/alert_config.dart';
-import 'package:babycam/analysis/alert/alert_engine.dart';
-import 'package:babycam/analysis/alert/alert_event.dart';
-import 'package:babycam/analysis/alert/alert_severity.dart';
-import 'package:babycam/analysis/alert/alert_type.dart';
-import 'package:babycam/analysis/audio/audio_analysis_result.dart';
-import 'package:babycam/analysis/audio/audio_calibration_state.dart';
-import 'package:babycam/analysis/video/motion_analysis_result.dart';
+import 'package:mimicam/analysis/alert/alert_config.dart';
+import 'package:mimicam/analysis/alert/alert_engine.dart';
+import 'package:mimicam/analysis/alert/alert_event.dart';
+import 'package:mimicam/analysis/alert/alert_severity.dart';
+import 'package:mimicam/analysis/alert/alert_type.dart';
+import 'package:mimicam/analysis/audio/audio_analysis_result.dart';
+import 'package:mimicam/analysis/audio/audio_calibration_state.dart';
+import 'package:mimicam/analysis/video/motion_analysis_result.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

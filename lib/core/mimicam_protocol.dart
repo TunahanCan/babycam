@@ -1,9 +1,9 @@
 import 'dart:convert';
 
-class BabyCamProtocol {
+class MimiCamProtocol {
   static const httpPort = 8080;
   static const discoveryPort = 45678;
-  static const discoveryService = 'babycam.v1';
+  static const discoveryService = 'mimicam.v1';
 
   static const packetMetadata = 0;
   static const packetAudioPcm16Le = 1;
@@ -21,7 +21,9 @@ class BabyCamProtocol {
   static String? parseDiscoveryAddress(List<int> data) {
     try {
       final decoded = jsonDecode(utf8.decode(data, allowMalformed: true));
-      if (decoded is! Map || decoded['service'] != discoveryService) return null;
+      if (decoded is! Map || decoded['service'] != discoveryService) {
+        return null;
+      }
       final address = decoded['address'];
       return address is String && address.isNotEmpty ? address : null;
     } on FormatException {
