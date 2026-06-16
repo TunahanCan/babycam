@@ -22,6 +22,7 @@ dependencies:
   image: ^4.2.0
   record: ^7.1.0
   crypto: ^3.0.3
+  mobile_scanner: ^7.2.0
 
 dev_dependencies:
   flutter_test:

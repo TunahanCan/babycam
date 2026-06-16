@@ -27,11 +27,11 @@ class AppStrings {
       ? 'Server aktif. Client cihazlarda bu adresi açın: $url'
       : 'Server is active. Open this address on client devices: $url';
   String get clientSearchingLog => isTurkish
-      ? 'Client modu: ağda MimiCam server aranıyor.'
-      : 'Client mode: searching for a MimiCam server on the network.';
+      ? 'Client modu: QR veya IP ile eşleşmeye hazır.'
+      : 'Client mode: ready to pair via QR or IP.';
   String get clientActiveStatus => isTurkish
-      ? 'Client modu aktif. Server otomatik aranıyor.'
-      : 'Client mode is active. Searching for the server automatically.';
+      ? 'Client modu aktif. QR veya IP ile bebek odasına bağlan.'
+      : 'Client mode is active. Connect to the baby room via QR or IP.';
   String get alertWebSocketDisconnected => isTurkish
       ? 'Uyarı WebSocket bağlantısı koptu.'
       : 'Alert WebSocket connection was lost.';
@@ -54,20 +54,6 @@ class AppStrings {
       isTurkish ? 'MimiCam uyarısı' : 'MimiCam alert';
   String get notificationChannelName =>
       isTurkish ? 'MimiCam Uyarıları' : 'MimiCam Alerts';
-
-  String get telegramMissingConfig => isTurkish
-      ? 'Telegram bilgileri boş; mesaj gönderilmedi.'
-      : 'Telegram configuration is empty; message was not sent.';
-  String telegramStatusCode(int code) =>
-      isTurkish ? 'Telegram hata kodu: $code' : 'Telegram error code: $code';
-  String telegramConnectionError(String message) => isTurkish
-      ? 'Telegram bağlantı hatası: $message'
-      : 'Telegram connection error: $message';
-  String get telegramTimeout =>
-      isTurkish ? 'Telegram zaman aşımı.' : 'Telegram timed out.';
-  String telegramServerStarted(String url) => isTurkish
-      ? '👋 Merhaba! Baby monitor servisi başlatıldı. Yayın: $url'
-      : '👋 Hello! Baby monitor service started. Stream: $url';
 
   String get cameraNotFound =>
       isTurkish ? 'Kamera bulunamadı.' : 'Camera not found.';

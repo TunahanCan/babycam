@@ -13,17 +13,15 @@ class RoleSelectionScreen extends StatelessWidget {
       body: _LightShell(
         child: SafeArea(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(22, 18, 22, 28),
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 22),
             children: [
-              const _StatusBar(),
-              const SizedBox(height: 34),
               const Text('Bu cihaz ne olacak?', style: _titleStyle),
               const SizedBox(height: 8),
               const Text(
-                'Rolü daha sonra ayarlardan değiştirebilirsin.',
+                'Bu cihaz genelde bir kez seçilir; değişim ayarlarda küçük bir rozet olarak kalır.',
                 style: _subtitleStyle,
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 20),
               _RoleChoiceCard(
                 dark: true,
                 icon: Icons.child_care,
@@ -33,7 +31,7 @@ class RoleSelectionScreen extends StatelessWidget {
                 chip: 'Önerilen',
                 onPressed: () => onRoleSelected(AppRole.server),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               _RoleChoiceCard(
                 icon: Icons.monitor_heart,
                 title: 'Ebeveyn Cihazı',
@@ -42,7 +40,13 @@ class RoleSelectionScreen extends StatelessWidget {
                 chip: 'İzleyici',
                 onPressed: () => onRoleSelected(AppRole.client),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 18),
+              const _InfoStrip(
+                title: 'İlk kurulum izinleri',
+                text:
+                    'Seçimden sonra gerekli kamera, mikrofon, bildirim ve pil/arka plan izinleri istenir.',
+              ),
+              const SizedBox(height: 10),
               const _InfoStrip(
                 title: 'Güvenlik notu',
                 text:
@@ -83,9 +87,9 @@ class _RoleChoiceCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onPressed,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(22),
         child: Container(
-          padding: const EdgeInsets.all(22),
+          padding: const EdgeInsets.all(18),
           decoration: _cardDecoration(dark: dark),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -94,11 +98,11 @@ class _RoleChoiceCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   CircleAvatar(
-                    radius: 30,
+                    radius: 24,
                     backgroundColor: iconColor,
-                    child: Icon(icon, color: _navy, size: 30),
+                    child: Icon(icon, color: _navy, size: 25),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -109,16 +113,16 @@ class _RoleChoiceCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: titleColor,
-                            fontSize: 25,
-                            height: 1.08,
+                            fontSize: 20,
+                            height: 1.12,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 7),
                         Text(
                           description,
                           style: TextStyle(
-                              color: bodyColor, fontSize: 17, height: 1.28),
+                              color: bodyColor, fontSize: 14.5, height: 1.28),
                         ),
                       ],
                     ),
@@ -127,13 +131,13 @@ class _RoleChoiceCard extends StatelessWidget {
                   _Chip(text: chip, color: dark ? _pinkSoft : _mintSoft),
                 ],
               ),
-              const SizedBox(height: 22),
+              const SizedBox(height: 14),
               Align(
                 alignment: Alignment.centerRight,
                 child: Icon(
                   Icons.arrow_forward_rounded,
                   color: dark ? Colors.white : _navy,
-                  size: 28,
+                  size: 22,
                 ),
               ),
             ],
@@ -153,17 +157,17 @@ class _InfoStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(16),
       decoration: _cardDecoration(),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const CircleAvatar(
-            radius: 24,
+            radius: 20,
             backgroundColor: _mintSoft,
             child: Icon(Icons.lock_outline_rounded, color: _navy),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -172,14 +176,14 @@ class _InfoStrip extends StatelessWidget {
                   title,
                   style: const TextStyle(
                     color: _navy,
-                    fontSize: 21,
+                    fontSize: 17,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(text,
                     style: const TextStyle(
-                        color: _slate, fontSize: 16, height: 1.25)),
+                        color: _slate, fontSize: 14, height: 1.25)),
               ],
             ),
           ),
@@ -209,25 +213,6 @@ class _LightShell extends StatelessWidget {
   }
 }
 
-class _StatusBar extends StatelessWidget {
-  const _StatusBar();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      children: [
-        Text('09:41',
-            style: TextStyle(
-                color: _navy, fontWeight: FontWeight.w900, fontSize: 18)),
-        Spacer(),
-        Icon(Icons.signal_cellular_alt_rounded, color: _navy),
-        SizedBox(width: 12),
-        Icon(Icons.battery_5_bar_rounded, color: _navy),
-      ],
-    );
-  }
-}
-
 class _Chip extends StatelessWidget {
   const _Chip({required this.text, required this.color});
 
@@ -237,13 +222,14 @@ class _Chip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: ShapeDecoration(color: color, shape: const StadiumBorder()),
       child: Text(
         text,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: _navy, fontWeight: FontWeight.w800),
+        style: const TextStyle(
+            color: _navy, fontWeight: FontWeight.w800, fontSize: 12),
       ),
     );
   }
@@ -252,11 +238,10 @@ class _Chip extends StatelessWidget {
 BoxDecoration _cardDecoration({bool dark = false}) {
   return BoxDecoration(
     color: dark ? _navy : Colors.white,
-    borderRadius: BorderRadius.circular(28),
+    borderRadius: BorderRadius.circular(22),
     border: Border.all(color: const Color(0xFFE2E8F0)),
     boxShadow: const [
-      BoxShadow(
-          color: Color(0x24111827), blurRadius: 22, offset: Offset(0, 12)),
+      BoxShadow(color: Color(0x18111827), blurRadius: 18, offset: Offset(0, 8)),
     ],
   );
 }
@@ -270,8 +255,8 @@ const _mintSoft = Color(0xFFD9F7F1);
 
 const _titleStyle = TextStyle(
   color: _navy,
-  fontSize: 38,
-  height: 1.05,
+  fontSize: 30,
+  height: 1.08,
   fontWeight: FontWeight.w900,
 );
-const _subtitleStyle = TextStyle(color: _slate, fontSize: 19, height: 1.22);
+const _subtitleStyle = TextStyle(color: _slate, fontSize: 15.5, height: 1.25);

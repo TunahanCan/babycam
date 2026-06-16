@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -5,6 +7,7 @@ import '../core/theme/mimicam_theme.dart';
 import '../features/client/client_app_shell.dart';
 import '../features/client/client_composition_root.dart';
 import '../features/client/client_runtime.dart';
+import '../features/client/pairing/pairing_session_store.dart';
 import '../features/role_selection/role_selection_screen.dart';
 import '../features/server/server_app_shell.dart';
 import '../features/server/server_composition_root.dart';
@@ -12,6 +15,7 @@ import '../features/server/server_runtime.dart';
 import '../l10n/app_strings.dart';
 import '../services/configuration_service.dart';
 import 'app_role.dart';
+import 'role_permission_coordinator.dart';
 import 'role_repository.dart';
 import 'role_resolver.dart';
 
@@ -28,6 +32,9 @@ class _AppBootstrapState extends State<AppBootstrap> {
   AppRole? _role;
   Object? _runtime;
   bool _loaded = false;
+  bool _switchingRole = false;
+  int _roleSwitchGeneration = 0;
+  final _permissionCoordinator = const RolePermissionCoordinator();
 
   @override
   void initState() {
@@ -39,6 +46,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
     final prefs = await SharedPreferences.getInstance();
     final roles = SharedPreferencesRoleRepository(prefs);
     final role = await RoleResolver(roles).resolve();
+    if (!mounted) return;
     setState(() {
       _prefs = prefs;
       _roles = roles;
@@ -48,42 +56,115 @@ class _AppBootstrapState extends State<AppBootstrap> {
   }
 
   Future<void> _select(AppRole role) async {
-    await _roles!.saveRole(role);
-    await _disposeRuntime();
-    setState(() {
-      _role = role;
-      _runtime = null;
-    });
+    await _permissionCoordinator.requestFor(role);
+    if (!mounted) return;
+    await _switchRole(role);
   }
 
-  Future<void> _reset() async {
-    await _roles!.clearRole();
-    await _disposeRuntime();
+  Future<void> _requestRoleChange(AppRole role) async {
+    if (_role == role || _switchingRole) return;
+    if (_role == AppRole.server && role == AppRole.client) {
+      final confirmed = await _confirmLeavingServer();
+      if (confirmed != true) return;
+    }
+    await _permissionCoordinator.requestFor(role);
+    if (!mounted) return;
+    await _switchRole(role);
+  }
+
+  Future<bool?> _confirmLeavingServer() {
+    return showModalBottomSheet<bool>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Server modundan çıkılsın mı?',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Client moduna geçersen bebek odası yayını ve yerel servisler kapatılır.',
+                  style: TextStyle(fontSize: 16, height: 1.3),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('Vazgeç'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: const Text('Client’a geç'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _switchRole(AppRole? role) async {
+    if (_switchingRole) return;
+
+    final generation = ++_roleSwitchGeneration;
+    final runtime = _runtime;
     setState(() {
+      _switchingRole = true;
       _role = null;
       _runtime = null;
     });
+
+    await _disposeRuntime(runtime);
+    if (_prefs != null) await PairingSessionStore(_prefs!).clear();
+    if (role == null) {
+      await _roles!.clearRole();
+    } else {
+      await _roles!.saveRole(role);
+    }
+
+    if (!mounted || generation != _roleSwitchGeneration) return;
+    setState(() {
+      _role = role;
+      _switchingRole = false;
+    });
   }
 
-  Future<void> _disposeRuntime() async {
-    final runtime = _runtime;
+  Future<void> _disposeRuntime(Object? runtime) async {
     if (runtime is ServerRuntime) await runtime.dispose();
     if (runtime is ClientRuntime) await runtime.dispose();
   }
 
   @override
   void dispose() {
-    _disposeRuntime();
+    _roleSwitchGeneration++;
+    final runtime = _runtime;
+    _runtime = null;
+    unawaited(_disposeRuntime(runtime));
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     if (!_loaded) {
-      return Theme(
-        data: MimiCamTheme.neutralTheme(),
-        child: const Scaffold(body: Center(child: CircularProgressIndicator())),
-      );
+      return const _BootstrapProgress(message: 'MimiCam hazırlanıyor...');
+    }
+    if (_switchingRole) {
+      return const _BootstrapProgress(message: 'Rol değiştiriliyor...');
     }
     final prefs = _prefs!;
     final config = ConfigurationService(prefs);
@@ -94,18 +175,48 @@ class _AppBootstrapState extends State<AppBootstrap> {
             strings: AppStrings.of(context),
           )) as ServerRuntime,
           config: config,
-          onResetRole: _reset,
+          activeRole: AppRole.server,
+          switchingRole: _switchingRole,
+          onRoleSelected: (role) => unawaited(_requestRoleChange(role)),
         ),
       AppRole.client => ClientAppShell(
-          runtime: (_runtime ??=
-                  ClientCompositionRoot.create(preferences: prefs))
-              as ClientRuntime,
-          onResetRole: _reset,
+          runtime: (_runtime ??= ClientCompositionRoot.create(
+            preferences: prefs,
+            strings: AppStrings.of(context),
+          )) as ClientRuntime,
+          activeRole: AppRole.client,
+          switchingRole: _switchingRole,
+          onRoleSelected: (role) => unawaited(_requestRoleChange(role)),
         ),
       null => Theme(
           data: MimiCamTheme.neutralTheme(),
           child: RoleSelectionScreen(onRoleSelected: _select),
         ),
     };
+  }
+}
+
+class _BootstrapProgress extends StatelessWidget {
+  const _BootstrapProgress({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Theme(
+      data: MimiCamTheme.neutralTheme(),
+      child: Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(message),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -8,15 +8,18 @@ import '../../../core/protocol/pairing_session.dart';
 class QRPairingClient {
   Future<PairingSession> pair(PairingPayload payload) async {
     final client = HttpClient();
+    final transport =
+        payload.capabilities['transport'] == 'https' ? 'https' : 'http';
     client.badCertificateCallback = (certificate, host, port) {
       // TODO: validate certificate.der SHA-256 against payload.certificateFingerprintSha256
       // once platform-compatible self-signed certificate generation is wired.
-      return payload.certificateFingerprintSha256.isNotEmpty;
+      return transport == 'https' &&
+          payload.certificateFingerprintSha256.isNotEmpty;
     };
     try {
       final request = await client.postUrl(
         Uri(
-          scheme: 'https',
+          scheme: transport,
           host: payload.host,
           port: payload.port,
           path: MimiCamProtocolV2.pairConfirm,

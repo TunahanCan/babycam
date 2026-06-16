@@ -49,46 +49,86 @@ class ClientRuntime {
   final Future<void> Function()? _stopAlerts;
   final Future<void> Function()? _clearStore;
   final _states = StreamController<ClientRuntimeState>.broadcast();
-  ClientRuntimeState _state = const ClientRuntimeState(phase: ClientRuntimePhase.unpaired);
+  ClientRuntimeState _state =
+      const ClientRuntimeState(phase: ClientRuntimePhase.unpaired);
+  bool _disposed = false;
 
   ClientRuntimeState get currentState => _state;
   Stream<ClientRuntimeState> get states => _states.stream;
 
   Future<void> pairWithServer(PairingPayload payload) async {
-    _emit(ClientRuntimeState(phase: ClientRuntimePhase.pairing, session: _state.session));
-    final session = await _pair(payload);
-    _emit(ClientRuntimeState(phase: ClientRuntimePhase.pairedIdle, session: session));
+    if (_disposed) return;
+    final previousSession = _state.session;
+    _emit(ClientRuntimeState(
+        phase: ClientRuntimePhase.pairing, session: previousSession));
+    late final PairingSession session;
+    try {
+      session = await _pair(payload);
+    } catch (error) {
+      if (!_disposed) {
+        _emit(ClientRuntimeState(
+          phase: ClientRuntimePhase.error,
+          session: previousSession,
+          error: error,
+        ));
+      }
+      rethrow;
+    }
+    if (_disposed) return;
+    _emit(ClientRuntimeState(
+        phase: ClientRuntimePhase.pairedIdle, session: session));
   }
 
   Future<void> renewTokenIfNeeded({DateTime? now}) async {
+    if (_disposed) return;
     final session = _state.session;
     if (session == null || !session.shouldRenew(now ?? DateTime.now())) return;
-    _emit(ClientRuntimeState(phase: ClientRuntimePhase.renewingToken, session: session));
+    _emit(ClientRuntimeState(
+        phase: ClientRuntimePhase.renewingToken, session: session));
     final renewed = await _renew?.call(session);
-    _emit(ClientRuntimeState(phase: ClientRuntimePhase.pairedIdle, session: renewed ?? session));
+    if (_disposed) return;
+    _emit(ClientRuntimeState(
+        phase: ClientRuntimePhase.pairedIdle, session: renewed ?? session));
   }
 
   Future<void> startWatching({bool audioEnabled = false}) async {
+    if (_disposed || _state.session == null) return;
     await _startStream?.call();
-    _emit(ClientRuntimeState(phase: ClientRuntimePhase.watching, session: _state.session));
+    if (_disposed) {
+      await _stopStream?.call();
+      return;
+    }
+    _emit(ClientRuntimeState(
+        phase: ClientRuntimePhase.watching, session: _state.session));
   }
 
   Future<void> stopWatching() async {
     await _stopStream?.call();
-    _emit(ClientRuntimeState(phase: ClientRuntimePhase.pairedIdle, session: _state.session));
+    if (_disposed) return;
+    _emit(ClientRuntimeState(
+        phase: ClientRuntimePhase.pairedIdle, session: _state.session));
   }
 
   Future<void> startAlertListening() async {
+    if (_disposed || _state.session == null) return;
     await _startAlerts?.call();
-    _emit(ClientRuntimeState(phase: ClientRuntimePhase.alertOnly, session: _state.session));
+    if (_disposed) {
+      await _stopAlerts?.call();
+      return;
+    }
+    _emit(ClientRuntimeState(
+        phase: ClientRuntimePhase.alertOnly, session: _state.session));
   }
 
   Future<void> stopAlertListening() async {
     await _stopAlerts?.call();
-    _emit(ClientRuntimeState(phase: ClientRuntimePhase.pairedIdle, session: _state.session));
+    if (_disposed) return;
+    _emit(ClientRuntimeState(
+        phase: ClientRuntimePhase.pairedIdle, session: _state.session));
   }
 
   Future<void> clearPairing() async {
+    if (_disposed) return;
     await stopWatching();
     await stopAlertListening();
     await _clearStore?.call();
@@ -96,8 +136,10 @@ class ClientRuntime {
   }
 
   Future<void> dispose() async {
-    await stopWatching();
-    await stopAlertListening();
+    if (_disposed) return;
+    _disposed = true;
+    await _stopStream?.call();
+    await _stopAlerts?.call();
     await _states.close();
   }
 

@@ -1,7 +1,9 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../app/app_role.dart';
 import '../../services/configuration_service.dart';
 import '../shared/presentation/mimicam_design_tokens.dart';
 import '../shared/presentation/mimicam_shells.dart';
@@ -12,12 +14,16 @@ class ServerHomeScreen extends StatefulWidget {
     super.key,
     required this.runtime,
     required this.config,
-    required this.onResetRole,
+    required this.activeRole,
+    required this.onRoleSelected,
+    this.switchingRole = false,
   });
 
   final ServerRuntime runtime;
   final ConfigurationService config;
-  final VoidCallback onResetRole;
+  final AppRole activeRole;
+  final ValueChanged<AppRole> onRoleSelected;
+  final bool switchingRole;
 
   @override
   State<ServerHomeScreen> createState() => _ServerHomeScreenState();
@@ -30,6 +36,7 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
   late double _motionDurationSeconds;
   late double _cryDurationSeconds;
   bool _savingSettings = false;
+  int _tab = 0;
 
   @override
   void initState() {
@@ -76,77 +83,136 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
           body: MimiCamGradientShell(
             variant: MimiCamShellVariant.server,
             child: SafeArea(
-              child: ListView(
-                padding: MimiCamDesignTokens.screenPadding,
-                children: [
-                  MimiCamTopBar(onResetRole: widget.onResetRole, dark: true),
-                  const SizedBox(height: 24),
-                  _ServerHeroCard(
-                    state: state,
-                    phaseLabel: _phaseLabel(state.phase),
-                    onStop: widget.runtime.stop,
-                  ),
-                  const SizedBox(height: 22),
-                  _LivePreviewCard(
-                    state: state,
-                    previewSource: widget.runtime.previewSource,
-                  ),
-                  const SizedBox(height: 24),
-                  const _ServerSectionHeader(
-                    title: 'Ebeveyn cihazını bağla',
-                    subtitle:
-                        'QR kodu göster; eşleşme sadece aynı ağdaki güvenilir cihazlar için açılır.',
-                  ),
-                  const SizedBox(height: 14),
-                  _ConnectionCard(qrPayload: state.qrPayload),
-                  const SizedBox(height: 24),
-                  _RuntimeStats(state: state),
-                  const SizedBox(height: 24),
-                  _DetectionCard(state: state),
-                  const SizedBox(height: 24),
-                  _ServerSettingsCard(
-                    motionThreshold: _motionThreshold,
-                    cryScoreThreshold: _cryScoreThreshold,
-                    notifyCooldownSeconds: _notifyCooldownSeconds,
-                    motionDurationSeconds: _motionDurationSeconds,
-                    cryDurationSeconds: _cryDurationSeconds,
-                    saving: _savingSettings,
-                    telegramEnabled:
-                        widget.config.telegramBotToken.isNotEmpty &&
-                            widget.config.telegramChatId.isNotEmpty,
-                    onReset: _resetSettings,
-                    onMotionThresholdChanged: (value) =>
-                        setState(() => _motionThreshold = value),
-                    onMotionThresholdChangeEnd: (value) => _persistSettings(
-                        () => widget.config.setMotionThreshold(value)),
-                    onCryScoreThresholdChanged: (value) =>
-                        setState(() => _cryScoreThreshold = value),
-                    onCryScoreThresholdChangeEnd: (value) => _persistSettings(
-                        () => widget.config.setCryScoreThreshold(value)),
-                    onNotifyCooldownChanged: (value) =>
-                        setState(() => _notifyCooldownSeconds = value),
-                    onNotifyCooldownChangeEnd: (value) => _persistSettings(() =>
-                        widget.config
-                            .setNotifyCooldownMs((value * 1000).round())),
-                    onMotionDurationChanged: (value) =>
-                        setState(() => _motionDurationSeconds = value),
-                    onMotionDurationChangeEnd: (value) => _persistSettings(() =>
-                        widget.config
-                            .setMotionMinDurationMs((value * 1000).round())),
-                    onCryDurationChanged: (value) =>
-                        setState(() => _cryDurationSeconds = value),
-                    onCryDurationChangeEnd: (value) => _persistSettings(() =>
-                        widget.config
-                            .setCryMinDurationMs((value * 1000).round())),
-                  ),
-                  const SizedBox(height: 30),
-                ],
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                transitionBuilder: _hardWipe,
+                child: _buildTab(context, state),
               ),
             ),
+          ),
+          bottomNavigationBar: MimiCamBottomNav(
+            items: _serverNavItems,
+            currentIndex: _tab,
+            activeColor: MimiCamDesignTokens.pink,
+            dark: true,
+            onTap: (index) => setState(() => _tab = index),
           ),
         );
       },
     );
+  }
+
+  Widget _buildTab(BuildContext context, ServerRuntimeState state) {
+    return switch (_tab) {
+      0 => _ServerTabFrame(
+          key: const ValueKey('server-stream'),
+          activeRole: widget.activeRole,
+          onRoleSelected: widget.onRoleSelected,
+          switchingRole: widget.switchingRole,
+          children: [
+            _ServerHeroCard(
+              state: state,
+              phaseLabel: _phaseLabel(state.phase),
+              onStop: widget.runtime.stop,
+            ),
+            const SizedBox(height: 16),
+            _LivePreviewCard(
+              state: state,
+              previewSource: widget.runtime.previewSource,
+            ),
+            const SizedBox(height: 16),
+            _RuntimeStats(state: state),
+            const SizedBox(height: 16),
+            _DetectionCard(state: state),
+          ],
+        ),
+      1 => _ServerTabFrame(
+          key: const ValueKey('server-qr-ip'),
+          activeRole: widget.activeRole,
+          onRoleSelected: widget.onRoleSelected,
+          switchingRole: widget.switchingRole,
+          children: [
+            const _ServerSectionHeader(
+              title: 'QR / IP bağlantı bileti',
+              subtitle:
+                  'Bu ekran QR taramaz; sadece ebeveyn cihazının bağlanacağı bilgiyi üretir.',
+            ),
+            const SizedBox(height: 10),
+            _ConnectionCard(qrPayload: state.qrPayload),
+            const SizedBox(height: 10),
+            _QrIpActions(
+              payload: state.qrPayload,
+              onRefresh: widget.runtime.startPairingMode,
+            ),
+          ],
+        ),
+      2 => _ServerTabFrame(
+          key: const ValueKey('server-services'),
+          activeRole: widget.activeRole,
+          onRoleSelected: widget.onRoleSelected,
+          switchingRole: widget.switchingRole,
+          children: [
+            const _ServerSectionHeader(
+              title: 'Servis durumu',
+              subtitle:
+                  'Kamera, mikrofon ve WebSocket server alanında izlenir.',
+            ),
+            const SizedBox(height: 10),
+            _ServiceStatusGrid(state: state),
+          ],
+        ),
+      _ => _ServerTabFrame(
+          key: const ValueKey('server-settings'),
+          activeRole: widget.activeRole,
+          onRoleSelected: widget.onRoleSelected,
+          switchingRole: widget.switchingRole,
+          children: [
+            const _ServerSectionHeader(
+              title: 'Server ayarları',
+              subtitle:
+                  'Eşikler, cooldown ve teknik davranış yalnızca bebek odası cihazını etkiler.',
+            ),
+            const SizedBox(height: 10),
+            _ServerSettingsCard(
+              motionThreshold: _motionThreshold,
+              cryScoreThreshold: _cryScoreThreshold,
+              notifyCooldownSeconds: _notifyCooldownSeconds,
+              motionDurationSeconds: _motionDurationSeconds,
+              cryDurationSeconds: _cryDurationSeconds,
+              saving: _savingSettings,
+              onReset: _resetSettings,
+              onMotionThresholdChanged: (value) =>
+                  setState(() => _motionThreshold = value),
+              onMotionThresholdChangeEnd: (value) => _persistSettings(
+                  () => widget.config.setMotionThreshold(value)),
+              onCryScoreThresholdChanged: (value) =>
+                  setState(() => _cryScoreThreshold = value),
+              onCryScoreThresholdChangeEnd: (value) => _persistSettings(
+                  () => widget.config.setCryScoreThreshold(value)),
+              onNotifyCooldownChanged: (value) =>
+                  setState(() => _notifyCooldownSeconds = value),
+              onNotifyCooldownChangeEnd: (value) => _persistSettings(() =>
+                  widget.config.setNotifyCooldownMs((value * 1000).round())),
+              onMotionDurationChanged: (value) =>
+                  setState(() => _motionDurationSeconds = value),
+              onMotionDurationChangeEnd: (value) => _persistSettings(() =>
+                  widget.config.setMotionMinDurationMs((value * 1000).round())),
+              onCryDurationChanged: (value) =>
+                  setState(() => _cryDurationSeconds = value),
+              onCryDurationChangeEnd: (value) => _persistSettings(() =>
+                  widget.config.setCryMinDurationMs((value * 1000).round())),
+            ),
+          ],
+        ),
+    };
+  }
+
+  Widget _hardWipe(Widget child, Animation<double> animation) {
+    final offset = Tween<Offset>(
+      begin: const Offset(1, 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+    return ClipRect(child: SlideTransition(position: offset, child: child));
   }
 
   static String _phaseLabel(ServerRuntimePhase phase) {
@@ -160,6 +226,49 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
       ServerRuntimePhase.mediaActive => 'Medya aktif',
       ServerRuntimePhase.error => 'Hata',
     };
+  }
+}
+
+const _serverNavItems = [
+  MimiCamBottomNavItem(icon: Icons.videocam_rounded, label: 'Yayın'),
+  MimiCamBottomNavItem(icon: Icons.qr_code_2_rounded, label: 'QR/IP'),
+  MimiCamBottomNavItem(
+      icon: Icons.settings_input_component_rounded, label: 'Servis'),
+  MimiCamBottomNavItem(icon: Icons.tune_rounded, label: 'Ayarlar'),
+];
+
+class _ServerTabFrame extends StatelessWidget {
+  const _ServerTabFrame({
+    super.key,
+    required this.activeRole,
+    required this.onRoleSelected,
+    required this.switchingRole,
+    required this.children,
+  });
+
+  final AppRole activeRole;
+  final ValueChanged<AppRole> onRoleSelected;
+  final bool switchingRole;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: MimiCamDesignTokens.screenPadding.copyWith(top: 6, bottom: 18),
+      children: [
+        Align(
+          alignment: Alignment.topRight,
+          child: MimiCamRoleBadge(
+            activeRole: activeRole,
+            onRoleSelected: onRoleSelected,
+            enabled: !switchingRole,
+            dark: true,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...children,
+      ],
+    );
   }
 }
 
@@ -177,10 +286,10 @@ class _ServerHeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(26),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: .10),
-        borderRadius: BorderRadius.circular(36),
+        borderRadius: BorderRadius.circular(28),
         border: Border.all(color: Colors.white24),
       ),
       child: Column(
@@ -190,8 +299,8 @@ class _ServerHeroCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 72,
-                height: 72,
+                width: 56,
+                height: 56,
                 decoration: const BoxDecoration(
                   color: MimiCamDesignTokens.pink,
                   shape: BoxShape.circle,
@@ -199,10 +308,10 @@ class _ServerHeroCard extends StatelessWidget {
                 child: const Icon(
                   Icons.child_care_rounded,
                   color: MimiCamDesignTokens.navy,
-                  size: 40,
+                  size: 31,
                 ),
               ),
-              const SizedBox(width: 18),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -211,28 +320,28 @@ class _ServerHeroCard extends StatelessWidget {
                       'BEBEK ODASI MODU',
                       style: TextStyle(
                         color: MimiCamDesignTokens.mint,
-                        fontSize: 12,
-                        letterSpacing: 1.2,
+                        fontSize: 10.5,
+                        letterSpacing: 1.0,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 5),
                     const Text(
                       'Oda yayına hazır',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 34,
-                        height: 1.02,
+                        fontSize: 26,
+                        height: 1.08,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 7),
                     Text(
                       state.errorMessage ??
                           'Kamera açık, eşleşme hazır. Telefonu sabit bir yere bırakabilirsin.',
                       style: const TextStyle(
                         color: Colors.white70,
-                        fontSize: 17,
+                        fontSize: 15,
                         height: 1.25,
                       ),
                     ),
@@ -241,7 +350,7 @@ class _ServerHeroCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 16),
           Wrap(
             spacing: 10,
             runSpacing: 10,
@@ -264,10 +373,10 @@ class _ServerHeroCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
-            height: 56,
+            height: 50,
             child: OutlinedButton.icon(
               onPressed: onStop,
               icon: const Icon(Icons.stop_circle_rounded),
@@ -275,12 +384,12 @@ class _ServerHeroCard extends StatelessWidget {
                 foregroundColor: Colors.white,
                 side: const BorderSide(color: Colors.white38),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(22),
+                  borderRadius: BorderRadius.circular(18),
                 ),
               ),
               label: const Text(
                 'Oda yayınını durdur',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
               ),
             ),
           ),
@@ -305,7 +414,7 @@ class _ServerSectionHeader extends StatelessWidget {
           title,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 26,
+            fontSize: 22,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -314,7 +423,7 @@ class _ServerSectionHeader extends StatelessWidget {
           subtitle,
           style: const TextStyle(
             color: Colors.white70,
-            fontSize: 17,
+            fontSize: 14.5,
             height: 1.25,
           ),
         ),
@@ -332,13 +441,13 @@ class _ServerPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: ShapeDecoration(color: color, shape: const StadiumBorder()),
       child: Text(
         label,
         style: const TextStyle(
           color: MimiCamDesignTokens.navy,
-          fontSize: 14,
+          fontSize: 12.5,
           fontWeight: FontWeight.w900,
         ),
       ),
@@ -363,19 +472,19 @@ class _ConnectionCard extends StatelessWidget {
             children: [
               const Text('Güvenli QR eşleşme',
                   style: MimiCamDesignTokens.cardTitle),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               const Text(
                 'Ebeveyn cihazında QR tara; bağlantı bilgisi otomatik aktarılır.',
                 style:
-                    TextStyle(color: MimiCamDesignTokens.slate, fontSize: 16),
+                    TextStyle(color: MimiCamDesignTokens.slate, fontSize: 14.5),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               _PayloadBox(payload: payload),
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
               const Text(
                 'Kod görünür kalsın; eşleşme bitince yayın izlenebilir.',
                 style:
-                    TextStyle(color: MimiCamDesignTokens.slate, fontSize: 18),
+                    TextStyle(color: MimiCamDesignTokens.slate, fontSize: 14.5),
               ),
             ],
           );
@@ -384,8 +493,8 @@ class _ConnectionCard extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(child: _QrPanel(payload: payload, size: 150)),
-                const SizedBox(height: 22),
+                Center(child: _QrPanel(payload: payload, size: 132)),
+                const SizedBox(height: 16),
                 details,
               ],
             );
@@ -394,8 +503,8 @@ class _ConnectionCard extends StatelessWidget {
           return Row(
             children: [
               Expanded(child: details),
-              const SizedBox(width: 28),
-              _QrPanel(payload: payload, size: 140),
+              const SizedBox(width: 20),
+              _QrPanel(payload: payload, size: 128),
             ],
           );
         },
@@ -413,10 +522,10 @@ class _PayloadBox extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: const Color(0xFFF2F0F8),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -442,21 +551,214 @@ class _QrPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: QrImageView(
-          data: payload,
-          size: size,
-          padding: EdgeInsets.zero,
-          eyeStyle: const QrEyeStyle(color: MimiCamDesignTokens.navy),
-          dataModuleStyle:
-              const QrDataModuleStyle(color: MimiCamDesignTokens.navy),
+    return RepaintBoundary(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
         ),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: QrImageView(
+            data: payload,
+            size: size,
+            padding: EdgeInsets.zero,
+            eyeStyle: const QrEyeStyle(color: MimiCamDesignTokens.navy),
+            dataModuleStyle:
+                const QrDataModuleStyle(color: MimiCamDesignTokens.navy),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QrIpActions extends StatelessWidget {
+  const _QrIpActions({required this.payload, required this.onRefresh});
+
+  final String? payload;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return MimiCamCard(
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          SizedBox(
+            height: 48,
+            child: FilledButton.icon(
+              onPressed: () async {
+                await onRefresh();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context)
+                  ..clearSnackBars()
+                  ..showSnackBar(
+                    const SnackBar(
+                        content: Text('QR bağlantı bileti yenilendi.')),
+                  );
+              },
+              icon: const Icon(Icons.refresh_rounded),
+              style: FilledButton.styleFrom(
+                backgroundColor: MimiCamDesignTokens.pink,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              label: const Text(
+                'QR yenile',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed: payload == null
+                  ? null
+                  : () async {
+                      await Clipboard.setData(ClipboardData(text: payload!));
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context)
+                        ..clearSnackBars()
+                        ..showSnackBar(
+                          const SnackBar(
+                              content: Text('Bağlantı bileti kopyalandı.')),
+                        );
+                    },
+              icon: const Icon(Icons.copy_rounded),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: MimiCamDesignTokens.navy,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              label: const Text(
+                'Adresi kopyala',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ServiceStatusGrid extends StatelessWidget {
+  const _ServiceStatusGrid({required this.state});
+
+  final ServerRuntimeState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final cards = [
+      _ServiceStatusCard(
+        icon: Icons.videocam_rounded,
+        title: 'Kamera',
+        value: state.cameraActive ? 'Aktif' : 'Hazırlanıyor',
+        color: state.cameraActive
+            ? MimiCamDesignTokens.mint
+            : MimiCamDesignTokens.amber,
+      ),
+      _ServiceStatusCard(
+        icon: Icons.mic_rounded,
+        title: 'Mikrofon',
+        value: state.microphoneActive ? 'Aktif' : 'Kapalı',
+        color: state.microphoneActive
+            ? MimiCamDesignTokens.mint
+            : MimiCamDesignTokens.amber,
+      ),
+      _ServiceStatusCard(
+        icon: Icons.hub_rounded,
+        title: 'WebSocket',
+        value: '${state.activeEventClients} event client',
+        color: MimiCamDesignTokens.pink,
+      ),
+      _ServiceStatusCard(
+        icon: Icons.people_alt_rounded,
+        title: 'Client sayısı',
+        value: '${state.activeClients} bağlı',
+        color: MimiCamDesignTokens.amber,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 520) {
+          return Column(
+            children: [
+              for (final card in cards) ...[
+                card,
+                if (card != cards.last) const SizedBox(height: 10),
+              ],
+            ],
+          );
+        }
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final card in cards)
+              SizedBox(width: (constraints.maxWidth - 12) / 2, child: card),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ServiceStatusCard extends StatelessWidget {
+  const _ServiceStatusCard({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String title;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: MimiCamDesignTokens.cardDecoration(),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: color,
+            child: Icon(icon, color: MimiCamDesignTokens.navy),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: MimiCamDesignTokens.navy,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: MimiCamDesignTokens.slate,
+                    fontSize: 13.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -488,12 +790,12 @@ class _RuntimeStats extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 430) {
+        if (constraints.maxWidth < 700) {
           return Column(
             children: [
               for (final stat in stats) ...[
                 stat,
-                if (stat != stats.last) const SizedBox(height: 14),
+                if (stat != stats.last) const SizedBox(height: 10),
               ],
             ],
           );
@@ -503,7 +805,7 @@ class _RuntimeStats extends StatelessWidget {
           children: [
             for (final stat in stats) ...[
               Expanded(child: stat),
-              if (stat != stats.last) const SizedBox(width: 14),
+              if (stat != stats.last) const SizedBox(width: 10),
             ],
           ],
         );
@@ -529,15 +831,16 @@ class _DetectionCard extends StatelessWidget {
             const SizedBox(height: 8),
             const Text(
               'Sadece önemli değişimleri sakin uyarılara dönüştürür.',
-              style: TextStyle(color: MimiCamDesignTokens.slate, fontSize: 16),
+              style:
+                  TextStyle(color: MimiCamDesignTokens.slate, fontSize: 14.5),
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 14),
             _KeyVal(
                 'Ağlama takibi', state.cryAnalyzerActive ? 'Hazır' : 'Kapalı'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
             _KeyVal('Hareket takibi',
                 state.motionAnalyzerActive ? 'Hazır' : 'Kapalı'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
             _KeyVal('Çalışma modu', _powerModeLabel(state.powerMode.name)),
           ],
         ),
@@ -586,7 +889,7 @@ class _LivePreviewCard extends StatelessWidget {
                     'Oda kamerası',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 23,
+                      fontSize: 19,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -598,38 +901,40 @@ class _LivePreviewCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
               ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: isCompact ? 220 : 280),
+                constraints: BoxConstraints(maxHeight: isCompact ? 190 : 240),
                 child: AspectRatio(
                   aspectRatio:
                       showCamera ? controller.value.aspectRatio : 16 / 9,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(26),
-                    child: ColoredBox(
-                      color: Colors.black,
-                      child: showCamera
-                          ? FittedBox(
-                              fit: BoxFit.cover,
-                              child: SizedBox(
-                                width: controller.value.previewSize?.height ??
-                                    constraints.maxWidth,
-                                height: controller.value.previewSize?.width ??
-                                    constraints.maxWidth / 1.6,
-                                child: CameraPreview(controller),
-                              ),
-                            )
-                          : const _PreviewWaitingContent(),
+                  child: RepaintBoundary(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: ColoredBox(
+                        color: Colors.black,
+                        child: showCamera
+                            ? FittedBox(
+                                fit: BoxFit.cover,
+                                child: SizedBox(
+                                  width: controller.value.previewSize?.height ??
+                                      constraints.maxWidth,
+                                  height: controller.value.previewSize?.width ??
+                                      constraints.maxWidth / 1.6,
+                                  child: CameraPreview(controller),
+                                ),
+                              )
+                            : const _PreviewWaitingContent(),
+                      ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
               Text(
                 showCamera
                     ? 'Telefonun bebek odasına baktığını buradan hızlıca kontrol edebilirsin.'
                     : 'Kamera izni verildiğinde oda görüntüsü burada görünecek.',
-                style: const TextStyle(color: Colors.white70, fontSize: 16),
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
               ),
             ],
           );
@@ -648,7 +953,7 @@ class _PreviewStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: ShapeDecoration(
         color: color,
         shape: const StadiumBorder(),
@@ -658,7 +963,7 @@ class _PreviewStatusChip extends StatelessWidget {
         style: const TextStyle(
           color: MimiCamDesignTokens.navy,
           fontWeight: FontWeight.w900,
-          fontSize: 14,
+          fontSize: 12.5,
         ),
       ),
     );
@@ -674,13 +979,13 @@ class _PreviewWaitingContent extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.videocam_off_rounded, color: Colors.white54, size: 42),
-          SizedBox(height: 12),
+          Icon(Icons.videocam_off_rounded, color: Colors.white54, size: 34),
+          SizedBox(height: 8),
           Text(
             'Kamera hazırlanıyor',
             style: TextStyle(
               color: Colors.white70,
-              fontSize: 17,
+              fontSize: 14,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -698,7 +1003,6 @@ class _ServerSettingsCard extends StatelessWidget {
     required this.motionDurationSeconds,
     required this.cryDurationSeconds,
     required this.saving,
-    required this.telegramEnabled,
     required this.onReset,
     required this.onMotionThresholdChanged,
     required this.onMotionThresholdChangeEnd,
@@ -718,7 +1022,6 @@ class _ServerSettingsCard extends StatelessWidget {
   final double motionDurationSeconds;
   final double cryDurationSeconds;
   final bool saving;
-  final bool telegramEnabled;
   final VoidCallback onReset;
   final ValueChanged<double> onMotionThresholdChanged;
   final ValueChanged<double> onMotionThresholdChangeEnd;
@@ -757,11 +1060,11 @@ class _ServerSettingsCard extends StatelessWidget {
             'Hassasiyeti bebeğin odasına göre ayarla; değişiklikler otomatik kaydedilir.',
             style: TextStyle(
               color: MimiCamDesignTokens.slate,
-              fontSize: 16,
+              fontSize: 14.5,
               height: 1.25,
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 14),
           _SettingSlider(
             title: 'Ağlama eşiği',
             description:
@@ -775,7 +1078,7 @@ class _ServerSettingsCard extends StatelessWidget {
             onChanged: onCryScoreThresholdChanged,
             onChangeEnd: onCryScoreThresholdChangeEnd,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           _SettingSlider(
             title: 'Hareket eşiği',
             description:
@@ -789,7 +1092,7 @@ class _ServerSettingsCard extends StatelessWidget {
             onChanged: onMotionThresholdChanged,
             onChangeEnd: onMotionThresholdChangeEnd,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           _SettingSlider(
             title: 'Bildirim cooldown',
             description: 'Aynı uyarının üst üste rahatsız etmesini engeller.',
@@ -802,7 +1105,7 @@ class _ServerSettingsCard extends StatelessWidget {
             onChanged: onNotifyCooldownChanged,
             onChangeEnd: onNotifyCooldownChangeEnd,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           _SettingSlider(
             title: 'Ağlama minimum süre',
             description:
@@ -816,7 +1119,7 @@ class _ServerSettingsCard extends StatelessWidget {
             onChanged: onCryDurationChanged,
             onChangeEnd: onCryDurationChangeEnd,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           _SettingSlider(
             title: 'Hareket minimum süre',
             description:
@@ -830,8 +1133,8 @@ class _ServerSettingsCard extends StatelessWidget {
             onChanged: onMotionDurationChanged,
             onChangeEnd: onMotionDurationChangeEnd,
           ),
-          const SizedBox(height: 22),
-          _KeyVal('Telegram', telegramEnabled ? 'Kurulu' : 'Eksik / kapalı'),
+          const SizedBox(height: 14),
+          const _KeyVal('Yerel bildirim', 'Client cihazına gönderilir'),
         ],
       ),
     );
@@ -846,7 +1149,7 @@ class _SettingsSaveChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: ShapeDecoration(
         color:
             saving ? MimiCamDesignTokens.amber : MimiCamDesignTokens.mintSoft,
@@ -856,7 +1159,7 @@ class _SettingsSaveChip extends StatelessWidget {
         saving ? 'Kaydediliyor' : 'Gerçek ayarlar',
         style: const TextStyle(
           color: MimiCamDesignTokens.navy,
-          fontSize: 13,
+          fontSize: 12,
           fontWeight: FontWeight.w900,
         ),
       ),
@@ -902,7 +1205,7 @@ class _SettingSlider extends StatelessWidget {
                 title,
                 style: const TextStyle(
                   color: MimiCamDesignTokens.navy,
-                  fontSize: 19,
+                  fontSize: 16,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -911,7 +1214,7 @@ class _SettingSlider extends StatelessWidget {
               valueLabel,
               style: TextStyle(
                 color: color,
-                fontSize: 18,
+                fontSize: 15,
                 fontWeight: FontWeight.w900,
               ),
             ),
@@ -922,7 +1225,7 @@ class _SettingSlider extends StatelessWidget {
           description,
           style: const TextStyle(
             color: MimiCamDesignTokens.slate,
-            fontSize: 15,
+            fontSize: 13.5,
             height: 1.25,
           ),
         ),
@@ -951,15 +1254,15 @@ class _Stat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 126,
-      padding: const EdgeInsets.all(22),
+      height: 112,
+      padding: const EdgeInsets.all(16),
       decoration: MimiCamDesignTokens.cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label,
               style: const TextStyle(
-                  color: MimiCamDesignTokens.slate, fontSize: 18)),
+                  color: MimiCamDesignTokens.slate, fontSize: 14)),
           const Spacer(),
           Text(
             value,
@@ -967,13 +1270,13 @@ class _Stat extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: MimiCamDesignTokens.navy,
-              fontSize: 22,
+              fontSize: 18,
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Container(
-              height: 12,
+              height: 8,
               decoration: BoxDecoration(
                   color: color, borderRadius: BorderRadius.circular(10))),
         ],
@@ -992,16 +1295,24 @@ class _KeyVal extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(label,
+        Expanded(
+          child: Text(
+            label,
+            style:
+                const TextStyle(fontSize: 15, color: MimiCamDesignTokens.slate),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-                fontSize: 19, color: MimiCamDesignTokens.slate)),
-        const Spacer(),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 19,
-            color: MimiCamDesignTokens.slate,
-            fontWeight: FontWeight.w900,
+              fontSize: 15,
+              color: MimiCamDesignTokens.slate,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ),
       ],

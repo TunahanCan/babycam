@@ -7,7 +7,7 @@ class ServerQrPayloadBuilder {
       {required this.tokenService,
       this.deviceId = 'server_local',
       this.deviceName = 'Bebek Odası',
-      this.certificateFingerprintSha256 = 'pending-local-tls-fingerprint'});
+      this.certificateFingerprintSha256 = ''});
   final PairingTokenService tokenService;
   final String deviceId;
   final String deviceName;
@@ -30,7 +30,7 @@ class ServerQrPayloadBuilder {
           'video': 'mjpeg',
           'audio': 'pcm16le',
           'events': 'json',
-          'transport': 'https'
+          'transport': 'http'
         },
       );
 }

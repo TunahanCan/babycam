@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:record/record.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../analysis/alert/alert_config.dart';
 import '../analysis/alert/alert_engine.dart';
@@ -20,13 +21,13 @@ import '../core/protocol/mimicam_protocol.dart' as protocol_v2;
 import '../features/server/pairing/pairing_token_service.dart';
 import '../l10n/app_strings.dart';
 import 'configuration_service.dart';
-import 'discovery_service.dart';
 import 'motion_analyzer.dart' show CameraImageJpegEncoder;
 import 'server/alert_protocol_adapter.dart';
 import 'server/media_analysis_coordinator.dart';
+import 'server/media_frame_policy.dart';
 import 'server/media_analysis_metrics.dart';
+import 'platform/foreground_service_controller.dart';
 import 'network_address_provider.dart';
-import 'telegram_service.dart';
 
 class MimiCamServer {
   MimiCamServer({
@@ -37,8 +38,7 @@ class MimiCamServer {
     this.enableLegacyWebSocketMediaPackets = false,
     this.enableAudioAutoCalibration = true,
     PairingTokenService? tokenService,
-  })  : tokenService = tokenService ?? PairingTokenService(),
-        _telegram = TelegramService(config, strings: strings, onLog: onLog);
+  }) : tokenService = tokenService ?? PairingTokenService();
 
   final bool enableLegacyWebSocketMediaPackets;
   final bool enableAudioAutoCalibration;
@@ -47,9 +47,7 @@ class MimiCamServer {
   final AppStrings strings;
   final void Function(String message) onLog;
   final void Function(String message) onAlert;
-  final TelegramService _telegram;
   final PairingTokenService tokenService;
-  final _discovery = DiscoveryService();
   final _audioRecorder = AudioRecorder();
   MediaAnalysisCoordinator? _analysisCoordinator;
   MediaAnalysisMetrics? _analysisMetrics;
@@ -61,24 +59,35 @@ class MimiCamServer {
   CameraController? cameraController;
   HttpServer? _httpServer;
   bool _httpServerListening = false;
+  bool _disposed = false;
   StreamSubscription<Uint8List>? _audioSubscription;
   Uint8List? _latestJpeg;
-  bool _encodingFrame = false;
   int _lastAudioDebugLog = 0;
+  final _frameBudget = MediaFrameBudget();
+  final _encodingPolicy = const MediaEncodingPolicy();
   static const _audioSampleRate = 16000;
   static const _audioChannels = 1;
   static const _audioBitsPerSample = 16;
 
   Future<String> start() async {
+    if (_disposed) throw StateError('MimiCamServer is disposed.');
     final address = await startPairingMode();
     await startMediaRuntime();
     return address;
   }
 
   Future<String> startPairingMode() async {
-    _httpServer ??= await HttpServer.bind(
-        InternetAddress.anyIPv4, MimiCamProtocol.httpPort,
-        shared: true);
+    if (_disposed) throw StateError('MimiCamServer is disposed.');
+    if (_httpServer == null) {
+      final server = await HttpServer.bind(
+          InternetAddress.anyIPv4, MimiCamProtocol.httpPort,
+          shared: true);
+      if (_disposed) {
+        await server.close(force: true);
+        throw StateError('MimiCamServer is disposed.');
+      }
+      _httpServer = server;
+    }
     if (!_httpServerListening) {
       _httpServerListening = true;
       _httpServer!.listen(_handleRequest);
@@ -90,8 +99,10 @@ class MimiCamServer {
   }
 
   Future<void> startMediaRuntime() async {
+    if (_disposed) throw StateError('MimiCamServer is disposed.');
     if (cameraController != null) return;
     final cameras = await availableCameras();
+    if (_disposed) throw StateError('MimiCamServer is disposed.');
     if (cameras.isEmpty) throw StateError(strings.cameraNotFound);
 
     _initializeAnalysisPipeline();
@@ -99,14 +110,19 @@ class MimiCamServer {
     cameraController = CameraController(cameras.first, ResolutionPreset.medium,
         enableAudio: false);
     await cameraController!.initialize();
+    if (_disposed) {
+      await cameraController?.dispose();
+      cameraController = null;
+      throw StateError('MimiCamServer is disposed.');
+    }
     await cameraController!.startImageStream(_handleCameraFrame);
     await _startAudioAnalysis();
-
-    final address = await NetworkAddressProvider.localHttpAddress() ??
-        '${InternetAddress.loopbackIPv4.address}:${MimiCamProtocol.httpPort}';
-    await _discovery.advertise(address);
-    await _telegram
-        .sendMessage(strings.telegramServerStarted('http://$address/'));
+    if (_disposed) {
+      await stopMediaRuntime();
+      throw StateError('MimiCamServer is disposed.');
+    }
+    await WakelockPlus.enable();
+    await ForegroundServiceController.startServer();
   }
 
   void _initializeAnalysisPipeline() {
@@ -199,29 +215,32 @@ class MimiCamServer {
     onLog(message);
     onAlert(message);
     _broadcastBinary(AlertProtocolAdapter.toLegacyAlertPacket(event));
-    _telegram.sendMessage(message);
   }
 
   void _handleCameraFrame(CameraImage frame) {
-    if (_encodingFrame) return;
-    _encodingFrame = true;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (!_frameBudget.shouldProcess(nowMs)) return;
+
     try {
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      final jpeg = CameraImageJpegEncoder.encode(frame);
-      _latestJpeg = jpeg;
-      if (enableLegacyWebSocketMediaPackets) {
-        _broadcastBinary([MimiCamProtocol.packetVideoMjpeg, ...jpeg]);
-      }
-      for (final client in _mjpegClients.toList()) {
-        _writeMjpegFrame(client, jpeg).catchError((Object _) {
-          _mjpegClients.remove(client);
-        });
+      final shouldEncodeJpeg = _encodingPolicy.shouldEncodeJpeg(
+        hasMjpegClients: _mjpegClients.isNotEmpty,
+        legacyWebSocketEnabled: enableLegacyWebSocketMediaPackets,
+      );
+      if (shouldEncodeJpeg) {
+        final jpeg = CameraImageJpegEncoder.encode(frame);
+        _latestJpeg = jpeg;
+        if (enableLegacyWebSocketMediaPackets) {
+          _broadcastBinary([MimiCamProtocol.packetVideoMjpeg, ...jpeg]);
+        }
+        for (final client in _mjpegClients.toList()) {
+          _writeMjpegFrame(client, jpeg).catchError((Object _) {
+            _mjpegClients.remove(client);
+          });
+        }
       }
       _analysisCoordinator?.onCameraFrame(_toLumaFrame(frame, nowMs));
-    } finally {
-      Future<void>.delayed(const Duration(milliseconds: 100), () {
-        _encodingFrame = false;
-      });
+    } catch (error) {
+      onLog('Frame işlenemedi: $error');
     }
   }
 
@@ -238,6 +257,10 @@ class MimiCamServer {
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
+    if (_disposed) {
+      await request.response.close();
+      return;
+    }
     if ((request.uri.path == '/ws/stream' ||
             request.uri.path == protocol_v2.MimiCamProtocolV2.events) &&
         WebSocketTransformer.isUpgradeRequest(request)) {
@@ -272,8 +295,19 @@ class MimiCamServer {
         await _writeJson(request.response, {'ok': true});
         return;
       case protocol_v2.MimiCamProtocolV2.statusPublic:
-        await _writeJson(
-            request.response, {'service': 'mimicam', 'pairing': true});
+        await _writeJson(request.response, {
+          'service': 'mimicam',
+          'pairing': true,
+          'serverDeviceId': 'server_local',
+          'serverName': 'Bebek Odası',
+          'pairingNonce': tokenService.createPairingNonce(),
+          'capabilities': {
+            'video': 'mjpeg',
+            'audio': 'pcm16le',
+            'events': 'json',
+            'transport': 'http',
+          },
+        });
         return;
       case '/video':
         if (!await _requireAuth(request)) return;
@@ -376,6 +410,8 @@ class MimiCamServer {
   }
 
   Future<void> stopMediaRuntime() async {
+    await ForegroundServiceController.stopServer();
+    await WakelockPlus.disable();
     await _audioSubscription?.cancel();
     _audioSubscription = null;
     await _alertSubscription?.cancel();
@@ -385,6 +421,7 @@ class MimiCamServer {
     await cameraController?.dispose();
     cameraController = null;
     _latestJpeg = null;
+    _frameBudget.reset();
   }
 
   Future<void> _handleMjpeg(HttpResponse response) async {
@@ -466,6 +503,10 @@ class MimiCamServer {
   }
 
   Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    await ForegroundServiceController.stopServer();
+    await WakelockPlus.disable();
     tokenService.revokeAll();
     await _audioSubscription?.cancel();
     _audioSubscription = null;
@@ -474,6 +515,7 @@ class MimiCamServer {
     await _analysisCoordinator?.dispose();
     _analysisCoordinator = null;
     _analysisMetrics?.reset();
+    _frameBudget.reset();
     await _audioRecorder.dispose();
     await cameraController?.dispose();
     cameraController = null;
@@ -484,6 +526,5 @@ class MimiCamServer {
     _webSockets.clear();
     _mjpegClients.clear();
     _audioClients.clear();
-    _discovery.dispose();
   }
 }

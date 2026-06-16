@@ -45,36 +45,36 @@ class _WatchScreenState extends State<WatchScreen> {
   Widget _watch(BuildContext context) {
     return SafeArea(
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(22, 18, 22, 104),
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 88),
         children: [
           const _Top(dark: true),
-          const SizedBox(height: 34),
+          const SizedBox(height: 16),
           const Text('Canlı izleme', style: _darkTitle),
           const SizedBox(height: 8),
           const Text('Bebek odası yayını bağlı. Son olaylar altta görünür.',
               style: _darkSubtitle),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           const _LightPill('Bağlı'),
-          const SizedBox(height: 22),
+          const SizedBox(height: 16),
           const _VideoPanel(),
-          const SizedBox(height: 22),
+          const SizedBox(height: 16),
           const _Event(
               label: 'Son uyarı',
               value: 'Ağlama algılandı · 09:38',
               color: _pink),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           const _Event(
               label: 'Hareket', value: 'Sakin · skor %08', color: _mint),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           const _Event(
               label: 'Bildirim', value: 'Yerel bildirim açık', color: _amber),
-          const SizedBox(height: 30),
+          const SizedBox(height: 18),
           const Text(
             'Hızlı işlemler',
             style: TextStyle(
-                color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900),
+                color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           _ActionGroup(
             actions: [
               _ActionSpec('Yeniden bağlan', _mint, _navy, () {}),
@@ -92,16 +92,16 @@ class _WatchScreenState extends State<WatchScreen> {
   Widget _history() {
     return SafeArea(
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(22, 18, 22, 104),
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 88),
         children: [
           const _Top(),
-          const SizedBox(height: 34),
+          const SizedBox(height: 16),
           const Text('Uyarı geçmişi', style: _title),
           const SizedBox(height: 8),
           const Text(
               'Ağlama, hareket ve sistem olaylarını zaman çizgisi olarak takip et.',
               style: _subtitle),
-          const SizedBox(height: 30),
+          const SizedBox(height: 18),
           const SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -116,21 +116,18 @@ class _WatchScreenState extends State<WatchScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 14),
           const _Timeline('09:38', 'Ağlama algılandı',
               'Ses seviyesi ortamdan 18 dB yüksek. Cooldown başladı.', _pink),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           const _Timeline('09:31', 'Client bağlandı',
               'Ebeveyn cihazı 192.168.1.42 adresinden bağlandı.', _mint),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           const _Timeline('09:12', 'Hareket algılandı',
               'Hareket skoru 2.1 sn boyunca eşik üzerinde kaldı.', _amber),
-          const SizedBox(height: 16),
-          const _Timeline('08:58', 'Telegram gönderildi',
-              'Bot API üzerinden uyarı mesajı gönderildi.', Color(0xFF9BBCFF)),
-          const SizedBox(height: 24),
+          const SizedBox(height: 10),
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(18),
             decoration: _cardDecoration(dark: true),
             child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -138,13 +135,13 @@ class _WatchScreenState extends State<WatchScreen> {
                 Text('Günlük özeti',
                     style: TextStyle(
                         color: Colors.white,
-                        fontSize: 23,
+                        fontSize: 18,
                         fontWeight: FontWeight.w900)),
-                SizedBox(height: 10),
+                SizedBox(height: 7),
                 Text(
                   'Bugün 2 ses, 1 hareket, 2 sistem olayı var.',
                   style: TextStyle(
-                      color: Colors.white70, fontSize: 17, height: 1.25),
+                      color: Colors.white70, fontSize: 14.5, height: 1.25),
                 ),
               ],
             ),
@@ -157,27 +154,27 @@ class _WatchScreenState extends State<WatchScreen> {
   Widget _settings() {
     return SafeArea(
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(22, 18, 22, 104),
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 88),
         children: [
           const _Top(),
-          const SizedBox(height: 34),
+          const SizedBox(height: 16),
           const Text('Ayarlar', style: _title),
           const SizedBox(height: 8),
           const Text(
               'Gürültü, hareket, bildirim ve entegrasyonları sade kontrollerle yönet.',
               style: _subtitle),
-          const SizedBox(height: 30),
+          const SizedBox(height: 18),
           const _SliderCard('Bildirim cooldown',
               'Tekrarlayan uyarıları sınırlar.', '60 sn', _pink, .68),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           const _SliderCard('Ağlama eşiği',
               'Ortam sesine göre algılama hassasiyeti.', '%65', _mint, .65),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           const _SliderCard('Hareket eşiği',
               'Kamera görüntüsündeki değişim hassasiyeti.', '%22', _amber, .22),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(18),
             decoration: _cardDecoration(dark: true),
             child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -185,10 +182,9 @@ class _WatchScreenState extends State<WatchScreen> {
                 Text('Entegrasyonlar',
                     style: TextStyle(
                         color: Colors.white,
-                        fontSize: 24,
+                        fontSize: 18,
                         fontWeight: FontWeight.w900)),
-                SizedBox(height: 20),
-                _SwitchLine('Telegram Bot', 'Kurulu değil', false),
+                SizedBox(height: 12),
                 _SwitchLine('Cihaz uyumasın', 'Server modunda açık', true),
                 _SwitchLine('Dil', 'Türkçe / English', true),
               ],
@@ -210,10 +206,10 @@ class _VideoPanel extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: Colors.black,
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(22),
           border: Border.all(color: Colors.white, width: 1.2),
         ),
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 22),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
         alignment: Alignment.bottomCenter,
         child: const Wrap(
           alignment: WrapAlignment.center,
@@ -238,7 +234,7 @@ class _VideoMetric extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text(text,
-        style: const TextStyle(color: Colors.white, fontSize: 16));
+        style: const TextStyle(color: Colors.white, fontSize: 13.5));
   }
 }
 
@@ -255,7 +251,7 @@ class _SliderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(18),
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,19 +263,19 @@ class _SliderCard extends StatelessWidget {
                 child: Text(
                   title,
                   style: const TextStyle(
-                      color: _navy, fontSize: 22, fontWeight: FontWeight.w900),
+                      color: _navy, fontSize: 18, fontWeight: FontWeight.w900),
                 ),
               ),
               const SizedBox(width: 12),
               Text(value,
                   style: TextStyle(
-                      color: color, fontSize: 22, fontWeight: FontWeight.w900)),
+                      color: color, fontSize: 18, fontWeight: FontWeight.w900)),
             ],
           ),
           const SizedBox(height: 10),
           Text(description,
-              style: const TextStyle(color: _slate, fontSize: 17)),
-          const SizedBox(height: 22),
+              style: const TextStyle(color: _slate, fontSize: 14)),
+          const SizedBox(height: 14),
           LinearProgressIndicator(
               value: progress,
               minHeight: 10,
@@ -301,7 +297,7 @@ class _SwitchLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
           Expanded(
@@ -311,11 +307,11 @@ class _SwitchLine extends StatelessWidget {
                 Text(title,
                     style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 19,
+                        fontSize: 16,
                         fontWeight: FontWeight.w900)),
                 Text(description,
                     style:
-                        const TextStyle(color: Colors.white70, fontSize: 16)),
+                        const TextStyle(color: Colors.white70, fontSize: 14)),
               ],
             ),
           ),
@@ -337,18 +333,18 @@ class _Timeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(18),
       decoration: _cardDecoration(),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 52,
+            width: 44,
             child: Text(time,
                 style: TextStyle(
-                    color: color, fontSize: 18, fontWeight: FontWeight.w900)),
+                    color: color, fontSize: 14, fontWeight: FontWeight.w900)),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -356,12 +352,12 @@ class _Timeline extends StatelessWidget {
                 Text(title,
                     style: const TextStyle(
                         color: _navy,
-                        fontSize: 21,
+                        fontSize: 17,
                         fontWeight: FontWeight.w900)),
-                const SizedBox(height: 8),
+                const SizedBox(height: 5),
                 Text(text,
                     style: const TextStyle(
-                        color: _slate, fontSize: 17, height: 1.25)),
+                        color: _slate, fontSize: 14, height: 1.25)),
               ],
             ),
           ),
@@ -381,25 +377,25 @@ class _Event extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(16),
       decoration: _cardDecoration(),
       child: Row(
         children: [
-          CircleAvatar(radius: 26, backgroundColor: color),
-          const SizedBox(width: 18),
+          CircleAvatar(radius: 22, backgroundColor: color),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: const TextStyle(color: _slate, fontSize: 18)),
-                const SizedBox(height: 6),
+                    style: const TextStyle(color: _slate, fontSize: 14)),
+                const SizedBox(height: 4),
                 Text(
                   value,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      color: _navy, fontSize: 21, fontWeight: FontWeight.w900),
+                      color: _navy, fontSize: 17, fontWeight: FontWeight.w900),
                 ),
               ],
             ),
@@ -424,7 +420,7 @@ class _ActionGroup extends StatelessWidget {
             children: [
               for (final action in actions) ...[
                 _Action(action),
-                if (action != actions.last) const SizedBox(height: 12),
+                if (action != actions.last) const SizedBox(height: 10),
               ],
             ],
           );
@@ -434,7 +430,7 @@ class _ActionGroup extends StatelessWidget {
           children: [
             for (final action in actions) ...[
               Expanded(child: _Action(action)),
-              if (action != actions.last) const SizedBox(width: 12),
+              if (action != actions.last) const SizedBox(width: 10),
             ],
           ],
         );
@@ -461,14 +457,14 @@ class _Action extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 64,
+      height: 52,
       width: double.infinity,
       child: FilledButton(
         onPressed: spec.onTap,
         style: FilledButton.styleFrom(
           backgroundColor: spec.backgroundColor,
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         ),
         child: Text(
           spec.text,
@@ -477,7 +473,7 @@ class _Action extends StatelessWidget {
           style: TextStyle(
               color: spec.foregroundColor,
               fontWeight: FontWeight.w900,
-              fontSize: 18),
+              fontSize: 15),
         ),
       ),
     );
@@ -493,14 +489,14 @@ class _Filter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
       decoration: ShapeDecoration(
           color: active ? _navy : Colors.white, shape: const StadiumBorder()),
       child: Text(
         text,
         style: TextStyle(
             color: active ? Colors.white : _slate,
-            fontSize: 17,
+            fontSize: 14,
             fontWeight: FontWeight.w900),
       ),
     );
@@ -516,8 +512,8 @@ class _Nav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 76,
-      padding: const EdgeInsets.all(7),
+      height: 64,
+      padding: const EdgeInsets.all(6),
       decoration:
           const ShapeDecoration(color: Colors.white, shape: StadiumBorder()),
       child: Row(
@@ -526,7 +522,7 @@ class _Nav extends StatelessWidget {
             Expanded(
               child: InkWell(
                 onTap: () => onTap(entry.key),
-                borderRadius: BorderRadius.circular(32),
+                borderRadius: BorderRadius.circular(26),
                 child: Container(
                   alignment: Alignment.center,
                   decoration: ShapeDecoration(
@@ -541,7 +537,7 @@ class _Nav extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: tab == entry.key ? _navy : _slate,
-                      fontSize: 18,
+                      fontSize: 15,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -576,7 +572,7 @@ class _PinnedNav extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
           child: child,
         ),
       ),
@@ -594,7 +590,7 @@ class _LightPill extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration:
             const ShapeDecoration(color: Colors.white, shape: StadiumBorder()),
         child: Text(
@@ -619,7 +615,7 @@ class _Top extends StatelessWidget {
       children: [
         Text('09:41',
             style: TextStyle(
-                color: color, fontWeight: FontWeight.w900, fontSize: 18)),
+                color: color, fontWeight: FontWeight.w900, fontSize: 14)),
         const Spacer(),
         Icon(Icons.signal_cellular_alt_rounded, color: color),
         const SizedBox(width: 12),
@@ -672,11 +668,10 @@ class _LightShell extends StatelessWidget {
 BoxDecoration _cardDecoration({bool dark = false}) {
   return BoxDecoration(
     color: dark ? _navy : Colors.white,
-    borderRadius: BorderRadius.circular(28),
+    borderRadius: BorderRadius.circular(22),
     border: Border.all(color: const Color(0xFFE2E8F0)),
     boxShadow: const [
-      BoxShadow(
-          color: Color(0x24111827), blurRadius: 22, offset: Offset(0, 12)),
+      BoxShadow(color: Color(0x18111827), blurRadius: 18, offset: Offset(0, 8)),
     ],
   );
 }
@@ -689,12 +684,12 @@ const _mintSoft = Color(0xFFD9F7F1);
 const _amber = Color(0xFFFFD37B);
 
 const _title = TextStyle(
-    color: _navy, fontSize: 38, height: 1.05, fontWeight: FontWeight.w900);
-const _subtitle = TextStyle(color: _slate, fontSize: 19, height: 1.2);
+    color: _navy, fontSize: 30, height: 1.08, fontWeight: FontWeight.w900);
+const _subtitle = TextStyle(color: _slate, fontSize: 15.5, height: 1.25);
 const _darkTitle = TextStyle(
     color: Colors.white,
-    fontSize: 38,
-    height: 1.05,
+    fontSize: 30,
+    height: 1.08,
     fontWeight: FontWeight.w900);
 const _darkSubtitle =
-    TextStyle(color: Colors.white70, fontSize: 19, height: 1.2);
+    TextStyle(color: Colors.white70, fontSize: 15.5, height: 1.25);

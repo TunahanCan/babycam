@@ -8,7 +8,8 @@ class MediaResourceCounter {
 
   bool get needsVideoCapture =>
       localPreviewActive || activeVideoClients > 0 || wantsMotionDetection;
-  bool get needsAudioCapture => activeAudioClients > 0 || wantsCryDetection;
+  bool get needsAudioCapture =>
+      localPreviewActive || activeAudioClients > 0 || wantsCryDetection;
   bool get needsVideoEncoding => activeVideoClients > 0;
   bool get needsAudioStreaming => activeAudioClients > 0;
   bool get hasLiveWatch => activeVideoClients > 0 || activeAudioClients > 0;

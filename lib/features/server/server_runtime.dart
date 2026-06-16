@@ -86,12 +86,15 @@ class ServerRuntime {
   Future<void> startPairingOnly() => startPairingMode();
 
   Future<void> startPairingMode() async {
+    if (_disposed) return;
     try {
       final qr = await _onStartPairing?.call();
+      if (_disposed) return;
       _emit(ServerRuntimeState(
           phase: ServerRuntimePhase.pairingActive, qrPayload: qr));
       await startLocalPreview();
     } catch (error) {
+      if (_disposed) return;
       _emit(ServerRuntimeState(
         phase: ServerRuntimePhase.error,
         qrPayload: _state.qrPayload,
@@ -101,10 +104,16 @@ class ServerRuntime {
   }
 
   Future<void> startLocalPreview() async {
+    if (_disposed) return;
     _resources.localPreviewActive = true;
     _emit(_stateForPhase(ServerRuntimePhase.mediaStarting));
     try {
       await _mediaRuntime.start();
+      if (_disposed) {
+        _resources.localPreviewActive = false;
+        await _mediaRuntime.stop();
+        return;
+      }
       _emit(_stateForPhase(ServerRuntimePhase.mediaActive));
     } catch (_) {
       _resources.localPreviewActive = false;
@@ -112,13 +121,16 @@ class ServerRuntime {
     }
   }
 
-  Future<void> markClientPaired() async =>
-      _emit(_stateForPhase(ServerRuntimePhase.clientPaired));
+  Future<void> markClientPaired() async {
+    if (_disposed) return;
+    _emit(_stateForPhase(ServerRuntimePhase.clientPaired));
+  }
 
   Future<void> onClientPaired(Object client) => markClientPaired();
 
   Future<void> startStreamSession(
       String clientId, StreamSessionOptions options) async {
+    if (_disposed) return;
     _activeSessions[clientId] = options;
     await _recomputeResources(
         startMediaIfNeeded: true, phase: ServerRuntimePhase.mediaActive);
@@ -136,6 +148,7 @@ class ServerRuntime {
 
   Future<void> enableNotificationsForClient(String clientId,
       {required bool cry, required bool motion}) async {
+    if (_disposed) return;
     _notificationClients[clientId] = (cry: cry, motion: motion);
     await _recomputeResources(
         startMediaIfNeeded: cry || motion,
@@ -168,13 +181,16 @@ class ServerRuntime {
   }
 
   Future<void> reloadAnalysisSettings() async {
+    if (_disposed) return;
     await _onSettingsChanged?.call();
+    if (_disposed) return;
     _emit(_stateForPhase(_state.phase));
   }
 
   Future<void> _recomputeResources(
       {required bool startMediaIfNeeded,
       required ServerRuntimePhase phase}) async {
+    if (_disposed) return;
     _resources.activeVideoClients =
         _activeSessions.values.where((s) => s.video).length;
     _resources.activeAudioClients =
@@ -188,6 +204,10 @@ class ServerRuntime {
         (_resources.needsVideoCapture || _resources.needsAudioCapture)) {
       _emit(_stateForPhase(ServerRuntimePhase.mediaStarting));
       await _mediaRuntime.start();
+      if (_disposed) {
+        await _mediaRuntime.stop();
+        return;
+      }
     }
     _emit(_stateForPhase(phase));
   }
@@ -216,6 +236,7 @@ class ServerRuntime {
   }
 
   void _emit(ServerRuntimeState state) {
+    if (_disposed && state.phase != ServerRuntimePhase.stopped) return;
     _state = state;
     if (!_states.isClosed) _states.add(state);
   }

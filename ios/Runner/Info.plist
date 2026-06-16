@@ -10,9 +10,10 @@
   <key>CFBundleShortVersionString</key><string>$(FLUTTER_BUILD_NAME)</string>
   <key>CFBundleVersion</key><string>$(FLUTTER_BUILD_NUMBER)</string>
   <key>LSRequiresIPhoneOS</key><true/>
-  <key>NSCameraUsageDescription</key><string>MimiCam server modu kamera yayını için kameraya ihtiyaç duyar.</string>
+  <key>NSCameraUsageDescription</key><string>MimiCam kamera yayını ve QR eşleşmesi için kameraya ihtiyaç duyar.</string>
   <key>NSMicrophoneUsageDescription</key><string>MimiCam server modu ses analizi ve yayın için mikrofona ihtiyaç duyar.</string>
   <key>NSLocalNetworkUsageDescription</key><string>MimiCam aynı yerel ağdaki client/server cihazlarını bulur.</string>
+  <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
   <key>NSBonjourServices</key><array><string>_mimicam._tcp</string></array>
   <key>UIViewControllerBasedStatusBarAppearance</key><false/>
 </dict></plist>
