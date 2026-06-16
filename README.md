@@ -1,151 +1,175 @@
-# MimiCam — İnternetsiz, Güvenli ve Yerel Bebek Kamerası
+# MimiCam — Yerel Ağda Güvenli Bebek Kamerası
 
-**MimiCam**, evinizdeki iki telefonu ya da tableti saniyeler içinde güvenli bir bebek kamerasına dönüştüren Flutter uygulamasıdır. Bir cihaz **Bebek Odası Cihazı** olur; kamera, mikrofon ve akıllı uyarıları yönetir. Diğer cihaz **Ebeveyn Cihazı** olur; canlı görüntüyü, sesi ve uyarıları aynı Wi‑Fi ağı içinde takip eder.
+**MimiCam**, iki telefonu veya tableti aynı Wi‑Fi ağı içinde bebek kamerasına dönüştüren Flutter uygulamasıdır. Bir cihaz **Server / Bebek Odası** olarak kamera, mikrofon, analiz ve yayın tarafını yönetir; diğer cihaz **Client / Ebeveyn** olarak eşleşir, canlı yayını izler ve uyarıları takip eder.
 
-Cloud hesabı yok. Abonelik yok. İnternete yayın yok. MimiCam, ebeveynlerin ihtiyaç duyduğu temel şeyi yapar: **bebek odasını yerel ağda, kontrollü ve güvenli şekilde izletir.**
-
----
-
-## Neden MimiCam?
-
-- **Aynı Wi‑Fi içinde çalışır:** Video, ses ve uyarılar ev ağınızdan çıkmadan cihazlar arasında akar.
-- **QR ile kolay kurulum:** Bebek odasındaki cihaz QR üretir; ebeveyn cihazı okutur ve güvenli eşleşme tamamlanır.
-- **Rol bazlı güvenli tasarım:** Server ve client görevleri kesin ayrılır; seçilmeyen role ait servisler çalıştırılmaz.
-- **60 günlük güvenilir cihaz oturumu:** Eşleşen ebeveyn cihazı trusted token ile tekrar tekrar QR okutmak zorunda kalmaz.
-- **Canlı izleme ve uyarılar:** Video, ses, hareket ve ağlama algılama akışları tek uygulama içinde yönetilir.
-- **Kaynak dostu çalışma:** Kamera, mikrofon ve analiz bileşenleri yalnızca ihtiyaç olduğunda açılır.
-- **Manuel paylaşım kontrolü:** Uyarı paylaşımı otomatik relay değildir; kullanıcı aksiyonuyla yapılır.
+Cloud hesabı, abonelik, internet relay, UDP discovery veya Telegram otomasyonu yoktur. Kurulum QR veya manuel IP ile yapılır; yayın ve uyarılar yerel ağda kalır.
 
 ---
 
-## MimiCam nasıl çalışır?
-
-MimiCam aynı kod tabanından iki farklı ürün deneyimi sunar:
-
-### 1. Bebek Odası Cihazı
-
-Eski bir telefonunuzu veya tabletinizi bebek odasına yerleştirin. Bu cihaz:
-
-1. QR eşleştirme kodu üretir.
-2. Ebeveyn cihazını güvenilir client olarak kaydeder.
-3. Kamera ve mikrofon kaynaklarını yönetir.
-4. Canlı video, ses ve olay akışlarını yerel ağda yayınlar.
-5. Hareket ve ağlama analizinden uyarı üretir.
-
-### 2. Ebeveyn Cihazı
-
-Kendi telefonunuzdan QR kodu okutun. Bu cihaz:
-
-1. Bebek odası cihazını doğrular.
-2. Güvenilir token alır ve güvenli oturumu saklar.
-3. Canlı görüntü ve sesi izler.
-4. Uyarıları dinler ve yerel bildirim gösterebilir.
-5. İzlemeyi durdurduğunuzda medya akışlarını kapatır.
-
----
-
-## Kurulum deneyimi
+## Güncel Ürün Akışı
 
 ```text
 Uygulamayı aç
   ↓
-Bu cihazın rolünü seç
+Bu cihaz Server mı Client mı seç
   ↓
-Bebek odası cihazında QR oluştur
+Server cihazda QR/IP bağlantı bileti üret
   ↓
-Ebeveyn cihazında QR okut
+Client cihazda QR okut veya IP:port gir
   ↓
-İzle + dinle
+Client İzle ekranından canlı video + sesi aç
 ```
 
-Yanlış rol seçilirse uygulama içinden rol sıfırlanabilir. Rol sıfırlanınca aktif runtime kapatılır ve kullanıcı güvenli şekilde ilk ekrana döner.
+Rol seçimi ilk açılışta yapılır ve cihazda saklanır. Günlük kullanımda rol değiştirme öne çıkarılmaz; sağ üstteki küçük rol rozeti yalnızca gerekli olduğunda rol değiştirmeyi sağlar. Server’dan Client’a geçerken aktif server runtime onaydan sonra kapatılır.
 
 ---
 
-## Güvenlik yaklaşımı
+## Temel Özellikler
 
-MimiCam güveni IP adresine veya cloud hesabına bağlamaz. Güven modeli şu üç parçaya dayanır:
+| Alan | Açıklama |
+| --- | --- |
+| Kesin rol ayrımı | Server ve Client graph'ları aynı anda kurulmaz; seçilmeyen role ait servisler kapalı kalır. |
+| QR + manuel IP eşleşme | Server QR/IP bileti üretir; Client QR tarar veya IP:port fallback kullanır. |
+| Büyük okunabilir QR | Server QR/IP ekranındaki QR, küçük telefonların okuyabilmesi için responsive olarak büyür. |
+| Yerel yayın | Video MJPEG, ses PCM/WAV stream olarak aynı LAN içinde aktarılır. |
+| Akıllı uyarılar | Hareket ve ağlama analizlerinden ebeveyne anlamlı, lokalize mesajlar üretilir. |
+| Bildirim önceliği | Client tarafında Bildirim sekmesi bebeğin son durumunu ebeveyne hızlı gösterir. |
+| Adaptif medya | Cihaz gücü ve ağ kalitesine göre 360p/480p/720p, FPS ve JPEG kalitesi ayarlanır. |
+| Çok dil | Telefon dili algılanır; destek yoksa varsayılan İngilizce kullanılır. |
+| Performans koruması | RepaintBoundary, frame budget ve ihtiyaç yokken encode etmeme politikaları kullanılır. |
+
+---
+
+## Roller ve Ekranlar
+
+### Server / Bebek Odası
+
+Server cihaz bebek odasında kalır ve yalnızca server özelliklerini gösterir:
+
+- **Yayın:** Kamera önizleme, aktif medya profili, yayın durumu ve yayını durdur aksiyonu.
+- **QR/IP:** Büyük QR, IP:port payload alanı, QR yenileme ve kopyalama.
+- **Servis:** Kamera, mikrofon, analiz ve bağlantı servislerinin durumu.
+- **Ayarlar:** Hareket/ağlama eşikleri, minimum süreler ve cooldown ayarları.
+
+Server modunda QR tarama, ebeveyn geçmişi veya client bildirim ayarları görünmez.
+
+### Client / Ebeveyn
+
+Client cihaz ebeveynin elindedir ve yalnızca client özelliklerini gösterir:
+
+- **İzle:** Sadece eşleşmiş Server yayını için canlı izleme kartı.
+- **Bul:** QR tarama ve manuel IP:port ile eşleşme.
+- **Bildirim:** Bebeğin son durumu ve ebeveyn için öncelikli uyarılar.
+- **Ayarlar:** Client bildirim/ebeveyn tercihleri için alan.
+
+Client modunda yayın durdurma, QR üretme, kamera/mikrofon server kontrolleri veya servis yönetimi görünmez.
+
+---
+
+## Güvenlik Modeli
+
+İlk güven QR payload ile kurulur:
 
 ```text
-serverDeviceId + certificateFingerprintSha256 + trustedClientToken
+serverDeviceId + certificateFingerprintSha256 + pairingNonce
 ```
 
-Temel güvenlik ilkeleri:
+Eşleşme sonrasında Client süreli token ile çalışır:
 
-- İlk güven QR payload ile kurulur.
-- Pairing nonce tek kullanımlıktır ve kısa süreli yaşar.
-- Eşleşme sonrası 256-bit rastgele trusted client token üretilir.
-- Server token düz metnini saklamaz; hash saklar.
-- Korunan endpointler bearer token ister.
-- Video/ses linkleri token olmadan açılmaz.
-- Uygulama internet relay, cloud backend, STUN/TURN veya OAuth gerektirmez.
+```text
+trustedClientToken / sessionToken
+```
 
----
+Kurallar:
 
-## Öne çıkan özellikler
+- Pairing nonce tek kullanımlık ve kısa ömürlüdür.
+- Eşleşme sonrası 256-bit rastgele token üretilir.
+- Server token düz metnini saklamaz; SHA-256 hash saklar.
+- Token varsayılan olarak 60 gün geçerlidir ve son 7 günde yenilenebilir.
+- Korunan endpointler Bearer token ister.
+- Token loglara yazılmamalıdır.
 
-| Özellik | Açıklama |
-| --- | --- |
-| QR ile eşleşme | İlk kurulum hızlı, anlaşılır ve kontrollüdür. |
-| Yerel video | MJPEG tabanlı canlı görüntü yerel ağda tüketilir. |
-| Yerel ses | PCM/WAV ses akışı ebeveyn cihazına aktarılır. |
-| Olay kanalı | WebSocket üzerinden uyarı ve durum olayları iletilir. |
-| Ağlama analizi | Mikrofon verisinden ağlama skoru üretilebilir. |
-| Hareket analizi | Kamera karelerinden hareket skoru çıkarılabilir. |
-| Bildirim modu | Canlı izleme kapalıyken seçili uyarılar açık tutulabilir. |
-| Güç modları | Pairing, bildirim ve canlı izleme modları kaynak kullanımını dengeler. |
-| Rol izolasyonu | Server ve client dependency graph'ları birbirinden ayrıdır. |
+Mevcut runtime yerel HTTP/WS ile çalışır; mimari production hedefi kalıcı self-signed TLS ve fingerprint pinning ile HTTPS/WSS’e taşınacak şekilde tasarlanmıştır.
 
 ---
 
-## Kime uygun?
+## Medya ve Adaptasyon
 
-MimiCam özellikle şunlar için tasarlanır:
+MimiCam eski Android/iPhone cihazlarda da çalışabilmek için kaliteyi iki sinyale göre ayarlar:
 
-- Kullanmadığı ikinci telefonu bebek kamerası yapmak isteyen ebeveynler.
-- Cloud kamera veya abonelik kullanmak istemeyen aileler.
-- Bebek odası görüntüsünün ev ağından çıkmamasını isteyen kullanıcılar.
-- Basit kurulum, net ekranlar ve kontrollü uyarılar isteyenler.
-- Flutter ile yerel ağ medya mimarisi geliştirmek isteyen ekipler.
+1. **Cihaz kapasitesi**
+   - `legacy`: 360p, düşük FPS, ses öncelikli.
+   - `balanced`: 480p dengeli profil.
+   - `modern`: 720p kalite profili.
+
+2. **Ağ kalitesi**
+   - Client `/status` ölçümü ve `/quality/report` ile RTT/failure bilgisini Server’a iletir.
+   - Server `excellent/good/weak/critical/offline` tier değerine göre profili günceller.
+   - Zayıf ağda görüntü düşer, ses önceliği korunur.
+
+Performans politikaları:
+
+- Video client yoksa JPEG encode yapılmaz.
+- Frame işleme `MediaFrameBudget` ile sınırlandırılır.
+- Kartlar ve QR gibi pahalı yüzeyler `RepaintBoundary` ile izole edilir.
+- Kamera preset değişirse controller kontrollü yeniden başlatılır.
 
 ---
 
-## Kullanıcı ekranları
+## Analiz ve Uyarılar
 
-- **Rol seçimi:** “Bu cihaz ne olarak çalışacak?” sorusuyla başlar.
-- **Bebek odası ekranı:** QR eşleştirme, yayın durumu, medya runtime ve analiz özetini gösterir.
-- **Ebeveyn ekranı:** QR tarama, eşleşme durumu ve “İzle + dinle” aksiyonunu sunar.
-- **Watch ekranı:** Video, ses, WebSocket bağlantısı ve son uyarı tek yerde izlenir.
+Server tarafındaki analiz boru hatları:
 
-Ürün dili teknik servis listesi yerine kullanıcı aksiyonlarına odaklanır: **QR okut, izle, dinle, uyarıyı gör, yayını durdur.**
+```text
+CameraImage → LumaDownsampler → MotionAnalyzerV2 → AlertEngine
+PCM audio  → GoertzelBandAnalyzer → CryAudioAnalyzerV2 → AlertEngine
+```
+
+`AlertEngine` skoru, cooldown politikasını ve lokalize ebeveyn mesajını üretir. Mesajlar tanı koymaz; “ses yükseldi”, “ağlama ihtimali arttı”, “odada hareket var” gibi ebeveynin kontrol etmesine yardım eden pratik bilgi verir.
 
 ---
 
-## Teknik özet
+## Dil Desteği
+
+Desteklenen diller:
+
+- İngilizce (`en`) — varsayılan fallback
+- Türkçe (`tr`)
+- Çince (`zh`)
+- Hintçe (`hi`)
+- İspanyolca (`es`)
+- Fransızca (`fr`)
+
+Tüm ana ekran yazıları, butonlar, rol metinleri, uyarı mesajları ve placeholder içerikler `AppStrings` üzerinden gelir. Flutter `Localizations` telefonun locale değerine göre doğru dili seçer; desteklenmeyen diller İngilizceye düşer.
+
+---
+
+## Teknik Özet
 
 - Framework: Flutter / Dart
-- Platformlar: Android ve iOS hedefli mobil uygulama
-- Transport hedefi: HTTPS + WSS, yerel ağ
-- Pairing: QR payload + tek kullanımlık nonce
+- Platform hedefi: Android ve iOS
+- State/runtime: Role-aware composition root + runtime state stream
+- Pairing: QR payload + nonce + HTTP pair confirm
 - Yetkilendirme: Bearer trusted client token
-- Video: MJPEG stream servis katmanı
-- Ses: PCM16LE / WAV stream servis katmanı
-- Olaylar: JSON alert event DTO'ları
-- Analiz: MotionAnalyzerV2, CryAudioAnalyzerV2, AlertEngine
-- Saklama: SharedPreferences tabanlı rol ve pairing session store
+- Video: MJPEG stream
+- Ses: PCM16LE/WAV stream
+- Event: JSON alert/status event DTO’ları
+- Analiz: `MotionAnalyzerV2`, `CryAudioAnalyzerV2`, `AlertEngine`
+- Saklama: `SharedPreferences` ile rol, ayar ve pairing session
+- Lokalizasyon: `AppStrings` + Flutter localization delegates
 
-Detaylı teknik dokümantasyon için [`ARCHITECT.md`](ARCHITECT.md) dosyasına bakın.
+Detaylı teknik açıklama için [`ARCHITECT.md`](ARCHITECT.md) dosyasına bakın.
 
 ---
 
-## Geliştirici kurulumu
+## Geliştirici Kurulumu
 
 Gereksinimler:
 
 - Flutter SDK
 - Android Studio veya Xcode
 - Aynı Wi‑Fi/LAN üzerinde iki test cihazı
-- Kamera ve mikrofon izinleri
+- Kamera, mikrofon, bildirim ve Android battery optimization izinleri
 
 Komutlar:
 
@@ -162,28 +186,53 @@ flutter analyze
 flutter test
 ```
 
----
+Debug APK:
 
-## Yol haritası
-
-- Platform uyumlu kalıcı self-signed TLS certificate üretimi
-- Android foreground service ve kalıcı bildirim akışı
-- iOS foreground/background medya yaşam döngüsü iyileştirmeleri
-- Manual IP/discovery yardımcı eşleşme ekranları
-- Token yenileme ve revoke kullanıcı arayüzleri
-- Daha zengin uyarı geçmişi ve paylaşım deneyimi
+```bash
+flutter build apk --debug
+```
 
 ---
 
-## MimiCam ne değildir?
+## Test Kapsamı
 
-MimiCam bir internet kamerası, cloud kayıt sistemi veya uzak erişim servisi değildir. Uygulama bilinçli olarak şu hedefleri dışarıda bırakır:
+Repo; rol izolasyonu, permission policy, pairing, runtime lifecycle, network quality, adaptive profile, analiz, alert, localization, ekran overflow ve performans bütçesi testlerini içerir.
+
+Öne çıkan test alanları:
+
+- `test/app/role_isolation_test.dart`
+- `test/app/role_permission_coordinator_test.dart`
+- `test/features/hard_split_navigation_test.dart`
+- `test/features/performance/screen_render_budget_test.dart`
+- `test/core/media/adaptive_media_profile_test.dart`
+- `test/l10n/app_strings_test.dart`
+- `test/analysis/audio/*`
+- `test/analysis/video/*`
+- `test/analysis/alert/*`
+
+---
+
+## Yol Haritası
+
+- Kalıcı self-signed TLS certificate üretimi ve pinning akışı.
+- Native Android foreground service kanalının tamamlanması.
+- iOS lifecycle ve yerel ağ izin metinlerinin olgunlaştırılması.
+- Token revoke/renew kullanıcı arayüzleri.
+- Daha zengin alert history ve manuel paylaşım deneyimi.
+- Native video/audio player entegrasyonu ile query token kullanımının azaltılması.
+
+---
+
+## MimiCam Ne Değildir?
+
+MimiCam bir cloud kamera, internetten izleme servisi veya abonelik ürünü değildir. Bilinçli olarak şu kapsam dışıdır:
 
 - Cloud backend
 - İnternete yayın
-- WebRTC relay/STUN/TURN
+- UDP discovery
+- Telegram otomasyonu
+- WebRTC relay/STUN/TURN zorunluluğu
 - Otomatik üçüncü cihaz paylaşımı
-- Enterprise OAuth akışları
-- Abonelik veya hesap zorunluluğu
+- Hesap veya abonelik zorunluluğu
 
-MimiCam'in odağı net: **aynı ağda, QR ile eşleşen iki cihaz arasında güvenli bebek izleme deneyimi.**
+Odak net: **aynı ağda, QR/IP ile eşleşen iki cihaz arasında güvenli ve anlaşılır bebek izleme deneyimi.**

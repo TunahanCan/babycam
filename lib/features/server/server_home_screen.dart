@@ -483,6 +483,8 @@ class _ConnectionCard extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isCompact = constraints.maxWidth < 430;
+          final qrSize =
+              _readableQrSize(constraints.maxWidth, compact: isCompact);
           final details = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -509,7 +511,7 @@ class _ConnectionCard extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(child: _QrPanel(payload: payload, size: 132)),
+                Center(child: _QrPanel(payload: payload, size: qrSize)),
                 const SizedBox(height: 16),
                 details,
               ],
@@ -520,12 +522,19 @@ class _ConnectionCard extends StatelessWidget {
             children: [
               Expanded(child: details),
               const SizedBox(width: 20),
-              _QrPanel(payload: payload, size: 128),
+              _QrPanel(payload: payload, size: qrSize),
             ],
           );
         },
       ),
     );
+  }
+
+  double _readableQrSize(double maxWidth, {required bool compact}) {
+    final maxSafeSize = (maxWidth - 16).clamp(120.0, compact ? 280.0 : 260.0);
+    final preferredSize = maxWidth * (compact ? .72 : .42);
+    final minReadableSize = maxSafeSize < 220 ? maxSafeSize : 220.0;
+    return preferredSize.clamp(minReadableSize, maxSafeSize).toDouble();
   }
 }
 

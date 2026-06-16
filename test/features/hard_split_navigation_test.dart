@@ -10,6 +10,7 @@ import 'package:mimicam/features/server/server_runtime.dart';
 import 'package:mimicam/features/shared/presentation/mimicam_shells.dart';
 import 'package:mimicam/l10n/app_strings.dart';
 import 'package:mimicam/services/configuration_service.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -150,6 +151,10 @@ void main() {
     expect(find.text('QR / IP bağlantı bileti'), findsOneWidget);
     expect(find.text('QR yenile'), findsOneWidget);
     expect(find.text('Adresi kopyala'), findsOneWidget);
+    expect(find.byType(QrImageView), findsOneWidget);
+    final qrSize = tester.getSize(find.byType(QrImageView));
+    expect(qrSize.width, greaterThanOrEqualTo(220));
+    expect(qrSize.height, greaterThanOrEqualTo(220));
     expect(find.text('QR Tara'), findsNothing);
   });
 }

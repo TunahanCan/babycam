@@ -1,31 +1,68 @@
 # Kotlin -> Flutter/Dart Porting Matrix
 
-Bu dosya eski Android/Kotlin kaynaklarının her birinin Flutter/Dart karşılığını gösterir. Amaç eski repodaki hiçbir uygulama sorumluluğunun sessizce düşmemesidir.
+Bu dosya eski Android/Kotlin sorumluluklarının güncel Flutter/Dart karşılıklarını gösterir. Amaç eski uygulama davranışlarının sessizce kaybolmaması ve artık bilinçli olarak kaldırılan parçaların da net görünmesidir.
 
-| Eski Kotlin dosyası | Sorumluluk | Flutter/Dart karşılığı |
+---
+
+## Güncel Karşılıklar
+
+| Eski Kotlin alanı | Sorumluluk | Güncel Flutter/Dart karşılığı |
 | --- | --- | --- |
-| `AppLogBuffer.kt` | Zaman damgalı ekran log tamponu | `lib/core/app_log.dart` |
-| `MimiCamProtocol.kt` | Portlar, paket tipleri, discovery payload parse/serialize | `lib/core/mimicam_protocol.dart` |
-| `AudioNormalizer.kt` | PCM16 normalize, RMS dB, zero-cross rate | `lib/services/audio_analyzer.dart` |
-| `AudioAmbientTracker.kt` | Ortam ses seviyesini adaptif izleme | `lib/services/audio_analyzer.dart` |
-| `AudioBandEnergyCalculator.kt` | Goertzel frekans/bant enerjisi | `lib/services/audio_analyzer.dart` |
-| `AudioPatternAnalyzer.kt` | Cry score, band balance, smoothing | `lib/services/audio_analyzer.dart` |
-| `LumaDownsampler.kt` | Luma stride farkındalıklı downsample | `lib/services/motion_analyzer.dart` |
-| `MotionScoreCalculator.kt` | Hareket gürültü tahmini ve smoothing | `lib/services/motion_analyzer.dart` |
-| `MotionAnalyzer.kt` | Kamera frame analizi, background update, JPEG callback | `lib/services/motion_analyzer.dart` + `lib/services/mimicam_server.dart` |
-| `ImageUtils.kt` | Kamera frame -> JPEG dönüşümü | `CameraImageJpegEncoder` (`lib/services/motion_analyzer.dart`) |
+| `AppLogBuffer.kt` | Zaman damgalı log tamponu | `lib/core/app_log.dart` |
+| `MimiCamProtocol.kt` | Portlar, endpointler, paket tipleri | `lib/core/mimicam_protocol.dart`, `lib/core/protocol/mimicam_protocol.dart` |
 | `NetworkAddressProvider.kt` | Yerel IPv4 `ip:port` bulma | `lib/services/network_address_provider.dart` |
-| `MimiCamDiscovery.kt` | UDP broadcast/listener | `lib/services/discovery_service.dart` |
-| `LiveStreamServer.kt` | HTTP `/`, `/video`, `/audio`, `/status`, WebSocket AV/alert | `lib/services/mimicam_server.dart` |
-| `ConfigurationHelper.kt` | Telegram ve eşik ayarları | `lib/services/configuration_service.dart` |
-| `BabyMonitorService.kt` | Kamera/mikrofon yakalama, motion/cry duration windows, cooldown, Telegram/client alert | `lib/services/mimicam_server.dart` + `lib/services/telegram_service.dart` |
-| `MainActivity.kt` | İzinler, rol/UI, log akışı, client WebView/alert | `lib/ui/home_page.dart` |
-| `ui/theme/Color.kt` | Material renkleri | `ThemeData(colorSchemeSeed: Colors.pink)` (`lib/main.dart`) |
-| `ui/theme/Theme.kt` | Material tema seçimi | `ThemeData(... useMaterial3: true)` (`lib/main.dart`) |
-| `ui/theme/Type.kt` | Typography başlangıç ayarı | Flutter Material typography defaults (`lib/main.dart`) |
+| `ConfigurationHelper.kt` | Eşikler, süreler, cooldown ve ayarlar | `lib/services/configuration_service.dart` |
+| `AudioNormalizer.kt` | PCM/RMS/dBFS yardımcıları | `lib/services/audio_analyzer.dart`, `lib/analysis/audio/pcm16le_reader.dart` |
+| `AudioAmbientTracker.kt` | Ortam ses kalibrasyonu | `lib/analysis/audio/audio_calibration_state.dart`, `lib/analysis/audio/cry_audio_analyzer_v2.dart` |
+| `AudioBandEnergyCalculator.kt` | Goertzel frekans enerjisi | `lib/analysis/audio/goertzel_band_analyzer.dart` |
+| `AudioPatternAnalyzer.kt` | Cry score ve smoothing | `lib/analysis/audio/cry_audio_analyzer_v2.dart` |
+| `LumaDownsampler.kt` | Luma stride-aware downsample | `lib/analysis/video/luma_downsampler.dart` |
+| `MotionScoreCalculator.kt` | Hareket skoru ve hysteresis | `lib/analysis/video/motion_analyzer_v2.dart` |
+| `MotionAnalyzer.kt` | Kamera frame analizi | `lib/analysis/video/*`, `lib/services/server/media_analysis_coordinator.dart` |
+| `ImageUtils.kt` | CameraImage -> JPEG | `CameraImageJpegEncoder` (`lib/services/motion_analyzer.dart`) |
+| `LiveStreamServer.kt` | HTTP video/audio/status/event endpointleri | `lib/services/mimicam_server.dart` |
+| `BabyMonitorService.kt` | Kamera/mikrofon, analiz, alert, cooldown | `lib/services/mimicam_server.dart`, `lib/services/server/media_analysis_coordinator.dart`, `lib/analysis/alert/alert_engine.dart` |
+| `MainActivity.kt` | Rol seçimi, izinler, ana UI | `lib/app/app_bootstrap.dart`, `lib/app/role_permission_coordinator.dart`, `lib/features/role_selection/*`, `lib/features/server/*`, `lib/features/client/*` |
+| `ui/theme/Color.kt` | Renk tokenları | `lib/core/theme/mimicam_colors.dart`, `lib/features/shared/presentation/mimicam_design_tokens.dart` |
+| `ui/theme/Theme.kt` | Material tema | `lib/core/theme/mimicam_theme.dart` |
+| `ui/theme/Type.kt` | Tipografi başlangıcı | `MimiCamDesignTokens` + Flutter Material typography |
 
-## Bilerek platforma taşınan parçalar
+---
 
-- Android foreground service/wake-lock modeli Flutter tarafında `wakelock_plus` ve uygulama lifecycle'ı ile temsil edilir.
-- Android native notification channel detayları `flutter_local_notifications` üzerinden platform eklentisine bırakılır.
-- Android CameraX geniş açı lens filtresi Flutter `camera` eklentisinin döndürdüğü kamera listesine indirgenmiştir; platformlar arası API lens focal-length filtrelemeyi standart sunmadığı için ilk uygun kamera seçilir.
+## Yeni Flutter Katmanları
+
+| Yeni alan | Amaç |
+| --- | --- |
+| `lib/app/role_repository.dart` | Seçilen cihaz rolünü kalıcı saklar. |
+| `lib/app/role_resolver.dart` | Açılışta role karar verir. |
+| `lib/features/server/server_composition_root.dart` | Sadece Server graph’ını kurar. |
+| `lib/features/client/client_composition_root.dart` | Sadece Client graph’ını kurar. |
+| `lib/features/server/pairing/*` | QR payload, nonce ve trusted token yönetimi. |
+| `lib/features/client/pairing/*` | QR scan, manual IP fallback ve pairing session store. |
+| `lib/core/media/adaptive_media_profile.dart` | Cihaz/ağ kalitesine göre medya profili seçimi. |
+| `lib/features/client/media/network_quality_monitor.dart` | Client RTT ölçümü ve Server’a quality report gönderme. |
+| `lib/l10n/app_strings.dart` | `en`, `tr`, `zh`, `hi`, `es`, `fr` UI ve alert metinleri. |
+| `test/features/hard_split_navigation_test.dart` | Server/Client ekranlarının kesin ayrımını doğrular. |
+| `test/features/performance/screen_render_budget_test.dart` | Kompakt ekran overflow ve repaint izolasyonunu doğrular. |
+
+---
+
+## Bilerek Kaldırılan veya Kapsam Dışı Bırakılanlar
+
+| Eski alan | Güncel karar |
+| --- | --- |
+| UDP discovery / broadcast | Kaldırıldı. Eşleşme QR ve manuel IP:port üzerinden yapılır. |
+| Telegram otomatik paylaşımı | Kaldırıldı. Alert paylaşımı otomatik relay değildir; gelecek manuel paylaşım akışına bırakılır. |
+| Tek ekranda server/client karışık UI | Kaldırıldı. Role göre ayrı shell ve bottom nav kullanılır. |
+| Client’ta server kontrol CTA’ları | Kaldırıldı. Client sadece izler/eşleşir/bildirim gösterir. |
+| Server’da QR scanner | Kaldırıldı. Server QR üretir; QR tarama Client’a aittir. |
+
+---
+
+## Platforma Taşınan Parçalar
+
+- Android foreground service hedefi `ForegroundServiceController` MethodChannel çağrılarıyla temsil edilir; native kanal production için tamamlanmalıdır.
+- Wakelock davranışı `wakelock_plus` üzerinden yönetilir.
+- Yerel bildirim altyapısı `flutter_local_notifications` ile soyutlanır.
+- Kamera erişimi Flutter `camera` eklentisiyle, mikrofon stream’i `record` eklentisiyle yönetilir.
+- QR üretimi `qr_flutter`, QR tarama `mobile_scanner` ile yapılır.
