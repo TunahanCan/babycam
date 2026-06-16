@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/media/adaptive_media_profile.dart';
+import '../../../l10n/app_strings.dart';
 import '../client_runtime.dart';
 
 class WatchScreen extends StatefulWidget {
@@ -51,6 +52,7 @@ class _WatchScreenState extends State<WatchScreen> {
   }
 
   Widget _watch(BuildContext context, ClientRuntimeState state) {
+    final strings = AppStrings.of(context);
     final quality = state.networkQuality;
     final profile = state.mediaProfile;
     return SafeArea(
@@ -59,41 +61,44 @@ class _WatchScreenState extends State<WatchScreen> {
         children: [
           const _Top(dark: true),
           const SizedBox(height: 16),
-          const Text('Canlı izleme', style: _darkTitle),
+          Text(strings.ui('liveWatching'), style: _darkTitle),
           const SizedBox(height: 8),
-          const Text('Bebek odası yayını bağlı. Son olaylar altta görünür.',
-              style: _darkSubtitle),
+          Text(strings.ui('liveStreamConnectedSubtitle'), style: _darkSubtitle),
           const SizedBox(height: 14),
-          const _LightPill('Bağlı'),
+          _LightPill(strings.ui('connected')),
           const SizedBox(height: 16),
           _VideoPanel(quality: quality, profile: profile),
           const SizedBox(height: 12),
           _NetworkQualityCard(quality: quality, profile: profile),
           const SizedBox(height: 16),
-          const _Event(
-              label: 'Son uyarı',
-              value: 'Ağlama algılandı · 09:38',
+          _Event(
+              label: strings.ui('lastAlert'),
+              value: strings.ui('cryingDetectedAt'),
               color: _pink),
           const SizedBox(height: 10),
-          const _Event(
-              label: 'Hareket', value: 'Sakin · skor %08', color: _mint),
+          _Event(
+              label: strings.ui('motion'),
+              value: strings.ui('motionCalmScore'),
+              color: _mint),
           const SizedBox(height: 10),
-          const _Event(
-              label: 'Bildirim', value: 'Yerel bildirim açık', color: _amber),
+          _Event(
+              label: strings.ui('navNotifications'),
+              value: strings.ui('localNotificationOn'),
+              color: _amber),
           const SizedBox(height: 18),
-          const Text(
-            'Hızlı işlemler',
-            style: TextStyle(
+          Text(
+            strings.ui('quickActions'),
+            style: const TextStyle(
                 color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 12),
           _ActionGroup(
             actions: [
-              _ActionSpec('Yeniden bağlan', _mint, _navy, () {}),
-              _ActionSpec('Adresi değiştir', _pink, Colors.white,
+              _ActionSpec(strings.ui('reconnect'), _mint, _navy, () {}),
+              _ActionSpec(strings.ui('changeAddress'), _pink, Colors.white,
                   () => Navigator.pop(context)),
-              _ActionSpec(
-                  'Geçmişi aç', _amber, _navy, () => setState(() => _tab = 1)),
+              _ActionSpec(strings.ui('openHistory'), _amber, _navy,
+                  () => setState(() => _tab = 1)),
             ],
           ),
         ],
@@ -102,57 +107,56 @@ class _WatchScreenState extends State<WatchScreen> {
   }
 
   Widget _history() {
+    final strings = AppStrings.of(context);
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 88),
         children: [
           const _Top(),
           const SizedBox(height: 16),
-          const Text('Uyarı geçmişi', style: _title),
+          Text(strings.ui('alertHistory'), style: _title),
           const SizedBox(height: 8),
-          const Text(
-              'Ağlama, hareket ve sistem olaylarını zaman çizgisi olarak takip et.',
-              style: _subtitle),
+          Text(strings.ui('alertHistorySubtitle'), style: _subtitle),
           const SizedBox(height: 18),
-          const SingleChildScrollView(
+          SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _Filter('Tümü', true),
-                SizedBox(width: 10),
-                _Filter('Ses', false),
-                SizedBox(width: 10),
-                _Filter('Hareket', false),
-                SizedBox(width: 10),
-                _Filter('Sistem', false),
+                _Filter(strings.ui('all'), true),
+                const SizedBox(width: 10),
+                _Filter(strings.ui('audio'), false),
+                const SizedBox(width: 10),
+                _Filter(strings.ui('motion'), false),
+                const SizedBox(width: 10),
+                _Filter(strings.ui('system'), false),
               ],
             ),
           ),
           const SizedBox(height: 14),
-          const _Timeline('09:38', 'Ağlama algılandı',
-              'Ses seviyesi ortamdan 18 dB yüksek. Cooldown başladı.', _pink),
+          _Timeline('09:38', strings.cryingSound,
+              '18 dB · ${strings.ui('notificationCooldown')}', _pink),
           const SizedBox(height: 10),
-          const _Timeline('09:31', 'Client bağlandı',
-              'Ebeveyn cihazı 192.168.1.42 adresinden bağlandı.', _mint),
+          _Timeline(
+              '09:31', strings.ui('phaseClientPaired'), '192.168.1.42', _mint),
           const SizedBox(height: 10),
-          const _Timeline('09:12', 'Hareket algılandı',
-              'Hareket skoru 2.1 sn boyunca eşik üzerinde kaldı.', _amber),
+          _Timeline('09:12', strings.motionAlert(72),
+              strings.ui('motionMinimumDurationDescription'), _amber),
           const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(18),
             decoration: _cardDecoration(dark: true),
-            child: const Column(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Günlük özeti',
-                    style: TextStyle(
+                Text(strings.ui('dailySummary'),
+                    style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.w900)),
-                SizedBox(height: 7),
+                const SizedBox(height: 7),
                 Text(
-                  'Bugün 2 ses, 1 hareket, 2 sistem olayı var.',
-                  style: TextStyle(
+                  strings.ui('todayEventSummary'),
+                  style: const TextStyle(
                       color: Colors.white70, fontSize: 14.5, height: 1.25),
                 ),
               ],
@@ -164,6 +168,7 @@ class _WatchScreenState extends State<WatchScreen> {
   }
 
   Widget _settings(ClientRuntimeState state) {
+    final strings = AppStrings.of(context);
     final profile = state.mediaProfile;
     return SafeArea(
       child: ListView(
@@ -171,37 +176,37 @@ class _WatchScreenState extends State<WatchScreen> {
         children: [
           const _Top(),
           const SizedBox(height: 16),
-          const Text('Ayarlar', style: _title),
+          Text(strings.ui('navSettings'), style: _title),
           const SizedBox(height: 8),
-          const Text(
-              'Gürültü, hareket, bildirim ve entegrasyonları sade kontrollerle yönet.',
-              style: _subtitle),
+          Text(strings.ui('watchSettingsSubtitle'), style: _subtitle),
           const SizedBox(height: 18),
           _QualityPreferenceCard(profile: profile),
           const SizedBox(height: 12),
-          const _SliderCard('Bildirim cooldown',
-              'Tekrarlayan uyarıları sınırlar.', '60 sn', _pink, .68),
+          _SliderCard(strings.ui('notificationCooldown'),
+              strings.ui('repeatedAlertsLimit'), '60 sn', _pink, .68),
           const SizedBox(height: 12),
-          const _SliderCard('Ağlama eşiği',
-              'Ortam sesine göre algılama hassasiyeti.', '%65', _mint, .65),
+          _SliderCard(strings.ui('cryThreshold'),
+              strings.ui('ambientCrySensitivity'), '%65', _mint, .65),
           const SizedBox(height: 12),
-          const _SliderCard('Hareket eşiği',
-              'Kamera görüntüsündeki değişim hassasiyeti.', '%22', _amber, .22),
+          _SliderCard(strings.ui('motionThreshold'),
+              strings.ui('cameraMotionSensitivity'), '%22', _amber, .22),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(18),
             decoration: _cardDecoration(dark: true),
-            child: const Column(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Entegrasyonlar',
-                    style: TextStyle(
+                Text(strings.ui('integrations'),
+                    style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.w900)),
-                SizedBox(height: 12),
-                _SwitchLine('Cihaz uyumasın', 'Server modunda açık', true),
-                _SwitchLine('Dil', 'Türkçe / English', true),
+                const SizedBox(height: 12),
+                _SwitchLine(strings.ui('keepDeviceAwake'),
+                    strings.ui('enabledInServerMode'), true),
+                _SwitchLine(
+                    strings.ui('language'), strings.ui('languageAuto'), true),
               ],
             ),
           ),
@@ -219,9 +224,14 @@ class _VideoPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final networkLabel = quality?.tier.label ?? 'Ölçülüyor';
+    final strings = AppStrings.of(context);
+    final networkLabel = quality == null
+        ? strings.ui('measuring')
+        : _networkLabel(strings, quality!.tier);
     final latencyLabel = quality?.rttMs == null ? '—' : '${quality!.rttMs}ms';
-    final audioLabel = profile?.audioFirst == true ? 'Öncelikli' : 'Açık';
+    final audioLabel = profile?.audioFirst == true
+        ? strings.ui('audioPriority')
+        : strings.ui('open');
     return AspectRatio(
       aspectRatio: 4 / 3,
       child: Container(
@@ -237,14 +247,27 @@ class _VideoPanel extends StatelessWidget {
           spacing: 18,
           runSpacing: 8,
           children: [
-            _VideoMetric('Ses: $audioLabel'),
-            _VideoMetric('Gecikme: $latencyLabel'),
-            _VideoMetric('Ağ: $networkLabel'),
+            _VideoMetric(
+                strings.uiFormat('audioMetric', {'value': audioLabel})),
+            _VideoMetric(
+                strings.uiFormat('latencyMetric', {'value': latencyLabel})),
+            _VideoMetric(
+                strings.uiFormat('networkMetric', {'value': networkLabel})),
           ],
         ),
       ),
     );
   }
+
+  static String _networkLabel(AppStrings strings, NetworkQualityTier tier) =>
+      switch (tier) {
+        NetworkQualityTier.excellent => strings.ui('netExcellent'),
+        NetworkQualityTier.good => strings.ui('netGood'),
+        NetworkQualityTier.weak => strings.ui('netWeak'),
+        NetworkQualityTier.critical => strings.ui('netCritical'),
+        NetworkQualityTier.offline => strings.ui('netOffline'),
+        NetworkQualityTier.unknown => strings.ui('measuring'),
+      };
 }
 
 class _NetworkQualityCard extends StatelessWidget {
@@ -255,12 +278,15 @@ class _NetworkQualityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     final isAudioFirst =
         quality?.tier.shouldPreferAudio == true || profile?.audioFirst == true;
-    final title = isAudioFirst ? 'Ses öncelikli mod' : 'Bağlantı dengede';
+    final title = isAudioFirst
+        ? strings.ui('audioFirstMode')
+        : strings.ui('connectionStable');
     final text = isAudioFirst
-        ? 'Wi‑Fi zayıflayınca görüntü FPS/kalite düşer; ses ve uyarılar korunur.'
-        : 'Ağ ölçülüyor; server kaliteyi otomatik ayarlıyor.';
+        ? strings.ui('audioFirstModeText')
+        : strings.ui('autoQualityModeText');
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: _cardDecoration(dark: true),
@@ -326,15 +352,16 @@ class _QualityPreferenceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Otomatik kalite',
-            style: TextStyle(
+          Text(
+            strings.ui('automaticQuality'),
+            style: const TextStyle(
               color: _navy,
               fontSize: 18,
               fontWeight: FontWeight.w900,
@@ -343,7 +370,7 @@ class _QualityPreferenceCard extends StatelessWidget {
           const SizedBox(height: 7),
           Text(
             profile == null
-                ? 'Server eski/yeni cihaz ve Wi‑Fi durumuna göre profili seçer.'
+                ? strings.ui('autoQualityDescription')
                 : profile!.summary,
             style: const TextStyle(color: _slate, fontSize: 14.5, height: 1.25),
           ),
@@ -645,7 +672,11 @@ class _Nav extends StatelessWidget {
           const ShapeDecoration(color: Colors.white, shape: StadiumBorder()),
       child: Row(
         children: [
-          for (final entry in ['İzle', 'Geçmiş', 'Ayarlar'].asMap().entries)
+          for (final entry in [
+            AppStrings.of(context).ui('navWatch'),
+            AppStrings.of(context).ui('navHistory'),
+            AppStrings.of(context).ui('navSettings')
+          ].asMap().entries)
             Expanded(
               child: InkWell(
                 onTap: () => onTap(entry.key),

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_role.dart';
 import '../../core/protocol/mimicam_protocol.dart';
 import '../../core/protocol/pairing_payload.dart';
+import '../../l10n/app_strings.dart';
 import '../shared/presentation/mimicam_design_tokens.dart';
 import '../shared/presentation/mimicam_shells.dart';
 import 'client_runtime.dart';
@@ -60,7 +61,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
             ),
           ),
           bottomNavigationBar: MimiCamBottomNav(
-            items: _clientNavItems,
+            items: _clientNavItems(context),
             currentIndex: _tab,
             activeColor: MimiCamDesignTokens.mint,
             onTap: (index) => setState(() => _tab = index),
@@ -71,6 +72,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   }
 
   Widget _buildTab(BuildContext context, ClientRuntimeState state) {
+    final strings = AppStrings.of(context);
     return switch (_tab) {
       0 => _ClientTabFrame(
           key: const ValueKey('client-watch'),
@@ -88,12 +90,15 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
             ),
             const SizedBox(height: 16),
             _SectionHeader(
-              eyebrow: state.session == null ? 'İzle' : 'Canlı',
-              title:
-                  state.session == null ? 'Önce oda seç' : 'Bebek odası hazır',
+              eyebrow: state.session == null
+                  ? strings.ui('navWatch')
+                  : strings.ui('live'),
+              title: state.session == null
+                  ? strings.ui('chooseRoomFirst')
+                  : strings.ui('clientTitlePairedIdle'),
               subtitle: state.session == null
-                  ? 'Client izleme ekranı sadece eşleşmiş server yayınını gösterir.'
-                  : 'Canlı yayın ve son uyarılar ebeveyn cihazında takip edilir.',
+                  ? strings.ui('clientWatchOnlyPairedStream')
+                  : strings.ui('liveAndAlertsParentText'),
             ),
             const SizedBox(height: 10),
             if (state.session == null)
@@ -101,7 +106,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
             else ...[
               _RoomCard(
                 title: state.session!.payload.deviceName,
-                status: 'QR ile eşleşti',
+                status: strings.ui('pairedWithQr'),
                 address:
                     '${state.session!.payload.host}:${state.session!.payload.port}',
                 tone: MimiCamDesignTokens.mint,
@@ -118,11 +123,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
           onRoleSelected: widget.onRoleSelected,
           switchingRole: widget.switchingRole,
           children: [
-            const _SectionHeader(
-              eyebrow: 'Bul',
-              title: 'Bebek odasına bağlan',
-              subtitle:
-                  'Oda cihazını QR ile eşleştir; gerekirse IP adresini elle gir.',
+            _SectionHeader(
+              eyebrow: strings.ui('navFind'),
+              title: strings.ui('connectBabyRoom'),
+              subtitle: strings.ui('connectBabyRoomSubtitle'),
             ),
             const SizedBox(height: 10),
             const _ConnectionChoices(),
@@ -138,7 +142,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
             else
               _RoomCard(
                 title: state.session!.payload.deviceName,
-                status: 'Eşleşmiş cihaz',
+                status: strings.ui('pairedDevice'),
                 address:
                     '${state.session!.payload.host}:${state.session!.payload.port}',
                 tone: MimiCamDesignTokens.mint,
@@ -151,19 +155,17 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
           activeRole: widget.activeRole,
           onRoleSelected: widget.onRoleSelected,
           switchingRole: widget.switchingRole,
-          children: const [
+          children: [
             _SectionHeader(
-              eyebrow: 'Bildirim',
-              title: 'Son durum ve bildirimler',
-              subtitle:
-                  'Ağlama, hareket ve sistem olayları anne ekranında öne çıkar.',
+              eyebrow: strings.ui('navNotifications'),
+              title: strings.ui('latestStatusAndNotifications'),
+              subtitle: strings.ui('parentEventsPriorityText'),
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             _ClientPlaceholderCard(
               icon: Icons.notifications_active_rounded,
-              title: 'Son durum bekleniyor',
-              text:
-                  'Eşleşmiş server uyarı gönderdiğinde en önemli durum burada görünecek.',
+              title: strings.ui('waitingLatestStatus'),
+              text: strings.ui('pairedServerAlertAppears'),
             ),
           ],
         ),
@@ -172,19 +174,17 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
           activeRole: widget.activeRole,
           onRoleSelected: widget.onRoleSelected,
           switchingRole: widget.switchingRole,
-          children: const [
+          children: [
             _SectionHeader(
-              eyebrow: 'Ayarlar',
-              title: 'Ebeveyn cihazı tercihleri',
-              subtitle:
-                  'Bildirim ve izleme davranışı burada kalır; server portu veya yayın kontrolü yoktur.',
+              eyebrow: strings.ui('navSettings'),
+              title: strings.ui('parentDevicePreferences'),
+              subtitle: strings.ui('noServerControlsText'),
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             _ClientPlaceholderCard(
               icon: Icons.notifications_active_rounded,
-              title: 'Client ayarları',
-              text:
-                  'Yerel bildirim, reconnect ve viewer tercihleri burada yönetilecek.',
+              title: strings.ui('clientSettings'),
+              text: strings.ui('clientSettingsPlaceholder'),
             ),
           ],
         ),
@@ -200,6 +200,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   }
 
   Future<void> _scanQr(BuildContext context) async {
+    final strings = AppStrings.of(context);
     final code = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => const QRScanScreen()),
     );
@@ -207,7 +208,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
     final payload = PairingPayload.parseUri(code);
     if (payload == null) {
-      _showMessage(context, 'Geçersiz veya süresi dolmuş MimiCam QR kodu.');
+      _showMessage(context, strings.ui('invalidQrCode'));
       return;
     }
 
@@ -215,33 +216,38 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       await ClientPairingFlow(widget.runtime).pairAndArmAlerts(payload);
       if (!context.mounted) return;
       setState(() => _tab = 0);
-      _showMessage(context, '${payload.deviceName} eşleşti.');
+      _showMessage(context,
+          strings.uiFormat('pairedMessage', {'name': payload.deviceName}));
     } catch (error) {
       if (!context.mounted) return;
-      _showMessage(context, 'Eşleşme kurulamadı: $error');
+      _showMessage(
+          context, strings.uiFormat('pairingFailed', {'error': error}));
     }
   }
 
   Future<void> _connectManualIp(BuildContext context) async {
+    final strings = AppStrings.of(context);
     final parsed = _parseManualAddress(_manualIpController.text);
     if (parsed == null) {
-      _showMessage(context, 'IP formatı geçersiz. Örnek: 192.168.1.20:8080');
+      _showMessage(context, strings.ui('invalidIpFormat'));
       return;
     }
     try {
-      final payload = await _fetchManualPairingPayload(parsed);
+      final payload = await _fetchManualPairingPayload(strings, parsed);
       await ClientPairingFlow(widget.runtime).pairAndArmAlerts(payload);
       if (!context.mounted) return;
       setState(() => _tab = 0);
-      _showMessage(context, '${payload.deviceName} eşleşti.');
+      _showMessage(context,
+          strings.uiFormat('pairedMessage', {'name': payload.deviceName}));
     } catch (error) {
       if (!context.mounted) return;
-      _showMessage(context, 'IP ile eşleşme kurulamadı: $error');
+      _showMessage(
+          context, strings.uiFormat('manualPairingFailed', {'error': error}));
     }
   }
 
   Future<PairingPayload> _fetchManualPairingPayload(
-      ({String host, int port}) address) async {
+      AppStrings strings, ({String host, int port}) address) async {
     final client = HttpClient();
     try {
       final request = await client.getUrl(
@@ -254,14 +260,17 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       );
       final response = await request.close();
       if (response.statusCode != HttpStatus.ok) {
-        throw StateError('Server bulunamadı: ${response.statusCode}');
+        throw StateError(
+            strings.uiFormat('serverNotFound', {'code': response.statusCode}));
       }
       final body = await utf8.decoder.bind(response).join();
       final json = jsonDecode(body);
-      if (json is! Map) throw StateError('Geçersiz server yanıtı');
+      if (json is! Map) {
+        throw StateError(strings.ui('invalidServerResponse'));
+      }
       final nonce = json['pairingNonce']?.toString();
       if (nonce == null || nonce.isEmpty) {
-        throw StateError('Server pairing nonce üretmedi');
+        throw StateError(strings.ui('missingPairingNonce'));
       }
       final capabilities = json['capabilities'] is Map
           ? Map<String, Object?>.from(json['capabilities'] as Map)
@@ -300,7 +309,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   void _openWatch(BuildContext context, ClientRuntimeState state) {
     if (state.session == null) {
-      _showMessage(context, 'Önce server QR kodunu tara.');
+      _showMessage(context, AppStrings.of(context).ui('scanServerQrFirst'));
       return;
     }
     Navigator.of(context).push(
@@ -315,13 +324,20 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   }
 }
 
-const _clientNavItems = [
-  MimiCamBottomNavItem(icon: Icons.live_tv_rounded, label: 'İzle'),
-  MimiCamBottomNavItem(icon: Icons.radar_rounded, label: 'Bul'),
-  MimiCamBottomNavItem(
-      icon: Icons.notifications_active_rounded, label: 'Bildirim'),
-  MimiCamBottomNavItem(icon: Icons.settings_rounded, label: 'Ayarlar'),
-];
+List<MimiCamBottomNavItem> _clientNavItems(BuildContext context) {
+  final strings = AppStrings.of(context);
+  return [
+    MimiCamBottomNavItem(
+        icon: Icons.live_tv_rounded, label: strings.ui('navWatch')),
+    MimiCamBottomNavItem(
+        icon: Icons.radar_rounded, label: strings.ui('navFind')),
+    MimiCamBottomNavItem(
+        icon: Icons.notifications_active_rounded,
+        label: strings.ui('navNotifications')),
+    MimiCamBottomNavItem(
+        icon: Icons.settings_rounded, label: strings.ui('navSettings')),
+  ];
+}
 
 class _ClientTabFrame extends StatelessWidget {
   const _ClientTabFrame({
@@ -364,6 +380,7 @@ class _ClientHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -401,10 +418,10 @@ class _ClientHeroCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const _TinyLabel('Ebeveyn modu'),
+                    _TinyLabel(strings.ui('parentMode')),
                     const SizedBox(height: 5),
                     Text(
-                      _titleFor(phase),
+                      _titleFor(strings, phase),
                       style: const TextStyle(
                         color: MimiCamDesignTokens.navy,
                         fontSize: 26,
@@ -419,7 +436,7 @@ class _ClientHeroCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            _subtitleFor(phase),
+            _subtitleFor(strings, phase),
             style: const TextStyle(
               color: MimiCamDesignTokens.slate,
               fontSize: 15,
@@ -427,14 +444,17 @@ class _ClientHeroCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          const Wrap(
+          Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              _ComfortChip(icon: Icons.wifi_rounded, text: 'Aynı Wi‑Fi'),
-              _ComfortChip(icon: Icons.qr_code_rounded, text: 'QR hazır'),
               _ComfortChip(
-                  icon: Icons.notifications_active_rounded, text: 'Uyarılar'),
+                  icon: Icons.wifi_rounded, text: strings.ui('sameWifi')),
+              _ComfortChip(
+                  icon: Icons.qr_code_rounded, text: strings.ui('qrReady')),
+              _ComfortChip(
+                  icon: Icons.notifications_active_rounded,
+                  text: strings.ui('alertsShort')),
             ],
           ),
         ],
@@ -442,32 +462,29 @@ class _ClientHeroCard extends StatelessWidget {
     );
   }
 
-  static String _titleFor(ClientRuntimePhase phase) {
+  static String _titleFor(AppStrings strings, ClientRuntimePhase phase) {
     return switch (phase) {
-      ClientRuntimePhase.unpaired => 'Odayı bulalım',
-      ClientRuntimePhase.scanningQr => 'QR kodu tarat',
-      ClientRuntimePhase.pairing => 'Güvenli eşleşiyor',
-      ClientRuntimePhase.pairedIdle => 'Bebek odası hazır',
-      ClientRuntimePhase.renewingToken => 'Oturum yenileniyor',
-      ClientRuntimePhase.watching => 'Canlı izleme açık',
-      ClientRuntimePhase.alertOnly => 'Uyarılar takipte',
-      ClientRuntimePhase.reconnecting => 'Yeniden bağlanıyor',
-      ClientRuntimePhase.offline => 'Oda çevrim dışı',
-      ClientRuntimePhase.revoked => 'Eşleşme iptal edildi',
-      ClientRuntimePhase.error => 'Bağlantıyı toparlayalım',
+      ClientRuntimePhase.unpaired => strings.ui('clientTitleUnpaired'),
+      ClientRuntimePhase.scanningQr => strings.ui('clientTitleScanningQr'),
+      ClientRuntimePhase.pairing => strings.ui('clientTitlePairing'),
+      ClientRuntimePhase.pairedIdle => strings.ui('clientTitlePairedIdle'),
+      ClientRuntimePhase.renewingToken =>
+        strings.ui('clientTitleRenewingToken'),
+      ClientRuntimePhase.watching => strings.ui('clientTitleWatching'),
+      ClientRuntimePhase.alertOnly => strings.ui('clientTitleAlertOnly'),
+      ClientRuntimePhase.reconnecting => strings.ui('clientTitleReconnecting'),
+      ClientRuntimePhase.offline => strings.ui('clientTitleOffline'),
+      ClientRuntimePhase.revoked => strings.ui('clientTitleRevoked'),
+      ClientRuntimePhase.error => strings.ui('clientTitleError'),
     };
   }
 
-  static String _subtitleFor(ClientRuntimePhase phase) {
+  static String _subtitleFor(AppStrings strings, ClientRuntimePhase phase) {
     return switch (phase) {
-      ClientRuntimePhase.error =>
-        'Ağ bağlantısını kontrol et; QR veya IP ile yeniden deneyebilirsin.',
-      ClientRuntimePhase.offline =>
-        'Bebek odası cihazı aynı ağda görünmüyor. Yakında tekrar arayacağız.',
-      ClientRuntimePhase.watching =>
-        'Canlı yayın ve son uyarılar izleme ekranında hazır.',
-      _ =>
-        'MimiCam yakındaki bebek odası cihazını sakin ve güvenli şekilde arar.',
+      ClientRuntimePhase.error => strings.ui('clientSubtitleError'),
+      ClientRuntimePhase.offline => strings.ui('clientSubtitleOffline'),
+      ClientRuntimePhase.watching => strings.ui('clientSubtitleWatching'),
+      _ => strings.ui('clientSubtitleDefault'),
     };
   }
 }
@@ -487,14 +504,17 @@ class _ClientNotificationFocusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     final active = paired &&
         (phase == ClientRuntimePhase.alertOnly ||
             phase == ClientRuntimePhase.watching ||
             phase == ClientRuntimePhase.pairedIdle);
-    final title = active ? 'Son durum takipte' : 'Bildirim için oda eşleştir';
+    final title = active
+        ? strings.ui('latestStatusTracked')
+        : strings.ui('pairRoomForNotifications');
     final text = active
-        ? 'Ağlama, hareket ve bağlantı uyarıları bu anne ekranında öne çıkar.'
-        : 'QR veya IP ile eşleşince bebeğin son durumu burada görünür.';
+        ? strings.ui('latestStatusTrackedText')
+        : strings.ui('pairRoomForNotificationsText');
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -528,9 +548,9 @@ class _ClientNotificationFocusCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'ANNE İÇİN ÖNCELİK',
-                  style: TextStyle(
+                Text(
+                  strings.ui('parentPriority'),
+                  style: const TextStyle(
                     color: MimiCamDesignTokens.mint,
                     fontSize: 10.5,
                     fontWeight: FontWeight.w900,
@@ -575,7 +595,9 @@ class _ClientNotificationFocusCard extends StatelessWidget {
                       shape: const StadiumBorder(),
                     ),
                     label: Text(
-                      active ? 'Bildirimleri aç' : 'Odayı eşleştir',
+                      active
+                          ? strings.ui('openNotifications')
+                          : strings.ui('pairRoom'),
                       style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
                   ),
@@ -635,24 +657,25 @@ class _ConnectionChoices extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 520;
         final children = [
-          const Expanded(
+          Expanded(
             child: _ConnectionChoice(
               icon: Icons.qr_code_scanner_rounded,
               title: 'QR',
-              subtitle: 'En hızlı yol',
+              subtitle: strings.ui('fastestWay'),
               color: MimiCamDesignTokens.pink,
             ),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: _ConnectionChoice(
               icon: Icons.link_rounded,
               title: 'IP',
-              subtitle: 'Elle bağlan',
+              subtitle: strings.ui('manualConnect'),
               color: MimiCamDesignTokens.amber,
             ),
           ),
@@ -816,13 +839,14 @@ class _NoRoomCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: MimiCamDesignTokens.cardDecoration(),
-      child: const Row(
+      child: Row(
         children: [
-          CircleAvatar(
+          const CircleAvatar(
             radius: 24,
             backgroundColor: Color(0xFFE9EDF2),
             child: Icon(
@@ -831,23 +855,23 @@ class _NoRoomCard extends StatelessWidget {
               size: 25,
             ),
           ),
-          SizedBox(width: 12),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'QR bekleniyor',
-                  style: TextStyle(
+                  strings.ui('qrWaiting'),
+                  style: const TextStyle(
                     color: MimiCamDesignTokens.navy,
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                  'Kendi kendine oda göstermeyecek; sadece taranan server bağlanır.',
-                  style: TextStyle(
+                  strings.ui('onlyScannedServerConnects'),
+                  style: const TextStyle(
                     color: MimiCamDesignTokens.slate,
                     fontSize: 14,
                     height: 1.2,
@@ -869,26 +893,27 @@ class _ClientWatchSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: MimiCamDesignTokens.cardDecoration(dark: true),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              CircleAvatar(
+              const CircleAvatar(
                 backgroundColor: MimiCamDesignTokens.mint,
                 child: Icon(
                   Icons.monitor_heart_rounded,
                   color: MimiCamDesignTokens.navy,
                 ),
               ),
-              SizedBox(width: 12),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Canlı izleme dashboard',
-                  style: TextStyle(
+                  strings.ui('liveWatchDashboard'),
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
@@ -898,10 +923,10 @@ class _ClientWatchSummary extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          const Text(
-            'Video, WS durumu ve son uyarılar bu ebeveyn alanında açılır.',
-            style:
-                TextStyle(color: Colors.white70, fontSize: 14.5, height: 1.25),
+          Text(
+            strings.ui('liveWatchSummary'),
+            style: const TextStyle(
+                color: Colors.white70, fontSize: 14.5, height: 1.25),
           ),
           const SizedBox(height: 14),
           SizedBox(
@@ -917,9 +942,9 @@ class _ClientWatchSummary extends StatelessWidget {
                   borderRadius: BorderRadius.circular(18),
                 ),
               ),
-              label: const Text(
-                'Canlı izlemeyi aç',
-                style: TextStyle(fontWeight: FontWeight.w900),
+              label: Text(
+                strings.ui('openLiveWatch'),
+                style: const TextStyle(fontWeight: FontWeight.w900),
               ),
             ),
           ),
@@ -942,17 +967,19 @@ class _FindActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: MimiCamDesignTokens.cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Bağlantı yolları', style: MimiCamDesignTokens.cardTitle),
+          Text(strings.ui('connectionWays'),
+              style: MimiCamDesignTokens.cardTitle),
           const SizedBox(height: 8),
-          const Text(
-            'QR tarayarak güvenli eşleş; gerekirse IP:port yazarak bağlan.',
-            style: TextStyle(
+          Text(
+            strings.ui('scanQrSecurely'),
+            style: const TextStyle(
               color: MimiCamDesignTokens.slate,
               fontSize: 14.5,
               height: 1.25,
@@ -972,9 +999,9 @@ class _FindActionCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(18),
                 ),
               ),
-              label: const Text(
-                'QR Tara',
-                style: TextStyle(fontWeight: FontWeight.w900),
+              label: Text(
+                strings.ui('scanQr'),
+                style: const TextStyle(fontWeight: FontWeight.w900),
               ),
             ),
           ),
@@ -982,10 +1009,10 @@ class _FindActionCard extends StatelessWidget {
           TextField(
             controller: manualIpController,
             keyboardType: TextInputType.url,
-            decoration: const InputDecoration(
-              labelText: 'IP veya IP:port',
+            decoration: InputDecoration(
+              labelText: strings.ui('ipOrHostPort'),
               hintText: '192.168.1.20:8080',
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 10),
@@ -1001,9 +1028,9 @@ class _FindActionCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(18),
                 ),
               ),
-              label: const Text(
-                'IP ile bağlan',
-                style: TextStyle(fontWeight: FontWeight.w900),
+              label: Text(
+                strings.ui('connectWithIp'),
+                style: const TextStyle(fontWeight: FontWeight.w900),
               ),
             ),
           ),

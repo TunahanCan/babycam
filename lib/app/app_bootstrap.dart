@@ -73,6 +73,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
   }
 
   Future<bool?> _confirmLeavingServer() {
+    final strings = AppStrings.of(context);
     return showModalBottomSheet<bool>(
       context: context,
       builder: (context) {
@@ -83,14 +84,15 @@ class _AppBootstrapState extends State<AppBootstrap> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Server modundan çıkılsın mı?',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                Text(
+                  strings.ui('confirmLeaveServerTitle'),
+                  style: const TextStyle(
+                      fontSize: 22, fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  'Client moduna geçersen bebek odası yayını ve yerel servisler kapatılır.',
-                  style: TextStyle(fontSize: 16, height: 1.3),
+                Text(
+                  strings.ui('confirmLeaveServerBody'),
+                  style: const TextStyle(fontSize: 16, height: 1.3),
                 ),
                 const SizedBox(height: 22),
                 Row(
@@ -98,14 +100,14 @@ class _AppBootstrapState extends State<AppBootstrap> {
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () => Navigator.of(context).pop(false),
-                        child: const Text('Vazgeç'),
+                        child: Text(strings.ui('cancel')),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: FilledButton(
                         onPressed: () => Navigator.of(context).pop(true),
-                        child: const Text('Client’a geç'),
+                        child: Text(strings.ui('switchToClient')),
                       ),
                     ),
                   ],
@@ -160,11 +162,12 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     if (!_loaded) {
-      return const _BootstrapProgress(message: 'MimiCam hazırlanıyor...');
+      return _BootstrapProgress(message: strings.ui('bootstrapPreparing'));
     }
     if (_switchingRole) {
-      return const _BootstrapProgress(message: 'Rol değiştiriliyor...');
+      return _BootstrapProgress(message: strings.ui('roleSwitching'));
     }
     final prefs = _prefs!;
     final config = ConfigurationService(prefs);

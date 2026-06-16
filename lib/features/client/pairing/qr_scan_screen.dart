@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../../l10n/app_strings.dart';
+
 class QRScanScreen extends StatefulWidget {
   const QRScanScreen({super.key});
 
@@ -44,12 +46,13 @@ class _QRScanScreenState extends State<QRScanScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFF07111F),
       appBar: AppBar(
         backgroundColor: const Color(0xFF07111F),
         foregroundColor: Colors.white,
-        title: const Text('QR Tara'),
+        title: Text(strings.ui('scanQr')),
       ),
       body: SafeArea(
         child: Column(
@@ -66,7 +69,7 @@ class _QRScanScreenState extends State<QRScanScreen> {
                         padding: const EdgeInsets.all(24),
                         child: Text(
                           error.errorDetails?.message ??
-                              'Kamera açılamadı. QR kodunu alttan yapıştırabilirsin.',
+                              strings.ui('qrScanCameraError'),
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             color: Colors.white,
@@ -99,9 +102,9 @@ class _QRScanScreenState extends State<QRScanScreen> {
                       controller: _manualController,
                       minLines: 1,
                       maxLines: 2,
-                      decoration: const InputDecoration(
-                        labelText: 'QR kod metni',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: strings.ui('qrCodeText'),
+                        border: const OutlineInputBorder(),
                       ),
                     ),
                   ),

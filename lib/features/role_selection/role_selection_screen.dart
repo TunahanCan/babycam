@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_role.dart';
+import '../../l10n/app_strings.dart';
 
 class RoleSelectionScreen extends StatelessWidget {
   const RoleSelectionScreen({super.key, required this.onRoleSelected});
@@ -9,48 +10,45 @@ class RoleSelectionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     return Scaffold(
       body: _LightShell(
         child: SafeArea(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 22),
             children: [
-              const Text('Bu cihaz ne olacak?', style: _titleStyle),
+              Text(strings.ui('roleSelectionTitle'), style: _titleStyle),
               const SizedBox(height: 8),
-              const Text(
-                'Bu cihaz genelde bir kez seçilir; değişim ayarlarda küçük bir rozet olarak kalır.',
+              Text(
+                strings.ui('roleSelectionSubtitle'),
                 style: _subtitleStyle,
               ),
               const SizedBox(height: 20),
               _RoleChoiceCard(
                 dark: true,
                 icon: Icons.child_care,
-                title: 'Bebek Odası Cihazı',
-                description:
-                    'Kamera ve mikrofon bu telefonda açılır. Yayın QR kod ile paylaşılır.',
-                chip: 'Önerilen',
+                title: strings.ui('babyRoomDeviceTitle'),
+                description: strings.ui('babyRoomDeviceDescription'),
+                chip: strings.ui('recommended'),
                 onPressed: () => onRoleSelected(AppRole.server),
               ),
               const SizedBox(height: 14),
               _RoleChoiceCard(
                 icon: Icons.monitor_heart,
-                title: 'Ebeveyn Cihazı',
-                description:
-                    'Aynı Wi-Fi içinde server bulunur, canlı yayın izlenir ve uyarılar bildirim olur.',
-                chip: 'İzleyici',
+                title: strings.ui('parentDeviceTitle'),
+                description: strings.ui('parentDeviceDescription'),
+                chip: strings.ui('viewer'),
                 onPressed: () => onRoleSelected(AppRole.client),
               ),
               const SizedBox(height: 18),
-              const _InfoStrip(
-                title: 'İlk kurulum izinleri',
-                text:
-                    'Seçimden sonra gerekli kamera, mikrofon, bildirim ve pil/arka plan izinleri istenir.',
+              _InfoStrip(
+                title: strings.ui('setupPermissionsTitle'),
+                text: strings.ui('setupPermissionsText'),
               ),
               const SizedBox(height: 10),
-              const _InfoStrip(
-                title: 'Güvenlik notu',
-                text:
-                    'Bu uygulama aynı Wi-Fi/LAN içinde kullanım için tasarlandı.',
+              _InfoStrip(
+                title: strings.ui('securityNoteTitle'),
+                text: strings.ui('securityNoteText'),
               ),
             ],
           ),

@@ -49,6 +49,20 @@ void main() {
     expect(strings.reset, 'Reset');
   });
 
+  test('UI labels follow locale and unsupported locales use English', () async {
+    const delegate = AppStrings.delegate;
+
+    expect(AppStrings(const Locale('es')).ui('scanQr'), 'Escanear QR');
+    expect(AppStrings(const Locale('fr')).ui('navSettings'), 'Réglages');
+    expect(AppStrings(const Locale('hi')).ui('parentDeviceTitle'),
+        'माता-पिता का डिवाइस');
+
+    final fallback = await delegate.load(const Locale('de'));
+
+    expect(fallback.ui('scanQr'), 'Scan QR');
+    expect(fallback.ui('roleSelectionTitle'), 'What will this device be?');
+  });
+
   test('parent alert messages include evidence and suggested action', () {
     final strings = AppStrings(const Locale('en'));
 

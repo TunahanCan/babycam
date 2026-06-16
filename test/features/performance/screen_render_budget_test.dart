@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mimicam/app/app_role.dart';
 import 'package:mimicam/features/client/client_home_screen.dart';
@@ -7,6 +8,7 @@ import 'package:mimicam/features/server/media/media_runtime_controller.dart';
 import 'package:mimicam/features/server/server_home_screen.dart';
 import 'package:mimicam/features/server/server_runtime.dart';
 import 'package:mimicam/features/shared/presentation/mimicam_shells.dart';
+import 'package:mimicam/l10n/app_strings.dart';
 import 'package:mimicam/services/configuration_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -25,6 +27,9 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
         home: ClientHomeScreen(
           runtime: runtime,
           activeRole: AppRole.client,
@@ -54,6 +59,9 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
         home: ServerHomeScreen(
           runtime: runtime,
           config: ConfigurationService(preferences),
@@ -80,6 +88,9 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
         home: ClientHomeScreen(
           runtime: runtime,
           activeRole: AppRole.client,
@@ -96,3 +107,10 @@ void main() {
 void _expectNoFlutterException(WidgetTester tester) {
   expect(tester.takeException(), isNull);
 }
+
+const _localizationsDelegates = [
+  AppStrings.delegate,
+  GlobalMaterialLocalizations.delegate,
+  GlobalWidgetsLocalizations.delegate,
+  GlobalCupertinoLocalizations.delegate,
+];

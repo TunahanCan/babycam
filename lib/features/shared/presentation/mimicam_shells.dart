@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/app_role.dart';
+import '../../../l10n/app_strings.dart';
 import 'mimicam_design_tokens.dart';
 
 class MimiCamCard extends StatelessWidget {
@@ -34,6 +35,7 @@ class MimiCamTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     final color = dark ? Colors.white : MimiCamDesignTokens.navy;
     final chipColor = dark ? Colors.white.withValues(alpha: .12) : Colors.white;
     return Row(
@@ -63,7 +65,7 @@ class MimiCamTopBar extends StatelessWidget {
         TextButton.icon(
           onPressed: onResetRole,
           icon: Icon(Icons.swap_horiz_rounded, color: color),
-          label: Text('Rol değiştir', style: TextStyle(color: color)),
+          label: Text(strings.ui('changeRole'), style: TextStyle(color: color)),
         ),
       ],
     );
@@ -86,6 +88,7 @@ class MimiCamRoleSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     final borderColor =
         dark ? Colors.white.withValues(alpha: .24) : const Color(0xFFD7E1E8);
     final backgroundColor =
@@ -103,8 +106,8 @@ class MimiCamRoleSwitch extends StatelessWidget {
             child: _RoleSwitchSide(
               role: AppRole.client,
               activeRole: activeRole,
-              title: 'CLIENT',
-              subtitle: 'EBEVEYN',
+              title: strings.ui('clientRoleTitle'),
+              subtitle: strings.ui('parentRoleSubtitle'),
               dark: dark,
               enabled: enabled,
               onTap: onRoleSelected,
@@ -119,8 +122,8 @@ class MimiCamRoleSwitch extends StatelessWidget {
             child: _RoleSwitchSide(
               role: AppRole.server,
               activeRole: activeRole,
-              title: 'SERVER',
-              subtitle: 'BEBEK ODASI',
+              title: strings.ui('serverRoleTitle'),
+              subtitle: strings.ui('babyRoomRoleSubtitle'),
               dark: dark,
               enabled: enabled,
               onTap: onRoleSelected,
@@ -148,12 +151,17 @@ class MimiCamRoleBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     final isClient = activeRole == AppRole.client;
     final nextRole = isClient ? AppRole.server : AppRole.client;
     final accent =
         isClient ? MimiCamDesignTokens.mint : MimiCamDesignTokens.pink;
-    final title = isClient ? 'CLIENT' : 'SERVER';
-    final subtitle = isClient ? 'EBEVEYN' : 'BEBEK ODASI';
+    final title = isClient
+        ? strings.ui('clientRoleTitle')
+        : strings.ui('serverRoleTitle');
+    final subtitle = isClient
+        ? strings.ui('parentRoleSubtitle')
+        : strings.ui('babyRoomRoleSubtitle');
     final textColor = dark ? Colors.white : MimiCamDesignTokens.navy;
     final mutedColor = dark ? Colors.white70 : MimiCamDesignTokens.slate;
     final backgroundColor = dark
@@ -164,7 +172,7 @@ class MimiCamRoleBadge extends StatelessWidget {
 
     return RepaintBoundary(
       child: Tooltip(
-        message: '$title rolü aktif. Değiştirmek için dokun.',
+        message: strings.uiFormat('roleBadgeTooltip', {'title': title}),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
