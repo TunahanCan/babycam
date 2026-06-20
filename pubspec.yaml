@@ -23,6 +23,8 @@ dependencies:
   record: ^7.1.0
   crypto: ^3.0.3
   mobile_scanner: ^7.2.0
+  basic_utils: ^5.8.2
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:

@@ -4,22 +4,24 @@ import 'dart:io';
 import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_payload.dart';
 import '../../../core/protocol/pairing_session.dart';
+import '../../../core/security/pinned_http_client_factory.dart';
+
+const _fingerprintMismatchMessage =
+    'Server güvenlik parmak izi eşleşmedi. QR’ı yenileyip tekrar deneyin.';
 
 class QRPairingClient {
+  QRPairingClient({PinnedHttpClientFactory? pinnedHttpClientFactory})
+      : _pinnedHttpClientFactory =
+            pinnedHttpClientFactory ?? PinnedHttpClientFactory();
+
+  final PinnedHttpClientFactory _pinnedHttpClientFactory;
+
   Future<PairingSession> pair(PairingPayload payload) async {
-    final client = HttpClient();
-    final transport =
-        payload.capabilities['transport'] == 'https' ? 'https' : 'http';
-    client.badCertificateCallback = (certificate, host, port) {
-      // TODO: validate certificate.der SHA-256 against payload.certificateFingerprintSha256
-      // once platform-compatible self-signed certificate generation is wired.
-      return transport == 'https' &&
-          payload.certificateFingerprintSha256.isNotEmpty;
-    };
+    final client = _clientForPayload(payload);
     try {
       final request = await client.postUrl(
         Uri(
-          scheme: transport,
+          scheme: payload.httpScheme,
           host: payload.host,
           port: payload.port,
           path: MimiCamProtocolV2.pairConfirm,
@@ -49,9 +51,23 @@ class QRPairingClient {
             json['trustedClientTokenExpiresAtMs'] is int
                 ? json['trustedClientTokenExpiresAtMs'] as int
                 : 0,
+        pairedAtMs: DateTime.now().millisecondsSinceEpoch,
       );
+    } on HandshakeException catch (_) {
+      throw StateError(_fingerprintMismatchMessage);
+    } on TlsException catch (_) {
+      throw StateError(_fingerprintMismatchMessage);
     } finally {
       client.close(force: true);
     }
+  }
+
+  HttpClient _clientForPayload(PairingPayload payload) {
+    if (payload.httpScheme != 'https') return HttpClient();
+    return _pinnedHttpClientFactory.create(
+      expectedFingerprintSha256Hex: payload.certificateFingerprintSha256,
+      expectedHost: payload.host,
+      expectedPort: payload.port,
+    );
   }
 }

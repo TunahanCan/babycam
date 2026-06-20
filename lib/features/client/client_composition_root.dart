@@ -7,6 +7,7 @@ import 'media/network_quality_monitor.dart';
 import 'media/stream_session_controller.dart';
 import 'pairing/pairing_session_store.dart';
 import 'pairing/qr_pairing_client.dart';
+import 'pairing/trusted_token_renewal_client.dart';
 import '../../l10n/app_strings.dart';
 
 class ClientCompositionRoot {
@@ -17,6 +18,7 @@ class ClientCompositionRoot {
   }) {
     createCount++;
     final pairingClient = QRPairingClient();
+    final tokenRenewal = TrustedTokenRenewalClient();
     final store = PairingSessionStore(preferences);
     final streams = StreamSessionController();
     final networkQuality = NetworkQualityMonitor();
@@ -28,12 +30,17 @@ class ClientCompositionRoot {
         await store.save(session);
         return session;
       },
+      renew: (session) async {
+        final renewed = await tokenRenewal.renew(session);
+        if (renewed != null) await store.save(renewed);
+        return renewed;
+      },
       startStream: streams.start,
       stopStream: streams.stop,
       watchNetworkQuality: networkQuality.watch,
-      startAlerts: () async {
+      startAlerts: (session) async {
         await notifications.initialize(strings: strings);
-        await alerts.start();
+        await alerts.start(session);
       },
       stopAlerts: alerts.stop,
       clearStore: store.clear,

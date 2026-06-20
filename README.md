@@ -31,6 +31,7 @@ Rol seçimi ilk açılışta yapılır ve cihazda saklanır. Günlük kullanımd
 | Kesin rol ayrımı | Server ve Client graph'ları aynı anda kurulmaz; seçilmeyen role ait servisler kapalı kalır. |
 | QR + manuel IP eşleşme | Server QR/IP bileti üretir; Client QR tarar veya IP:port fallback kullanır. |
 | Büyük okunabilir QR | Server QR/IP ekranındaki QR, küçük telefonların okuyabilmesi için responsive olarak büyür. |
+| Yerel HTTPS/WSS | Release varsayılanı self-signed TLS + certificate fingerprint pinning’dir; HTTP/WS yalnızca debug geliştirici modunda açılabilir. |
 | Yerel yayın | Video MJPEG, ses PCM/WAV stream olarak aynı LAN içinde aktarılır. |
 | Çoklu ebeveyn cihazı | Eşleşmiş birden fazla Client aynı Server yayınına bağlanabilir; kalite ortak kapasiteye göre dengelenir. |
 | Akıllı uyarılar | Hareket ve ağlama analizlerinden ebeveyne anlamlı, lokalize mesajlar üretilir. |
@@ -75,6 +76,8 @@ Client modunda yayın durdurma, QR üretme, kamera/mikrofon server kontrolleri v
 serverDeviceId + certificateFingerprintSha256 + pairingNonce
 ```
 
+Server ilk açılışta yerel self-signed RSA 2048 sertifika üretir ve bunu uygulama destek dizininde saklar. QR payload aktif sertifikanın SHA-256 DER fingerprint’ini taşır. Client, QR veya manuel HTTPS `/status/public` keşfinden aldığı fingerprint ile HTTPS/WSS bağlantılarını pin’ler; fingerprint uyuşmazsa eşleşme ve stream istekleri başarısız olur.
+
 Eşleşme sonrasında Client süreli token ile çalışır:
 
 ```text
@@ -89,8 +92,8 @@ Kurallar:
 - Token varsayılan olarak 60 gün geçerlidir ve son 7 günde yenilenebilir.
 - Korunan endpointler Bearer token ister.
 - Token loglara yazılmamalıdır.
-
-Mevcut runtime yerel HTTP/WS ile çalışır; mimari production hedefi kalıcı self-signed TLS ve fingerprint pinning ile HTTPS/WSS’e taşınacak şekilde tasarlanmıştır.
+- `/pair/confirm`, `/auth/renew`, `/session/start`, `/session/stop`, `/quality/report`, `/status`, `/video`, `/audio` ve `/ws/events` release modda HTTPS/WSS üzerinden çalışır.
+- HTTP/WS yalnızca debug build’de `insecureHttpDevOnly` geliştirici konfigürasyonu ile kullanılabilir.
 
 ---
 
@@ -157,7 +160,8 @@ Tüm ana ekran yazıları, butonlar, rol metinleri, uyarı mesajları ve placeho
 - Framework: Flutter / Dart
 - Platform hedefi: Android ve iOS
 - State/runtime: Role-aware composition root + runtime state stream
-- Pairing: QR payload + nonce + HTTP pair confirm
+- Transport: Self-signed local HTTPS/WSS + SHA-256 certificate fingerprint pinning
+- Pairing: QR payload + nonce + HTTPS pair confirm
 - Yetkilendirme: Bearer trusted client token
 - Video: MJPEG stream
 - Ses: PCM16LE/WAV stream
@@ -215,6 +219,7 @@ Repo; rol izolasyonu, permission policy, pairing, runtime lifecycle, network qua
 - `test/core/media/adaptive_media_profile_test.dart`
 - `test/core/media/client_quality_tracker_test.dart`
 - `test/features/client/network_quality_monitor_test.dart`
+- `test/core/security/*`
 - `test/l10n/app_strings_test.dart`
 - `test/analysis/audio/*`
 - `test/analysis/video/*`
@@ -224,7 +229,7 @@ Repo; rol izolasyonu, permission policy, pairing, runtime lifecycle, network qua
 
 ## Yol Haritası
 
-- Kalıcı self-signed TLS certificate üretimi ve pinning akışı.
+- Sertifika private key saklamasını secure storage katmanına taşıma.
 - Native Android foreground service kanalının tamamlanması.
 - iOS lifecycle ve yerel ağ izin metinlerinin olgunlaştırılması.
 - Token revoke/renew kullanıcı arayüzleri.

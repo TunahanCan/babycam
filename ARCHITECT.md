@@ -8,7 +8,7 @@ Bu doküman MimiCam’in güncel Flutter mimarisini anlatır. Ana hedef, projeye
 
 1. **Strict role isolation:** Server ve Client aynı anda çalışmaz; sadece seçilen rolün composition root’u kurulur.
 2. **Local-first:** Video, ses, status ve event akışları aynı Wi‑Fi/LAN içinde kalır; cloud relay yoktur.
-3. **QR/IP-first pairing:** İlk güven QR payload ile kurulur; manuel IP fallback aynı pairing endpointine bağlanır.
+3. **QR/IP-first pairing:** İlk güven QR payload’daki sertifika fingerprint’i ve nonce ile kurulur; manuel IP fallback HTTPS `/status/public` keşfiyle aynı pairing endpointine bağlanır.
 4. **Token continuity:** Pairing sonrası Client süreli trusted token ile oturumunu sürdürür.
 5. **Resource on demand:** Kamera, mikrofon, encoder ve analyzer ihtiyaç oldukça açılır.
 6. **Adaptive media:** Cihaz kapasitesi, aktif Client ağ ölçümleri ve izleyici sayısı yayın profilini belirler.
@@ -168,7 +168,7 @@ ServerRuntime
 Sorumluluklar:
 
 - Pairing nonce ve trusted token üretimi.
-- HTTP endpointlerini başlatma.
+- HTTPS/WSS endpointlerini başlatma.
 - QR payload üretme.
 - Kamera/mikrofon runtime lifecycle.
 - Aktif medya profilini UI’a taşıma.
@@ -243,11 +243,16 @@ Payload ana alanları:
   "pairingNonce": "one_time_nonce",
   "expiresAtMs": 1710000000000,
   "certificateFingerprintSha256": "sha256_hex",
+  "transport": {
+    "httpScheme": "https",
+    "wsScheme": "wss",
+    "tlsMode": "selfSignedPinned"
+  },
   "capabilities": {
     "video": "mjpeg",
     "audio": "pcm16le",
     "events": "json",
-    "transport": "http",
+    "transport": "https",
     "mediaProfile": {}
   }
 }
@@ -261,12 +266,34 @@ Kurallar:
 - Server token hash saklar; düz metin token saklamaz.
 - Token lifetime 60 gündür, renew window 7 gündür.
 - Runtime dispose olduğunda tokenlar revoke edilir.
+- Sertifika fingerprint’i değişirse mevcut pairing güven bağı geçersiz kabul edilir ve Client’ın yeniden eşleşmesi gerekir.
 
 ---
 
 ## 9. Endpoint ve Transport
 
-Güncel runtime yerel HTTP/WS üstünde çalışır. Production hedefi `LocalTlsCertificateManager` ve `CertificateFingerprint` ile HTTPS/WSS pinning’e taşımaktır.
+Release/runtime varsayılan transport `localTlsPinned` modudur:
+
+```text
+MimiCamServer.startPairingMode
+  ↓
+LocalTlsCertificateManager.loadOrCreate
+  ↓
+SecurityContext TLS 1.2+
+  ↓
+HttpServer.bindSecure
+  ↓
+HTTPS endpoints + aynı server üstünde WSS /ws/events
+```
+
+`TransportSecurityConfig.insecureHttpDevOnly` sadece debug build’de HTTP/WS açabilir. Profile/release benzeri modda insecure transport `StateError` ile durdurulur.
+
+Client tarafı merkezi URL ve pinned client katmanlarını kullanır:
+
+- `ServerEndpointBuilder` session’daki `httpScheme/wsScheme` ile URL üretir.
+- `PinnedHttpClientFactory` `SecurityContext(withTrustedRoots: false)` kullanır ve sadece beklenen host, port ve SHA-256 certificate fingerprint eşleşirse self-signed sertifikayı kabul eder.
+- `QRPairingClient`, `TrustedTokenRenewalClient`, `StreamSessionController`, `NetworkQualityMonitor` ve `ClientAlertListener` secure session’da pinned client kullanır.
+- Manuel IP fallback production’da önce HTTPS `/status/public` çağırır, token göndermez ve keşfedilen fingerprint’i pairing payload’a bağlar. HTTP fallback yalnızca debug’da denenir.
 
 | Endpoint | Amaç | Yetki |
 | --- | --- | --- |
@@ -281,7 +308,7 @@ Güncel runtime yerel HTTP/WS üstünde çalışır. Production hedefi `LocalTls
 | `/ws/events` | Alert/status event akışı | Bearer token |
 | `/status` | Server status ve media profile | Bearer token |
 
-Geçici not: Native viewer tamamlanana kadar streamlerde query token desteği korunur; hedef Authorization header ağırlıklı akıştır.
+Native viewer tamamlanana kadar streamlerde query token desteği korunur; yeni runtime HTTP ve WSS çağrılarında Authorization header’ı önceliklidir.
 
 ---
 
@@ -463,6 +490,7 @@ Test katmanları:
 - **Client quality aggregation:** `test/core/media/client_quality_tracker_test.dart`
 - **Network quality:** `test/features/client/network_quality_monitor_test.dart`
 - **Pairing:** `test/core/pairing_payload_test.dart`, `test/features/client/qr_pairing_client_test.dart`
+- **Transport security:** `test/core/security/*`
 - **Runtime lifecycle:** `test/features/server/server_runtime_lifecycle_test.dart`, `test/features/client/client_runtime_lifecycle_test.dart`
 - **Analysis:** `test/analysis/audio/*`, `test/analysis/video/*`, `test/analysis/alert/*`
 - **Localization:** `test/l10n/app_strings_test.dart`
@@ -510,7 +538,7 @@ Mimari şu parçaları özellikle içermez:
 
 ## 19. Gelecek Mimari İşler
 
-- `HttpServer.bindSecure` ve kalıcı self-signed certificate saklama.
+- Local TLS private key saklamasını secure storage arkasına taşıma.
 - Certificate fingerprint pinning UI ve hata akışı.
 - Token revoke/renew ekranları.
 - Native Android foreground service implementasyonu.

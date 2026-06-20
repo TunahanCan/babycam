@@ -1061,6 +1061,19 @@ const _uiText = <String, Map<String, String>>{
     'es': 'No se pudo emparejar: {error}',
     'fr': 'Échec de l’appairage : {error}'
   },
+  'securityFingerprintMismatch': {
+    'tr':
+        'Server güvenlik parmak izi eşleşmedi. QR’ı yenileyip tekrar deneyin.',
+    'en':
+        'Server security fingerprint did not match. Refresh the QR and try again.',
+    'zh': 'Server 安全指纹不匹配。请刷新二维码后重试。',
+    'hi':
+        'Server सुरक्षा फिंगरप्रिंट मेल नहीं खाया। QR को रीफ़्रेश करके फिर कोशिश करें।',
+    'es':
+        'La huella de seguridad del server no coincide. Actualiza el QR e inténtalo de nuevo.',
+    'fr':
+        'L’empreinte de sécurité du server ne correspond pas. Actualisez le QR puis réessayez.'
+  },
   'invalidIpFormat': {
     'tr': 'IP formatı geçersiz. Örnek: 192.168.1.20:8080',
     'en': 'Invalid IP format. Example: 192.168.1.20:8080',

@@ -20,6 +20,8 @@ import '../core/media/adaptive_media_profile.dart';
 import '../core/media/client_quality_tracker.dart';
 import '../core/mimicam_protocol.dart';
 import '../core/protocol/mimicam_protocol.dart' as protocol_v2;
+import '../core/security/local_tls_certificate_manager.dart';
+import '../core/security/transport_security_config.dart';
 import '../features/server/pairing/pairing_token_service.dart';
 import '../l10n/app_strings.dart';
 import 'configuration_service.dart';
@@ -43,8 +45,15 @@ class MimiCamServer {
     this.onMediaProfileChanged,
     DeviceCapabilityTier? deviceTier,
     PairingTokenService? tokenService,
+    TransportSecurityConfig transportSecurityConfig =
+        TransportSecurityConfig.secureDefault,
+    LocalTlsCertificateManager? localTlsCertificateManager,
   })  : tokenService = tokenService ?? PairingTokenService(),
+        transportSecurityConfig = transportSecurityConfig,
+        _localTlsCertificateManager =
+            localTlsCertificateManager ?? LocalTlsCertificateManager(),
         _deviceTier = deviceTier ?? DeviceCapabilityProbe.detectTier() {
+    transportSecurityConfig.validateForBuildMode();
     _activeMediaProfile = MediaQualityProfile.forDeviceTier(_deviceTier);
     _frameBudget.updateMinInterval(_activeMediaProfile.frameInterval);
   }
@@ -58,6 +67,8 @@ class MimiCamServer {
   final void Function(String message) onAlert;
   final void Function(MediaQualityProfile profile)? onMediaProfileChanged;
   final PairingTokenService tokenService;
+  final TransportSecurityConfig transportSecurityConfig;
+  final LocalTlsCertificateManager _localTlsCertificateManager;
   final _audioRecorder = AudioRecorder();
   MediaAnalysisCoordinator? _analysisCoordinator;
   MediaAnalysisMetrics? _analysisMetrics;
@@ -72,6 +83,8 @@ class MimiCamServer {
   CameraController? cameraController;
   DeviceCapabilityTier get deviceTier => _deviceTier;
   MediaQualityProfile get activeMediaProfile => _activeMediaProfile;
+  String get certificateFingerprintSha256 =>
+      _localTlsCertificate?.fingerprintSha256Hex ?? '';
   Map<String, Object?> get mediaCapabilities => _mediaCapabilities();
 
   HttpServer? _httpServer;
@@ -79,6 +92,7 @@ class MimiCamServer {
   bool _disposed = false;
   StreamSubscription<Uint8List>? _audioSubscription;
   Uint8List? _latestJpeg;
+  LocalTlsCertificate? _localTlsCertificate;
   int _lastAudioDebugLog = 0;
   final _frameBudget = MediaFrameBudget();
   final _encodingPolicy = const MediaEncodingPolicy();
@@ -97,10 +111,35 @@ class MimiCamServer {
 
   Future<String> startPairingMode() async {
     if (_disposed) throw StateError('MimiCamServer is disposed.');
+    final address = await NetworkAddressProvider.localHttpAddress() ??
+        '${InternetAddress.loopbackIPv4.address}:${MimiCamProtocol.httpPort}';
+    final host = address.split(':').first;
     if (_httpServer == null) {
-      final server = await HttpServer.bind(
-          InternetAddress.anyIPv4, MimiCamProtocol.httpPort,
-          shared: true);
+      late final HttpServer server;
+      if (transportSecurityConfig.isSecure) {
+        final certificate = await _localTlsCertificateManager.loadOrCreate(
+          deviceId: 'server_local',
+          deviceName: 'Bebek Odası',
+          currentHostIps: [host, InternetAddress.loopbackIPv4.address],
+        );
+        _localTlsCertificate = certificate;
+        final context = _localTlsCertificateManager.createServerSecurityContext(
+          certificate,
+        );
+        server = await HttpServer.bindSecure(
+          InternetAddress.anyIPv4,
+          MimiCamProtocol.httpPort,
+          context,
+          shared: true,
+        );
+      } else {
+        transportSecurityConfig.validateForBuildMode();
+        server = await HttpServer.bind(
+          InternetAddress.anyIPv4,
+          MimiCamProtocol.httpPort,
+          shared: true,
+        );
+      }
       if (_disposed) {
         await server.close(force: true);
         throw StateError('MimiCamServer is disposed.');
@@ -111,10 +150,9 @@ class MimiCamServer {
       _httpServerListening = true;
       _httpServer!.listen(_handleRequest);
     }
-    final address = await NetworkAddressProvider.localHttpAddress() ??
-        '${InternetAddress.loopbackIPv4.address}:${MimiCamProtocol.httpPort}';
-    onLog(strings.serverStartedLog('http://$address/'));
-    return 'http://$address/';
+    final url = '${transportSecurityConfig.httpScheme}://$address/';
+    onLog(strings.serverStartedLog(url));
+    return url;
   }
 
   Future<void> startMediaRuntime() async {
@@ -330,6 +368,8 @@ class MimiCamServer {
           'serverDeviceId': 'server_local',
           'serverName': 'Bebek Odası',
           'pairingNonce': tokenService.createPairingNonce(),
+          'certificateFingerprintSha256': certificateFingerprintSha256,
+          'transport': transportSecurityConfig.toPayloadTransport(),
           'capabilities': _mediaCapabilities(),
         });
         return;
@@ -565,8 +605,9 @@ class MimiCamServer {
         'audio': _activeMediaProfile.audioCodec,
         'audioPreferred': _activeMediaProfile.preferredAudioCodec,
         'events': 'json',
-        'transport': 'http',
+        'transport': transportSecurityConfig.httpScheme,
         'transportPreferred': 'webrtc',
+        'certificateFingerprintSha256': certificateFingerprintSha256,
         'deviceTier': _deviceTier.name,
         'mediaProfile': _activeMediaProfile.toJson(),
       };

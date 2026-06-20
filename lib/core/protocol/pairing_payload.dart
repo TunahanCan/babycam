@@ -13,6 +13,7 @@ class PairingPayload {
       required this.pairingNonce,
       required this.expiresAtMs,
       this.certificateFingerprintSha256 = '',
+      this.transport = const <String, Object?>{},
       required this.capabilities});
   final int schemaVersion;
   final String scheme;
@@ -23,9 +24,21 @@ class PairingPayload {
   final String pairingNonce;
   final int expiresAtMs;
   final String certificateFingerprintSha256;
+  final Map<String, Object?> transport;
   final Map<String, Object?> capabilities;
 
   bool get isExpired => DateTime.now().millisecondsSinceEpoch > expiresAtMs;
+  String get httpScheme {
+    final scheme = transport['httpScheme']?.toString();
+    if (scheme == 'https' || scheme == 'http') return scheme!;
+    return capabilities['transport'] == 'https' ? 'https' : 'http';
+  }
+
+  String get wsScheme {
+    final scheme = transport['wsScheme']?.toString();
+    if (scheme == 'wss' || scheme == 'ws') return scheme!;
+    return httpScheme == 'https' ? 'wss' : 'ws';
+  }
 
   Map<String, Object?> toJson() => {
         'schemaVersion': schemaVersion,
@@ -37,6 +50,7 @@ class PairingPayload {
         'pairingNonce': pairingNonce,
         'expiresAtMs': expiresAtMs,
         'certificateFingerprintSha256': certificateFingerprintSha256,
+        'transport': transport,
         'capabilities': capabilities
       };
 
@@ -51,6 +65,7 @@ class PairingPayload {
     final expiresAtMs = json['expiresAtMs'];
     final certificateFingerprintSha256 =
         json['certificateFingerprintSha256'] ?? '';
+    final transport = json['transport'] ?? const <String, Object?>{};
     final capabilities = json['capabilities'];
     if (schemaVersion is! int ||
         schemaVersion != MimiCamProtocolV2.schemaVersion ||
@@ -62,6 +77,7 @@ class PairingPayload {
         pairingNonce is! String ||
         expiresAtMs is! int ||
         certificateFingerprintSha256 is! String ||
+        transport is! Map ||
         capabilities is! Map) {
       return null;
     }
@@ -75,6 +91,7 @@ class PairingPayload {
         pairingNonce: pairingNonce,
         expiresAtMs: expiresAtMs,
         certificateFingerprintSha256: certificateFingerprintSha256,
+        transport: Map<String, Object?>.from(transport),
         capabilities: Map<String, Object?>.from(capabilities));
   }
 

@@ -1,4 +1,6 @@
 import '../../core/protocol/pairing_payload.dart';
+import '../../core/security/local_tls_certificate_manager.dart';
+import '../../core/security/transport_security_config.dart';
 import '../../l10n/app_strings.dart';
 import '../../services/mimicam_server.dart';
 import '../../services/configuration_service.dart';
@@ -15,7 +17,10 @@ class ServerCompositionRoot {
       void Function(String message)? onLog,
       Future<String> Function()? startPairingOverride,
       Future<void> Function()? startMediaOverride,
-      Future<void> Function()? stopOverride}) {
+      Future<void> Function()? stopOverride,
+      TransportSecurityConfig transportSecurityConfig =
+          TransportSecurityConfig.secureDefault,
+      LocalTlsCertificateManager? localTlsCertificateManager}) {
     createCount++;
     final tokenService = PairingTokenService();
     void Function()? notifyMediaProfileChanged;
@@ -25,8 +30,13 @@ class ServerCompositionRoot {
         onLog: onLog ?? (_) {},
         onAlert: (_) {},
         onMediaProfileChanged: (_) => notifyMediaProfileChanged?.call(),
-        tokenService: tokenService);
-    final qrBuilder = ServerQrPayloadBuilder(tokenService: tokenService);
+        tokenService: tokenService,
+        transportSecurityConfig: transportSecurityConfig,
+        localTlsCertificateManager: localTlsCertificateManager);
+    final qrBuilder = ServerQrPayloadBuilder(
+      tokenService: tokenService,
+      transportSecurityConfig: transportSecurityConfig,
+    );
     String? lastAddress;
     final media = MediaRuntimeController(
         onStart: startMediaOverride ?? server.startMediaRuntime,
@@ -43,6 +53,8 @@ class ServerCompositionRoot {
             lastAddress = uri.host;
             final payload = qrBuilder.build(
               host: lastAddress ?? '127.0.0.1',
+              certificateFingerprintSha256: server.certificateFingerprintSha256,
+              transportSecurityConfig: transportSecurityConfig,
               capabilities: server.mediaCapabilities,
             );
             return payload.toUriString();

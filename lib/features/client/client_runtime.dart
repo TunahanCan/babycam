@@ -42,7 +42,7 @@ class ClientRuntime {
     Future<void> Function(PairingSession session)? stopStream,
     Stream<NetworkQualityUpdate> Function(PairingSession session)?
         watchNetworkQuality,
-    Future<void> Function()? startAlerts,
+    Future<void> Function(PairingSession session)? startAlerts,
     Future<void> Function()? stopAlerts,
     Future<void> Function()? clearStore,
   })  : _pair = pair,
@@ -60,7 +60,7 @@ class ClientRuntime {
   final Future<void> Function(PairingSession session)? _stopStream;
   final Stream<NetworkQualityUpdate> Function(PairingSession session)?
       _watchNetworkQuality;
-  final Future<void> Function()? _startAlerts;
+  final Future<void> Function(PairingSession session)? _startAlerts;
   final Future<void> Function()? _stopAlerts;
   final Future<void> Function()? _clearStore;
   final _states = StreamController<ClientRuntimeState>.broadcast();
@@ -149,7 +149,8 @@ class ClientRuntime {
 
   Future<void> startAlertListening() async {
     if (_disposed || _state.session == null) return;
-    await _startAlerts?.call();
+    final session = _state.session!;
+    await _startAlerts?.call(session);
     if (_disposed) {
       await _stopAlerts?.call();
       return;

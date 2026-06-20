@@ -16,7 +16,9 @@ class PairingSessionStore {
           'payload': session.payload.toJson(),
           'token': session.sessionToken,
           'clientId': session.clientId,
-          'trustedClientTokenExpiresAtMs': session.trustedClientTokenExpiresAtMs,
+          'trustedClientTokenExpiresAtMs':
+              session.trustedClientTokenExpiresAtMs,
+          'pairedAtMs': session.pairedAtMs,
         }),
       );
 
@@ -25,14 +27,20 @@ class PairingSessionStore {
     if (raw == null) return null;
     final json = jsonDecode(raw);
     if (json is! Map) return null;
-    final payload = PairingPayload.fromJson(Map<String, Object?>.from(json['payload'] as Map));
+    final payload = PairingPayload.fromJson(
+        Map<String, Object?>.from(json['payload'] as Map));
     final token = json['token'];
     return payload != null && token is String
         ? PairingSession(
             payload: payload,
             sessionToken: token,
             clientId: json['clientId']?.toString() ?? 'client_local',
-            trustedClientTokenExpiresAtMs: json['trustedClientTokenExpiresAtMs'] is int ? json['trustedClientTokenExpiresAtMs'] as int : 0,
+            trustedClientTokenExpiresAtMs:
+                json['trustedClientTokenExpiresAtMs'] is int
+                    ? json['trustedClientTokenExpiresAtMs'] as int
+                    : 0,
+            pairedAtMs:
+                json['pairedAtMs'] is int ? json['pairedAtMs'] as int : 0,
           )
         : null;
   }
