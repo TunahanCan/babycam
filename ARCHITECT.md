@@ -17,6 +17,7 @@ Ana kararlar:
 5. En fazla 5 trusted Client ve 5 aktif watch Client desteklenir.
 6. Medya pipeline audio/event öncelikli, video ise adaptif ve düşürülebilirdir.
 7. Server tek latest JPEG üretir; client başına encode veya backlog yoktur.
+8. `MimiCamServer` public facade olarak kalır; client lifecycle, auth, kalite seçimi ve backpressure küçük server policy sınıflarına ayrılır.
 
 ---
 
@@ -65,9 +66,20 @@ lib/
 │   └── shared/             # design tokens and shell widgets
 └── services/
     ├── mimicam_server.dart # local HTTP server and media pipeline
-    ├── server/             # media policy, metrics, alert protocol adapter
+    ├── server/             # client registry, auth guard, quality/backpressure policies
     └── platform/           # device capability and foreground service adapters
 ```
+
+`services/server/` altındaki ana parçalar:
+
+| Sınıf | Sorumluluk |
+| --- | --- |
+| `ActiveClientRegistry` | Aktif watch slotları, stream attach/detach, streamToken prune ve kalite tracker lifecycle’ı |
+| `RequestAuthGuard` | Bearer trusted token doğrulama ve `clientId` çözümleme |
+| `MediaQualitySelector` | Device tier + network tier + client load zincirinden medya profili seçimi |
+| `StreamBackpressureGate` | MJPEG/audio stream için busy-skip ve cleanup |
+| `MediaFrameBudget` | Encode/analyze frame aralığı |
+| `MediaEncodingPolicy` | MJPEG encode gerekip gerekmediği |
 
 ---
 
@@ -175,6 +187,8 @@ Stream token:
 - Sadece `/video` ve `/audio` için query parametresi olarak kabul edilir.
 - `/status`, `/quality/report`, `/auth/renew`, `/ws/events` için geçerli değildir.
 - Trusted token’ın query parametresi olarak kullanılmasına izin verilmez.
+- `ActiveClientRegistry` tarafından `clientId` ile ilişkilendirilir.
+- Expire olduğunda prune edilir; aktif stream bağlantısı yoksa client slotu da temizlenir.
 
 ---
 
@@ -185,8 +199,8 @@ Stream token:
 | `GET /status/public` | Pairing public bilgisi | Local ağ | Pairing mode aktifken nonce döner |
 | `POST /pair/confirm` | Trusted token üretimi | Nonce | Nonce tek kullanımlıdır |
 | `POST /auth/renew` | Trusted token yenileme | Bearer token | Revoked/expired token reddedilir |
-| `POST /session/start` | Watch slot açma | Bearer token | streamToken döner |
-| `POST /session/stop` | Watch slot kapatma | Bearer token | Slot, kalite raporu, stream token temizlenir |
+| `POST /session/start` | Watch slot açma | Bearer token | Aynı client için idempotent, streamToken döner |
+| `POST /session/stop` | Watch slot kapatma | Bearer token | Registry cleanup yapar |
 | `POST /quality/report` | Client kalite raporu | Bearer token | TTL 15 saniye |
 | `GET /status` | Private server durumu | Bearer token | Medya profili ve sayaçlar |
 | `GET /video` | MJPEG stream | Bearer veya streamToken | Query trusted token kabul edilmez |
@@ -205,12 +219,15 @@ Tüm endpointlerden önce `LocalNetworkGuard` çalışır. Guard private IPv4 bl
 
 ### Active Watch Client
 
-`MimiCamServer` aktif watch client setini `/session/start` ve `/session/stop` ile yönetir.
+`MimiCamServer` aktif watch client yönetimini `ActiveClientRegistry` üzerinden yapar. Server facade endpointleri ve media runtime’ı taşır; slot, streamToken ve kalite report lifecycle’ı registry’de toplanır.
 
 - `maxActiveWatchClients = 5`
 - 6. aktif watch isteği: `429`, `MAX_ACTIVE_CLIENTS_REACHED`
-- `/session/stop` slotu boşaltır.
-- Disconnect sonrası stream response listeleri temizlenir; session slotu stop çağrısıyla kapanır.
+- `/session/start` aynı client için idempotenttir; slot sayısı artmaz, yeni `streamToken` döner.
+- `/video` ve `/audio` auth sonucu sadece boolean değildir; trusted token veya streamToken’dan `clientId` çözülür ve stream attach edilir.
+- Aynı client video ve audio stream açarsa tek aktif slot kullanır; connection count ikisi de kapanana kadar client’ı canlı tutar.
+- `/session/stop`, stream response disconnect ve streamToken expiry aynı cleanup yolunu kullanır.
+- Cleanup slotu, stream connection sayacını, kalite raporunu ve client’a ait stream tokenları temizler.
 
 ---
 
@@ -233,9 +250,25 @@ Kurallar:
 - Client başına kamera frame encode edilmez.
 - Server yalnız tek latest JPEG’i tutar.
 - MJPEG client response busy ise yeni frame atlanır.
+- Audio client flush busy ise yeni PCM chunk atlanır.
 - Frame queue/backlog yoktur.
 - Response kapanınca MJPEG/audio client listelerinden temizlenir.
+- Response kapanınca `ActiveClientRegistry.detachStream()` çağrılır; slot orphan kalmaz.
 - Audio ve event akışı video düşse bile önceliklidir.
+
+Backpressure davranışı `StreamBackpressureGate` ile ortaktır:
+
+```text
+stream response idle
+  ↓
+chunk/frame yazılır
+  ↓
+flush future tamamlanana kadar busy
+  ↓
+busy iken gelen frame/chunk skip
+  ↓
+flush tamamlanınca idle veya hata varsa cleanup
+```
 
 ---
 
@@ -256,6 +289,14 @@ Client yükü:
 - 2–3 aktif: en fazla 640×360, 5fps, JPEG 42.
 - 4–5 aktif: 426×240 veya düşük 640×360, 2–4fps, JPEG 36–40.
 
+Kalite seçimi `MediaQualitySelector` içinde tek policy olarak tutulur:
+
+```text
+MediaQualityProfile.forDeviceTier(deviceTier)
+  .adaptForNetwork(effectiveNetworkTier)
+  .adaptForClientLoad(activeClientCount)
+```
+
 Server kalite seçimi şu sinyallerle ilerler:
 
 - Aktif watch client sayısı.
@@ -264,7 +305,7 @@ Server kalite seçimi şu sinyallerle ilerler:
 - Frame budget/backpressure.
 - Reconnect/failure davranışı.
 
-`ClientQualityTracker` raporları TTL ile tutar; süresi geçen rapor bilinmeyen sayılır.
+`ClientQualityTracker` raporları TTL ile tutar; süresi geçen rapor bilinmeyen sayılır. Tracker lifecycle’ı registry içinde olduğu için stop/disconnect/expiry sonrası kalite raporu aktif talebi düşürmez.
 
 ---
 
@@ -312,6 +353,13 @@ Ana test kümeleri:
 - Token auth ve stream token testleri.
 - Adaptive media ve backpressure testleri.
 - QR/UI overflow ve render budget testleri.
+
+Refactor sonrası özellikle korunan senaryolar:
+
+- `ActiveClientRegistry` idempotent start, disconnect cleanup, expiry prune ve çoklu stream count.
+- `MediaQualitySelector` 1, 2–3, 4–5 client ve weak/critical ağ kombinasyonları.
+- `StreamBackpressureGate` busy-skip ve cleanup davranışı.
+- HTTP auth guard: private endpointlerde query trusted token reddi, streamToken’ın yalnız media endpointlerinde kabulü.
 
 Önerilen doğrulama:
 

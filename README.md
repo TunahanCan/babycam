@@ -5,7 +5,7 @@ MimiCam, aynı local Wi‑Fi ağı içindeki telefonları basit bir bebek kamera
 - **Server / Bebek Odası:** Kamera, mikrofon, analiz, pairing ve local HTTP/WS yayınını yönetir.
 - **Client / Ebeveyn:** QR veya manuel IP:port ile eşleşir, uyarıları dinler ve canlı izleme oturumu açar.
 
-MVP’de cloud, relay, hesap sistemi, OAuth, UDP discovery, Telegram otomasyonu, HTTPS/WSS ve certificate pinning yoktur. Amaç; iki telefon ya da en fazla 5 local cihaz arasında düşük gecikmeli, zayıf Wi‑Fi’da stabil medya aktarımıdır.
+MVP’de cloud, relay, hesap sistemi, OAuth, UDP discovery, Telegram otomasyonu, HTTPS/WSS ve certificate pinning yoktur. Amaç; iki telefon ya da en fazla 5 local cihaz arasında düşük gecikmeli, zayıf Wi‑Fi’da stabil medya aktarımıdır. Server tarafında public API sade tutulur; içeride client lifecycle, auth guard, kalite seçimi ve stream backpressure ayrı küçük policy/registry sınıflarıyla yönetilir.
 
 ---
 
@@ -20,7 +20,7 @@ MimiCam MVP, aynı local Wi‑Fi ağı içinde **HTTP/WS + pairing token** model
 | Trusted cihaz | En fazla 5 eşleşmiş Client |
 | Aktif izleme | En fazla 5 eşzamanlı watch client |
 | Video | MJPEG, tek latest JPEG, client başına encode yok |
-| Audio | PCM16LE/WAV; zayıf ağda video yerine ses/event öncelikli |
+| Audio | PCM16LE/WAV; yavaş client için flush backlog biriktirmez |
 | Güvenlik kapsamı | Aynı Wi‑Fi’daki yetkisiz cihazları pairing token ile engelleme |
 
 ---
@@ -88,7 +88,9 @@ Limitler:
 
 - 6. trusted pairing isteği `409` ve `MAX_TRUSTED_CLIENTS_REACHED` döner.
 - 6. aktif watch oturumu `429` ve `MAX_ACTIVE_CLIENTS_REACHED` döner.
-- `/session/stop` aktif slotu, kalite raporunu ve stream tokenlarını temizler.
+- Aynı client tekrar `/session/start` çağırırsa slot sayısı artmaz; sadece yeni `streamToken` alır.
+- `/session/stop`, stream response disconnect ve streamToken expiry aynı cleanup yolunu kullanır.
+- Cleanup aktif slotu, kalite raporunu, stream connection sayacını ve ilgili stream tokenlarını temizler.
 
 ---
 
@@ -122,7 +124,7 @@ Payload içinde certificate fingerprint, TLS mode, `https` veya `wss` alanı bul
 
 ## Medya Kalitesi
 
-Server tek latest JPEG üretir; her Client kendi hızında okur. Client başına frame queue veya ayrı encode yoktur. Yavaş client frame kaçırır, backlog birikmez.
+Server tek latest JPEG üretir; her Client kendi hızında okur. Client başına frame queue veya ayrı encode yoktur. Yavaş client frame kaçırır, backlog birikmez. Audio stream de aynı prensiple busy/flush guard kullanır; yavaş client için PCM chunk kuyruğu büyütülmez.
 
 | Durum | Çözünürlük | FPS | JPEG | Öncelik |
 | --- | ---: | ---: | ---: | --- |
@@ -137,7 +139,7 @@ Aktif client sayısı da kaliteyi sınırlar:
 - **2–3 client:** En fazla 640×360, 5fps, JPEG 42.
 - **4–5 client:** 426×240 veya çok düşük 640×360, 2–4fps, JPEG 36–40.
 
-Server; aktif client sayısı, en kötü client kalite raporu, reconnect/failure durumu ve frame bütçesine göre kaliteyi düşürür. İyileşme daha yavaş, düşüş daha hızlı olacak şekilde tasarlanmıştır.
+Server kaliteyi `MediaQualitySelector` ile seçer: cihaz tier profili, aktif clientların en kötü ağ raporu ve aktif client sayısı sırasıyla uygulanır. İyileşme daha yavaş, düşüş daha hızlı olacak şekilde tasarlanmıştır.
 
 ---
 
@@ -156,6 +158,8 @@ Server; aktif client sayısı, en kötü client kalite raporu, reconnect/failure
 | `GET /audio` | PCM16LE/WAV stream | Bearer token veya streamToken |
 | `GET /ws/events` | Alert/event WebSocket | Bearer token |
 
+`streamToken` yalnız medya endpointlerinde geçerlidir. `/status`, `/quality/report`, `/auth/renew` ve `/ws/events` için Bearer trusted token gerekir; trusted token query parametresi olarak kabul edilmez.
+
 ---
 
 ## Proje Yapısı
@@ -173,8 +177,15 @@ lib/
 │   ├── client/             # pairing, watch, alerts, client UI/runtime
 │   ├── server/             # server UI/runtime, pairing token service
 │   └── shared/             # shared presentation primitives
-└── services/               # MimiCamServer, config, platform adapters
+└── services/               # MimiCamServer facade, config, server policies, platform adapters
 ```
+
+`lib/services/server/` altında streaming refactor parçaları bulunur:
+
+- `ActiveClientRegistry`: aktif watch client, streamToken ve kalite raporu lifecycle’ı.
+- `RequestAuthGuard`: Bearer trusted token doğrulama.
+- `MediaQualitySelector`: cihaz/ağ/client yükünden profil seçimi.
+- `StreamBackpressureGate`: video/audio stream için busy-skip kontrolü.
 
 ---
 
@@ -195,6 +206,9 @@ Odak testler:
 - `test/features/server/active_client_limit_test.dart`
 - `test/features/server/token_auth_test.dart`
 - `test/services/server/media_backpressure_test.dart`
+- `test/services/server/active_client_registry_test.dart`
+- `test/services/server/media_quality_selector_test.dart`
+- `test/services/server/stream_backpressure_gate_test.dart`
 - `test/core/media/adaptive_media_weak_wifi_test.dart`
 
 ---
