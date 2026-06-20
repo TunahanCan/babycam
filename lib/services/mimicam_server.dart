@@ -276,6 +276,8 @@ class MimiCamServer {
       }
       for (final client in _audioClients.toList()) {
         final clientId = _audioClientIds[client];
+        // Busy clients skip the current chunk instead of growing a queue; live
+        // audio freshness is more important than delayed backlog playback.
         if (!_audioBackpressure.tryMarkBusy(client)) continue;
         if (clientId != null) _audioBusyClientIds.add(clientId);
         final startedAt = DateTime.now();
@@ -357,6 +359,8 @@ class MimiCamServer {
             _mjpegBackpressure.recordSkippedVideoFrame(client);
             continue;
           }
+          // The stream is latest-frame oriented: slow clients drop frames
+          // rather than buffering old JPEGs and increasing memory pressure.
           if (!_mjpegBackpressure.tryMarkBusy(client)) continue;
           final startedAt = DateTime.now();
           _writeMjpegFrame(client, jpeg).then<void>((_) {
@@ -472,87 +476,150 @@ class MimiCamServer {
       return;
     }
 
-    switch (request.uri.path) {
-      case protocol_v2.MimiCamProtocolV2.pairConfirm:
-        await _handlePairConfirm(request);
-        return;
-      case protocol_v2.MimiCamProtocolV2.authRenew:
-        await _handleAuthRenew(request);
-        return;
-      case protocol_v2.MimiCamProtocolV2.sessionStart:
-        if (!await _requireAuth(request)) return;
-        await _handleSessionStart(request);
-        return;
-      case protocol_v2.MimiCamProtocolV2.sessionStop:
-        if (!await _requireAuth(request)) return;
-        await _handleSessionStop(request);
-        return;
-      case protocol_v2.MimiCamProtocolV2.qualityReport:
-        if (!await _requireAuth(request)) return;
-        await _handleQualityReport(request);
-        return;
-      case protocol_v2.MimiCamProtocolV2.statusPublic:
-        if (!_pairingModeActive) {
-          request.response.statusCode = HttpStatus.notFound;
-          await request.response.close();
-          return;
-        }
-        await _writeJson(request.response, {
-          'service': 'mimicam',
-          'pairing': true,
-          'serverDeviceId': 'server_local',
-          'serverName': 'Bebek Odası',
-          'pairingNonce': tokenService.createPairingNonce(),
-          'transport': transportConfig.payloadTransport,
-          'capabilities': _mediaCapabilities(),
-        });
-        return;
-      case '/video':
+    final route = _routeFor(request.uri.path);
+    if (route == null) {
+      await _writeLandingPage(request.response);
+      return;
+    }
+
+    final auth = await _authorizeRoute(request, route.authMode);
+    if (!auth.ok) return;
+    await route.handle(request, auth.clientId);
+  }
+
+  List<_RouteSpec> get _routes => [
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.pairConfirm,
+          _AuthMode.none,
+          (request, _) => _handlePairConfirm(request),
+        ),
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.authRenew,
+          _AuthMode.none,
+          (request, _) => _handleAuthRenew(request),
+        ),
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.sessionStart,
+          _AuthMode.bearer,
+          (request, _) => _handleSessionStart(request),
+        ),
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.sessionStop,
+          _AuthMode.bearer,
+          (request, _) => _handleSessionStop(request),
+        ),
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.qualityReport,
+          _AuthMode.bearer,
+          (request, _) => _handleQualityReport(request),
+        ),
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.statusPublic,
+          _AuthMode.none,
+          (request, _) => _handlePublicStatus(request),
+        ),
+        _RouteSpec(
+          '/video',
+          _AuthMode.streamToken,
+          _handleVideoRoute,
+        ),
+        _RouteSpec(
+          '/audio',
+          _AuthMode.streamToken,
+          _handleAudioRoute,
+        ),
+        _RouteSpec(
+          '/status',
+          _AuthMode.bearer,
+          (request, _) => _handlePrivateStatus(request),
+        ),
+      ];
+
+  _RouteSpec? _routeFor(String path) {
+    for (final route in _routes) {
+      if (route.path == path) return route;
+    }
+    return null;
+  }
+
+  Future<({bool ok, String? clientId})> _authorizeRoute(
+    HttpRequest request,
+    _AuthMode mode,
+  ) async {
+    switch (mode) {
+      case _AuthMode.none:
+        return (ok: true, clientId: null);
+      case _AuthMode.bearer:
+        return (ok: await _requireAuth(request), clientId: null);
+      case _AuthMode.streamToken:
+        // Stream tokens intentionally stop at media endpoints; state-changing
+        // endpoints must still prove identity with the trusted Bearer token.
         final clientId = await _requireStreamAuth(request);
-        if (clientId == null) return;
-        try {
-          await startMediaRuntime();
-          await _handleMjpeg(request.response, clientId);
-        } catch (_) {
-          _activeClientRegistry.detachStream(clientId);
-          request.response.statusCode = HttpStatus.internalServerError;
-          await request.response.close();
-        }
-        return;
-      case '/audio':
-        final clientId = await _requireStreamAuth(request);
-        if (clientId == null) return;
-        try {
-          await startMediaRuntime();
-          await _handleAudio(request.response, clientId);
-        } catch (_) {
-          _activeClientRegistry.detachStream(clientId);
-          request.response.statusCode = HttpStatus.internalServerError;
-          await request.response.close();
-        }
-        return;
-      case '/status':
-        if (!await _requireAuth(request)) return;
-        await _writeJson(request.response, {
-          'videoClients': _mjpegClients.length,
-          'audioClients': _audioClients.length,
-          'webSocketClients': _webSockets.length,
-          'activeStreamClients': _activeClientRegistry.activeClientCount,
-          'qualityReportClients': _activeClientRegistry.qualityReportCount,
-          'hasFrame': _latestJpeg != null,
-          'deviceTier': _deviceTier.name,
-          'mediaProfile': _effectiveMediaProfile().toJson(),
-          'jpegBytesPerSecond':
-              _jpegByteBudgetController.lastActualBytesPerSecond(
-            _activeMediaProfile,
-          ),
-          if (_analysisCoordinator != null)
-            ..._analysisCoordinator!.diagnostics(),
-        });
-        return;
-      default:
-        await _writeLandingPage(request.response);
-        return;
+        return (ok: clientId != null, clientId: clientId);
+    }
+  }
+
+  Future<void> _handlePublicStatus(HttpRequest request) async {
+    if (!_pairingModeActive) {
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
+      return;
+    }
+    await _writeJson(request.response, {
+      'service': 'mimicam',
+      'pairing': true,
+      'serverDeviceId': 'server_local',
+      'serverName': 'Bebek Odası',
+      'pairingNonce': tokenService.createPairingNonce(),
+      'transport': transportConfig.payloadTransport,
+      'capabilities': _mediaCapabilities(),
+    });
+  }
+
+  Future<void> _handlePrivateStatus(HttpRequest request) async {
+    await _writeJson(request.response, {
+      'videoClients': _mjpegClients.length,
+      'audioClients': _audioClients.length,
+      'webSocketClients': _webSockets.length,
+      'activeStreamClients': _activeClientRegistry.activeClientCount,
+      'qualityReportClients': _activeClientRegistry.qualityReportCount,
+      'hasFrame': _latestJpeg != null,
+      'deviceTier': _deviceTier.name,
+      'mediaProfile': _effectiveMediaProfile().toJson(),
+      'jpegBytesPerSecond': _jpegByteBudgetController.lastActualBytesPerSecond(
+        _activeMediaProfile,
+      ),
+      if (_analysisCoordinator != null) ..._analysisCoordinator!.diagnostics(),
+    });
+  }
+
+  Future<void> _handleVideoRoute(
+    HttpRequest request,
+    String? clientId,
+  ) async {
+    if (clientId == null) return;
+    try {
+      await startMediaRuntime();
+      await _handleMjpeg(request.response, clientId);
+    } catch (_) {
+      _activeClientRegistry.detachStream(clientId);
+      request.response.statusCode = HttpStatus.internalServerError;
+      await request.response.close();
+    }
+  }
+
+  Future<void> _handleAudioRoute(
+    HttpRequest request,
+    String? clientId,
+  ) async {
+    if (clientId == null) return;
+    try {
+      await startMediaRuntime();
+      await _handleAudio(request.response, clientId);
+    } catch (_) {
+      _activeClientRegistry.detachStream(clientId);
+      request.response.statusCode = HttpStatus.internalServerError;
+      await request.response.close();
     }
   }
 
@@ -705,6 +772,8 @@ class MimiCamServer {
         await request.response.close();
         return;
       }
+      // Body clientId is telemetry metadata only; the trusted Bearer token owns
+      // the identity used for quality decisions and cleanup.
       final report = ClientQualityReport.fromJson(
         Map<Object?, Object?>.from(json),
         clientId: auth.clientId,
@@ -1040,4 +1109,14 @@ class MimiCamServer {
     _cryActive = false;
     _lastCryActiveAtMs = null;
   }
+}
+
+enum _AuthMode { none, bearer, streamToken }
+
+class _RouteSpec {
+  const _RouteSpec(this.path, this.authMode, this.handle);
+
+  final String path;
+  final _AuthMode authMode;
+  final Future<void> Function(HttpRequest request, String? clientId) handle;
 }

@@ -172,6 +172,67 @@ void main() {
     expect(find.text(payload), findsNothing);
   });
 
+  testWidgets('client settings metinleri locale catalogundan gelir',
+      (tester) async {
+    final strings = AppStrings(const Locale('es'));
+    final runtime = ClientRuntime(
+      pair: (_) => throw UnimplementedError(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('es'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ClientHomeScreen(
+          runtime: runtime,
+          activeRole: AppRole.client,
+          onRoleSelected: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(strings.ui('navSettings')).last);
+    await tester.pumpAndSettle();
+
+    expect(find.text(strings.ui('languageSelectText')), findsOneWidget);
+    expect(find.text(strings.ui('keepAwakeClientText')), findsOneWidget);
+    _expectNoFlutterException(tester);
+  });
+
+  testWidgets('server settings slider specleri dar ekranda render olur',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final preferences = await SharedPreferences.getInstance();
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(),
+      onStartPairing: () async => 'mimicam://pair?payload=x',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ServerHomeScreen(
+          runtime: runtime,
+          config: ConfigurationService(preferences),
+          activeRole: AppRole.server,
+          onRoleSelected: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Ayarlar').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Slider), findsNWidgets(5));
+    _expectNoFlutterException(tester);
+  });
+
   testWidgets('pahalı ortak yüzeyler repaint boundary ile izole edilir',
       (tester) async {
     final runtime = ClientRuntime(

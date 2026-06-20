@@ -1182,48 +1182,7 @@ class _NotificationList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final items = [
-      _NotificationSpec(
-        Icons.notifications_active_outlined,
-        strings.ui('cryDetectedTitle'),
-        strings.ui('cryDetectedText'),
-        '12:32',
-        strings.ui('important'),
-        MimiCamDesignTokens.blushSoft,
-      ),
-      _NotificationSpec(
-        Icons.directions_run_rounded,
-        strings.ui('motionDetectedTitle'),
-        strings.ui('motionDetectedText'),
-        '12:28',
-        strings.ui('info'),
-        const Color(0xFFEFFAF5),
-      ),
-      _NotificationSpec(
-        Icons.nights_stay_rounded,
-        strings.ui('temperatureWarningTitle'),
-        strings.ui('temperatureWarningText'),
-        '11:45',
-        strings.ui('warning'),
-        const Color(0xFFFFF7E8),
-      ),
-      _NotificationSpec(
-        Icons.wifi_rounded,
-        strings.ui('connectionRenewedTitle'),
-        strings.ui('connectionRenewedText'),
-        '11:30',
-        strings.ui('system'),
-        const Color(0xFFF1F5FB),
-      ),
-      _NotificationSpec(
-        Icons.water_drop_outlined,
-        strings.ui('humidityNormalTitle'),
-        strings.ui('humidityNormalText'),
-        '10:55',
-        strings.ui('info'),
-        const Color(0xFFF7EFFB),
-      ),
-    ];
+    final items = _parentNotificationSpecs(strings);
 
     return Column(
       children: [
@@ -1234,6 +1193,53 @@ class _NotificationList extends StatelessWidget {
       ],
     );
   }
+}
+
+List<_NotificationSpec> _parentNotificationSpecs(AppStrings strings) {
+  // Demo parent feed items stay data-only so the screen build tree does not
+  // need to change when real alert history replaces these fixtures.
+  return [
+    _NotificationSpec(
+      Icons.notifications_active_outlined,
+      strings.ui('cryDetectedTitle'),
+      strings.ui('cryDetectedText'),
+      '12:32',
+      strings.ui('important'),
+      MimiCamDesignTokens.blushSoft,
+    ),
+    _NotificationSpec(
+      Icons.directions_run_rounded,
+      strings.ui('motionDetectedTitle'),
+      strings.ui('motionDetectedText'),
+      '12:28',
+      strings.ui('info'),
+      const Color(0xFFEFFAF5),
+    ),
+    _NotificationSpec(
+      Icons.nights_stay_rounded,
+      strings.ui('temperatureWarningTitle'),
+      strings.ui('temperatureWarningText'),
+      '11:45',
+      strings.ui('warning'),
+      const Color(0xFFFFF7E8),
+    ),
+    _NotificationSpec(
+      Icons.wifi_rounded,
+      strings.ui('connectionRenewedTitle'),
+      strings.ui('connectionRenewedText'),
+      '11:30',
+      strings.ui('system'),
+      const Color(0xFFF1F5FB),
+    ),
+    _NotificationSpec(
+      Icons.water_drop_outlined,
+      strings.ui('humidityNormalTitle'),
+      strings.ui('humidityNormalText'),
+      '10:55',
+      strings.ui('info'),
+      const Color(0xFFF7EFFB),
+    ),
+  ];
 }
 
 class _NotificationSpec {

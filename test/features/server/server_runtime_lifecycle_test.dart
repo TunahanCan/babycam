@@ -71,6 +71,40 @@ void main() {
     expect(media.isActive, isFalse);
   });
 
+  test('Media start eşzamanlı çağrılarda tek kez çalışır', () async {
+    final startCompleter = Completer<void>();
+    var startCount = 0;
+    final media = MediaRuntimeController(
+      onStart: () async {
+        startCount++;
+        await startCompleter.future;
+      },
+    );
+
+    final first = media.start();
+    final second = media.start();
+
+    startCompleter.complete();
+    await Future.wait([first, second]);
+
+    expect(startCount, 1);
+    expect(media.isActive, isTrue);
+  });
+
+  test('Media start hata alırsa aktif kalmaz ve stop çağırmaz', () async {
+    var stopCount = 0;
+    final media = MediaRuntimeController(
+      onStart: () async => throw StateError('camera unavailable'),
+      onStop: () async => stopCount++,
+    );
+
+    await expectLater(media.start(), throwsStateError);
+    await media.stop();
+
+    expect(media.isActive, isFalse);
+    expect(stopCount, 0);
+  });
+
   test('Server dispose pairing start yarışından sonra medyayı başlatmaz',
       () async {
     final pairingStarted = Completer<void>();

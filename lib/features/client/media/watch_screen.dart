@@ -72,14 +72,7 @@ class _WatchScreenState extends State<WatchScreen> {
           _LiveMetricGrid(quality: quality, profile: profile),
           const SizedBox(height: 18),
           _ActionGroup(
-            actions: [
-              _ActionSpec(Icons.wifi_rounded, strings.ui('reconnect'),
-                  const Color(0xFFFFE3EA), () {}),
-              _ActionSpec(Icons.qr_code_2_rounded, strings.ui('changeAddress'),
-                  _mintSoft, () => Navigator.pop(context)),
-              _ActionSpec(Icons.nights_stay_rounded, strings.ui('openHistory'),
-                  const Color(0xFFF2EEFA), () => setState(() => _tab = 1)),
-            ],
+            actions: _watchActionSpecs(context, strings),
           ),
           const SizedBox(height: 28),
           SizedBox(
@@ -213,6 +206,34 @@ class _WatchScreenState extends State<WatchScreen> {
         ],
       ),
     );
+  }
+
+  List<_ActionSpec> _watchActionSpecs(
+    BuildContext context,
+    AppStrings strings,
+  ) {
+    // Keep watch actions as specs so responsive layout is isolated from the
+    // navigation callbacks each button triggers.
+    return [
+      _ActionSpec(
+        Icons.wifi_rounded,
+        strings.ui('reconnect'),
+        const Color(0xFFFFE3EA),
+        () {},
+      ),
+      _ActionSpec(
+        Icons.qr_code_2_rounded,
+        strings.ui('changeAddress'),
+        _mintSoft,
+        () => Navigator.pop(context),
+      ),
+      _ActionSpec(
+        Icons.nights_stay_rounded,
+        strings.ui('openHistory'),
+        const Color(0xFFF2EEFA),
+        () => setState(() => _tab = 1),
+      ),
+    ];
   }
 }
 

@@ -1143,77 +1143,121 @@ class _ServerSettingsCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          _SettingSlider(
-            title: strings.ui('cryThreshold'),
-            description: strings.ui('cryThresholdDescription'),
-            valueLabel: '%${(cryScoreThreshold * 100).round()}',
-            value: cryScoreThreshold,
-            min: .20,
-            max: .95,
-            divisions: 75,
-            color: MimiCamDesignTokens.mint,
-            onChanged: onCryScoreThresholdChanged,
-            onChangeEnd: onCryScoreThresholdChangeEnd,
-          ),
-          const SizedBox(height: 12),
-          _SettingSlider(
-            title: strings.ui('motionThreshold'),
-            description: strings.ui('motionThresholdDescription'),
-            valueLabel: '%${(motionThreshold * 100).round()}',
-            value: motionThreshold,
-            min: .05,
-            max: .60,
-            divisions: 55,
-            color: MimiCamDesignTokens.amber,
-            onChanged: onMotionThresholdChanged,
-            onChangeEnd: onMotionThresholdChangeEnd,
-          ),
-          const SizedBox(height: 12),
-          _SettingSlider(
-            title: strings.ui('notificationCooldown'),
-            description: strings.ui('notificationCooldownDescription'),
-            valueLabel: '${notifyCooldownSeconds.round()} sn',
-            value: notifyCooldownSeconds,
-            min: 10,
-            max: 180,
-            divisions: 34,
-            color: MimiCamDesignTokens.pink,
-            onChanged: onNotifyCooldownChanged,
-            onChangeEnd: onNotifyCooldownChangeEnd,
-          ),
-          const SizedBox(height: 12),
-          _SettingSlider(
-            title: strings.ui('cryMinimumDuration'),
-            description: strings.ui('cryMinimumDurationDescription'),
-            valueLabel: '${cryDurationSeconds.toStringAsFixed(1)} sn',
-            value: cryDurationSeconds,
-            min: .5,
-            max: 6,
-            divisions: 11,
-            color: MimiCamDesignTokens.mint,
-            onChanged: onCryDurationChanged,
-            onChangeEnd: onCryDurationChangeEnd,
-          ),
-          const SizedBox(height: 12),
-          _SettingSlider(
-            title: strings.ui('motionMinimumDuration'),
-            description: strings.ui('motionMinimumDurationDescription'),
-            valueLabel: '${motionDurationSeconds.toStringAsFixed(1)} sn',
-            value: motionDurationSeconds,
-            min: .5,
-            max: 6,
-            divisions: 11,
-            color: MimiCamDesignTokens.amber,
-            onChanged: onMotionDurationChanged,
-            onChangeEnd: onMotionDurationChangeEnd,
-          ),
-          const SizedBox(height: 14),
+          for (final spec in _sliderSpecs(strings)) ...[
+            _SettingSlider(
+              title: spec.title,
+              description: spec.description,
+              valueLabel: spec.valueLabel,
+              value: spec.value,
+              min: spec.min,
+              max: spec.max,
+              divisions: spec.divisions,
+              color: spec.color,
+              onChanged: spec.onChanged,
+              onChangeEnd: spec.onChangeEnd,
+            ),
+            const SizedBox(height: 12),
+          ],
+          const SizedBox(height: 2),
           _KeyVal(strings.ui('localNotification'),
               strings.ui('sentToClientDevice')),
         ],
       ),
     );
   }
+
+  List<_SettingSliderSpec> _sliderSpecs(AppStrings strings) {
+    // Slider constraints are kept together so changing a detection policy does
+    // not require editing the responsive settings layout.
+    return [
+      _SettingSliderSpec(
+        title: strings.ui('cryThreshold'),
+        description: strings.ui('cryThresholdDescription'),
+        valueLabel: '%${(cryScoreThreshold * 100).round()}',
+        value: cryScoreThreshold,
+        min: .20,
+        max: .95,
+        divisions: 75,
+        color: MimiCamDesignTokens.mint,
+        onChanged: onCryScoreThresholdChanged,
+        onChangeEnd: onCryScoreThresholdChangeEnd,
+      ),
+      _SettingSliderSpec(
+        title: strings.ui('motionThreshold'),
+        description: strings.ui('motionThresholdDescription'),
+        valueLabel: '%${(motionThreshold * 100).round()}',
+        value: motionThreshold,
+        min: .05,
+        max: .60,
+        divisions: 55,
+        color: MimiCamDesignTokens.amber,
+        onChanged: onMotionThresholdChanged,
+        onChangeEnd: onMotionThresholdChangeEnd,
+      ),
+      _SettingSliderSpec(
+        title: strings.ui('notificationCooldown'),
+        description: strings.ui('notificationCooldownDescription'),
+        valueLabel: '${notifyCooldownSeconds.round()} sn',
+        value: notifyCooldownSeconds,
+        min: 10,
+        max: 180,
+        divisions: 34,
+        color: MimiCamDesignTokens.pink,
+        onChanged: onNotifyCooldownChanged,
+        onChangeEnd: onNotifyCooldownChangeEnd,
+      ),
+      _SettingSliderSpec(
+        title: strings.ui('cryMinimumDuration'),
+        description: strings.ui('cryMinimumDurationDescription'),
+        valueLabel: '${cryDurationSeconds.toStringAsFixed(1)} sn',
+        value: cryDurationSeconds,
+        min: .5,
+        max: 6,
+        divisions: 11,
+        color: MimiCamDesignTokens.mint,
+        onChanged: onCryDurationChanged,
+        onChangeEnd: onCryDurationChangeEnd,
+      ),
+      _SettingSliderSpec(
+        title: strings.ui('motionMinimumDuration'),
+        description: strings.ui('motionMinimumDurationDescription'),
+        valueLabel: '${motionDurationSeconds.toStringAsFixed(1)} sn',
+        value: motionDurationSeconds,
+        min: .5,
+        max: 6,
+        divisions: 11,
+        color: MimiCamDesignTokens.amber,
+        onChanged: onMotionDurationChanged,
+        onChangeEnd: onMotionDurationChangeEnd,
+      ),
+    ];
+  }
+}
+
+class _SettingSliderSpec {
+  const _SettingSliderSpec({
+    required this.title,
+    required this.description,
+    required this.valueLabel,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.color,
+    required this.onChanged,
+    required this.onChangeEnd,
+  });
+
+  final String title;
+  final String description;
+  final String valueLabel;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final Color color;
+  final ValueChanged<double> onChanged;
+  final ValueChanged<double> onChangeEnd;
 }
 
 class _SettingsSaveChip extends StatelessWidget {

@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mimicam/l10n/app_strings.dart';
+import 'package:mimicam/l10n/src/app_ui_text_catalog.dart';
 
 void main() {
   test('Chinese locale is supported and loaded', () async {
@@ -61,6 +62,33 @@ void main() {
 
     expect(fallback.ui('scanQr'), 'Scan QR');
     expect(fallback.ui('roleSelectionTitle'), 'What will this device be?');
+  });
+
+  test('UI catalog tüm desteklenen diller için değer taşır', () {
+    final languageCodes = AppStrings.supportedLocales
+        .map((locale) => locale.languageCode)
+        .toSet();
+
+    for (final entry in appUiTextCatalog.entries) {
+      expect(
+        entry.value.keys.toSet(),
+        containsAll(languageCodes),
+        reason: '${entry.key} eksik locale içeriyor',
+      );
+    }
+  });
+
+  test('uiFormat placeholder değerlerini locale metnine uygular', () {
+    final spanish = AppStrings(const Locale('es'));
+
+    expect(
+      spanish.uiFormat('pairedMessage', {'name': 'Bebek Odası'}),
+      contains('Bebek Odası'),
+    );
+    expect(
+      spanish.uiFormat('pairingFailed', {'error': 'timeout'}),
+      contains('timeout'),
+    );
   });
 
   test('parent alert messages include evidence and suggested action', () {
