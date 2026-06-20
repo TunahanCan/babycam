@@ -77,12 +77,12 @@ class MediaQualityProfile {
   static MediaQualityProfile forDeviceTier(DeviceCapabilityTier tier) =>
       switch (tier) {
         DeviceCapabilityTier.legacy => const MediaQualityProfile(
-            id: 'compat_480p',
-            label: 'Uyumluluk',
-            width: 854,
-            height: 480,
-            targetFps: 8,
-            jpegQuality: 54,
+            id: 'weak_360p',
+            label: 'Zayıf ağ',
+            width: 640,
+            height: 360,
+            targetFps: 5,
+            jpegQuality: 42,
             cameraPresetKey: 'medium',
             audioCodec: 'pcm16le',
             preferredAudioCodec: 'opus',
@@ -91,12 +91,12 @@ class MediaQualityProfile {
             audioFirst: true,
           ),
         DeviceCapabilityTier.balanced => const MediaQualityProfile(
-            id: 'balanced_480p',
-            label: 'Dengeli',
+            id: 'normal_480p',
+            label: 'Normal',
             width: 854,
             height: 480,
-            targetFps: 10,
-            jpegQuality: 62,
+            targetFps: 8,
+            jpegQuality: 52,
             cameraPresetKey: 'medium',
             audioCodec: 'pcm16le',
             preferredAudioCodec: 'opus',
@@ -104,13 +104,13 @@ class MediaQualityProfile {
             preferredVideoCodec: 'h264-webrtc',
           ),
         DeviceCapabilityTier.modern => const MediaQualityProfile(
-            id: 'quality_720p',
-            label: 'Kaliteli',
-            width: 1280,
-            height: 720,
-            targetFps: 15,
-            jpegQuality: 70,
-            cameraPresetKey: 'high',
+            id: 'normal_480p_modern',
+            label: 'Normal',
+            width: 854,
+            height: 480,
+            targetFps: 8,
+            jpegQuality: 52,
+            cameraPresetKey: 'medium',
             audioCodec: 'pcm16le',
             preferredAudioCodec: 'opus',
             videoCodec: 'mjpeg',
@@ -119,45 +119,46 @@ class MediaQualityProfile {
       };
 
   MediaQualityProfile adaptForNetwork(NetworkQualityTier tier) {
-    final baseIsLegacy = id.startsWith('compat_');
     return switch (tier) {
       NetworkQualityTier.unknown => this,
-      NetworkQualityTier.excellent => baseIsLegacy
-          ? copyWith(
-              id: '${id}_excellent_trial',
-              label: 'Dengeli deneme',
-              width: 854,
-              height: 480,
-              targetFps: 10,
-              jpegQuality: 58,
-              cameraPresetKey: 'medium',
-              audioFirst: false,
-            )
-          : this,
-      NetworkQualityTier.good => copyWith(
-          id: '${id}_good',
-          label: '$label / stabil',
-          targetFps: targetFps.clamp(8, 12),
-          jpegQuality: jpegQuality.clamp(56, 68),
-        ),
-      NetworkQualityTier.weak => copyWith(
-          id: 'audio_first_480p',
-          label: 'Ses öncelikli',
+      NetworkQualityTier.excellent || NetworkQualityTier.good => copyWith(
+          id: id.startsWith('normal_') ? id : 'normal_480p',
+          label: 'Normal',
           width: 854,
           height: 480,
-          targetFps: 7,
-          jpegQuality: 50,
+          targetFps: 8,
+          jpegQuality: 52,
+          cameraPresetKey: 'medium',
+          audioFirst: false,
+        ),
+      NetworkQualityTier.weak => copyWith(
+          id: 'weak_360p',
+          label: 'Zayıf ağ',
+          width: 640,
+          height: 360,
+          targetFps: 5,
+          jpegQuality: 42,
           cameraPresetKey: 'medium',
           audioFirst: true,
         ),
-      NetworkQualityTier.critical || NetworkQualityTier.offline => copyWith(
-          id: 'survival_audio_first_480p',
+      NetworkQualityTier.critical => copyWith(
+          id: 'critical_240p',
           label: 'Kritik ağ',
-          width: 854,
-          height: 480,
-          targetFps: 4,
-          jpegQuality: 42,
-          cameraPresetKey: 'medium',
+          width: 426,
+          height: 240,
+          targetFps: 2,
+          jpegQuality: 36,
+          cameraPresetKey: 'low',
+          audioFirst: true,
+        ),
+      NetworkQualityTier.offline => copyWith(
+          id: 'survival_audio_only',
+          label: 'Hayatta kalma',
+          width: 426,
+          height: 240,
+          targetFps: 1,
+          jpegQuality: 36,
+          cameraPresetKey: 'low',
           audioFirst: true,
         ),
     };
@@ -166,21 +167,26 @@ class MediaQualityProfile {
   MediaQualityProfile adaptForClientLoad(int activeVideoClients) {
     if (activeVideoClients >= 4) {
       return copyWith(
-        id: height > 480 ? 'shared_480p' : '${id}_shared',
+        id: 'shared_critical_240p',
         label: 'Çoklu izleme',
-        width: 854,
-        height: 480,
-        targetFps: targetFps > 8 ? 8 : targetFps,
-        jpegQuality: jpegQuality > 52 ? 52 : jpegQuality,
-        cameraPresetKey: 'medium',
+        width: 426,
+        height: 240,
+        targetFps: targetFps > 4 ? 4 : targetFps,
+        jpegQuality: jpegQuality > 40 ? 40 : jpegQuality,
+        cameraPresetKey: 'low',
+        audioFirst: true,
       );
     }
-    if (activeVideoClients >= 2 && height > 480) {
+    if (activeVideoClients >= 2) {
       return copyWith(
-        id: '${id}_shared_stable',
+        id: 'shared_weak_360p',
         label: '$label / paylaşımlı',
-        targetFps: targetFps > 12 ? 12 : targetFps,
-        jpegQuality: jpegQuality > 64 ? 64 : jpegQuality,
+        width: width > 640 ? 640 : width,
+        height: height > 360 ? 360 : height,
+        targetFps: targetFps > 5 ? 5 : targetFps,
+        jpegQuality: jpegQuality > 42 ? 42 : jpegQuality,
+        cameraPresetKey: height > 360 ? 'medium' : cameraPresetKey,
+        audioFirst: true,
       );
     }
     return this;

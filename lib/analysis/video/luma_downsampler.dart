@@ -4,7 +4,8 @@ import 'luma_frame.dart';
 
 /// Nearest-neighbor Y-plane downsampler with stride-aware safe reads.
 class LumaDownsampler {
-  const LumaDownsampler({required this.outputWidth, required this.outputHeight});
+  const LumaDownsampler(
+      {required this.outputWidth, required this.outputHeight});
 
   final int outputWidth;
   final int outputHeight;

@@ -8,5 +8,6 @@ class ClientNotificationService {
     _service = NotificationService(strings);
     await _service!.initialize();
   }
+
   Future<void> show(String message) async => _service?.showAlert(message);
 }

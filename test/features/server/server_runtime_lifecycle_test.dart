@@ -5,7 +5,7 @@ import 'package:mimicam/features/server/media/media_runtime_controller.dart';
 import 'package:mimicam/features/server/server_runtime.dart';
 
 void main() {
-  test('Server startPairingMode çağrılınca kamera önizlemesi aktif başlar',
+  test('Server startPairingMode sadece pairing açar, medya oturumla başlar',
       () async {
     var startCount = 0;
     var stopCount = 0;
@@ -16,21 +16,21 @@ void main() {
         onStartPairing: () async => 'mimicam://pair?payload=x');
 
     await runtime.startPairingMode();
-    expect(media.isActive, isTrue);
-    expect(startCount, 1);
-    expect(runtime.currentState.cameraActive, isTrue);
-    expect(runtime.currentState.microphoneActive, isTrue);
+    expect(media.isActive, isFalse);
+    expect(startCount, 0);
+    expect(runtime.currentState.cameraActive, isFalse);
+    expect(runtime.currentState.microphoneActive, isFalse);
 
     await runtime.markClientPaired();
-    expect(media.isActive, isTrue);
+    expect(media.isActive, isFalse);
 
     await runtime.startMediaRuntimeForSession('s1');
     expect(media.isActive, isTrue);
     expect(startCount, 1);
 
     await runtime.endSession('s1');
-    expect(media.isActive, isTrue);
-    expect(stopCount, 0);
+    expect(media.isActive, isFalse);
+    expect(stopCount, 1);
 
     await runtime.stop();
     expect(media.isActive, isFalse);

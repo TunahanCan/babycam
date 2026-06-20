@@ -1,14 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/app_role.dart';
 import '../../core/protocol/mimicam_protocol.dart';
 import '../../core/protocol/pairing_payload.dart';
-import '../../core/security/certificate_fingerprint.dart';
-import '../../core/security/pinned_http_client_factory.dart';
 import '../../l10n/app_strings.dart';
 import '../shared/presentation/mimicam_design_tokens.dart';
 import '../shared/presentation/mimicam_shells.dart';
@@ -219,36 +216,15 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   Future<PairingPayload> _fetchManualPairingPayload(
       AppStrings strings, ({String host, int port}) address) async {
-    final discovery = PublicStatusCertificateDiscoveryClient();
-    final secureClient = discovery.create(
-      expectedHost: address.host,
-      expectedPort: address.port,
-    );
+    final client = HttpClient();
     try {
       return await _fetchManualPairingPayloadWithClient(
         strings,
         address,
-        client: secureClient,
-        scheme: 'https',
-        discoveredFingerprint: () => discovery.discoveredFingerprintSha256Hex,
-      );
-    } catch (_) {
-      if (!kDebugMode) rethrow;
-    } finally {
-      secureClient.close(force: true);
-    }
-
-    final insecureClient = HttpClient();
-    try {
-      return await _fetchManualPairingPayloadWithClient(
-        strings,
-        address,
-        client: insecureClient,
-        scheme: 'http',
-        discoveredFingerprint: () => null,
+        client: client,
       );
     } finally {
-      insecureClient.close(force: true);
+      client.close(force: true);
     }
   }
 
@@ -256,79 +232,49 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     AppStrings strings,
     ({String host, int port}) address, {
     required HttpClient client,
-    required String scheme,
-    required String? Function() discoveredFingerprint,
   }) async {
-    try {
-      final request = await client.getUrl(
-        Uri(
-          scheme: scheme,
-          host: address.host,
-          port: address.port,
-          path: MimiCamProtocolV2.statusPublic,
-        ),
-      );
-      final response = await request.close();
-      if (response.statusCode != HttpStatus.ok) {
-        throw StateError(
-            strings.uiFormat('serverNotFound', {'code': response.statusCode}));
-      }
-      final body = await utf8.decoder.bind(response).join();
-      final json = jsonDecode(body);
-      if (json is! Map) {
-        throw StateError(strings.ui('invalidServerResponse'));
-      }
-      final nonce = json['pairingNonce']?.toString();
-      if (nonce == null || nonce.isEmpty) {
-        throw StateError(strings.ui('missingPairingNonce'));
-      }
-      final jsonFingerprint =
-          json['certificateFingerprintSha256']?.toString() ?? '';
-      final certFingerprint = discoveredFingerprint() ?? jsonFingerprint;
-      if (scheme == 'https' && certFingerprint.isEmpty) {
-        throw StateError(strings.ui('invalidServerResponse'));
-      }
-      if (jsonFingerprint.isNotEmpty &&
-          certFingerprint.isNotEmpty &&
-          !CertificateFingerprint.constantTimeEqualsHex(
-              jsonFingerprint, certFingerprint)) {
-        throw StateError(strings.ui('securityFingerprintMismatch'));
-      }
-      final transport = json['transport'] is Map
-          ? Map<String, Object?>.from(json['transport'] as Map)
-          : <String, Object?>{
-              'httpScheme': scheme,
-              'wsScheme': scheme == 'https' ? 'wss' : 'ws',
-              'tlsMode':
-                  scheme == 'https' ? 'selfSignedPinned' : 'insecureDevOnly',
-            };
-      final capabilities = json['capabilities'] is Map
-          ? Map<String, Object?>.from(json['capabilities'] as Map)
-          : <String, Object?>{
-              'video': 'mjpeg',
-              'audio': 'pcm16le',
-              'events': 'json',
-              'transport': scheme,
-            };
-      return PairingPayload(
-        schemaVersion: MimiCamProtocolV2.schemaVersion,
+    final request = await client.getUrl(
+      Uri(
+        scheme: 'http',
         host: address.host,
         port: address.port,
-        deviceId: json['serverDeviceId']?.toString() ?? 'manual_server',
-        deviceName: json['serverName']?.toString() ?? 'Manual IP Server',
-        pairingNonce: nonce,
-        expiresAtMs: DateTime.now()
-            .add(const Duration(minutes: 2))
-            .millisecondsSinceEpoch,
-        certificateFingerprintSha256: certFingerprint,
-        transport: transport,
-        capabilities: capabilities,
-      );
-    } on HandshakeException catch (_) {
-      throw StateError(strings.ui('securityFingerprintMismatch'));
-    } on TlsException catch (_) {
-      throw StateError(strings.ui('securityFingerprintMismatch'));
+        path: MimiCamProtocolV2.statusPublic,
+      ),
+    );
+    final response = await request.close();
+    if (response.statusCode != HttpStatus.ok) {
+      throw StateError(
+          strings.uiFormat('serverNotFound', {'code': response.statusCode}));
     }
+    final body = await utf8.decoder.bind(response).join();
+    final json = jsonDecode(body);
+    if (json is! Map) {
+      throw StateError(strings.ui('invalidServerResponse'));
+    }
+    final nonce = json['pairingNonce']?.toString();
+    if (nonce == null || nonce.isEmpty) {
+      throw StateError(strings.ui('missingPairingNonce'));
+    }
+    final capabilities = json['capabilities'] is Map
+        ? Map<String, Object?>.from(json['capabilities'] as Map)
+        : <String, Object?>{
+            'video': 'mjpeg',
+            'audio': 'pcm16le',
+            'events': 'json',
+            'maxClients': 5,
+          };
+    return PairingPayload(
+      schemaVersion: MimiCamProtocolV2.schemaVersion,
+      host: address.host,
+      port: address.port,
+      deviceId: json['serverDeviceId']?.toString() ?? 'manual_server',
+      deviceName: json['serverName']?.toString() ?? 'Manual IP Server',
+      pairingNonce: nonce,
+      expiresAtMs:
+          DateTime.now().add(const Duration(minutes: 2)).millisecondsSinceEpoch,
+      transport: json['transport']?.toString() ?? 'http_ws',
+      capabilities: capabilities,
+    );
   }
 
   ({String host, int port})? _parseManualAddress(String value) {

@@ -1,1 +1,3 @@
-class MjpegStreamService { int clientCount = 0; }
+class MjpegStreamService {
+  int clientCount = 0;
+}

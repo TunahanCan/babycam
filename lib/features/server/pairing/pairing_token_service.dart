@@ -21,6 +21,9 @@ class TrustedClientRecord {
   final int lastSeenAtMs;
   final int expiresAtMs;
   final int? revokedAtMs;
+  bool get revoked => revokedAtMs != null;
+  DateTime get pairedAt => DateTime.fromMillisecondsSinceEpoch(createdAtMs);
+  DateTime get lastSeenAt => DateTime.fromMillisecondsSinceEpoch(lastSeenAtMs);
 
   TrustedClientRecord copyWith(
           {String? tokenHash,
@@ -38,20 +41,65 @@ class TrustedClientRecord {
       );
 }
 
+class StreamAccessToken {
+  const StreamAccessToken({
+    required this.clientId,
+    required this.token,
+    required this.expiresAtMs,
+  });
+
+  final String clientId;
+  final String token;
+  final int expiresAtMs;
+}
+
+class StreamTokenRecord {
+  const StreamTokenRecord({
+    required this.clientId,
+    required this.tokenHash,
+    required this.createdAtMs,
+    required this.expiresAtMs,
+  });
+
+  final String clientId;
+  final String tokenHash;
+  final int createdAtMs;
+  final int expiresAtMs;
+}
+
+class TrustedClientLimitException implements Exception {
+  const TrustedClientLimitException();
+
+  static const code = 'MAX_TRUSTED_CLIENTS_REACHED';
+  static const userMessage =
+      'En fazla 5 cihaz eşleştirilebilir. Önce eski bir cihazı kaldırın.';
+
+  @override
+  String toString() => '$code: $userMessage';
+}
+
 class PairingTokenService {
   PairingTokenService(
       {DateTime Function()? now,
       Duration nonceTtl = const Duration(minutes: 10),
+      Duration streamTokenTtl = const Duration(seconds: 90),
+      this.maxTrustedClients = defaultMaxTrustedClients,
       SecureRandomTokenGenerator? tokenGenerator})
       : _now = now ?? DateTime.now,
         _nonceTtl = nonceTtl,
+        _streamTokenTtl = streamTokenTtl,
         _tokenGenerator = tokenGenerator ?? SecureRandomTokenGenerator();
+
+  static const defaultMaxTrustedClients = 5;
 
   final DateTime Function() _now;
   final Duration _nonceTtl;
+  final Duration _streamTokenTtl;
+  final int maxTrustedClients;
   final SecureRandomTokenGenerator _tokenGenerator;
   final _nonces = <String, int>{};
   final _clients = <String, TrustedClientRecord>{};
+  final _streamTokens = <String, StreamTokenRecord>{};
 
   String createPairingNonce() {
     final nonce = _tokenGenerator.generateHex(byteCount: 32);
@@ -71,6 +119,11 @@ class PairingTokenService {
     final clientId = deviceId.isEmpty
         ? 'client_${_tokenGenerator.generateHex(byteCount: 8)}'
         : deviceId;
+    final existing = _clients[clientId];
+    final createsNewSlot = existing == null || existing.revokedAtMs != null;
+    if (createsNewSlot && pairedClientCount >= maxTrustedClients) {
+      throw const TrustedClientLimitException();
+    }
     final token = _tokenGenerator.generateHex(byteCount: 32);
     final expiresAtMs = nowMs + TrustedClientToken.lifetime.inMilliseconds;
     _clients[clientId] = TrustedClientRecord(
@@ -114,6 +167,40 @@ class PairingTokenService {
 
   bool validateSessionToken(String token) =>
       validateTrustedClientToken(token) != null;
+
+  StreamAccessToken issueStreamToken({required String clientId}) {
+    final nowMs = _now().millisecondsSinceEpoch;
+    final token = _tokenGenerator.generateHex(byteCount: 32);
+    final tokenHash = hashToken(token);
+    final expiresAtMs = nowMs + _streamTokenTtl.inMilliseconds;
+    _streamTokens[tokenHash] = StreamTokenRecord(
+      clientId: clientId,
+      tokenHash: tokenHash,
+      createdAtMs: nowMs,
+      expiresAtMs: expiresAtMs,
+    );
+    return StreamAccessToken(
+      clientId: clientId,
+      token: token,
+      expiresAtMs: expiresAtMs,
+    );
+  }
+
+  StreamTokenRecord? validateStreamToken(String token) {
+    final tokenHash = hashToken(token);
+    final record = _streamTokens[tokenHash];
+    final nowMs = _now().millisecondsSinceEpoch;
+    if (record == null || record.expiresAtMs <= nowMs) {
+      _streamTokens.remove(tokenHash);
+      return null;
+    }
+    return record;
+  }
+
+  void revokeStreamTokensForClient(String clientId) {
+    _streamTokens.removeWhere((_, record) => record.clientId == clientId);
+  }
+
   String hashToken(String token) =>
       sha256.convert(utf8.encode(token)).toString();
   TrustedClientRecord? recordForClient(String clientId) => _clients[clientId];
@@ -126,6 +213,7 @@ class PairingTokenService {
     for (final entry in _clients.entries) {
       if (entry.value.tokenHash == tokenHash) {
         _clients[entry.key] = entry.value.copyWith(revokedAtMs: nowMs);
+        revokeStreamTokensForClient(entry.key);
       }
     }
   }
@@ -135,6 +223,7 @@ class PairingTokenService {
     if (record != null) {
       _clients[clientId] =
           record.copyWith(revokedAtMs: _now().millisecondsSinceEpoch);
+      revokeStreamTokensForClient(clientId);
     }
   }
 
@@ -143,5 +232,6 @@ class PairingTokenService {
     for (final entry in _clients.entries) {
       _clients[entry.key] = entry.value.copyWith(revokedAtMs: nowMs);
     }
+    _streamTokens.clear();
   }
 }

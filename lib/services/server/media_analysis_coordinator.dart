@@ -20,7 +20,8 @@ class MediaAnalysisCoordinator {
         _audioAnalyzer = audioAnalyzer,
         _alertEngine = alertEngine,
         _metrics = metrics,
-        _motionFrameGate = FrameRateGate(fps: motionAnalyzer.config.analysisFps),
+        _motionFrameGate =
+            FrameRateGate(fps: motionAnalyzer.config.analysisFps),
         _onLog = onLog;
 
   final MotionAnalyzerV2 _motionAnalyzer;

@@ -53,7 +53,8 @@ class AudioAnalysisConfig {
     double? fluxWeight,
     double? minDbfsForCryCandidate,
     double? loudSoundDbfs,
-  }) => AudioAnalysisConfig(
+  }) =>
+      AudioAnalysisConfig(
         sampleRate: sampleRate ?? this.sampleRate,
         windowMs: windowMs ?? this.windowMs,
         hopMs: hopMs ?? this.hopMs,

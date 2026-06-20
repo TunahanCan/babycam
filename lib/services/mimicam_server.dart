@@ -19,9 +19,9 @@ import '../analysis/video/motion_analyzer_v2.dart';
 import '../core/media/adaptive_media_profile.dart';
 import '../core/media/client_quality_tracker.dart';
 import '../core/mimicam_protocol.dart';
+import '../core/network/local_network_guard.dart';
 import '../core/protocol/mimicam_protocol.dart' as protocol_v2;
-import '../core/security/local_tls_certificate_manager.dart';
-import '../core/security/transport_security_config.dart';
+import '../core/security/transport_config.dart';
 import '../features/server/pairing/pairing_token_service.dart';
 import '../l10n/app_strings.dart';
 import 'configuration_service.dart';
@@ -45,15 +45,13 @@ class MimiCamServer {
     this.onMediaProfileChanged,
     DeviceCapabilityTier? deviceTier,
     PairingTokenService? tokenService,
-    TransportSecurityConfig transportSecurityConfig =
-        TransportSecurityConfig.secureDefault,
-    LocalTlsCertificateManager? localTlsCertificateManager,
+    this.transportConfig = TransportConfig.local,
+    this.localNetworkGuard = const LocalNetworkGuard(),
+    this.maxActiveWatchClients = 5,
+    this.startMediaOnSessionStart = true,
+    this.httpPort = MimiCamProtocol.httpPort,
   })  : tokenService = tokenService ?? PairingTokenService(),
-        transportSecurityConfig = transportSecurityConfig,
-        _localTlsCertificateManager =
-            localTlsCertificateManager ?? LocalTlsCertificateManager(),
         _deviceTier = deviceTier ?? DeviceCapabilityProbe.detectTier() {
-    transportSecurityConfig.validateForBuildMode();
     _activeMediaProfile = MediaQualityProfile.forDeviceTier(_deviceTier);
     _frameBudget.updateMinInterval(_activeMediaProfile.frameInterval);
   }
@@ -67,9 +65,12 @@ class MimiCamServer {
   final void Function(String message) onAlert;
   final void Function(MediaQualityProfile profile)? onMediaProfileChanged;
   final PairingTokenService tokenService;
-  final TransportSecurityConfig transportSecurityConfig;
-  final LocalTlsCertificateManager _localTlsCertificateManager;
-  final _audioRecorder = AudioRecorder();
+  final TransportConfig transportConfig;
+  final LocalNetworkGuard localNetworkGuard;
+  final int maxActiveWatchClients;
+  final bool startMediaOnSessionStart;
+  final int httpPort;
+  AudioRecorder? _audioRecorder;
   MediaAnalysisCoordinator? _analysisCoordinator;
   MediaAnalysisMetrics? _analysisMetrics;
   StreamSubscription<AlertEvent>? _alertSubscription;
@@ -83,16 +84,15 @@ class MimiCamServer {
   CameraController? cameraController;
   DeviceCapabilityTier get deviceTier => _deviceTier;
   MediaQualityProfile get activeMediaProfile => _activeMediaProfile;
-  String get certificateFingerprintSha256 =>
-      _localTlsCertificate?.fingerprintSha256Hex ?? '';
   Map<String, Object?> get mediaCapabilities => _mediaCapabilities();
 
   HttpServer? _httpServer;
   bool _httpServerListening = false;
+  bool _pairingModeActive = false;
   bool _disposed = false;
+  bool _wakelockEnabled = false;
   StreamSubscription<Uint8List>? _audioSubscription;
   Uint8List? _latestJpeg;
-  LocalTlsCertificate? _localTlsCertificate;
   int _lastAudioDebugLog = 0;
   final _frameBudget = MediaFrameBudget();
   final _encodingPolicy = const MediaEncodingPolicy();
@@ -112,34 +112,14 @@ class MimiCamServer {
   Future<String> startPairingMode() async {
     if (_disposed) throw StateError('MimiCamServer is disposed.');
     final address = await NetworkAddressProvider.localHttpAddress() ??
-        '${InternetAddress.loopbackIPv4.address}:${MimiCamProtocol.httpPort}';
+        '${InternetAddress.loopbackIPv4.address}:$httpPort';
     final host = address.split(':').first;
     if (_httpServer == null) {
-      late final HttpServer server;
-      if (transportSecurityConfig.isSecure) {
-        final certificate = await _localTlsCertificateManager.loadOrCreate(
-          deviceId: 'server_local',
-          deviceName: 'Bebek Odası',
-          currentHostIps: [host, InternetAddress.loopbackIPv4.address],
-        );
-        _localTlsCertificate = certificate;
-        final context = _localTlsCertificateManager.createServerSecurityContext(
-          certificate,
-        );
-        server = await HttpServer.bindSecure(
-          InternetAddress.anyIPv4,
-          MimiCamProtocol.httpPort,
-          context,
-          shared: true,
-        );
-      } else {
-        transportSecurityConfig.validateForBuildMode();
-        server = await HttpServer.bind(
-          InternetAddress.anyIPv4,
-          MimiCamProtocol.httpPort,
-          shared: true,
-        );
-      }
+      final server = await HttpServer.bind(
+        InternetAddress.anyIPv4,
+        httpPort,
+        shared: true,
+      );
       if (_disposed) {
         await server.close(force: true);
         throw StateError('MimiCamServer is disposed.');
@@ -150,9 +130,14 @@ class MimiCamServer {
       _httpServerListening = true;
       _httpServer!.listen(_handleRequest);
     }
-    final url = '${transportSecurityConfig.httpScheme}://$address/';
+    _pairingModeActive = true;
+    final url = '${transportConfig.httpScheme}://$host:${_httpServer!.port}/';
     onLog(strings.serverStartedLog(url));
     return url;
+  }
+
+  void stopPairingMode() {
+    _pairingModeActive = false;
   }
 
   Future<void> startMediaRuntime() async {
@@ -182,6 +167,7 @@ class MimiCamServer {
       throw StateError('MimiCamServer is disposed.');
     }
     await WakelockPlus.enable();
+    _wakelockEnabled = true;
     await ForegroundServiceController.startServer();
   }
 
@@ -231,11 +217,12 @@ class MimiCamServer {
   }
 
   Future<void> _startAudioAnalysis() async {
-    if (!await _audioRecorder.hasPermission()) {
+    final audioRecorder = _audioRecorder ??= AudioRecorder();
+    if (!await audioRecorder.hasPermission()) {
       onLog(strings.microphonePermissionMissing);
       return;
     }
-    final stream = await _audioRecorder.startStream(const RecordConfig(
+    final stream = await audioRecorder.startStream(const RecordConfig(
       encoder: AudioEncoder.pcm16bits,
       sampleRate: _audioSampleRate,
       numChannels: _audioChannels,
@@ -326,6 +313,15 @@ class MimiCamServer {
       await request.response.close();
       return;
     }
+    final remoteAddress = request.connectionInfo?.remoteAddress;
+    // This is not a firewall; it reduces accidental public exposure if the
+    // socket becomes reachable outside the local Wi-Fi network.
+    if (remoteAddress != null &&
+        !localNetworkGuard.isAllowedRemoteAddress(remoteAddress)) {
+      request.response.statusCode = HttpStatus.forbidden;
+      await request.response.close();
+      return;
+    }
     if ((request.uri.path == '/ws/stream' ||
             request.uri.path == protocol_v2.MimiCamProtocolV2.events) &&
         WebSocketTransformer.isUpgradeRequest(request)) {
@@ -362,24 +358,28 @@ class MimiCamServer {
         await _handleQualityReport(request);
         return;
       case protocol_v2.MimiCamProtocolV2.statusPublic:
+        if (!_pairingModeActive) {
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+          return;
+        }
         await _writeJson(request.response, {
           'service': 'mimicam',
           'pairing': true,
           'serverDeviceId': 'server_local',
           'serverName': 'Bebek Odası',
           'pairingNonce': tokenService.createPairingNonce(),
-          'certificateFingerprintSha256': certificateFingerprintSha256,
-          'transport': transportSecurityConfig.toPayloadTransport(),
+          'transport': transportConfig.payloadTransport,
           'capabilities': _mediaCapabilities(),
         });
         return;
       case '/video':
-        if (!await _requireAuth(request)) return;
+        if (!await _requireStreamAuth(request)) return;
         await startMediaRuntime();
         await _handleMjpeg(request.response);
         return;
       case '/audio':
-        if (!await _requireAuth(request)) return;
+        if (!await _requireStreamAuth(request)) return;
         await startMediaRuntime();
         await _handleAudio(request.response);
         return;
@@ -406,6 +406,11 @@ class MimiCamServer {
 
   Future<void> _handlePairConfirm(HttpRequest request) async {
     try {
+      if (!_pairingModeActive) {
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+        return;
+      }
       final body = await utf8.decoder.bind(request).join();
       final json = jsonDecode(body);
       if (json is! Map ||
@@ -427,6 +432,13 @@ class MimiCamServer {
         'trustedClientTokenExpiresAtMs': token.expiresAtMs,
         'capabilities': _mediaCapabilities(),
         'sessionToken': token.token,
+      });
+    } on TrustedClientLimitException {
+      request.response.statusCode = HttpStatus.conflict;
+      await _writeJson(request.response, {
+        'ok': false,
+        'code': TrustedClientLimitException.code,
+        'message': TrustedClientLimitException.userMessage,
       });
     } catch (_) {
       request.response.statusCode = HttpStatus.badRequest;
@@ -468,14 +480,29 @@ class MimiCamServer {
     }
 
     final clientId = _clientIdForRequest(request, json);
+    final createsActiveSlot = !_activeStreamClients.contains(clientId);
+    if (createsActiveSlot &&
+        _activeStreamClients.length >= maxActiveWatchClients) {
+      request.response.statusCode = HttpStatus.tooManyRequests;
+      await _writeJson(request.response, {
+        'ok': false,
+        'code': 'MAX_ACTIVE_CLIENTS_REACHED',
+        'message':
+            'En fazla 5 cihaz aynı anda izleyebilir. Önce bir oturumu kapatın.',
+      });
+      return;
+    }
     _activeStreamClients.add(clientId);
     try {
       await _applyMediaProfileForCurrentDemand();
-      await startMediaRuntime();
+      if (startMediaOnSessionStart) await startMediaRuntime();
+      final streamToken = tokenService.issueStreamToken(clientId: clientId);
       await _writeJson(request.response, {
         'ok': true,
         'activeStreamClients': _activeStreamClients.length,
         'mediaProfile': _activeMediaProfile.toJson(),
+        'streamToken': streamToken.token,
+        'streamTokenExpiresAtMs': streamToken.expiresAtMs,
       });
     } catch (_) {
       _activeStreamClients.remove(clientId);
@@ -498,6 +525,7 @@ class MimiCamServer {
     try {
       _activeStreamClients.remove(clientId);
       _clientQualityTracker.remove(clientId);
+      tokenService.revokeStreamTokensForClient(clientId);
       if (_activeStreamClients.isEmpty &&
           _mjpegClients.isEmpty &&
           _audioClients.isEmpty) {
@@ -605,9 +633,8 @@ class MimiCamServer {
         'audio': _activeMediaProfile.audioCodec,
         'audioPreferred': _activeMediaProfile.preferredAudioCodec,
         'events': 'json',
-        'transport': transportSecurityConfig.httpScheme,
+        'maxClients': maxActiveWatchClients,
         'transportPreferred': 'webrtc',
-        'certificateFingerprintSha256': certificateFingerprintSha256,
         'deviceTier': _deviceTier.name,
         'mediaProfile': _activeMediaProfile.toJson(),
       };
@@ -620,29 +647,34 @@ class MimiCamServer {
       };
 
   bool _isAuthorized(HttpRequest request) {
-    final token = _tokenFromRequest(request);
-    // TODO: Replace query stream token with Authorization header when native viewer is used.
+    final token = _trustedTokenFromRequest(request);
     return token != null && tokenService.validateSessionToken(token);
   }
 
-  String? _tokenFromRequest(HttpRequest request) {
+  bool _isStreamAuthorized(HttpRequest request) {
+    if (_isAuthorized(request)) return true;
+    final streamToken = request.uri.queryParameters['streamToken'];
+    return streamToken != null &&
+        tokenService.validateStreamToken(streamToken) != null;
+  }
+
+  String? _trustedTokenFromRequest(HttpRequest request) {
     final header = request.headers.value(HttpHeaders.authorizationHeader);
     return header != null && header.startsWith('Bearer ')
         ? header.substring(7)
-        : request.uri.queryParameters['token'];
+        : null;
   }
 
   String _clientIdForRequest(HttpRequest request, Object? json) {
+    final token = _trustedTokenFromRequest(request);
+    final record =
+        token == null ? null : tokenService.validateTrustedClientToken(token);
+    if (record != null) return record.clientId;
     if (json is Map) {
       final clientId = json['clientId']?.toString().trim();
       if (clientId != null && clientId.isNotEmpty) return clientId;
     }
-    final token = _tokenFromRequest(request);
-    final record =
-        token == null ? null : tokenService.validateTrustedClientToken(token);
-    return record?.clientId ??
-        request.connectionInfo?.remoteAddress.address ??
-        'unknown_client';
+    return request.connectionInfo?.remoteAddress.address ?? 'unknown_client';
   }
 
   Future<Object?> _readJsonBody(HttpRequest request) async {
@@ -665,9 +697,19 @@ class MimiCamServer {
     return false;
   }
 
+  Future<bool> _requireStreamAuth(HttpRequest request) async {
+    if (_isStreamAuthorized(request)) return true;
+    request.response.statusCode = HttpStatus.unauthorized;
+    await request.response.close();
+    return false;
+  }
+
   Future<void> stopMediaRuntime() async {
     await ForegroundServiceController.stopServer();
-    await WakelockPlus.disable();
+    if (_wakelockEnabled) {
+      await WakelockPlus.disable();
+      _wakelockEnabled = false;
+    }
     await _audioSubscription?.cancel();
     _audioSubscription = null;
     await _alertSubscription?.cancel();
@@ -769,7 +811,10 @@ class MimiCamServer {
     if (_disposed) return;
     _disposed = true;
     await ForegroundServiceController.stopServer();
-    await WakelockPlus.disable();
+    if (_wakelockEnabled) {
+      await WakelockPlus.disable();
+      _wakelockEnabled = false;
+    }
     tokenService.revokeAll();
     await _audioSubscription?.cancel();
     _audioSubscription = null;
@@ -779,7 +824,8 @@ class MimiCamServer {
     _analysisCoordinator = null;
     _analysisMetrics?.reset();
     _frameBudget.reset();
-    await _audioRecorder.dispose();
+    await _audioRecorder?.dispose();
+    _audioRecorder = null;
     await cameraController?.dispose();
     cameraController = null;
     await _httpServer?.close(force: true);

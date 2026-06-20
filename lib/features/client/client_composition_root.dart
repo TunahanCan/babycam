@@ -17,7 +17,7 @@ class ClientCompositionRoot {
     required AppStrings strings,
   }) {
     createCount++;
-    final pairingClient = QRPairingClient();
+    const pairingClient = QRPairingClient();
     final tokenRenewal = TrustedTokenRenewalClient();
     final store = PairingSessionStore(preferences);
     final streams = StreamSessionController();

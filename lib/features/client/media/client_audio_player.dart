@@ -1,1 +1,3 @@
-class ClientAudioPlayer { Future<void> dispose() async {} }
+class ClientAudioPlayer {
+  Future<void> dispose() async {}
+}

@@ -1,1 +1,3 @@
-class WavAudioStreamService { int clientCount = 0; }
+class WavAudioStreamService {
+  int clientCount = 0;
+}

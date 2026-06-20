@@ -11,7 +11,8 @@ void main() {
 
   test('expired nonce reddedilir', () {
     var now = DateTime(2026);
-    final service = PairingTokenService(now: () => now, nonceTtl: const Duration(seconds: 1));
+    final service = PairingTokenService(
+        now: () => now, nonceTtl: const Duration(seconds: 1));
     final nonce = service.createPairingNonce();
     now = now.add(const Duration(seconds: 2));
     expect(service.validateAndConsumeNonce(nonce), isFalse);
@@ -19,7 +20,8 @@ void main() {
 
   test('pairing başarılı olunca session token üretilir', () {
     final service = PairingTokenService();
-    final token = service.issueSessionToken(clientName: 'client', deviceId: 'client_1');
+    final token =
+        service.issueSessionToken(clientName: 'client', deviceId: 'client_1');
     expect(token.length, greaterThanOrEqualTo(32));
     expect(service.validateSessionToken(token), isTrue);
     service.revokeSession(token);

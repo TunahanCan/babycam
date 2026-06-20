@@ -43,7 +43,6 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
   void initState() {
     super.initState();
     _loadSettings();
-    widget.runtime.startPairingMode();
   }
 
   void _loadSettings() {
@@ -96,11 +95,22 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
             currentIndex: _tab,
             activeColor: MimiCamDesignTokens.pink,
             dark: true,
-            onTap: (index) => setState(() => _tab = index),
+            onTap: _selectTab,
           ),
         );
       },
     );
+  }
+
+  void _selectTab(int index) {
+    final leavingPairingTab = _tab == 1 && index != 1;
+    setState(() => _tab = index);
+    if (leavingPairingTab) {
+      widget.runtime.stopPairingMode();
+    }
+    if (index == 1) {
+      widget.runtime.startPairingMode();
+    }
   }
 
   Widget _buildTab(BuildContext context, ServerRuntimeState state) {

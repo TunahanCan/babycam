@@ -60,12 +60,14 @@ class ServerRuntime {
   ServerRuntime({
     required MediaRuntimeController mediaRuntime,
     Future<String> Function()? onStartPairing,
+    Future<void> Function()? onStopPairing,
     Future<void> Function()? onStop,
     Future<void> Function()? onSettingsChanged,
     Object? Function()? previewSource,
     MediaQualityProfile Function()? mediaProfile,
   })  : _mediaRuntime = mediaRuntime,
         _onStartPairing = onStartPairing,
+        _onStopPairing = onStopPairing,
         _onStop = onStop,
         _onSettingsChanged = onSettingsChanged,
         _previewSource = previewSource,
@@ -73,6 +75,7 @@ class ServerRuntime {
 
   final MediaRuntimeController _mediaRuntime;
   final Future<String> Function()? _onStartPairing;
+  final Future<void> Function()? _onStopPairing;
   final Future<void> Function()? _onStop;
   final Future<void> Function()? _onSettingsChanged;
   final Object? Function()? _previewSource;
@@ -102,7 +105,6 @@ class ServerRuntime {
         qrPayload: qr,
         mediaProfile: mediaProfile,
       ));
-      await startLocalPreview();
     } catch (error) {
       if (_disposed) return;
       _emit(ServerRuntimeState(
@@ -111,6 +113,15 @@ class ServerRuntime {
         errorMessage: error.toString(),
         mediaProfile: mediaProfile,
       ));
+    }
+  }
+
+  Future<void> stopPairingMode() async {
+    if (_disposed) return;
+    await _onStopPairing?.call();
+    if (_disposed) return;
+    if (_state.phase == ServerRuntimePhase.pairingActive) {
+      _emit(_stateForPhase(ServerRuntimePhase.pairingIdle));
     }
   }
 

@@ -46,7 +46,7 @@ void main() {
       },
     );
 
-    final session = await QRPairingClient().pair(payload);
+    final session = await (const QRPairingClient()).pair(payload);
 
     expect(session.clientId, 'client_1');
     expect(session.sessionToken, 'trusted-token');

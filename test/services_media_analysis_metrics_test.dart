@@ -14,8 +14,10 @@ void main() {
       final metrics = MediaAnalysisMetrics(motionTargetFps: 3);
 
       metrics.recordVideoFrameReceived();
-      metrics.recordMotion(_motionResult(score: 0.5, processingTimeMicros: 1000));
-      metrics.recordMotion(_motionResult(score: 0.7, processingTimeMicros: 3000));
+      metrics
+          .recordMotion(_motionResult(score: 0.5, processingTimeMicros: 1000));
+      metrics
+          .recordMotion(_motionResult(score: 0.7, processingTimeMicros: 3000));
       metrics.recordMotionSkippedByFpsGate();
       metrics.recordMotionDroppedBecauseBusy();
 
@@ -66,7 +68,9 @@ void main() {
   });
 }
 
-MotionAnalysisResult _motionResult({required double score, required int processingTimeMicros}) => MotionAnalysisResult(
+MotionAnalysisResult _motionResult(
+        {required double score, required int processingTimeMicros}) =>
+    MotionAnalysisResult(
       timestampMs: 100,
       score: score,
       rawScore: score,
@@ -82,7 +86,9 @@ MotionAnalysisResult _motionResult({required double score, required int processi
       processingTimeMicros: processingTimeMicros,
     );
 
-AudioAnalysisResult _audioResult({required double score, required int processingTimeMicros}) => AudioAnalysisResult(
+AudioAnalysisResult _audioResult(
+        {required double score, required int processingTimeMicros}) =>
+    AudioAnalysisResult(
       timestampMs: 200,
       cryScore: score,
       rawCryScore: score,

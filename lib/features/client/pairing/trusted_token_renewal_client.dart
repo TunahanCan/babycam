@@ -4,17 +4,12 @@ import 'dart:io';
 import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
-import '../../../core/security/pinned_http_client_factory.dart';
 
 class TrustedTokenRenewalClient {
   TrustedTokenRenewalClient({
-    PinnedHttpClientFactory? pinnedHttpClientFactory,
     HttpClient Function(PairingSession session)? clientFactory,
-  })  : _pinnedHttpClientFactory =
-            pinnedHttpClientFactory ?? PinnedHttpClientFactory(),
-        _clientFactory = clientFactory;
+  }) : _clientFactory = clientFactory;
 
-  final PinnedHttpClientFactory _pinnedHttpClientFactory;
   final HttpClient Function(PairingSession session)? _clientFactory;
 
   Future<PairingSession?> renew(PairingSession session) async {
@@ -54,11 +49,6 @@ class TrustedTokenRenewalClient {
   HttpClient _createClient(PairingSession session) {
     final factory = _clientFactory;
     if (factory != null) return factory(session);
-    if (session.httpScheme != 'https') return HttpClient();
-    return _pinnedHttpClientFactory.create(
-      expectedFingerprintSha256Hex: session.certificateFingerprintSha256,
-      expectedHost: session.host,
-      expectedPort: session.port,
-    );
+    return HttpClient();
   }
 }

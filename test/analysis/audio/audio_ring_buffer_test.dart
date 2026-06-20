@@ -7,7 +7,8 @@ void main() {
     final rb = AudioRingBuffer(sampleRate: 10, windowMs: 1000, hopMs: 500);
     rb.addSamples(Int16List.fromList([1, 2, 3]), timestampMs: 0);
     expect(rb.hasEnoughForWindow, isFalse);
-    rb.addSamples(Int16List.fromList([4, 5, 6, 7, 8, 9, 10]), timestampMs: 1000);
+    rb.addSamples(Int16List.fromList([4, 5, 6, 7, 8, 9, 10]),
+        timestampMs: 1000);
     expect(rb.hasEnoughForWindow, isTrue);
     expect(rb.readLatestWindow(), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     rb.addSamples(Int16List.fromList([11, 12, 13, 14, 15]), timestampMs: 1500);

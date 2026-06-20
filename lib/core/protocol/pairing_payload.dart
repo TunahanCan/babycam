@@ -12,8 +12,7 @@ class PairingPayload {
       required this.deviceName,
       required this.pairingNonce,
       required this.expiresAtMs,
-      this.certificateFingerprintSha256 = '',
-      this.transport = const <String, Object?>{},
+      this.transport = 'http_ws',
       required this.capabilities});
   final int schemaVersion;
   final String scheme;
@@ -23,22 +22,12 @@ class PairingPayload {
   final String deviceName;
   final String pairingNonce;
   final int expiresAtMs;
-  final String certificateFingerprintSha256;
-  final Map<String, Object?> transport;
+  final String transport;
   final Map<String, Object?> capabilities;
 
   bool get isExpired => DateTime.now().millisecondsSinceEpoch > expiresAtMs;
-  String get httpScheme {
-    final scheme = transport['httpScheme']?.toString();
-    if (scheme == 'https' || scheme == 'http') return scheme!;
-    return capabilities['transport'] == 'https' ? 'https' : 'http';
-  }
-
-  String get wsScheme {
-    final scheme = transport['wsScheme']?.toString();
-    if (scheme == 'wss' || scheme == 'ws') return scheme!;
-    return httpScheme == 'https' ? 'wss' : 'ws';
-  }
+  String get httpScheme => 'http';
+  String get wsScheme => 'ws';
 
   Map<String, Object?> toJson() => {
         'schemaVersion': schemaVersion,
@@ -49,7 +38,6 @@ class PairingPayload {
         'deviceName': deviceName,
         'pairingNonce': pairingNonce,
         'expiresAtMs': expiresAtMs,
-        'certificateFingerprintSha256': certificateFingerprintSha256,
         'transport': transport,
         'capabilities': capabilities
       };
@@ -63,9 +51,7 @@ class PairingPayload {
     final deviceName = json['deviceName'];
     final pairingNonce = json['pairingNonce'];
     final expiresAtMs = json['expiresAtMs'];
-    final certificateFingerprintSha256 =
-        json['certificateFingerprintSha256'] ?? '';
-    final transport = json['transport'] ?? const <String, Object?>{};
+    final transport = json['transport'] ?? 'http_ws';
     final capabilities = json['capabilities'];
     if (schemaVersion is! int ||
         schemaVersion != MimiCamProtocolV2.schemaVersion ||
@@ -76,8 +62,7 @@ class PairingPayload {
         deviceName is! String ||
         pairingNonce is! String ||
         expiresAtMs is! int ||
-        certificateFingerprintSha256 is! String ||
-        transport is! Map ||
+        transport is! String ||
         capabilities is! Map) {
       return null;
     }
@@ -90,8 +75,7 @@ class PairingPayload {
         deviceName: deviceName,
         pairingNonce: pairingNonce,
         expiresAtMs: expiresAtMs,
-        certificateFingerprintSha256: certificateFingerprintSha256,
-        transport: Map<String, Object?>.from(transport),
+        transport: transport,
         capabilities: Map<String, Object?>.from(capabilities));
   }
 

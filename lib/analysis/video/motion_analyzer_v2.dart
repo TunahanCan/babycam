@@ -80,12 +80,15 @@ class MotionAnalyzerV2 {
         backgroundSum += _background[i];
       }
     }
-    if (total == 0) return _finish(_invalid(frame.timestampMs, sw.elapsedMicroseconds));
+    if (total == 0) {
+      return _finish(_invalid(frame.timestampMs, sw.elapsedMicroseconds));
+    }
 
     final currentMean = currentSum / total;
     final backgroundMean = backgroundSum / total;
     final globalShift = currentMean - backgroundMean;
-    final threshold = max(_config.minPixelDiff, _noiseFloor * _config.noiseMultiplier);
+    final threshold =
+        max(_config.minPixelDiff, _noiseFloor * _config.noiseMultiplier);
     var active = 0;
     var rawActive = 0;
     var diffSum = 0.0;
@@ -95,7 +98,8 @@ class MotionAnalyzerV2 {
       if (!_inRoi(i)) continue;
       final rawDiff = (_current[i] - _background[i]).abs().toDouble();
       if (rawDiff > threshold) rawActive++;
-      final diff = (_current[i] - globalShift - _background[i]).abs().toDouble();
+      final diff =
+          (_current[i] - globalShift - _background[i]).abs().toDouble();
       allDiffSum += diff;
       if (diff > threshold) {
         active++;
@@ -109,8 +113,9 @@ class MotionAnalyzerV2 {
     var rawScore = activeAreaRatio < _config.minActiveAreaRatio
         ? 0.0
         : _clamp01(0.65 * (activeAreaRatio / 0.10) + 0.35 * (meanDiff / 64.0));
-    final isGlobalLightChange = rawActiveRatio > _config.globalLightChangeRatio ||
-        (rawActiveRatio > 0.40 && activeAreaRatio < rawActiveRatio * 0.25);
+    final isGlobalLightChange =
+        rawActiveRatio > _config.globalLightChangeRatio ||
+            (rawActiveRatio > 0.40 && activeAreaRatio < rawActiveRatio * 0.25);
     if (isGlobalLightChange) rawScore = 0;
 
     _smoothedScore = _clamp01(
@@ -119,17 +124,22 @@ class MotionAnalyzerV2 {
     );
     _updateMotionState(frame.timestampMs, isGlobalLightChange);
 
-    if (!_isMotion && !isGlobalLightChange && rawScore < _config.motionOffThreshold) {
+    if (!_isMotion &&
+        !isGlobalLightChange &&
+        rawScore < _config.motionOffThreshold) {
       final observedNoise = allDiffSum / total;
       _noiseFloor = _noiseFloor * 0.90 + observedNoise * 0.10;
     }
 
     final alpha = isGlobalLightChange
         ? _config.stableBackgroundAlpha * 0.5
-        : (_isMotion ? _config.motionBackgroundAlpha : _config.stableBackgroundAlpha);
+        : (_isMotion
+            ? _config.motionBackgroundAlpha
+            : _config.stableBackgroundAlpha);
     final initAlpha = _analyzedFrames < 5 ? _config.initializationAlpha : alpha;
     for (var i = 0; i < count; i++) {
-      _background[i] = _background[i] * (1 - initAlpha) + _current[i] * initAlpha;
+      _background[i] =
+          _background[i] * (1 - initAlpha) + _current[i] * initAlpha;
     }
     _analyzedFrames++;
 
@@ -174,7 +184,8 @@ class MotionAnalyzerV2 {
       };
 
   void _allocateBuffers() {
-    final length = max(0, _config.downsampleWidth * _config.downsampleHeight).toInt();
+    final length =
+        max(0, _config.downsampleWidth * _config.downsampleHeight).toInt();
     _current = Uint8List(length);
     _background = Float64List(length);
     _noiseFloor = _config.minPixelDiff / _config.noiseMultiplier;
@@ -214,7 +225,8 @@ class MotionAnalyzerV2 {
     }
   }
 
-  MotionAnalysisResult _result(int timestampMs, int micros) => MotionAnalysisResult(
+  MotionAnalysisResult _result(int timestampMs, int micros) =>
+      MotionAnalysisResult(
         timestampMs: timestampMs,
         score: 0,
         rawScore: 0,
@@ -230,7 +242,8 @@ class MotionAnalyzerV2 {
         processingTimeMicros: micros,
       );
 
-  MotionAnalysisResult _invalid(int timestampMs, int micros) => MotionAnalysisResult(
+  MotionAnalysisResult _invalid(int timestampMs, int micros) =>
+      MotionAnalysisResult(
         timestampMs: timestampMs,
         score: 0,
         rawScore: 0,

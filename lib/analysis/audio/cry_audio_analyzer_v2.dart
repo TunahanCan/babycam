@@ -9,7 +9,17 @@ import 'audio_ring_buffer.dart';
 import 'goertzel_band_analyzer.dart';
 import 'pcm16le_reader.dart';
 
-const _centers = [250.0, 400.0, 600.0, 800.0, 1000.0, 1500.0, 2000.0, 3000.0, 4000.0];
+const _centers = [
+  250.0,
+  400.0,
+  600.0,
+  800.0,
+  1000.0,
+  1500.0,
+  2000.0,
+  3000.0,
+  4000.0
+];
 const _minDbfs = -120.0;
 const _fallbackAmbientDbfs = -55.0;
 
@@ -115,7 +125,10 @@ class CryAudioAnalyzerV2 {
       normalized[i] = sample;
       sumSq += sample * sample;
       peak = max(peak, sample.abs());
-      if (i > 0 && ((sample >= 0 && previous < 0) || (sample < 0 && previous >= 0))) crossings++;
+      if (i > 0 &&
+          ((sample >= 0 && previous < 0) || (sample < 0 && previous >= 0))) {
+        crossings++;
+      }
       previous = sample;
     }
     final rms = sqrt(sumSq / samples.length);
@@ -132,6 +145,7 @@ class CryAudioAnalyzerV2 {
       }
       return (energy / total).clamp(0.0, 1.0).toDouble();
     }
+
     final lowRatio = bandRatio((f) => f >= 250 && f <= 600);
     final cryRatio = bandRatio((f) => f >= 400 && f <= 1500);
     final highRatio = bandRatio((f) => f >= 1500 && f <= 4000);
@@ -141,24 +155,44 @@ class CryAudioAnalyzerV2 {
     _previousBandVector = vector;
 
     _updateCalibration(dbfs, timestampMs);
-    final ambient = _state == AudioCalibrationState.uncalibrated ? _fallbackAmbientDbfs : _ambientDbfs;
+    final ambient = _state == AudioCalibrationState.uncalibrated
+        ? _fallbackAmbientDbfs
+        : _ambientDbfs;
     final delta = dbfs - ambient;
     final energyScore = _norm(delta, 6, 24);
     final bandScore = _norm(cryRatio, 0.25, 0.65);
     final zcrScore = _trapezoid(zcr, 0.02, 0.04, 0.22, 0.34);
     final centroidScore = _trapezoid(centroid, 350, 600, 2200, 3200);
     final fluxScore = _norm(flux, 0.0005, 0.03);
-    final weightSum = max(1e-9, config.energyWeight + config.bandWeight + config.zcrWeight + config.centroidWeight + config.fluxWeight);
-    var raw = (config.energyWeight * energyScore + config.bandWeight * bandScore + config.zcrWeight * zcrScore + config.centroidWeight * centroidScore + config.fluxWeight * fluxScore) / weightSum;
+    final weightSum = max(
+        1e-9,
+        config.energyWeight +
+            config.bandWeight +
+            config.zcrWeight +
+            config.centroidWeight +
+            config.fluxWeight);
+    var raw = (config.energyWeight * energyScore +
+            config.bandWeight * bandScore +
+            config.zcrWeight * zcrScore +
+            config.centroidWeight * centroidScore +
+            config.fluxWeight * fluxScore) /
+        weightSum;
     if (dbfs < config.minDbfsForCryCandidate) raw *= 0.35;
     raw = raw.clamp(0.0, 1.0).toDouble();
     final alpha = config.smoothingAlpha.clamp(0.0, 1.0).toDouble();
-    final score = (_previousCryScore * (1 - alpha) + raw * alpha).clamp(0.0, 1.0).toDouble();
+    final score = (_previousCryScore * (1 - alpha) + raw * alpha)
+        .clamp(0.0, 1.0)
+        .toDouble();
     _previousCryScore = score;
     final isLoud = dbfs >= config.loudSoundDbfs;
-    final likely = _updateDecision(score, timestampMs) && _state != AudioCalibrationState.calibrating;
-    if (_state == AudioCalibrationState.calibrated && !likely && !isLoud && score < config.cryOffThreshold) {
-      _ambientDbfs = _ambientDbfs * (1 - config.ambientUpdateAlpha) + dbfs * config.ambientUpdateAlpha;
+    final likely = _updateDecision(score, timestampMs) &&
+        _state != AudioCalibrationState.calibrating;
+    if (_state == AudioCalibrationState.calibrated &&
+        !likely &&
+        !isLoud &&
+        score < config.cryOffThreshold) {
+      _ambientDbfs = _ambientDbfs * (1 - config.ambientUpdateAlpha) +
+          dbfs * config.ambientUpdateAlpha;
     }
     sw.stop();
     return AudioAnalysisResult(
@@ -191,7 +225,9 @@ class CryAudioAnalyzerV2 {
     _calibrationStartMs ??= timestampMs;
     _calibrationDbfs.add(dbfs);
     if (timestampMs - _calibrationStartMs! >= config.calibrationMs) {
-      _ambientDbfs = _calibrationDbfs.isEmpty ? _fallbackAmbientDbfs : _calibrationDbfs.reduce((a, b) => a + b) / _calibrationDbfs.length;
+      _ambientDbfs = _calibrationDbfs.isEmpty
+          ? _fallbackAmbientDbfs
+          : _calibrationDbfs.reduce((a, b) => a + b) / _calibrationDbfs.length;
       _state = AudioCalibrationState.calibrated;
       _calibrationDbfs.clear();
     }
@@ -207,7 +243,9 @@ class CryAudioAnalyzerV2 {
       _candidateActive = false;
       _candidateStartMs = null;
     }
-    return _candidateActive && _candidateStartMs != null && timestampMs - _candidateStartMs! >= config.minCryDurationMs;
+    return _candidateActive &&
+        _candidateStartMs != null &&
+        timestampMs - _candidateStartMs! >= config.minCryDurationMs;
   }
 
   double _weightedCentroid(List<double> vector, double total) {
@@ -264,11 +302,10 @@ class CryAudioAnalyzerV2 {
 }
 
 double _norm(double value, double minValue, double maxValue) =>
-    ((value - minValue) / (maxValue - minValue))
-        .clamp(0.0, 1.0)
-        .toDouble();
+    ((value - minValue) / (maxValue - minValue)).clamp(0.0, 1.0).toDouble();
 
-double _trapezoid(double v, double start, double fullStart, double fullEnd, double end) {
+double _trapezoid(
+    double v, double start, double fullStart, double fullEnd, double end) {
   if (v <= start || v >= end) return 0;
   if (v >= fullStart && v <= fullEnd) return 1;
   if (v < fullStart) return _norm(v, start, fullStart);

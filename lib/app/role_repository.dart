@@ -15,7 +15,8 @@ class SharedPreferencesRoleRepository implements RoleRepository {
 
   @override
   Future<AppRole?> loadRole() async {
-    final value = _preferences.getString(storageKey) ?? _preferences.getString('mode');
+    final value =
+        _preferences.getString(storageKey) ?? _preferences.getString('mode');
     return switch (value) {
       'server' => AppRole.server,
       'client' => AppRole.client,

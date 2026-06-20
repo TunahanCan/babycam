@@ -19,7 +19,7 @@ class ClientVideoViewer extends StatelessWidget {
         onNavigationRequest: (request) {
           final uri = Uri.tryParse(request.url);
           if (uri == null) return NavigationDecision.prevent;
-          final allowed = (uri.scheme == 'http' || uri.scheme == 'https') &&
+          final allowed = uri.scheme == 'http' &&
               uri.host == pairedServerHost &&
               uri.port == pairedServerPort;
           return allowed

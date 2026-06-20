@@ -1,6 +1,5 @@
 import '../../core/protocol/pairing_payload.dart';
-import '../../core/security/local_tls_certificate_manager.dart';
-import '../../core/security/transport_security_config.dart';
+import '../../core/security/transport_config.dart';
 import '../../l10n/app_strings.dart';
 import '../../services/mimicam_server.dart';
 import '../../services/configuration_service.dart';
@@ -18,9 +17,7 @@ class ServerCompositionRoot {
       Future<String> Function()? startPairingOverride,
       Future<void> Function()? startMediaOverride,
       Future<void> Function()? stopOverride,
-      TransportSecurityConfig transportSecurityConfig =
-          TransportSecurityConfig.secureDefault,
-      LocalTlsCertificateManager? localTlsCertificateManager}) {
+      TransportConfig transportConfig = TransportConfig.local}) {
     createCount++;
     final tokenService = PairingTokenService();
     void Function()? notifyMediaProfileChanged;
@@ -31,11 +28,10 @@ class ServerCompositionRoot {
         onAlert: (_) {},
         onMediaProfileChanged: (_) => notifyMediaProfileChanged?.call(),
         tokenService: tokenService,
-        transportSecurityConfig: transportSecurityConfig,
-        localTlsCertificateManager: localTlsCertificateManager);
+        transportConfig: transportConfig);
     final qrBuilder = ServerQrPayloadBuilder(
       tokenService: tokenService,
-      transportSecurityConfig: transportSecurityConfig,
+      transportConfig: transportConfig,
     );
     String? lastAddress;
     final media = MediaRuntimeController(
@@ -53,12 +49,15 @@ class ServerCompositionRoot {
             lastAddress = uri.host;
             final payload = qrBuilder.build(
               host: lastAddress ?? '127.0.0.1',
-              certificateFingerprintSha256: server.certificateFingerprintSha256,
-              transportSecurityConfig: transportSecurityConfig,
+              port: uri.port,
+              transportConfig: transportConfig,
               capabilities: server.mediaCapabilities,
             );
             return payload.toUriString();
           },
+      onStopPairing: startPairingOverride == null
+          ? () async => server.stopPairingMode()
+          : null,
       onStop: stopOverride ?? server.dispose,
     );
     notifyMediaProfileChanged = runtime.refreshMediaProfile;

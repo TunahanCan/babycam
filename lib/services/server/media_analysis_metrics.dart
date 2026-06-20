@@ -43,7 +43,8 @@ class MediaAnalysisMetrics {
     if (!result.skippedByFrameRateGate && !result.invalidFrame) {
       videoFramesAnalyzed++;
     }
-    motionProcessingAvgMicros = _ema(motionProcessingAvgMicros, result.processingTimeMicros.toDouble());
+    motionProcessingAvgMicros =
+        _ema(motionProcessingAvgMicros, result.processingTimeMicros.toDouble());
     lastMotionScore = result.score;
     lastMotionAt = result.timestampMs;
     lastMotionIsMotion = result.isMotion;
@@ -58,7 +59,8 @@ class MediaAnalysisMetrics {
     if (!result.invalidChunk) {
       audioWindowsAnalyzed++;
     }
-    audioProcessingAvgMicros = _ema(audioProcessingAvgMicros, result.processingTimeMicros.toDouble());
+    audioProcessingAvgMicros =
+        _ema(audioProcessingAvgMicros, result.processingTimeMicros.toDouble());
     lastCryScore = result.cryScore;
     lastAudioDbfs = result.dbfs;
     lastAmbientDbfs = result.ambientDbfs;
@@ -134,5 +136,6 @@ class MediaAnalysisMetrics {
     lastAlertAt = null;
   }
 
-  double _ema(double avg, double value) => avg == 0 ? value : avg * 0.9 + value * 0.1;
+  double _ema(double avg, double value) =>
+      avg == 0 ? value : avg * 0.9 + value * 0.1;
 }

@@ -37,10 +37,13 @@ class AudioAnalysisResult {
   final bool alert;
   final String reason;
 
-  String get dominantSound => cryScore >= moanScore ? _strings.cryingSound : _strings.moaningSound;
+  String get dominantSound =>
+      cryScore >= moanScore ? _strings.cryingSound : _strings.moaningSound;
 
   String get summary {
-    final f0 = fundamentalHz > 0 ? '${fundamentalHz.round()} Hz' : _strings.unknownFundamentalFrequency;
+    final f0 = fundamentalHz > 0
+        ? '${fundamentalHz.round()} Hz'
+        : _strings.unknownFundamentalFrequency;
     return _strings.audioSummary(
       dbfs: dbfs,
       ambientDbfs: 20 * log(max(ambientRms, 1e-6)) / ln10,
@@ -82,7 +85,8 @@ class _SpectralShape {
 }
 
 class AudioAnalyzer {
-  AudioAnalyzer({this.sampleRate = 16000, AppStrings? strings}) : _strings = strings ?? AppStrings(const Locale('tr'));
+  AudioAnalyzer({this.sampleRate = 16000, AppStrings? strings})
+      : _strings = strings ?? AppStrings(const Locale('tr'));
 
   final AppStrings _strings;
 
@@ -118,9 +122,11 @@ class AudioAnalyzer {
         (1 - _smoothStep(spectral.entropy, 0.55, 0.92)).clamp(0.0, 1.0);
     final zeroCrossComponent = _smoothStep(zeroCrossRate, 0.08, 0.35);
     final cryTimbre =
-        (cryRatio * 1.12 + harshRatio * 0.58 + cryCentroidComponent * 0.40).clamp(0.0, 1.0);
-    final moanTimbre =
-        (lowRatio * 1.15 + (1 - _smoothStep(spectral.centroidHz, 360, 1100)) * 0.35).clamp(0.0, 1.0);
+        (cryRatio * 1.12 + harshRatio * 0.58 + cryCentroidComponent * 0.40)
+            .clamp(0.0, 1.0);
+    final moanTimbre = (lowRatio * 1.15 +
+            (1 - _smoothStep(spectral.centroidHz, 360, 1100)) * 0.35)
+        .clamp(0.0, 1.0);
 
     final voiceActivity = (0.52 * aboveAmbient +
             0.28 * narrowVoicedComponent +
@@ -138,12 +144,17 @@ class AudioAnalyzer {
             0.08 * voiceActivity)
         .clamp(0.0, 1.0);
 
-    _sustainedCry = _leakyIntegrator(_sustainedCry, cryScore, attack: 0.35, release: 0.08);
-    _sustainedMoan = _leakyIntegrator(_sustainedMoan, moanScore, attack: 0.25, release: 0.06);
-    _sustainedVoiceActivity = _leakyIntegrator(_sustainedVoiceActivity, voiceActivity, attack: 0.30, release: 0.10);
+    _sustainedCry =
+        _leakyIntegrator(_sustainedCry, cryScore, attack: 0.35, release: 0.08);
+    _sustainedMoan = _leakyIntegrator(_sustainedMoan, moanScore,
+        attack: 0.25, release: 0.06);
+    _sustainedVoiceActivity = _leakyIntegrator(
+        _sustainedVoiceActivity, voiceActivity,
+        attack: 0.30, release: 0.10);
 
     final now = DateTime.now();
-    final cooldownPassed = now.difference(_lastAlert) > const Duration(seconds: 12);
+    final cooldownPassed =
+        now.difference(_lastAlert) > const Duration(seconds: 12);
     final cryAlert = _sustainedCry > 0.72 &&
         rms > _ambientRms * 2.05 &&
         _sustainedVoiceActivity > 0.45;
@@ -216,7 +227,9 @@ class AudioAnalyzer {
     var previous = samples.first;
     for (var i = 1; i < samples.length; i++) {
       final sample = samples[i];
-      if ((sample >= 0 && previous < 0) || (sample < 0 && previous >= 0)) crossings++;
+      if ((sample >= 0 && previous < 0) || (sample < 0 && previous >= 0)) {
+        crossings++;
+      }
       previous = sample;
     }
     return crossings / (samples.length - 1);

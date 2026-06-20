@@ -7,7 +7,8 @@ import 'package:mimicam/analysis/video/motion_analyzer_v2.dart';
 import 'package:mimicam/analysis/video/normalized_rect.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-Uint8List makeLumaFrame({required int width, required int height, required int value}) =>
+Uint8List makeLumaFrame(
+        {required int width, required int height, required int value}) =>
     Uint8List.fromList(List.filled(width * height, value));
 
 void drawRectOnLuma(Uint8List frame, int width, int height, int left, int top,
@@ -44,7 +45,11 @@ MotionAnalysisConfig fastConfig({NormalizedRect? roi}) => MotionAnalysisConfig(
 
 void prime(MotionAnalyzerV2 analyzer, int width, int height) {
   for (var i = 0; i < 5; i++) {
-    analyzer.analyze(makeFrame(makeLumaFrame(width: width, height: height, value: 80), width, height, i * 100));
+    analyzer.analyze(makeFrame(
+        makeLumaFrame(width: width, height: height, value: 80),
+        width,
+        height,
+        i * 100));
   }
 }
 
@@ -54,7 +59,11 @@ void main() {
 
   test('static frame has low score and no motion', () {
     final analyzer = MotionAnalyzerV2(config: fastConfig());
-    final result = analyzer.analyze(makeFrame(makeLumaFrame(width: width, height: height, value: 90), width, height, 0));
+    final result = analyzer.analyze(makeFrame(
+        makeLumaFrame(width: width, height: height, value: 90),
+        width,
+        height,
+        0));
     expect(result.score, lessThan(0.01));
     expect(result.isMotion, isFalse);
   });
@@ -101,7 +110,8 @@ void main() {
 
   test('motion inside ROI raises score', () {
     final analyzer = MotionAnalyzerV2(
-      config: fastConfig(roi: const NormalizedRect(left: 0, top: 0, width: 0.5, height: 0.5)),
+      config: fastConfig(
+          roi: const NormalizedRect(left: 0, top: 0, width: 0.5, height: 0.5)),
     );
     prime(analyzer, width, height);
     final data = makeLumaFrame(width: width, height: height, value: 80);
@@ -112,7 +122,8 @@ void main() {
 
   test('motion outside ROI keeps score low', () {
     final analyzer = MotionAnalyzerV2(
-      config: fastConfig(roi: const NormalizedRect(left: 0, top: 0, width: 0.5, height: 0.5)),
+      config: fastConfig(
+          roi: const NormalizedRect(left: 0, top: 0, width: 0.5, height: 0.5)),
     );
     prime(analyzer, width, height);
     final data = makeLumaFrame(width: width, height: height, value: 80);
@@ -121,10 +132,15 @@ void main() {
     expect(result.rawScore, lessThan(0.05));
   });
 
-  test('whole frame brightness change is global light change and no motion', () {
+  test('whole frame brightness change is global light change and no motion',
+      () {
     final analyzer = MotionAnalyzerV2(config: fastConfig());
     prime(analyzer, width, height);
-    final result = analyzer.analyze(makeFrame(makeLumaFrame(width: width, height: height, value: 160), width, height, 600));
+    final result = analyzer.analyze(makeFrame(
+        makeLumaFrame(width: width, height: height, value: 160),
+        width,
+        height,
+        600));
     expect(result.isGlobalLightChange, isTrue);
     expect(result.isMotion, isFalse);
   });
@@ -152,7 +168,16 @@ void main() {
 
   test('toJson returns core fields', () {
     final analyzer = MotionAnalyzerV2(config: fastConfig());
-    final json = analyzer.analyze(makeFrame(makeLumaFrame(width: width, height: height, value: 90), width, height, 0)).toJson();
-    expect(json.keys, containsAll(['timestampMs', 'score', 'rawScore', 'isMotion', 'invalidFrame']));
+    final json = analyzer
+        .analyze(makeFrame(
+            makeLumaFrame(width: width, height: height, value: 90),
+            width,
+            height,
+            0))
+        .toJson();
+    expect(
+        json.keys,
+        containsAll(
+            ['timestampMs', 'score', 'rawScore', 'isMotion', 'invalidFrame']));
   });
 }

@@ -19,5 +19,6 @@ class Pcm16LeReader {
     return out;
   }
 
-  static double sampleToDouble(int sample) => (sample / 32768.0).clamp(-1.0, 1.0).toDouble();
+  static double sampleToDouble(int sample) =>
+      (sample / 32768.0).clamp(-1.0, 1.0).toDouble();
 }

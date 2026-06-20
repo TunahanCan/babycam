@@ -132,12 +132,12 @@ void main() {
     }
   });
 
-  testWidgets('server QR uzun HTTPS payload ile kısa ekrana sığar',
+  testWidgets('server QR uzun HTTP/WS payload ile kısa ekrana sığar',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(320, 640));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final preferences = await SharedPreferences.getInstance();
-    final payload = _longSecureQrPayload();
+    final payload = _longHttpWsQrPayload();
     final runtime = ServerRuntime(
       mediaRuntime: MediaRuntimeController(),
       onStartPairing: () async => payload,
@@ -223,7 +223,7 @@ PairingPayload _payload() => PairingPayload(
       capabilities: const {'transport': 'http'},
     );
 
-String _longSecureQrPayload() {
+String _longHttpWsQrPayload() {
   final noisyPayload = List.filled(720, 'a').join();
   return 'mimicam://pair?payload=$noisyPayload';
 }

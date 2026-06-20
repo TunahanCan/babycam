@@ -20,8 +20,6 @@ class PairingSession {
   int get port => payload.port;
   String get deviceId => payload.deviceId;
   String get deviceName => payload.deviceName;
-  String get certificateFingerprintSha256 =>
-      payload.certificateFingerprintSha256;
   String get httpScheme => payload.httpScheme;
   String get wsScheme => payload.wsScheme;
 

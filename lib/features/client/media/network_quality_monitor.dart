@@ -6,22 +6,17 @@ import '../../../core/media/adaptive_media_profile.dart';
 import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
-import '../../../core/security/pinned_http_client_factory.dart';
 
 class NetworkQualityMonitor {
   NetworkQualityMonitor({
     this.pollInterval = const Duration(seconds: 4),
     this.timeout = const Duration(seconds: 2),
     HttpClient Function(PairingSession session)? clientFactory,
-    PinnedHttpClientFactory? pinnedHttpClientFactory,
-  })  : _clientFactory = clientFactory,
-        _pinnedHttpClientFactory =
-            pinnedHttpClientFactory ?? PinnedHttpClientFactory();
+  }) : _clientFactory = clientFactory;
 
   final Duration pollInterval;
   final Duration timeout;
   final HttpClient Function(PairingSession session)? _clientFactory;
-  final PinnedHttpClientFactory _pinnedHttpClientFactory;
   final _classifier = const NetworkQualityClassifier();
 
   Stream<NetworkQualityUpdate> watch(PairingSession session) async* {
@@ -132,11 +127,6 @@ class NetworkQualityMonitor {
   HttpClient _createClient(PairingSession session) {
     final factory = _clientFactory;
     if (factory != null) return factory(session);
-    if (session.httpScheme != 'https') return HttpClient();
-    return _pinnedHttpClientFactory.create(
-      expectedFingerprintSha256Hex: session.certificateFingerprintSha256,
-      expectedHost: session.host,
-      expectedPort: session.port,
-    );
+    return HttpClient();
   }
 }

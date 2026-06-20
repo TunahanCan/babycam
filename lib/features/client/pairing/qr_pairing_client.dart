@@ -4,20 +4,12 @@ import 'dart:io';
 import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_payload.dart';
 import '../../../core/protocol/pairing_session.dart';
-import '../../../core/security/pinned_http_client_factory.dart';
-
-const _fingerprintMismatchMessage =
-    'Server güvenlik parmak izi eşleşmedi. QR’ı yenileyip tekrar deneyin.';
 
 class QRPairingClient {
-  QRPairingClient({PinnedHttpClientFactory? pinnedHttpClientFactory})
-      : _pinnedHttpClientFactory =
-            pinnedHttpClientFactory ?? PinnedHttpClientFactory();
-
-  final PinnedHttpClientFactory _pinnedHttpClientFactory;
+  const QRPairingClient();
 
   Future<PairingSession> pair(PairingPayload payload) async {
-    final client = _clientForPayload(payload);
+    final client = HttpClient();
     try {
       final request = await client.postUrl(
         Uri(
@@ -53,21 +45,8 @@ class QRPairingClient {
                 : 0,
         pairedAtMs: DateTime.now().millisecondsSinceEpoch,
       );
-    } on HandshakeException catch (_) {
-      throw StateError(_fingerprintMismatchMessage);
-    } on TlsException catch (_) {
-      throw StateError(_fingerprintMismatchMessage);
     } finally {
       client.close(force: true);
     }
-  }
-
-  HttpClient _clientForPayload(PairingPayload payload) {
-    if (payload.httpScheme != 'https') return HttpClient();
-    return _pinnedHttpClientFactory.create(
-      expectedFingerprintSha256Hex: payload.certificateFingerprintSha256,
-      expectedHost: payload.host,
-      expectedPort: payload.port,
-    );
   }
 }

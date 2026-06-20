@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/security/transport_security_config.dart';
 import 'package:mimicam/features/server/pairing/pairing_token_service.dart';
 import 'package:mimicam/features/server/pairing/server_qr_payload_builder.dart';
 
@@ -17,17 +16,12 @@ void main() {
             DateTime.now()
                 .add(const Duration(minutes: 1))
                 .millisecondsSinceEpoch,
-        certificateFingerprintSha256: 'ab' * 32,
-        transport: const {
-          'httpScheme': 'https',
-          'wsScheme': 'wss',
-          'tlsMode': 'selfSignedPinned',
-        },
+        transport: 'http_ws',
         capabilities: const {
           'video': 'mjpeg',
           'audio': 'pcm16le',
           'events': 'json',
-          'transport': 'https',
+          'maxClients': 5,
         },
       );
 
@@ -35,6 +29,8 @@ void main() {
     final parsed = PairingPayload.parseUri(payload().toUriString());
     expect(parsed, isNotNull);
     expect(parsed!.host, '192.168.1.20');
+    expect(parsed.httpScheme, 'http');
+    expect(parsed.wsScheme, 'ws');
   });
 
   test('expired QR payload reddedilir', () {
@@ -52,21 +48,18 @@ void main() {
     expect(parsed, isNull);
   });
 
-  test('server QR payload pinned HTTPS transport ile üretilir', () {
+  test('server QR payload HTTP/WS transport ile üretilir', () {
     final builder = ServerQrPayloadBuilder(tokenService: PairingTokenService());
 
-    final payload = builder.build(
-      host: '192.168.1.20',
-      certificateFingerprintSha256: 'cd' * 32,
-    );
+    final payload = builder.build(host: '192.168.1.20');
 
-    expect(payload.certificateFingerprintSha256, 'cd' * 32);
-    expect(payload.transport['httpScheme'], 'https');
-    expect(payload.transport['wsScheme'], 'wss');
-    expect(payload.capabilities['transport'], 'https');
+    expect(payload.transport, 'http_ws');
+    expect(payload.httpScheme, 'http');
+    expect(payload.wsScheme, 'ws');
+    expect(payload.capabilities['maxClients'], 5);
   });
 
-  test('eski payload transport alanı olmadan parse edilebilir', () {
+  test('transport alanı olmadan gelen payload HTTP/WS kabul edilir', () {
     final parsed = PairingPayload.fromJson({
       'schemaVersion': 1,
       'scheme': 'mimicam',
@@ -77,24 +70,12 @@ void main() {
       'pairingNonce': 'nonce',
       'expiresAtMs':
           DateTime.now().add(const Duration(minutes: 1)).millisecondsSinceEpoch,
-      'capabilities': {'transport': 'http'},
+      'capabilities': {'maxClients': 5},
     });
 
     expect(parsed, isNotNull);
-    expect(parsed!.httpScheme, 'http');
+    expect(parsed!.transport, 'http_ws');
+    expect(parsed.httpScheme, 'http');
     expect(parsed.wsScheme, 'ws');
-  });
-
-  test('insecure dev config QR payload içinde HTTP/WS taşıyabilir', () {
-    final builder = ServerQrPayloadBuilder(
-      tokenService: PairingTokenService(),
-      transportSecurityConfig: TransportSecurityConfig.insecureDevOnly,
-    );
-
-    final payload = builder.build(host: '127.0.0.1');
-
-    expect(payload.transport['httpScheme'], 'http');
-    expect(payload.transport['wsScheme'], 'ws');
-    expect(payload.capabilities['transport'], 'http');
   });
 }
