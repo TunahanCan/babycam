@@ -16,8 +16,10 @@ class RoleSelectionScreen extends StatelessWidget {
       body: _LightShell(
         child: SafeArea(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(18, 12, 18, 22),
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
             children: [
+              const _BrandHeader(),
+              const SizedBox(height: 18),
               Text(strings.ui('roleSelectionTitle'), style: _titleStyle),
               const SizedBox(height: 8),
               Text(
@@ -49,6 +51,26 @@ class RoleSelectionScreen extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BrandHeader extends StatelessWidget {
+  const _BrandHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Semantics(
+        label: 'MimiCam',
+        image: true,
+        child: Image.asset(
+          'assets/branding/mimicam_wordmark.png',
+          width: 230,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.high,
         ),
       ),
     );
