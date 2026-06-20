@@ -25,6 +25,22 @@ void main() {
     expect(find.text('Bebek Odası Cihazı'), findsOneWidget);
     expect(find.byIcon(Icons.monitor_heart), findsOneWidget);
     expect(find.byIcon(Icons.child_care), findsOneWidget);
+    expect(find.byIcon(Icons.wifi_tethering_rounded), findsOneWidget);
+    expect(find.text('Güvenlik notu'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Güvenlik notu')).dy,
+      lessThan(520),
+    );
+    expect(
+      tester
+          .getBottomLeft(
+            find.text(
+              'Bu uygulama aynı Wi-Fi/LAN içinde kullanım için tasarlandı.',
+            ),
+          )
+          .dy,
+      lessThan(600),
+    );
     expect(MimiCamColors.brandBlue, const Color(0xFF5AA9FF));
     expect(MimiCamColors.brandPink, const Color(0xFFFF7BBF));
     await tester.tap(find.text('Ebeveyn Cihazı'));

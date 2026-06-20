@@ -44,11 +44,12 @@ class RoleSelectionScreen extends StatelessWidget {
                 iconColor: const Color(0xFFB9F1E9),
                 onPressed: () => onRoleSelected(AppRole.client),
               ),
-              const SizedBox(height: 132),
+              const SizedBox(height: 18),
               _InfoStrip(
                 title: strings.ui('securityNoteTitle'),
                 text: strings.ui('securityNoteText'),
               ),
+              const SizedBox(height: 28),
             ],
           ),
         ),
@@ -172,16 +173,16 @@ class _InfoStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(17),
       decoration: _cardDecoration(color: MimiCamDesignTokens.amberSoft),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const CircleAvatar(
-            radius: 20,
+            radius: 21,
             backgroundColor: Colors.white,
             child: Icon(
-              Icons.shield_outlined,
+              Icons.wifi_tethering_rounded,
               color: MimiCamDesignTokens.nightPlum,
             ),
           ),
