@@ -11,6 +11,40 @@ import 'package:mimicam/services/mimicam_server.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('session/start aynı client için idempotent kalır', () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+
+    final first = await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.sessionStart,
+      trusted.token,
+      {'clientId': trusted.clientId},
+    );
+    final second = await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.sessionStart,
+      trusted.token,
+      {'clientId': trusted.clientId},
+    );
+
+    expect(first.statusCode, HttpStatus.ok);
+    expect(second.statusCode, HttpStatus.ok);
+    expect(first.body['activeStreamClients'], 1);
+    expect(second.body['activeStreamClients'], 1);
+    expect(first.body['streamToken'], isNot(second.body['streamToken']));
+  });
+
   test('6. aktif izleyici 429 MAX_ACTIVE_CLIENTS_REACHED alır', () async {
     final tokenService = PairingTokenService(maxTrustedClients: 10);
     final server = await _testServer(tokenService);

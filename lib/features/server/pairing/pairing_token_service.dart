@@ -197,6 +197,22 @@ class PairingTokenService {
     return record;
   }
 
+  Set<String> pruneExpiredStreamTokens() {
+    final nowMs = _now().millisecondsSinceEpoch;
+    final expiredClientIds = <String>{};
+    _streamTokens.removeWhere((_, record) {
+      final expired = record.expiresAtMs <= nowMs;
+      if (expired) expiredClientIds.add(record.clientId);
+      return expired;
+    });
+    return expiredClientIds;
+  }
+
+  bool hasValidStreamTokenForClient(String clientId) {
+    pruneExpiredStreamTokens();
+    return _streamTokens.values.any((record) => record.clientId == clientId);
+  }
+
   void revokeStreamTokensForClient(String clientId) {
     _streamTokens.removeWhere((_, record) => record.clientId == clientId);
   }
