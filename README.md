@@ -5,7 +5,7 @@ MimiCam, aynı local Wi‑Fi ağı içindeki telefonları basit bir bebek kamera
 - **Server / Bebek Odası:** Kamera, mikrofon, analiz, pairing ve local HTTP/WS yayınını yönetir.
 - **Client / Ebeveyn:** QR veya manuel IP:port ile eşleşir, uyarıları dinler ve canlı izleme oturumu açar.
 
-MVP’de cloud, relay, hesap sistemi, OAuth, UDP discovery, Telegram otomasyonu, HTTPS/WSS ve certificate pinning yoktur. Amaç; iki telefon ya da en fazla 5 local cihaz arasında düşük gecikmeli, zayıf Wi‑Fi’da stabil medya aktarımıdır. Server tarafında public API sade tutulur; içeride client lifecycle, auth guard, kalite seçimi ve stream backpressure ayrı küçük policy/registry sınıflarıyla yönetilir.
+MVP’de cloud, relay, hesap sistemi, OAuth, UDP discovery, Telegram otomasyonu, HTTPS/WSS ve certificate pinning yoktur. Amaç; iki telefon ya da en fazla 5 local cihaz arasında düşük gecikmeli, zayıf Wi‑Fi’da stabil medya aktarımıdır. Client; RTT yanında video frame gap, audio gap/underrun, WebSocket disconnect/reconnect ve stream timeout sinyallerini raporlar. Server tarafında public API sade tutulur; içeride client lifecycle, auth guard, kalite seçimi ve stream backpressure ayrı küçük policy/registry sınıflarıyla yönetilir.
 
 ---
 
@@ -21,6 +21,7 @@ MimiCam MVP, aynı local Wi‑Fi ağı içinde **HTTP/WS + pairing token** model
 | Aktif izleme | En fazla 5 eşzamanlı watch client |
 | Video | MJPEG, tek latest JPEG, client başına encode yok |
 | Audio | PCM16LE/WAV; yavaş client için flush backlog biriktirmez |
+| Kalite raporu | RTT + video/audio gap + WS reconnect + watchActive |
 | Güvenlik kapsamı | Aynı Wi‑Fi’daki yetkisiz cihazları pairing token ile engelleme |
 
 ---
@@ -43,6 +44,10 @@ Client Bearer token ile status/event/session endpointlerine erişir
 Session start kısa ömürlü streamToken üretir
   ↓
 Video/audio sadece Bearer token veya streamToken ile açılır
+  ↓
+Client health monitor 4 sn aralıkla /quality/report gönderir
+  ↓
+Server hızlı düşürme / 30 sn stabil sonrası tek kademe yükseltme uygular
 ```
 
 Rol seçimi cihazda saklanır. Rol değişiminde eski runtime dispose edilir ve karşı role ait graph baştan kurulur.
@@ -67,7 +72,7 @@ Server artık uygulama açılır açılmaz pairing başlatmaz. Pairing mode QR/I
 - **Bildirim:** Alert dinleme ve geçmiş yüzeyi.
 - **Ayarlar:** Client tercih alanı.
 
-Manuel bağlantı yerel HTTP `/status/public` üzerinden yapılır. Client tarafında HTTPS/WSS fallback veya certificate fingerprint kontrolü yoktur.
+Manuel bağlantı yerel HTTP `/status/public` üzerinden yapılır. Watch oturumu açıldığında lightweight HTTP `/video` ve `/audio` reader health sinyali üretir; mevcut UI callbackleri varsa aynı monitöre ek sinyal besleyebilir. Client tarafında HTTPS/WSS fallback veya certificate fingerprint kontrolü yoktur.
 
 ---
 
@@ -139,7 +144,9 @@ Aktif client sayısı da kaliteyi sınırlar:
 - **2–3 client:** En fazla 640×360, 5fps, JPEG 42.
 - **4–5 client:** 426×240 veya çok düşük 640×360, 2–4fps, JPEG 36–40.
 
-Server kaliteyi `MediaQualitySelector` ile seçer: cihaz tier profili, aktif clientların en kötü ağ raporu ve aktif client sayısı sırasıyla uygulanır. İyileşme daha yavaş, düşüş daha hızlı olacak şekilde tasarlanmıştır.
+Client `ClientStreamHealthMonitor` ile video frame gap, audio gap, WebSocket disconnect/reconnect, stream timeout ve watchActive sinyallerini toplar. 2 saniye video frame gap weak, 5 saniye gap veya audio underrun critical sinyal üretir.
+
+Server kaliteyi `MediaQualitySelector` ile seçer: cihaz tier profili, aktif clientların en kötü kalite raporu ve aktif client sayısı sırasıyla uygulanır. Kötü sinyalde kalite hızlı düşer; yükseliş için en az 30 saniye stabil metrik gerekir ve yalnız tek kademe yükselir.
 
 ---
 
@@ -159,6 +166,8 @@ Server kaliteyi `MediaQualitySelector` ile seçer: cihaz tier profili, aktif cli
 | `GET /ws/events` | Alert/event WebSocket | Bearer token |
 
 `streamToken` yalnız medya endpointlerinde geçerlidir. `/status`, `/quality/report`, `/auth/renew` ve `/ws/events` için Bearer trusted token gerekir; trusted token query parametresi olarak kabul edilmez.
+
+`/quality/report` payload’ı geriye uyumludur: eski `tier/rttMs` alanları kabul edilir, yeni health alanları eksikse güvenli default kullanılır. Server body’deki `clientId` yerine Bearer token’dan çözülen clientId’yi esas alır.
 
 ---
 
@@ -187,6 +196,12 @@ lib/
 - `MediaQualitySelector`: cihaz/ağ/client yükünden profil seçimi.
 - `StreamBackpressureGate`: video/audio stream için busy-skip kontrolü.
 
+Client media tarafında:
+
+- `ClientStreamHealthMonitor`: video/audio/event health snapshot ve quality payload üretimi.
+- `NetworkQualityMonitor`: RTT/status probe ile health snapshot birleştirip `/quality/report` gönderimi.
+- `StreamSessionController`: session lifecycle ve lightweight `/video`/`/audio` health reader.
+
 ---
 
 ## Geliştirme
@@ -209,7 +224,21 @@ Odak testler:
 - `test/services/server/active_client_registry_test.dart`
 - `test/services/server/media_quality_selector_test.dart`
 - `test/services/server/stream_backpressure_gate_test.dart`
+- `test/features/client/client_stream_health_monitor_test.dart`
+- `test/features/client/network_quality_monitor_test.dart`
+- `test/features/client/stream_session_controller_test.dart`
+- `test/services/server/backpressure_memory_test.dart`
+- `test/services/server/active_client_load_quality_test.dart`
 - `test/core/media/adaptive_media_weak_wifi_test.dart`
+
+Manuel cihaz performans kontrolü:
+
+```bash
+flutter install -d <device-id> --uninstall-only
+flutter run -d <device-id> --profile --trace-startup
+```
+
+LG G6 (`LG H870`, Android 9) üzerinde son profile startup kontrolünde first frame `465ms`, rasterized first frame `861ms` ölçüldü. Aynı kontrolde app test için kurulup işlem sonunda tekrar kaldırıldı.
 
 ---
 

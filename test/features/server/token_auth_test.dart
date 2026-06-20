@@ -168,6 +168,112 @@ void main() {
       HttpStatus.unauthorized,
     );
   });
+
+  test('quality/report yeni alanları auth clientId ile işler', () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    await _postSessionStart(
+      client,
+      base.port,
+      trusted.token,
+      trusted.clientId,
+    );
+    final response = await _postQualityReport(
+      client,
+      base.port,
+      trusted.token,
+      {
+        'clientId': 'spoofed_client',
+        'tier': 'excellent',
+        'videoFrameGapMs': 5000,
+        'audioUnderrun': true,
+        'watchActive': true,
+      },
+    );
+
+    expect(response.statusCode, HttpStatus.ok);
+    expect(response.body['effectiveNetworkTier'], 'critical');
+    expect(
+      (response.body['mediaProfile'] as Map)['height'],
+      240,
+    );
+  });
+
+  test('quality/report eski payload kabul eder ve streamToken reddeder',
+      () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    final start = await _postSessionStart(
+      client,
+      base.port,
+      trusted.token,
+      trusted.clientId,
+    );
+    final accepted = await _postQualityReport(
+      client,
+      base.port,
+      trusted.token,
+      {'tier': 'weak', 'rttMs': 600},
+    );
+
+    expect(accepted.statusCode, HttpStatus.ok);
+    expect(accepted.body['effectiveNetworkTier'], 'weak');
+
+    final request = await client.postUrl(Uri(
+      scheme: 'http',
+      host: InternetAddress.loopbackIPv4.address,
+      port: base.port,
+      path: MimiCamProtocolV2.qualityReport,
+      queryParameters: {'streamToken': start['streamToken'] as String},
+    ));
+    request.headers.contentType = ContentType.json;
+    request.write(jsonEncode({'tier': 'critical'}));
+    final rejected = await request.close();
+    await rejected.drain<void>();
+
+    expect(rejected.statusCode, HttpStatus.unauthorized);
+  });
+
+  test('quality/report revoked trusted token reddeder', () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    tokenService.revokeSession(trusted.token);
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    final response = await _postQualityReport(
+      client,
+      base.port,
+      trusted.token,
+      {'tier': 'weak'},
+    );
+
+    expect(response.statusCode, HttpStatus.unauthorized);
+  });
 }
 
 Future<MimiCamServer> _testServer(PairingTokenService tokenService) async {
@@ -226,4 +332,30 @@ Future<Map<String, Object?>> _postSessionStart(
   final body = jsonDecode(await utf8.decoder.bind(response).join());
   expect(response.statusCode, HttpStatus.ok);
   return Map<String, Object?>.from(body as Map);
+}
+
+Future<({int statusCode, Map<String, Object?> body})> _postQualityReport(
+  HttpClient client,
+  int port,
+  String bearerToken,
+  Map<String, Object?> body,
+) async {
+  final request = await client.postUrl(Uri(
+    scheme: 'http',
+    host: InternetAddress.loopbackIPv4.address,
+    port: port,
+    path: MimiCamProtocolV2.qualityReport,
+  ));
+  request.headers
+    ..contentType = ContentType.json
+    ..set(HttpHeaders.authorizationHeader, 'Bearer $bearerToken');
+  request.write(jsonEncode(body));
+  final response = await request.close();
+  final responseBody = await utf8.decoder.bind(response).join();
+  final json =
+      responseBody.isEmpty ? <String, Object?>{} : jsonDecode(responseBody);
+  return (
+    statusCode: response.statusCode,
+    body: json is Map ? Map<String, Object?>.from(json) : <String, Object?>{},
+  );
 }

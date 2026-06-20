@@ -6,16 +6,19 @@ import '../../../core/media/adaptive_media_profile.dart';
 import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
+import 'client_stream_health_monitor.dart';
 
 class NetworkQualityMonitor {
   NetworkQualityMonitor({
     this.pollInterval = const Duration(seconds: 4),
     this.timeout = const Duration(seconds: 2),
+    this.healthMonitor,
     HttpClient Function(PairingSession session)? clientFactory,
   }) : _clientFactory = clientFactory;
 
   final Duration pollInterval;
   final Duration timeout;
+  final ClientStreamHealthMonitor? healthMonitor;
   final HttpClient Function(PairingSession session)? _clientFactory;
   final _classifier = const NetworkQualityClassifier();
 
@@ -45,13 +48,21 @@ class NetworkQualityMonitor {
       ).timeout(timeout);
       stopwatch.stop();
       final rttMs = stopwatch.elapsedMilliseconds;
-      final tier = _classifier.classify(rttMs: rttMs);
-      final report = await _sendQualityReport(
-        client,
-        session,
-        tier,
-        rttMs,
-      ).timeout(timeout);
+      final healthSnapshot = healthMonitor?.snapshot();
+      final tier = _worseTier(
+        _classifier.classify(rttMs: rttMs),
+        healthSnapshot?.healthTier ?? NetworkQualityTier.unknown,
+      );
+      final report = _shouldSendQualityReport(healthSnapshot, tier)
+          ? await _sendQualityReport(
+              client,
+              session,
+              tier,
+              rttMs,
+              consecutiveFailures: 0,
+              healthSnapshot: healthSnapshot,
+            ).timeout(timeout)
+          : status;
       return NetworkQualityUpdate(
         snapshot: NetworkQualitySnapshot(
           tier: tier,
@@ -81,18 +92,32 @@ class NetworkQualityMonitor {
     HttpClient client,
     PairingSession session,
     NetworkQualityTier tier,
-    int rttMs,
-  ) async {
+    int rttMs, {
+    required int consecutiveFailures,
+    ClientQualitySnapshot? healthSnapshot,
+  }) async {
     final request = await client.postUrl(
         ServerEndpointBuilder(session).http(MimiCamProtocolV2.qualityReport));
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.authorizationHeader, 'Bearer ${session.sessionToken}');
-    request.write(jsonEncode({
-      'tier': tier.name,
-      'rttMs': rttMs,
-      'clientId': session.clientId,
-    }));
+    request.write(jsonEncode(
+      healthSnapshot?.toQualityReportJson(
+            clientId: session.clientId,
+            networkTier: tier,
+            rttMs: rttMs,
+            consecutiveFailures: consecutiveFailures,
+          ) ??
+          {
+            'tier': tier.name,
+            'networkTier': tier.name,
+            'rttMs': rttMs,
+            'consecutiveFailures': consecutiveFailures,
+            'clientId': session.clientId,
+            'watchActive': false,
+            'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+          },
+    ));
     final response = await request.close();
     if (response.statusCode != HttpStatus.ok) {
       throw StateError('Quality report failed: ${response.statusCode}');
@@ -129,4 +154,28 @@ class NetworkQualityMonitor {
     if (factory != null) return factory(session);
     return HttpClient();
   }
+
+  bool _shouldSendQualityReport(
+    ClientQualitySnapshot? healthSnapshot,
+    NetworkQualityTier tier,
+  ) {
+    if (healthMonitor == null) return true;
+    if (healthSnapshot?.watchActive ?? false) return true;
+    return _severity(tier) >= _severity(NetworkQualityTier.weak);
+  }
+
+  NetworkQualityTier _worseTier(
+    NetworkQualityTier current,
+    NetworkQualityTier next,
+  ) =>
+      _severity(next) > _severity(current) ? next : current;
+
+  int _severity(NetworkQualityTier tier) => switch (tier) {
+        NetworkQualityTier.offline => 5,
+        NetworkQualityTier.critical => 4,
+        NetworkQualityTier.weak => 3,
+        NetworkQualityTier.good => 2,
+        NetworkQualityTier.excellent => 1,
+        NetworkQualityTier.unknown => 0,
+      };
 }

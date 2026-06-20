@@ -125,9 +125,20 @@ class ActiveClientRegistry {
     );
   }
 
+  void updateQualityReport(ClientQualityReport report) {
+    _qualityTracker.updateReport(
+      report.copyWith(clientId: _normalizeClientId(report.clientId)),
+    );
+  }
+
   NetworkQualityTier effectiveTier() {
     pruneExpiredStreamTokens();
     return _qualityTracker.effectiveTier(clientIds: _activeClients);
+  }
+
+  ClientQualityReport? worstQualityReport() {
+    pruneExpiredStreamTokens();
+    return _qualityTracker.worstReport(clientIds: _activeClients);
   }
 
   void cleanupClient(String clientId) {

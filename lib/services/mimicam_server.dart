@@ -17,6 +17,7 @@ import '../analysis/video/luma_frame.dart';
 import '../analysis/video/motion_analysis_config.dart';
 import '../analysis/video/motion_analyzer_v2.dart';
 import '../core/media/adaptive_media_profile.dart';
+import '../core/media/client_quality_tracker.dart';
 import '../core/mimicam_protocol.dart';
 import '../core/network/local_network_guard.dart';
 import '../core/protocol/mimicam_protocol.dart' as protocol_v2;
@@ -85,8 +86,10 @@ class MimiCamServer {
   final _webSockets = <WebSocket>{};
   final _mjpegClients = <HttpResponse>{};
   final _audioClients = <HttpResponse>{};
-  final _mjpegBackpressure = StreamBackpressureGate<HttpResponse>();
-  final _audioBackpressure = StreamBackpressureGate<HttpResponse>();
+  final _mjpegBackpressure =
+      StreamBackpressureGate<HttpResponse>(kind: StreamBackpressureKind.video);
+  final _audioBackpressure =
+      StreamBackpressureGate<HttpResponse>(kind: StreamBackpressureKind.audio);
   late final ActiveClientRegistry _activeClientRegistry;
   late final RequestAuthGuard _authGuard;
 
@@ -105,7 +108,7 @@ class MimiCamServer {
   int _lastAudioDebugLog = 0;
   final _frameBudget = MediaFrameBudget();
   final _encodingPolicy = const MediaEncodingPolicy();
-  final _mediaQualitySelector = const MediaQualitySelector();
+  final _mediaQualitySelector = MediaQualitySelector();
   final DeviceCapabilityTier _deviceTier;
   late MediaQualityProfile _activeMediaProfile;
   static const _audioSampleRate = 16000;
@@ -250,14 +253,22 @@ class MimiCamServer {
       }
       for (final client in _audioClients.toList()) {
         if (!_audioBackpressure.tryMarkBusy(client)) continue;
+        final startedAt = DateTime.now();
         try {
           client.add(chunk);
-          client.flush().catchError((Object _) {
+          client.flush().then<void>((_) {
+            _audioBackpressure.recordSuccess(
+              client,
+              duration: DateTime.now().difference(startedAt),
+            );
+          }).catchError((Object _) {
             _audioClients.remove(client);
+            _audioBackpressure.recordFailure(client);
             _audioBackpressure.remove(client);
           }).whenComplete(() => _audioBackpressure.markIdle(client));
         } catch (_) {
           _audioClients.remove(client);
+          _audioBackpressure.recordFailure(client);
           _audioBackpressure.remove(client);
         }
       }
@@ -301,8 +312,15 @@ class MimiCamServer {
         }
         for (final client in _mjpegClients.toList()) {
           if (!_mjpegBackpressure.tryMarkBusy(client)) continue;
-          _writeMjpegFrame(client, jpeg).catchError((Object _) {
+          final startedAt = DateTime.now();
+          _writeMjpegFrame(client, jpeg).then<void>((_) {
+            _mjpegBackpressure.recordSuccess(
+              client,
+              duration: DateTime.now().difference(startedAt),
+            );
+          }).catchError((Object _) {
             _mjpegClients.remove(client);
+            _mjpegBackpressure.recordFailure(client);
             _mjpegBackpressure.remove(client);
           }).whenComplete(() => _mjpegBackpressure.markIdle(client));
         }
@@ -578,12 +596,18 @@ class MimiCamServer {
       final body = await utf8.decoder.bind(request).join();
       final json = jsonDecode(body);
       if (json is! Map) throw const FormatException('Invalid quality report');
-      final tier = NetworkQualityTier.fromName(json['tier']?.toString());
-      _activeClientRegistry.updateQuality(
-        clientId: _clientIdForRequest(request, json),
-        tier: tier,
-        rttMs: _intValue(json['rttMs']),
+      final auth = _authGuard.trusted(request);
+      if (auth == null) {
+        request.response.statusCode = HttpStatus.unauthorized;
+        await request.response.close();
+        return;
+      }
+      final report = ClientQualityReport.fromJson(
+        Map<Object?, Object?>.from(json),
+        clientId: auth.clientId,
+        nowMs: DateTime.now().millisecondsSinceEpoch,
       );
+      _activeClientRegistry.updateQualityReport(report);
       await _applyMediaProfileForCurrentDemand();
       await _writeJson(request.response, {
         'ok': true,
@@ -603,6 +627,7 @@ class MimiCamServer {
       deviceTier: _deviceTier,
       networkTier: _activeClientRegistry.effectiveTier(),
       activeClientCount: _activeClientRegistry.activeClientCount,
+      worstReport: _activeClientRegistry.worstQualityReport(),
     );
     await _setActiveMediaProfile(nextProfile);
   }
@@ -692,13 +717,6 @@ class MimiCamServer {
     return jsonDecode(body);
   }
 
-  int? _intValue(Object? value) {
-    if (value is int) return value;
-    if (value is num) return value.round();
-    if (value is String) return int.tryParse(value);
-    return null;
-  }
-
   Future<bool> _requireAuth(HttpRequest request) async {
     if (_isAuthorized(request)) return true;
     request.response.statusCode = HttpStatus.unauthorized;
@@ -751,6 +769,7 @@ class MimiCamServer {
     _frameBudget.reset();
     _mjpegBackpressure.clear();
     _audioBackpressure.clear();
+    _mediaQualitySelector.reset();
   }
 
   Future<void> _handleMjpeg(HttpResponse response, String clientId) async {

@@ -81,6 +81,15 @@ lib/
 | `MediaFrameBudget` | Encode/analyze frame aralığı |
 | `MediaEncodingPolicy` | MJPEG encode gerekip gerekmediği |
 
+Client media tarafındaki ana parçalar:
+
+| Sınıf | Sorumluluk |
+| --- | --- |
+| `ClientStreamHealthMonitor` | Video/audio/event health snapshot ve quality payload sinyalleri |
+| `NetworkQualityMonitor` | RTT/status probe ile health snapshot birleştirme ve `/quality/report` gönderimi |
+| `StreamSessionController` | Session start/stop ve lightweight `/video`/`/audio` health reader lifecycle’ı |
+| `ClientAlertListener` | WS connect/disconnect/reconnect sinyallerini health monitöre aktarma |
+
 ---
 
 ## 4. Transport Model
@@ -305,22 +314,61 @@ Server kalite seçimi şu sinyallerle ilerler:
 - Frame budget/backpressure.
 - Reconnect/failure davranışı.
 
-`ClientQualityTracker` raporları TTL ile tutar; süresi geçen rapor bilinmeyen sayılır. Tracker lifecycle’ı registry içinde olduğu için stop/disconnect/expiry sonrası kalite raporu aktif talebi düşürmez.
+`ClientQualityTracker` raporları TTL ile tutar; süresi geçen rapor bilinmeyen sayılır. Tracker lifecycle’ı registry içinde olduğu için stop/disconnect/expiry sonrası kalite raporu aktif talebi düşürmez. Selector kötü sinyalde hızlı degrade eder; upgrade için en az 30 saniye stabil metrik ve tek kademelik yükseliş gerekir.
 
 ---
 
 ## 11. Client Kalite Raporu
 
-Client tarafı kalite raporu şu sinyalleri temsil edecek şekilde tasarlanmıştır:
+Client tarafı kalite raporu artık şu sinyalleri birlikte taşır:
 
 - RTT ve ardışık failure sayısı.
-- Son video frame gecikmesi.
-- Frame gap / stream timeout.
-- WebSocket kopması.
-- Audio gap veya underrun.
-- Reconnect sonrası ilk saniyelerde düşük kalite tercihi.
+- Video frame gap ve stream timeout.
+- Audio gap ve audio underrun.
+- WebSocket disconnect/reconnect sayısı.
+- Reconnect sonrası ilk 10 saniyede düşük kalite tercihi.
+- Watch ekranının aktif olup olmadığı.
 
-Mevcut implementation RTT/failure tabanlı sınıflandırmayı ve server’a `/quality/report` göndermeyi içerir. Mimari hedef; video/audio/event gözlemlerinin aynı rapora eklenmesidir.
+`ClientStreamHealthMonitor` video/audio/event gözlemlerini toplar. Canonical frame/chunk sinyali HTTP `/video` ve `/audio` reader’dan gelir; mevcut veya gelecekteki UI callbackleri aynı monitöre ek sinyal besleyebilir.
+
+Data flow:
+
+```text
+WatchScreen / ClientRuntime.startWatching
+  ↓
+StreamSessionController.start
+  ↓
+/session/start → streamToken
+  ↓
+lightweight /video + /audio readers
+  ↓
+ClientStreamHealthMonitor.snapshot
+  ↓
+NetworkQualityMonitor + RTT/status probe
+  ↓
+POST /quality/report with Bearer trusted token
+  ↓
+ActiveClientRegistry + ClientQualityTracker
+  ↓
+MediaQualitySelector hysteresis
+```
+
+Raporlama kuralları:
+
+- Watch aktifken yaklaşık 4 saniyede bir `/quality/report` gönderilir.
+- Watch aktif değilken iyi ağda agresif raporlama yapılmaz.
+- Video frame gap 2 saniyeye çıkarsa en az weak, 5 saniyeye çıkarsa critical sinyal oluşur.
+- Audio underrun veya `audioGapMs >= 1500` critical sinyal üretir.
+- WS disconnect/reconnect en az weak sinyal üretir; ardışık kopmalar critical’a kadar düşebilir.
+- Server body’deki `clientId` yerine Bearer token’dan çözülen clientId’yi kullanır.
+- Stream token bu endpointte geçerli değildir.
+
+Backpressure metrikleri queue üretmeden tutulur:
+
+- MJPEG busy ise yeni frame skip edilir ve `skippedVideoFrames` artar.
+- Audio flush busy ise yeni chunk skip edilir ve `skippedAudioChunks` artar.
+- Başarılı write timestamp/duration ve ardışık write failure sayısı sayaç olarak tutulur.
+- Bu metrikler frame/chunk saklamaz; latest-frame modeli korunur.
 
 ---
 
@@ -358,6 +406,8 @@ Refactor sonrası özellikle korunan senaryolar:
 
 - `ActiveClientRegistry` idempotent start, disconnect cleanup, expiry prune ve çoklu stream count.
 - `MediaQualitySelector` 1, 2–3, 4–5 client ve weak/critical ağ kombinasyonları.
+- `MediaQualitySelector` hızlı degrade, 30 saniye stabil olmadan upgrade etmeme ve tek kademe upgrade hysteresis’i.
+- `ClientStreamHealthMonitor` video/audio gap, WS disconnect/reconnect ve watchActive sinyalleri.
 - `StreamBackpressureGate` busy-skip ve cleanup davranışı.
 - HTTP auth guard: private endpointlerde query trusted token reddi, streamToken’ın yalnız media endpointlerinde kabulü.
 
@@ -368,6 +418,15 @@ dart format .
 flutter analyze
 flutter test
 ```
+
+Manuel cihaz performans kontrolü:
+
+```bash
+flutter install -d <device-id> --uninstall-only
+flutter run -d <device-id> --profile --trace-startup
+```
+
+LG G6 (`LG H870`, Android 9) üzerinde son profile startup trace sonucu: first frame `465ms`, rasterized first frame `861ms`, framework init `447ms`. Startup sırasında `Skipped 38 frames` ve Impeller/Kotlin Gradle Plugin uyarıları görüldü; testleri fail etmedi ama performans/teknik borç olarak takip edilmelidir.
 
 ---
 

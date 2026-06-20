@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'alerts/client_alert_listener.dart';
 import 'alerts/client_notification_service.dart';
 import 'client_runtime.dart';
+import 'media/client_stream_health_monitor.dart';
 import 'media/network_quality_monitor.dart';
 import 'media/stream_session_controller.dart';
 import 'pairing/pairing_session_store.dart';
@@ -20,9 +21,10 @@ class ClientCompositionRoot {
     const pairingClient = QRPairingClient();
     final tokenRenewal = TrustedTokenRenewalClient();
     final store = PairingSessionStore(preferences);
-    final streams = StreamSessionController();
-    final networkQuality = NetworkQualityMonitor();
-    final alerts = ClientAlertListener();
+    final streamHealth = ClientStreamHealthMonitor();
+    final streams = StreamSessionController(healthMonitor: streamHealth);
+    final networkQuality = NetworkQualityMonitor(healthMonitor: streamHealth);
+    final alerts = ClientAlertListener(healthMonitor: streamHealth);
     final notifications = ClientNotificationService();
     return ClientRuntime(
       pair: (payload) async {
