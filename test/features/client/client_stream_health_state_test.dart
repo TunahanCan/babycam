@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mimicam/core/media/adaptive_media_profile.dart';
-import 'package:mimicam/features/client/media/client_stream_health_monitor.dart';
+import 'package:mimicam/features/client/media/client_stream_health_state.dart';
 
 void main() {
   test('initial snapshot safe defaults taşır', () {
-    final monitor = ClientStreamHealthMonitor(nowMs: () => 1000);
+    final monitor = ClientStreamHealthState(nowMs: () => 1000);
     final snapshot = monitor.snapshot();
 
     expect(snapshot.videoFrameGapMs, isNull);
@@ -15,7 +15,7 @@ void main() {
 
   test('video frame gap 2 saniyede weak, 5 saniyede critical olur', () {
     var nowMs = 1000;
-    final monitor = ClientStreamHealthMonitor(nowMs: () => nowMs)
+    final monitor = ClientStreamHealthState(nowMs: () => nowMs)
       ..resetForNewWatchSession();
 
     monitor.markVideoFrameReceived();
@@ -30,9 +30,22 @@ void main() {
     expect(critical.healthTier, NetworkQualityTier.critical);
   });
 
+  test('frame callback gelince lastVideoFrameAt güncellenir', () {
+    var nowMs = 1000;
+    final state = ClientStreamHealthState(nowMs: () => nowMs)
+      ..resetForNewWatchSession();
+
+    nowMs = 1234;
+    state.markVideoFrameReceived();
+    final snapshot = state.snapshot();
+
+    expect(snapshot.lastVideoFrameAtMs, 1234);
+    expect(snapshot.videoFrameGapMs, 0);
+  });
+
   test('audio gap 1500ms üstünde underrun üretir', () {
     var nowMs = 1000;
-    final monitor = ClientStreamHealthMonitor(nowMs: () => nowMs)
+    final monitor = ClientStreamHealthState(nowMs: () => nowMs)
       ..resetForNewWatchSession()
       ..markAudioChunkReceived();
 
@@ -44,9 +57,31 @@ void main() {
     expect(snapshot.healthTier, NetworkQualityTier.critical);
   });
 
+  test('audio callback gelince lastAudioChunkAt güncellenir', () {
+    var nowMs = 1000;
+    final state = ClientStreamHealthState(nowMs: () => nowMs)
+      ..resetForNewWatchSession();
+
+    nowMs = 1450;
+    state.markAudioChunkReceived();
+    final snapshot = state.snapshot();
+
+    expect(snapshot.lastAudioChunkAtMs, 1450);
+    expect(snapshot.audioGapMs, 0);
+  });
+
+  test('ws disconnect sayaç artırır', () {
+    final state = ClientStreamHealthState(nowMs: () => 1000)
+      ..resetForNewWatchSession();
+
+    state.markWsDisconnected();
+
+    expect(state.snapshot().wsDisconnectCount, 1);
+  });
+
   test('ws disconnect ve reconnect sayaçları session reset ile temizlenir', () {
     var nowMs = 1000;
-    final monitor = ClientStreamHealthMonitor(nowMs: () => nowMs)
+    final monitor = ClientStreamHealthState(nowMs: () => nowMs)
       ..resetForNewWatchSession()
       ..markWsDisconnected()
       ..markReconnectAttempt();

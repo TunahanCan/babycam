@@ -45,6 +45,46 @@ void main() {
     expect(first.body['streamToken'], isNot(second.body['streamToken']));
   });
 
+  test('quality health ölçümü aynı client için active client sayısını artırmaz',
+      () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+
+    final start = await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.sessionStart,
+      trusted.token,
+      {'clientId': trusted.clientId},
+    );
+    final report = await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.qualityReport,
+      trusted.token,
+      {
+        'clientId': trusted.clientId,
+        'tier': 'excellent',
+        'watchActive': true,
+        'videoFrameGapMs': 0,
+        'audioGapMs': 0,
+      },
+    );
+
+    expect(start.statusCode, HttpStatus.ok);
+    expect(start.body['activeStreamClients'], 1);
+    expect(report.statusCode, HttpStatus.ok);
+    expect(report.body['activeStreamClients'], 1);
+  });
+
   test('6. aktif izleyici 429 MAX_ACTIVE_CLIENTS_REACHED alır', () async {
     final tokenService = PairingTokenService(maxTrustedClients: 10);
     final server = await _testServer(tokenService);

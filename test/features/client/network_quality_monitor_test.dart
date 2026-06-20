@@ -6,7 +6,7 @@ import 'package:mimicam/core/media/adaptive_media_profile.dart';
 import 'package:mimicam/core/protocol/mimicam_protocol.dart';
 import 'package:mimicam/core/protocol/pairing_payload.dart';
 import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/media/client_stream_health_monitor.dart';
+import 'package:mimicam/features/client/media/client_stream_health_state.dart';
 import 'package:mimicam/features/client/media/network_quality_monitor.dart';
 
 void main() {
@@ -65,7 +65,7 @@ void main() {
   test('RTT iyi olsa bile video frame gap 5s ise critical rapor gönderir',
       () async {
     var nowMs = 1000;
-    final health = ClientStreamHealthMonitor(nowMs: () => nowMs)
+    final health = ClientStreamHealthState(nowMs: () => nowMs)
       ..resetForNewWatchSession()
       ..markVideoFrameReceived();
     nowMs += 5000;
@@ -76,7 +76,7 @@ void main() {
     final monitor = NetworkQualityMonitor(
       pollInterval: const Duration(minutes: 1),
       timeout: const Duration(seconds: 2),
-      healthMonitor: health,
+      healthState: health,
     );
     final update = await monitor.watch(_session(server.port)).first;
 
@@ -88,7 +88,7 @@ void main() {
 
   test('audio underrun critical rapor gönderir', () async {
     var nowMs = 1000;
-    final health = ClientStreamHealthMonitor(nowMs: () => nowMs)
+    final health = ClientStreamHealthState(nowMs: () => nowMs)
       ..resetForNewWatchSession()
       ..markAudioChunkReceived();
     nowMs += 1500;
@@ -99,7 +99,7 @@ void main() {
     final monitor = NetworkQualityMonitor(
       pollInterval: const Duration(minutes: 1),
       timeout: const Duration(seconds: 2),
-      healthMonitor: health,
+      healthState: health,
     );
     final update = await monitor.watch(_session(server.port)).first;
 
@@ -108,7 +108,7 @@ void main() {
   });
 
   test('ws disconnect en az weak rapor gönderir', () async {
-    final health = ClientStreamHealthMonitor(nowMs: () => 1000)
+    final health = ClientStreamHealthState(nowMs: () => 1000)
       ..resetForNewWatchSession()
       ..markWsDisconnected();
     final captured = <Map<String, Object?>>[];
@@ -118,7 +118,7 @@ void main() {
     final monitor = NetworkQualityMonitor(
       pollInterval: const Duration(minutes: 1),
       timeout: const Duration(seconds: 2),
-      healthMonitor: health,
+      healthState: health,
     );
     final update = await monitor.watch(_session(server.port)).first;
 
@@ -127,7 +127,7 @@ void main() {
   });
 
   test('watch aktif değilken iyi ağda quality report göndermez', () async {
-    final health = ClientStreamHealthMonitor(nowMs: () => 1000);
+    final health = ClientStreamHealthState(nowMs: () => 1000);
     final captured = <Map<String, Object?>>[];
     final server = await _qualityServer(captured);
     addTearDown(() => server.close(force: true));
@@ -135,7 +135,7 @@ void main() {
     final monitor = NetworkQualityMonitor(
       pollInterval: const Duration(minutes: 1),
       timeout: const Duration(seconds: 2),
-      healthMonitor: health,
+      healthState: health,
     );
     final update = await monitor.watch(_session(server.port)).first;
 

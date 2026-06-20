@@ -6,19 +6,19 @@ import '../../../core/media/adaptive_media_profile.dart';
 import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
-import 'client_stream_health_monitor.dart';
+import 'client_stream_health_state.dart';
 
 class NetworkQualityMonitor {
   NetworkQualityMonitor({
     this.pollInterval = const Duration(seconds: 4),
     this.timeout = const Duration(seconds: 2),
-    this.healthMonitor,
+    this.healthState,
     HttpClient Function(PairingSession session)? clientFactory,
   }) : _clientFactory = clientFactory;
 
   final Duration pollInterval;
   final Duration timeout;
-  final ClientStreamHealthMonitor? healthMonitor;
+  final ClientStreamHealthState? healthState;
   final HttpClient Function(PairingSession session)? _clientFactory;
   final _classifier = const NetworkQualityClassifier();
 
@@ -48,7 +48,7 @@ class NetworkQualityMonitor {
       ).timeout(timeout);
       stopwatch.stop();
       final rttMs = stopwatch.elapsedMilliseconds;
-      final healthSnapshot = healthMonitor?.snapshot();
+      final healthSnapshot = healthState?.snapshot();
       final tier = _worseTier(
         _classifier.classify(rttMs: rttMs),
         healthSnapshot?.healthTier ?? NetworkQualityTier.unknown,
@@ -159,7 +159,7 @@ class NetworkQualityMonitor {
     ClientQualitySnapshot? healthSnapshot,
     NetworkQualityTier tier,
   ) {
-    if (healthMonitor == null) return true;
+    if (healthState == null) return true;
     if (healthSnapshot?.watchActive ?? false) return true;
     return _severity(tier) >= _severity(NetworkQualityTier.weak);
   }

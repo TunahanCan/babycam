@@ -76,8 +76,8 @@ class ClientQualitySnapshot {
       value != null && value >= threshold;
 }
 
-class ClientStreamHealthMonitor {
-  ClientStreamHealthMonitor({
+class ClientStreamHealthState {
+  ClientStreamHealthState({
     int Function()? nowMs,
     this.videoWeakGap = const Duration(seconds: 2),
     this.videoCriticalGap = const Duration(seconds: 5),

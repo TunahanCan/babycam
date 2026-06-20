@@ -85,10 +85,10 @@ Client media tarafındaki ana parçalar:
 
 | Sınıf | Sorumluluk |
 | --- | --- |
-| `ClientStreamHealthMonitor` | Video/audio/event health snapshot ve quality payload sinyalleri |
+| `ClientStreamHealthState` | Video/audio/event health snapshot ve quality payload sinyalleri |
 | `NetworkQualityMonitor` | RTT/status probe ile health snapshot birleştirme ve `/quality/report` gönderimi |
-| `StreamSessionController` | Session start/stop ve lightweight `/video`/`/audio` health reader lifecycle’ı |
-| `ClientAlertListener` | WS connect/disconnect/reconnect sinyallerini health monitöre aktarma |
+| `StreamSessionController` | Session start/stop, watch active state ve streamToken saklama |
+| `ClientAlertListener` | WS connect/disconnect/reconnect sinyallerini health state’e aktarma |
 
 ---
 
@@ -329,7 +329,7 @@ Client tarafı kalite raporu artık şu sinyalleri birlikte taşır:
 - Reconnect sonrası ilk 10 saniyede düşük kalite tercihi.
 - Watch ekranının aktif olup olmadığı.
 
-`ClientStreamHealthMonitor` video/audio/event gözlemlerini toplar. Canonical frame/chunk sinyali HTTP `/video` ve `/audio` reader’dan gelir; mevcut veya gelecekteki UI callbackleri aynı monitöre ek sinyal besleyebilir.
+Client kalite sinyalleri ayrı medya bağlantısı açmadan, mevcut video/audio/event pipeline callback’lerinden toplanır. Video frame geldiğinde lastVideoFrameAt, audio chunk geldiğinde lastAudioChunkAt, WS kopunca disconnect sayaçları güncellenir. Bu state sadece /quality/report payload’ını besler; bandwidth, stream slotu veya ek bağlantı tüketmez.
 
 Data flow:
 
@@ -340,9 +340,9 @@ StreamSessionController.start
   ↓
 /session/start → streamToken
   ↓
-lightweight /video + /audio readers
+Existing video/audio/event pipeline callbacks
   ↓
-ClientStreamHealthMonitor.snapshot
+ClientStreamHealthState.snapshot
   ↓
 NetworkQualityMonitor + RTT/status probe
   ↓
@@ -407,7 +407,7 @@ Refactor sonrası özellikle korunan senaryolar:
 - `ActiveClientRegistry` idempotent start, disconnect cleanup, expiry prune ve çoklu stream count.
 - `MediaQualitySelector` 1, 2–3, 4–5 client ve weak/critical ağ kombinasyonları.
 - `MediaQualitySelector` hızlı degrade, 30 saniye stabil olmadan upgrade etmeme ve tek kademe upgrade hysteresis’i.
-- `ClientStreamHealthMonitor` video/audio gap, WS disconnect/reconnect ve watchActive sinyalleri.
+- `ClientStreamHealthState` video/audio gap, WS disconnect/reconnect ve watchActive sinyalleri.
 - `StreamBackpressureGate` busy-skip ve cleanup davranışı.
 - HTTP auth guard: private endpointlerde query trusted token reddi, streamToken’ın yalnız media endpointlerinde kabulü.
 

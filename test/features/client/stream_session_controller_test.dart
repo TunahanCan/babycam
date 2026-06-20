@@ -5,14 +5,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mimicam/core/protocol/mimicam_protocol.dart';
 import 'package:mimicam/core/protocol/pairing_payload.dart';
 import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/media/client_stream_health_monitor.dart';
+import 'package:mimicam/features/client/media/client_stream_health_state.dart';
 import 'package:mimicam/features/client/media/stream_session_controller.dart';
 
 void main() {
-  test('session start sonrası video ve audio reader health monitor besler',
+  test('health state session start sonrası ayrı video/audio request açmaz',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
+    var videoRequests = 0;
+    var audioRequests = 0;
     server.listen((request) async {
       if (request.uri.path == MimiCamProtocolV2.sessionStart) {
         request.response.headers.contentType = ContentType.json;
@@ -27,11 +29,13 @@ void main() {
         return;
       }
       if (request.uri.path == MimiCamProtocolV2.video) {
+        videoRequests++;
         request.response.add([1, 2, 3]);
         await request.response.close();
         return;
       }
       if (request.uri.path == MimiCamProtocolV2.audio) {
+        audioRequests++;
         request.response.add([4, 5, 6]);
         await request.response.close();
         return;
@@ -39,9 +43,9 @@ void main() {
       request.response.statusCode = HttpStatus.notFound;
       await request.response.close();
     });
-    final health = ClientStreamHealthMonitor();
+    final health = ClientStreamHealthState();
     final controller = StreamSessionController(
-      healthMonitor: health,
+      healthState: health,
       streamTimeout: const Duration(seconds: 1),
     );
     addTearDown(controller.dispose);
@@ -51,8 +55,11 @@ void main() {
     final snapshot = health.snapshot();
 
     expect(snapshot.watchActive, isTrue);
-    expect(snapshot.lastVideoFrameAtMs, isNotNull);
-    expect(snapshot.lastAudioChunkAtMs, isNotNull);
+    expect(controller.lastStreamToken, 'stream_token');
+    expect(snapshot.lastVideoFrameAtMs, isNull);
+    expect(snapshot.lastAudioChunkAtMs, isNull);
+    expect(videoRequests, 0);
+    expect(audioRequests, 0);
   });
 }
 

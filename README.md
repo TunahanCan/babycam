@@ -72,7 +72,7 @@ Server artık uygulama açılır açılmaz pairing başlatmaz. Pairing mode QR/I
 - **Bildirim:** Alert dinleme ve geçmiş yüzeyi.
 - **Ayarlar:** Client tercih alanı.
 
-Manuel bağlantı yerel HTTP `/status/public` üzerinden yapılır. Watch oturumu açıldığında lightweight HTTP `/video` ve `/audio` reader health sinyali üretir; mevcut UI callbackleri varsa aynı monitöre ek sinyal besleyebilir. Client tarafında HTTPS/WSS fallback veya certificate fingerprint kontrolü yoktur.
+Manuel bağlantı yerel HTTP `/status/public` üzerinden yapılır. Watch oturumu health için ayrı medya bağlantısı açmaz; mevcut video/audio/event pipeline callback’leri `ClientStreamHealthState` içine timestamp ve sayaç yazar. Client tarafında HTTPS/WSS fallback veya certificate fingerprint kontrolü yoktur.
 
 ---
 
@@ -144,7 +144,7 @@ Aktif client sayısı da kaliteyi sınırlar:
 - **2–3 client:** En fazla 640×360, 5fps, JPEG 42.
 - **4–5 client:** 426×240 veya çok düşük 640×360, 2–4fps, JPEG 36–40.
 
-Client `ClientStreamHealthMonitor` ile video frame gap, audio gap, WebSocket disconnect/reconnect, stream timeout ve watchActive sinyallerini toplar. 2 saniye video frame gap weak, 5 saniye gap veya audio underrun critical sinyal üretir.
+Client `ClientStreamHealthState` ile video frame gap, audio gap, WebSocket disconnect/reconnect, stream timeout ve watchActive sinyallerini yalnız bellek içi state olarak toplar. Health ölçümü ikinci streamToken, ikinci stream slotu veya ekstra bandwidth oluşturmaz.
 
 Server kaliteyi `MediaQualitySelector` ile seçer: cihaz tier profili, aktif clientların en kötü kalite raporu ve aktif client sayısı sırasıyla uygulanır. Kötü sinyalde kalite hızlı düşer; yükseliş için en az 30 saniye stabil metrik gerekir ve yalnız tek kademe yükselir.
 
@@ -198,9 +198,9 @@ lib/
 
 Client media tarafında:
 
-- `ClientStreamHealthMonitor`: video/audio/event health snapshot ve quality payload üretimi.
+- `ClientStreamHealthState`: video/audio/event health snapshot ve quality payload üretimi.
 - `NetworkQualityMonitor`: RTT/status probe ile health snapshot birleştirip `/quality/report` gönderimi.
-- `StreamSessionController`: session lifecycle ve lightweight `/video`/`/audio` health reader.
+- `StreamSessionController`: session lifecycle, watch active state ve streamToken saklama.
 
 ---
 
@@ -224,7 +224,7 @@ Odak testler:
 - `test/services/server/active_client_registry_test.dart`
 - `test/services/server/media_quality_selector_test.dart`
 - `test/services/server/stream_backpressure_gate_test.dart`
-- `test/features/client/client_stream_health_monitor_test.dart`
+- `test/features/client/client_stream_health_state_test.dart`
 - `test/features/client/network_quality_monitor_test.dart`
 - `test/features/client/stream_session_controller_test.dart`
 - `test/services/server/backpressure_memory_test.dart`

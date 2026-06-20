@@ -1,22 +1,24 @@
+import 'dart:async';
 import 'dart:io';
 
 import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
-import '../media/client_stream_health_monitor.dart';
+import '../media/client_stream_health_state.dart';
 
 class ClientAlertListener {
   ClientAlertListener({
-    this.healthMonitor,
+    this.healthState,
     this.reconnectDelay = const Duration(seconds: 1),
     HttpClient Function(PairingSession session)? clientFactory,
   }) : _clientFactory = clientFactory;
 
-  final ClientStreamHealthMonitor? healthMonitor;
+  final ClientStreamHealthState? healthState;
   final Duration reconnectDelay;
   final HttpClient Function(PairingSession session)? _clientFactory;
   bool isListening = false;
   WebSocket? _socket;
+  StreamSubscription<dynamic>? _socketSubscription;
   HttpClient? _client;
   bool _hadUnexpectedDisconnect = false;
   bool _intentionalStop = false;
@@ -25,7 +27,7 @@ class ClientAlertListener {
     if (isListening) return;
     _intentionalStop = false;
     if (_hadUnexpectedDisconnect) {
-      healthMonitor?.markReconnectAttempt();
+      healthState?.markReconnectAttempt();
       await Future<void>.delayed(reconnectDelay);
     }
     final client = _clientFactory?.call(session);
@@ -42,20 +44,13 @@ class ClientAlertListener {
     _socket = socket;
     isListening = true;
     _hadUnexpectedDisconnect = false;
-    healthMonitor?.markWsConnected();
-    socket.done.whenComplete(() {
-      final unexpected = !_intentionalStop;
-      isListening = false;
-      if (_socket == socket) {
-        _socket = null;
-        _client?.close(force: true);
-        _client = null;
-      }
-      if (unexpected) {
-        _hadUnexpectedDisconnect = true;
-        healthMonitor?.markWsDisconnected();
-      }
-    });
+    healthState?.markWsConnected();
+    _socketSubscription = socket.listen(
+      (_) {},
+      onError: (_) => _handleSocketClosed(socket),
+      onDone: () => _handleSocketClosed(socket),
+      cancelOnError: false,
+    );
   }
 
   Future<void> stop() async {
@@ -63,8 +58,25 @@ class ClientAlertListener {
     isListening = false;
     final socket = _socket;
     _socket = null;
+    await _socketSubscription?.cancel();
+    _socketSubscription = null;
     await socket?.close();
     _client?.close(force: true);
     _client = null;
+  }
+
+  void _handleSocketClosed(WebSocket socket) {
+    final unexpected = !_intentionalStop;
+    isListening = false;
+    if (_socket == socket) {
+      _socket = null;
+      _socketSubscription = null;
+      _client?.close(force: true);
+      _client = null;
+    }
+    if (unexpected && !_hadUnexpectedDisconnect) {
+      _hadUnexpectedDisconnect = true;
+      healthState?.markWsDisconnected();
+    }
   }
 }
