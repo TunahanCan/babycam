@@ -1,5 +1,60 @@
 enum StreamBackpressureKind { generic, video, audio }
 
+StreamBackpressureMetrics combineBackpressureMetrics(
+  Iterable<StreamBackpressureMetrics> metrics,
+) {
+  int? maxInt(int? current, int? next) {
+    if (current == null) return next;
+    if (next == null) return current;
+    return next > current ? next : current;
+  }
+
+  double? mergeAverage(double? current, double? next) {
+    if (current == null) return next;
+    if (next == null) return current;
+    return (current + next) / 2;
+  }
+
+  var skippedWrites = 0;
+  var skippedVideoFrames = 0;
+  var skippedAudioChunks = 0;
+  var consecutiveWriteFailures = 0;
+  int? lastSuccessfulVideoWriteAtMs;
+  int? lastSuccessfulAudioWriteAtMs;
+  int? lastWriteDurationMs;
+  double? averageWriteDurationMs;
+  for (final metric in metrics) {
+    skippedWrites += metric.skippedWrites;
+    skippedVideoFrames += metric.skippedVideoFrames;
+    skippedAudioChunks += metric.skippedAudioChunks;
+    consecutiveWriteFailures += metric.consecutiveWriteFailures;
+    lastSuccessfulVideoWriteAtMs = maxInt(
+      lastSuccessfulVideoWriteAtMs,
+      metric.lastSuccessfulVideoWriteAtMs,
+    );
+    lastSuccessfulAudioWriteAtMs = maxInt(
+      lastSuccessfulAudioWriteAtMs,
+      metric.lastSuccessfulAudioWriteAtMs,
+    );
+    lastWriteDurationMs =
+        maxInt(lastWriteDurationMs, metric.lastWriteDurationMs);
+    averageWriteDurationMs = mergeAverage(
+      averageWriteDurationMs,
+      metric.averageWriteDurationMs,
+    );
+  }
+  return StreamBackpressureMetrics(
+    skippedWrites: skippedWrites,
+    skippedVideoFrames: skippedVideoFrames,
+    skippedAudioChunks: skippedAudioChunks,
+    lastSuccessfulVideoWriteAtMs: lastSuccessfulVideoWriteAtMs,
+    lastSuccessfulAudioWriteAtMs: lastSuccessfulAudioWriteAtMs,
+    consecutiveWriteFailures: consecutiveWriteFailures,
+    lastWriteDurationMs: lastWriteDurationMs,
+    averageWriteDurationMs: averageWriteDurationMs,
+  );
+}
+
 class StreamBackpressureMetrics {
   const StreamBackpressureMetrics({
     this.skippedWrites = 0,
@@ -65,6 +120,8 @@ class StreamBackpressureGate<T extends Object> {
     _busyClients.remove(client);
   }
 
+  bool isBusy(T client) => _busyClients.contains(client);
+
   void remove(T client) {
     _busyClients.remove(client);
     _metrics.remove(client);
@@ -79,6 +136,45 @@ class StreamBackpressureGate<T extends Object> {
 
   StreamBackpressureMetrics metricsFor(T client) =>
       (_metrics[client] ?? _MutableStreamBackpressureMetrics()).snapshot();
+
+  StreamBackpressureMetrics aggregateMetrics() {
+    final total = _MutableStreamBackpressureMetrics();
+    for (final metrics in _metrics.values) {
+      total.skippedWrites += metrics.skippedWrites;
+      total.skippedVideoFrames += metrics.skippedVideoFrames;
+      total.skippedAudioChunks += metrics.skippedAudioChunks;
+      total.consecutiveWriteFailures += metrics.consecutiveWriteFailures;
+      total.lastSuccessfulVideoWriteAtMs = _maxNullable(
+        total.lastSuccessfulVideoWriteAtMs,
+        metrics.lastSuccessfulVideoWriteAtMs,
+      );
+      total.lastSuccessfulAudioWriteAtMs = _maxNullable(
+        total.lastSuccessfulAudioWriteAtMs,
+        metrics.lastSuccessfulAudioWriteAtMs,
+      );
+      total.lastWriteDurationMs = _maxNullable(
+        total.lastWriteDurationMs,
+        metrics.lastWriteDurationMs,
+      );
+      total.averageWriteDurationMs = _mergeAverage(
+        total.averageWriteDurationMs,
+        metrics.averageWriteDurationMs,
+      );
+    }
+    return total.snapshot();
+  }
+
+  void recordSkippedVideoFrame(T client) {
+    final metrics = _metricsFor(client);
+    metrics.skippedWrites++;
+    metrics.skippedVideoFrames++;
+  }
+
+  void recordSkippedAudioChunk(T client) {
+    final metrics = _metricsFor(client);
+    metrics.skippedWrites++;
+    metrics.skippedAudioChunks++;
+  }
 
   void recordSuccess(T client, {required Duration duration}) {
     final metrics = _metricsFor(client);
@@ -117,5 +213,17 @@ class StreamBackpressureGate<T extends Object> {
       case StreamBackpressureKind.generic:
         break;
     }
+  }
+
+  int? _maxNullable(int? current, int? next) {
+    if (current == null) return next;
+    if (next == null) return current;
+    return next > current ? next : current;
+  }
+
+  double? _mergeAverage(double? current, double? next) {
+    if (current == null) return next;
+    if (next == null) return current;
+    return (current + next) / 2;
   }
 }

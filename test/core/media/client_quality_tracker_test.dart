@@ -119,4 +119,20 @@ void main() {
     expect(newReport.effectiveTier, NetworkQualityTier.critical);
     expect(newReport.clientId, 'baba');
   });
+
+  test('skipped frame alanları geriye uyumlu parse edilir', () {
+    final report = ClientQualityReport.fromJson(
+      {
+        'tier': 'excellent',
+        'skippedFrames': 4,
+        'skippedAudioChunks': 1,
+      },
+      clientId: 'anne',
+      nowMs: 1000,
+    );
+
+    expect(report.skippedVideoFrames, 4);
+    expect(report.skippedAudioChunks, 1);
+    expect(report.effectiveTier, NetworkQualityTier.critical);
+  });
 }

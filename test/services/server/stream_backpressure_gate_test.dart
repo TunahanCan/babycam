@@ -46,4 +46,32 @@ void main() {
     expect(metrics.skippedAudioChunks, 1);
     expect(metrics.consecutiveWriteFailures, 1);
   });
+
+  test('audio busy iken video skip metriği ayrıca kaydedilir', () {
+    final gate = StreamBackpressureGate<String>(
+      kind: StreamBackpressureKind.video,
+    );
+
+    gate.recordSkippedVideoFrame('client');
+
+    expect(gate.metricsFor('client').skippedVideoFrames, 1);
+    expect(gate.metricsFor('client').skippedWrites, 1);
+  });
+
+  test('aggregate metrics audio ve video skip toplamını verir', () {
+    final video = StreamBackpressureGate<String>(
+      kind: StreamBackpressureKind.video,
+    )..recordSkippedVideoFrame('client');
+    final audio = StreamBackpressureGate<String>(
+      kind: StreamBackpressureKind.audio,
+    )..recordSkippedAudioChunk('client');
+
+    final aggregate = combineBackpressureMetrics([
+      video.aggregateMetrics(),
+      audio.aggregateMetrics(),
+    ]);
+
+    expect(aggregate.skippedVideoFrames, 1);
+    expect(aggregate.skippedAudioChunks, 1);
+  });
 }

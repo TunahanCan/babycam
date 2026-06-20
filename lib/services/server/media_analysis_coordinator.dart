@@ -2,10 +2,12 @@ import 'dart:async';
 
 import '../../analysis/alert/alert_engine.dart';
 import '../../analysis/alert/alert_event.dart';
+import '../../analysis/audio/audio_analysis_result.dart';
 import '../../analysis/audio/audio_chunk.dart';
 import '../../analysis/audio/cry_audio_analyzer_v2.dart';
 import '../../analysis/video/frame_rate_gate.dart';
 import '../../analysis/video/luma_frame.dart';
+import '../../analysis/video/motion_analysis_result.dart';
 import '../../analysis/video/motion_analyzer_v2.dart';
 import 'media_analysis_metrics.dart';
 
@@ -16,13 +18,17 @@ class MediaAnalysisCoordinator {
     required AlertEngine alertEngine,
     required MediaAnalysisMetrics metrics,
     void Function(String message)? onLog,
+    void Function(AudioAnalysisResult result)? onAudioResult,
+    void Function(MotionAnalysisResult result)? onMotionResult,
   })  : _motionAnalyzer = motionAnalyzer,
         _audioAnalyzer = audioAnalyzer,
         _alertEngine = alertEngine,
         _metrics = metrics,
         _motionFrameGate =
             FrameRateGate(fps: motionAnalyzer.config.analysisFps),
-        _onLog = onLog;
+        _onLog = onLog,
+        _onAudioResult = onAudioResult,
+        _onMotionResult = onMotionResult;
 
   final MotionAnalyzerV2 _motionAnalyzer;
   final CryAudioAnalyzerV2 _audioAnalyzer;
@@ -30,6 +36,8 @@ class MediaAnalysisCoordinator {
   final MediaAnalysisMetrics _metrics;
   final FrameRateGate _motionFrameGate;
   final void Function(String message)? _onLog;
+  final void Function(AudioAnalysisResult result)? _onAudioResult;
+  final void Function(MotionAnalysisResult result)? _onMotionResult;
 
   bool _isMotionAnalysisBusy = false;
   bool _disposed = false;
@@ -53,6 +61,7 @@ class MediaAnalysisCoordinator {
     try {
       final result = _motionAnalyzer.analyze(frame);
       _metrics.recordMotion(result);
+      _onMotionResult?.call(result);
       _alertEngine.onMotionResult(result);
     } catch (error) {
       _metrics.recordMotionError();
@@ -69,6 +78,7 @@ class MediaAnalysisCoordinator {
       final results = _audioAnalyzer.addChunk(chunk);
       for (final result in results) {
         _metrics.recordAudio(result);
+        _onAudioResult?.call(result);
         _alertEngine.onAudioResult(result);
       }
     } catch (error) {

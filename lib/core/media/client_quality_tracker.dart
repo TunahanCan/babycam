@@ -9,6 +9,8 @@ class ClientQualityReport {
     this.consecutiveFailures = 0,
     this.videoFrameGapMs,
     this.audioGapMs,
+    this.skippedVideoFrames = 0,
+    this.skippedAudioChunks = 0,
     this.wsDisconnectCount = 0,
     this.reconnectCount = 0,
     this.streamTimedOut = false,
@@ -24,6 +26,8 @@ class ClientQualityReport {
   final int consecutiveFailures;
   final int? videoFrameGapMs;
   final int? audioGapMs;
+  final int skippedVideoFrames;
+  final int skippedAudioChunks;
   final int wsDisconnectCount;
   final int reconnectCount;
   final bool streamTimedOut;
@@ -47,6 +51,9 @@ class ClientQualityReport {
         'consecutiveFailures': consecutiveFailures,
         'videoFrameGapMs': videoFrameGapMs,
         'audioGapMs': audioGapMs,
+        'skippedFrames': skippedVideoFrames,
+        'skippedVideoFrames': skippedVideoFrames,
+        'skippedAudioChunks': skippedAudioChunks,
         'wsDisconnectCount': wsDisconnectCount,
         'reconnectCount': reconnectCount,
         'streamTimedOut': streamTimedOut,
@@ -70,6 +77,10 @@ class ClientQualityReport {
       consecutiveFailures: _intValue(json['consecutiveFailures']) ?? 0,
       videoFrameGapMs: _intValue(json['videoFrameGapMs']),
       audioGapMs: _intValue(json['audioGapMs']),
+      skippedVideoFrames: _intValue(json['skippedVideoFrames']) ??
+          _intValue(json['skippedFrames']) ??
+          0,
+      skippedAudioChunks: _intValue(json['skippedAudioChunks']) ?? 0,
       wsDisconnectCount: _intValue(json['wsDisconnectCount']) ?? 0,
       reconnectCount: _intValue(json['reconnectCount']) ?? 0,
       streamTimedOut: _boolValue(json['streamTimedOut']),
@@ -90,6 +101,8 @@ class ClientQualityReport {
     int? consecutiveFailures,
     int? videoFrameGapMs,
     int? audioGapMs,
+    int? skippedVideoFrames,
+    int? skippedAudioChunks,
     int? wsDisconnectCount,
     int? reconnectCount,
     bool? streamTimedOut,
@@ -105,6 +118,8 @@ class ClientQualityReport {
         consecutiveFailures: consecutiveFailures ?? this.consecutiveFailures,
         videoFrameGapMs: videoFrameGapMs ?? this.videoFrameGapMs,
         audioGapMs: audioGapMs ?? this.audioGapMs,
+        skippedVideoFrames: skippedVideoFrames ?? this.skippedVideoFrames,
+        skippedAudioChunks: skippedAudioChunks ?? this.skippedAudioChunks,
         wsDisconnectCount: wsDisconnectCount ?? this.wsDisconnectCount,
         reconnectCount: reconnectCount ?? this.reconnectCount,
         streamTimedOut: streamTimedOut ?? this.streamTimedOut,
@@ -116,6 +131,7 @@ class ClientQualityReport {
   NetworkQualityTier _healthTier() {
     if (streamTimedOut ||
         audioUnderrun ||
+        skippedAudioChunks > 0 ||
         _atLeast(videoFrameGapMs, 5000) ||
         _atLeast(audioGapMs, 1500) ||
         consecutiveFailures >= 2 ||
@@ -125,6 +141,7 @@ class ClientQualityReport {
     }
     if (_atLeast(videoFrameGapMs, 2000) ||
         _atLeast(audioGapMs, 1000) ||
+        skippedVideoFrames >= 3 ||
         consecutiveFailures >= 1 ||
         wsDisconnectCount > 0 ||
         reconnectCount > 0 ||

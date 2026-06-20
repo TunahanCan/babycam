@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
@@ -10,9 +11,12 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../analysis/alert/alert_config.dart';
 import '../analysis/alert/alert_engine.dart';
 import '../analysis/alert/alert_event.dart';
+import '../analysis/alert/episode_notification_aggregator.dart';
+import '../analysis/audio/audio_analysis_result.dart';
 import '../analysis/audio/audio_analysis_config.dart';
 import '../analysis/audio/audio_chunk.dart';
 import '../analysis/audio/cry_audio_analyzer_v2.dart';
+import '../analysis/video/motion_analysis_result.dart';
 import '../analysis/video/luma_frame.dart';
 import '../analysis/video/motion_analysis_config.dart';
 import '../analysis/video/motion_analyzer_v2.dart';
@@ -28,6 +32,7 @@ import 'configuration_service.dart';
 import 'motion_analyzer.dart' show CameraImageJpegEncoder;
 import 'server/active_client_registry.dart';
 import 'server/alert_protocol_adapter.dart';
+import 'server/jpeg_byte_budget_controller.dart';
 import 'server/media_analysis_coordinator.dart';
 import 'server/media_frame_policy.dart';
 import 'server/media_analysis_metrics.dart';
@@ -86,6 +91,9 @@ class MimiCamServer {
   final _webSockets = <WebSocket>{};
   final _mjpegClients = <HttpResponse>{};
   final _audioClients = <HttpResponse>{};
+  final _mjpegClientIds = <HttpResponse, String>{};
+  final _audioClientIds = <HttpResponse, String>{};
+  final _audioBusyClientIds = <String>{};
   final _mjpegBackpressure =
       StreamBackpressureGate<HttpResponse>(kind: StreamBackpressureKind.video);
   final _audioBackpressure =
@@ -107,10 +115,16 @@ class MimiCamServer {
   Uint8List? _latestJpeg;
   int _lastAudioDebugLog = 0;
   final _frameBudget = MediaFrameBudget();
+  final _frameBudgetManager = const FrameBudgetManager();
   final _encodingPolicy = const MediaEncodingPolicy();
+  final _jpegByteBudgetController = JpegByteBudgetController();
   final _mediaQualitySelector = MediaQualitySelector();
   final DeviceCapabilityTier _deviceTier;
   late MediaQualityProfile _activeMediaProfile;
+  Uint8List? _lastMotionSample;
+  double _lastMotionEnergy = 0;
+  bool _cryActive = false;
+  int? _lastCryActiveAtMs;
   static const _audioSampleRate = 16000;
   static const _audioChannels = 1;
   static const _audioBitsPerSample = 16;
@@ -210,9 +224,18 @@ class MimiCamServer {
     final coordinator = MediaAnalysisCoordinator(
       motionAnalyzer: MotionAnalyzerV2(config: motionConfig),
       audioAnalyzer: audioAnalyzer,
-      alertEngine: AlertEngine(config: alertConfig, strings: strings),
+      alertEngine: AlertEngine(
+        config: alertConfig,
+        strings: strings,
+        episodeAggregator: EpisodeBasedNotificationAggregator(),
+        networkTierProvider: _activeClientRegistry.effectiveTier,
+        audioReliableProvider: _isAudioReliable,
+        videoReliableProvider: _isVideoReliable,
+      ),
       metrics: metrics,
       onLog: onLog,
+      onAudioResult: _handleAudioAnalysisResult,
+      onMotionResult: _handleMotionAnalysisResult,
     );
     _analysisMetrics = metrics;
     _analysisCoordinator = coordinator;
@@ -252,7 +275,9 @@ class MimiCamServer {
         _broadcastBinary([MimiCamProtocol.packetAudioPcm16Le, ...chunk]);
       }
       for (final client in _audioClients.toList()) {
+        final clientId = _audioClientIds[client];
         if (!_audioBackpressure.tryMarkBusy(client)) continue;
+        if (clientId != null) _audioBusyClientIds.add(clientId);
         final startedAt = DateTime.now();
         try {
           client.add(chunk);
@@ -265,11 +290,16 @@ class MimiCamServer {
             _audioClients.remove(client);
             _audioBackpressure.recordFailure(client);
             _audioBackpressure.remove(client);
-          }).whenComplete(() => _audioBackpressure.markIdle(client));
+          }).whenComplete(() {
+            _audioBackpressure.markIdle(client);
+            if (clientId != null) _audioBusyClientIds.remove(clientId);
+          });
         } catch (_) {
           _audioClients.remove(client);
+          _audioClientIds.remove(client);
           _audioBackpressure.recordFailure(client);
           _audioBackpressure.remove(client);
+          if (clientId != null) _audioBusyClientIds.remove(clientId);
         }
       }
       _logAudioDiagnostics();
@@ -289,11 +319,14 @@ class MimiCamServer {
     final message = event.message;
     onLog(message);
     onAlert(message);
+    _broadcastText(AlertProtocolAdapter.toJsonText(event));
     _broadcastBinary(AlertProtocolAdapter.toLegacyAlertPacket(event));
   }
 
   void _handleCameraFrame(CameraImage frame) {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
+    _lastMotionEnergy = _estimateMotionEnergy(frame);
+    _updateContentAwareFrameBudget(nowMs);
     if (!_frameBudget.shouldProcess(nowMs)) return;
 
     try {
@@ -302,15 +335,28 @@ class MimiCamServer {
         legacyWebSocketEnabled: enableLegacyWebSocketMediaPackets,
       );
       if (shouldEncodeJpeg) {
+        final jpegQuality = _jpegByteBudgetController.qualityFor(
+          _activeMediaProfile,
+        );
         final jpeg = CameraImageJpegEncoder.encode(
           frame,
-          quality: _activeMediaProfile.jpegQuality,
+          quality: jpegQuality,
+        );
+        _jpegByteBudgetController.recordEncodedFrame(
+          _activeMediaProfile,
+          byteLength: jpeg.length,
+          atMs: nowMs,
         );
         _latestJpeg = jpeg;
         if (enableLegacyWebSocketMediaPackets) {
           _broadcastBinary([MimiCamProtocol.packetVideoMjpeg, ...jpeg]);
         }
         for (final client in _mjpegClients.toList()) {
+          final clientId = _mjpegClientIds[client];
+          if (clientId != null && _audioBusyClientIds.contains(clientId)) {
+            _mjpegBackpressure.recordSkippedVideoFrame(client);
+            continue;
+          }
           if (!_mjpegBackpressure.tryMarkBusy(client)) continue;
           final startedAt = DateTime.now();
           _writeMjpegFrame(client, jpeg).then<void>((_) {
@@ -320,6 +366,7 @@ class MimiCamServer {
             );
           }).catchError((Object _) {
             _mjpegClients.remove(client);
+            _mjpegClientIds.remove(client);
             _mjpegBackpressure.recordFailure(client);
             _mjpegBackpressure.remove(client);
           }).whenComplete(() => _mjpegBackpressure.markIdle(client));
@@ -329,6 +376,58 @@ class MimiCamServer {
     } catch (error) {
       onLog('Frame işlenemedi: $error');
     }
+  }
+
+  double _estimateMotionEnergy(CameraImage frame) {
+    final bytes = frame.planes.first.bytes;
+    if (bytes.isEmpty) return 0;
+    const sampleCount = 96;
+    final stride = max(1, bytes.length ~/ sampleCount);
+    final sample = Uint8List(sampleCount);
+    for (var index = 0; index < sampleCount; index++) {
+      sample[index] = bytes[min(index * stride, bytes.length - 1)];
+    }
+    final previous = _lastMotionSample;
+    _lastMotionSample = sample;
+    if (previous == null || previous.length != sample.length) return 0;
+    var diff = 0;
+    for (var index = 0; index < sample.length; index++) {
+      diff += (sample[index] - previous[index]).abs();
+    }
+    return diff / (sample.length * 255);
+  }
+
+  void _updateContentAwareFrameBudget(int nowMs) {
+    if (_lastCryActiveAtMs != null && nowMs - _lastCryActiveAtMs! > 2500) {
+      _cryActive = false;
+    }
+    final targetFps = min(
+      _activeMediaProfile.targetFps,
+      _frameBudgetManager.targetFps(
+        motionEnergy: _lastMotionEnergy,
+        cryActive: _cryActive,
+        networkTier: _activeClientRegistry.effectiveTier(),
+        activeClients: _activeClientRegistry.activeClientCount,
+      ),
+    );
+    _frameBudget.updateMinInterval(
+      Duration(milliseconds: (1000 / max(1, targetFps)).round()),
+    );
+  }
+
+  void _handleAudioAnalysisResult(AudioAnalysisResult result) {
+    final active = result.isCryLikely || result.cryScore > 0.4;
+    if (active) {
+      _cryActive = true;
+      _lastCryActiveAtMs = result.timestampMs;
+    } else if (_lastCryActiveAtMs != null &&
+        result.timestampMs - _lastCryActiveAtMs! > 2500) {
+      _cryActive = false;
+    }
+  }
+
+  void _handleMotionAnalysisResult(MotionAnalysisResult result) {
+    _lastMotionEnergy = result.meanDiff;
   }
 
   LumaFrame _toLumaFrame(CameraImage frame, int timestampMs) {
@@ -442,7 +541,11 @@ class MimiCamServer {
           'qualityReportClients': _activeClientRegistry.qualityReportCount,
           'hasFrame': _latestJpeg != null,
           'deviceTier': _deviceTier.name,
-          'mediaProfile': _activeMediaProfile.toJson(),
+          'mediaProfile': _effectiveMediaProfile().toJson(),
+          'jpegBytesPerSecond':
+              _jpegByteBudgetController.lastActualBytesPerSecond(
+            _activeMediaProfile,
+          ),
           if (_analysisCoordinator != null)
             ..._analysisCoordinator!.diagnostics(),
         });
@@ -547,7 +650,7 @@ class MimiCamServer {
       await _writeJson(request.response, {
         'ok': true,
         'activeStreamClients': startResult.activeClientCount,
-        'mediaProfile': _activeMediaProfile.toJson(),
+        'mediaProfile': _effectiveMediaProfile().toJson(),
         'streamToken': startResult.streamToken.token,
         'streamTokenExpiresAtMs': startResult.streamToken.expiresAtMs,
       });
@@ -583,7 +686,7 @@ class MimiCamServer {
       await _writeJson(request.response, {
         'ok': true,
         'activeStreamClients': _activeClientRegistry.activeClientCount,
-        'mediaProfile': _activeMediaProfile.toJson(),
+        'mediaProfile': _effectiveMediaProfile().toJson(),
       });
     } catch (_) {
       request.response.statusCode = HttpStatus.internalServerError;
@@ -614,7 +717,7 @@ class MimiCamServer {
         'deviceTier': _deviceTier.name,
         'activeStreamClients': _activeClientRegistry.activeClientCount,
         'effectiveNetworkTier': _activeClientRegistry.effectiveTier().name,
-        'mediaProfile': _activeMediaProfile.toJson(),
+        'mediaProfile': _effectiveMediaProfile().toJson(),
       });
     } catch (_) {
       request.response.statusCode = HttpStatus.badRequest;
@@ -628,9 +731,23 @@ class MimiCamServer {
       networkTier: _activeClientRegistry.effectiveTier(),
       activeClientCount: _activeClientRegistry.activeClientCount,
       worstReport: _activeClientRegistry.worstQualityReport(),
+      qualityReports: _activeClientRegistry.activeQualityReports(),
+      backpressureMetrics: _combinedBackpressureMetrics(),
     );
     await _setActiveMediaProfile(nextProfile);
   }
+
+  StreamBackpressureMetrics _combinedBackpressureMetrics() =>
+      combineBackpressureMetrics([
+        _mjpegBackpressure.aggregateMetrics(),
+        _audioBackpressure.aggregateMetrics(),
+      ]);
+
+  bool _isAudioReliable() =>
+      _audioBackpressure.aggregateMetrics().skippedAudioChunks == 0;
+
+  bool _isVideoReliable() =>
+      _mjpegBackpressure.aggregateMetrics().skippedVideoFrames < 3;
 
   Future<void> _setActiveMediaProfile(MediaQualityProfile nextProfile) async {
     final previousProfile = _activeMediaProfile;
@@ -687,8 +804,12 @@ class MimiCamServer {
         'maxClients': maxActiveWatchClients,
         'transportPreferred': 'webrtc',
         'deviceTier': _deviceTier.name,
-        'mediaProfile': _activeMediaProfile.toJson(),
+        'mediaProfile': _effectiveMediaProfile().toJson(),
       };
+
+  MediaQualityProfile _effectiveMediaProfile() => _activeMediaProfile.copyWith(
+        jpegQuality: _jpegByteBudgetController.qualityFor(_activeMediaProfile),
+      );
 
   ResolutionPreset _resolutionPresetFor(MediaQualityProfile profile) =>
       switch (profile.cameraPresetKey) {
@@ -766,9 +887,17 @@ class MimiCamServer {
     await cameraController?.dispose();
     cameraController = null;
     _latestJpeg = null;
+    _lastMotionSample = null;
+    _lastMotionEnergy = 0;
+    _cryActive = false;
+    _lastCryActiveAtMs = null;
     _frameBudget.reset();
     _mjpegBackpressure.clear();
     _audioBackpressure.clear();
+    _mjpegClientIds.clear();
+    _audioClientIds.clear();
+    _audioBusyClientIds.clear();
+    _jpegByteBudgetController.reset();
     _mediaQualitySelector.reset();
   }
 
@@ -776,8 +905,10 @@ class MimiCamServer {
     response.headers.set(HttpHeaders.contentTypeHeader,
         'multipart/x-mixed-replace; boundary=frame');
     _mjpegClients.add(response);
+    _mjpegClientIds[response] = clientId;
     response.done.catchError((Object _) {}).whenComplete(() {
       _mjpegClients.remove(response);
+      _mjpegClientIds.remove(response);
       _mjpegBackpressure.remove(response);
       _activeClientRegistry.detachStream(clientId);
     });
@@ -792,8 +923,11 @@ class MimiCamServer {
         channels: _audioChannels,
         bitsPerSample: _audioBitsPerSample));
     _audioClients.add(response);
+    _audioClientIds[response] = clientId;
     response.done.catchError((Object _) {}).whenComplete(() {
       _audioClients.remove(response);
+      _audioClientIds.remove(response);
+      _audioBusyClientIds.remove(clientId);
       _audioBackpressure.remove(response);
       _activeClientRegistry.detachStream(clientId);
     });
@@ -860,6 +994,12 @@ class MimiCamServer {
     }
   }
 
+  void _broadcastText(String data) {
+    for (final socket in _webSockets.toList()) {
+      socket.add(data);
+    }
+  }
+
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
@@ -879,6 +1019,10 @@ class MimiCamServer {
     _activeClientRegistry.clear();
     _mjpegBackpressure.clear();
     _audioBackpressure.clear();
+    _mjpegClientIds.clear();
+    _audioClientIds.clear();
+    _audioBusyClientIds.clear();
+    _jpegByteBudgetController.reset();
     tokenService.revokeAll();
     await _audioRecorder?.dispose();
     _audioRecorder = null;
@@ -891,5 +1035,9 @@ class MimiCamServer {
     _webSockets.clear();
     _mjpegClients.clear();
     _audioClients.clear();
+    _lastMotionSample = null;
+    _lastMotionEnergy = 0;
+    _cryActive = false;
+    _lastCryActiveAtMs = null;
   }
 }

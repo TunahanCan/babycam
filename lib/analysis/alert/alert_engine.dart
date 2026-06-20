@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../core/media/adaptive_media_profile.dart';
 import '../audio/audio_analysis_result.dart';
 import '../video/motion_analysis_result.dart';
 import '../../l10n/app_strings.dart';
@@ -8,11 +9,19 @@ import 'alert_event.dart';
 import 'alert_severity.dart';
 import 'alert_type.dart';
 import 'cooldown_policy.dart';
+import 'episode_notification_aggregator.dart';
 
 /// Converts analyzer results into structured, transport-agnostic alerts.
 class AlertEngine {
-  AlertEngine({this.config = const AlertConfig(), AppStrings? strings})
-      : _cooldownPolicy = CooldownPolicy(
+  AlertEngine({
+    this.config = const AlertConfig(),
+    AppStrings? strings,
+    EpisodeBasedNotificationAggregator? episodeAggregator,
+    NotificationComposer notificationComposer = const NotificationComposer(),
+    NetworkQualityTier Function()? networkTierProvider,
+    bool Function()? audioReliableProvider,
+    bool Function()? videoReliableProvider,
+  })  : _cooldownPolicy = CooldownPolicy(
           cooldownMsByType: {
             AlertType.cryDetected: config.cryCooldownMs,
             AlertType.motionDetected: config.motionCooldownMs,
@@ -20,10 +29,20 @@ class AlertEngine {
             AlertType.globalLightChange: config.globalLightChangeCooldownMs,
           },
         ),
-        _strings = strings;
+        _strings = strings,
+        _episodeAggregator = episodeAggregator,
+        _notificationComposer = notificationComposer,
+        _networkTierProvider = networkTierProvider,
+        _audioReliableProvider = audioReliableProvider,
+        _videoReliableProvider = videoReliableProvider;
 
   final AlertConfig config;
   final AppStrings? _strings;
+  final EpisodeBasedNotificationAggregator? _episodeAggregator;
+  final NotificationComposer _notificationComposer;
+  final NetworkQualityTier Function()? _networkTierProvider;
+  final bool Function()? _audioReliableProvider;
+  final bool Function()? _videoReliableProvider;
   final CooldownPolicy _cooldownPolicy;
   final StreamController<AlertEvent> _controller =
       StreamController<AlertEvent>.broadcast();
@@ -40,6 +59,7 @@ class AlertEngine {
 
   /// Handles one motion analysis result and returns the emitted alert, if any.
   AlertEvent? onMotionResult(MotionAnalysisResult result) {
+    _episodeAggregator?.onMotionResult(result);
     if (result.isGlobalLightChange) {
       if (!config.emitGlobalLightChangeInfo) {
         return null;
@@ -70,7 +90,27 @@ class AlertEngine {
 
   /// Handles one audio analysis result and returns the emitted alert, if any.
   AlertEvent? onAudioResult(AudioAnalysisResult result) {
-    if (result.isCryLikely && result.cryScore >= config.cryAlertThreshold) {
+    final episode = _episodeAggregator?.onAudioResult(
+      result,
+      streamQualityTier:
+          _networkTierProvider?.call() ?? NetworkQualityTier.unknown,
+      audioReliable: _audioReliableProvider?.call() ?? true,
+      videoReliable: _videoReliableProvider?.call() ?? true,
+    );
+    if (episode != null) {
+      return _tryEmit(
+        type: AlertType.cryDetected,
+        severity: episode.severity,
+        message: _notificationComposer.compose(episode),
+        score: episode.maxCryScore,
+        timestampMs: episode.lastUpdatedAtMs,
+        metadata: episode.toJson(),
+      );
+    }
+
+    if (_episodeAggregator == null &&
+        result.isCryLikely &&
+        result.cryScore >= config.cryAlertThreshold) {
       return _tryEmit(
         type: AlertType.cryDetected,
         severity: AlertSeverity.warning,
@@ -112,6 +152,7 @@ class AlertEngine {
     _alertsProduced = 0;
     _lastAlertType = null;
     _lastAlertAt = null;
+    _episodeAggregator?.reset();
   }
 
   /// Closes the alert stream. Future result handling becomes a safe no-op.

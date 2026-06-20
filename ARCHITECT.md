@@ -77,6 +77,9 @@ lib/
 | `ActiveClientRegistry` | Aktif watch slotları, stream attach/detach, streamToken prune ve kalite tracker lifecycle’ı |
 | `RequestAuthGuard` | Bearer trusted token doğrulama ve `clientId` çözümleme |
 | `MediaQualitySelector` | Device tier + network tier + client load zincirinden medya profili seçimi |
+| `UtilityBasedProfileSelector` | BOLA türevi fayda hesabı ile profil adayı seçimi |
+| `FrameBudgetManager` | Motion/cry/network/client yüküne göre hedef FPS |
+| `JpegByteBudgetController` | Profil başına byte/s hedefi ve JPEG kalite P-denetimi |
 | `StreamBackpressureGate` | MJPEG/audio stream için busy-skip ve cleanup |
 | `MediaFrameBudget` | Encode/analyze frame aralığı |
 | `MediaEncodingPolicy` | MJPEG encode gerekip gerekmediği |
@@ -296,25 +299,35 @@ Client yükü:
 
 - 1 aktif: ağ kalitesi normal/weak/critical seçer.
 - 2–3 aktif: en fazla 640×360, 5fps, JPEG 42.
-- 4–5 aktif: 426×240 veya düşük 640×360, 2–4fps, JPEG 36–40.
+- 4–5 aktif: 426×240 critical/survival, content-aware 1–2fps, JPEG 32–40.
 
-Kalite seçimi `MediaQualitySelector` içinde tek policy olarak tutulur:
+Kalite seçimi `MediaQualitySelector` facade’ında tutulur; aday profil seçimi `UtilityBasedProfileSelector` içinde BOLA türevi fayda fonksiyonuyla yapılır:
 
 ```text
-MediaQualityProfile.forDeviceTier(deviceTier)
-  .adaptForNetwork(effectiveNetworkTier)
-  .adaptForClientLoad(activeClientCount)
+utility(profile) =
+  visualQuality(profile)
+  - stallPenalty(videoFrameGap)
+  - audioPenalty(audioGap, audioUnderrun)
+  - backpressurePenalty(skippedFrames)
+  - clientLoadPenalty(activeClients)
+  - switchPenalty(profileChange)
 ```
 
 Server kalite seçimi şu sinyallerle ilerler:
 
 - Aktif watch client sayısı.
-- Aktif clientların en kötü kalite raporu.
-- `NetworkQualityTier` değerleri.
-- Frame budget/backpressure.
+- Aktif clientların kalite raporları ve en kötü effective tier’i.
+- `NetworkQualityTier`, WS reconnect/failure, video/audio gap ve audio underrun.
+- MJPEG/audio backpressure skip ve write duration metrikleri.
 - Reconnect/failure davranışı.
 
-`ClientQualityTracker` raporları TTL ile tutar; süresi geçen rapor bilinmeyen sayılır. Tracker lifecycle’ı registry içinde olduğu için stop/disconnect/expiry sonrası kalite raporu aktif talebi düşürmez. Selector kötü sinyalde hızlı degrade eder; upgrade için en az 30 saniye stabil metrik ve tek kademelik yükseliş gerekir.
+`ClientQualityTracker` raporları TTL ile tutar; süresi geçen rapor bilinmeyen sayılır. Tracker lifecycle’ı registry içinde olduğu için stop/disconnect/expiry sonrası kalite raporu aktif talebi düşürmez. Selector kötü sinyalde hızlı degrade eder; upgrade için en az 30 saniye stabil metrik ve tek kademelik yükseliş gerekir. 2–3 client varken normal profil seçilmez; 4–5 client varken profil critical/survival sınırına iner.
+
+Kamera encode bütçesi iki ek policy ile korunur:
+
+- `FrameBudgetManager`, her kamera frame’inde ucuz luma örneklemesiyle `motionEnergy` üretir; audio analizinden gelen `cryActive`, ağ tier’i ve aktif client sayısıyla hedef FPS döndürür.
+- `JpegByteBudgetController`, encode sonrası JPEG byte uzunluğunu ölçer ve profil hedeflerine göre kaliteyi 32–58 aralığında ayarlar: normal 250–300 kB/s, weak 90–150 kB/s, critical 25–60 kB/s, survival 10–25 kB/s.
+- Bu iki policy profil değiştirmeden önce FPS/quality bütçesini aşağı çeker; yetmezse hysteresis’li profile selector kaliteyi düşürür.
 
 ---
 
@@ -359,6 +372,7 @@ Raporlama kuralları:
 - Watch aktif değilken iyi ağda agresif raporlama yapılmaz.
 - Video frame gap 2 saniyeye çıkarsa en az weak, 5 saniyeye çıkarsa critical sinyal oluşur.
 - Audio underrun veya `audioGapMs >= 1500` critical sinyal üretir.
+- `skippedFrames`, `skippedVideoFrames` ve `skippedAudioChunks` geriye uyumlu şekilde parse edilir; eksik alanlar `0` sayılır.
 - WS disconnect/reconnect en az weak sinyal üretir; ardışık kopmalar critical’a kadar düşebilir.
 - Server body’deki `clientId` yerine Bearer token’dan çözülen clientId’yi kullanır.
 - Stream token bu endpointte geçerli değildir.
@@ -367,12 +381,30 @@ Backpressure metrikleri queue üretmeden tutulur:
 
 - MJPEG busy ise yeni frame skip edilir ve `skippedVideoFrames` artar.
 - Audio flush busy ise yeni chunk skip edilir ve `skippedAudioChunks` artar.
+- Audio flush devam ederken aynı client için video frame yazımı atlanır; audio/event önceliği korunur.
 - Başarılı write timestamp/duration ve ardışık write failure sayısı sayaç olarak tutulur.
 - Bu metrikler frame/chunk saklamaz; latest-frame modeli korunur.
 
 ---
 
-## 12. UI ve Rol İzolasyonu
+## 12. Episode Bazlı Bildirimler
+
+`EpisodeBasedNotificationAggregator`, tek tek kısa uyarılar yerine ağlama episode’u üretir:
+
+```text
+quiet → suspectedCry → confirmedCry → ongoingCry
+  ↘ 10 sn sessizlik → resolved
+```
+
+- `LowCostCryScorer`, enerji, voiced ratio, harmonic ratio, consecutive F0 proxy ve süre skorunu birleştirir.
+- 2 saniye üstü sinyal suspected, 5 saniye üstü confirmed sayılır.
+- 10 saniye sessizlik episode’u kapatır; kısa yükselmeler sakin “devam ederse tekrar bildirilecek” mesajına döner.
+- WS `baby_event` metadata’sı `cryScore`, `durationMs`, `motionDetected`, `lastMotionAgoMs`, `audioReliable`, `videoReliable` ve `networkTier` alanlarını taşır.
+- Mobil TFLite/LSTM attention dedektörü bu MVP kapsamına eklenmedi; ileride `CryDetector` adapter’ı olarak takılabilir.
+
+---
+
+## 13. UI ve Rol İzolasyonu
 
 Server UI:
 
@@ -390,7 +422,7 @@ Client UI:
 
 ---
 
-## 13. Test Stratejisi
+## 14. Test Stratejisi
 
 Ana test kümeleri:
 
@@ -400,6 +432,7 @@ Ana test kümeleri:
 - Trusted/active client limit testleri.
 - Token auth ve stream token testleri.
 - Adaptive media ve backpressure testleri.
+- Utility selector, frame budget, JPEG byte budget ve episode aggregator testleri.
 - QR/UI overflow ve render budget testleri.
 
 Refactor sonrası özellikle korunan senaryolar:
@@ -409,6 +442,7 @@ Refactor sonrası özellikle korunan senaryolar:
 - `MediaQualitySelector` hızlı degrade, 30 saniye stabil olmadan upgrade etmeme ve tek kademe upgrade hysteresis’i.
 - `ClientStreamHealthState` video/audio gap, WS disconnect/reconnect ve watchActive sinyalleri.
 - `StreamBackpressureGate` busy-skip ve cleanup davranışı.
+- `FrameBudgetManager`, `JpegByteBudgetController`, `UtilityBasedProfileSelector` ve `EpisodeBasedNotificationAggregator` kararları.
 - HTTP auth guard: private endpointlerde query trusted token reddi, streamToken’ın yalnız media endpointlerinde kabulü.
 
 Önerilen doğrulama:

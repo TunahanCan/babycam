@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mimicam/core/media/adaptive_media_profile.dart';
 import 'package:mimicam/services/server/media_frame_policy.dart';
 
 void main() {
@@ -66,6 +67,58 @@ void main() {
           legacyWebSocketEnabled: true,
         ),
         isTrue,
+      );
+    });
+  });
+
+  group('FrameBudgetManager', () {
+    test('motion/cry/network/client yüküne göre FPS seçer', () {
+      const manager = FrameBudgetManager();
+
+      expect(
+        manager.targetFps(
+          motionEnergy: 0.01,
+          cryActive: false,
+          networkTier: NetworkQualityTier.good,
+          activeClients: 1,
+        ),
+        3,
+      );
+      expect(
+        manager.targetFps(
+          motionEnergy: 0.08,
+          cryActive: false,
+          networkTier: NetworkQualityTier.good,
+          activeClients: 1,
+        ),
+        8,
+      );
+      expect(
+        manager.targetFps(
+          motionEnergy: 0.01,
+          cryActive: false,
+          networkTier: NetworkQualityTier.weak,
+          activeClients: 1,
+        ),
+        2,
+      );
+      expect(
+        manager.targetFps(
+          motionEnergy: 0.08,
+          cryActive: false,
+          networkTier: NetworkQualityTier.weak,
+          activeClients: 1,
+        ),
+        5,
+      );
+      expect(
+        manager.targetFps(
+          motionEnergy: 0.08,
+          cryActive: true,
+          networkTier: NetworkQualityTier.good,
+          activeClients: 5,
+        ),
+        2,
       );
     });
   });

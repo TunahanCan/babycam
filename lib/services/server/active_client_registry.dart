@@ -141,6 +141,14 @@ class ActiveClientRegistry {
     return _qualityTracker.worstReport(clientIds: _activeClients);
   }
 
+  List<ClientQualityReport> activeQualityReports() {
+    pruneExpiredStreamTokens();
+    return _activeClients
+        .map(_qualityTracker.reportFor)
+        .whereType<ClientQualityReport>()
+        .toList(growable: false);
+  }
+
   void cleanupClient(String clientId) {
     final normalizedClientId = _normalizeClientId(clientId);
     _activeClients.remove(normalizedClientId);

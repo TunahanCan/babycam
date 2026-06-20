@@ -1,3 +1,5 @@
+import '../../core/media/adaptive_media_profile.dart';
+
 class MediaFrameBudget {
   MediaFrameBudget({Duration minInterval = const Duration(milliseconds: 120)})
       : _minInterval = minInterval;
@@ -36,4 +38,25 @@ class MediaEncodingPolicy {
     required bool legacyWebSocketEnabled,
   }) =>
       hasMjpegClients || legacyWebSocketEnabled;
+}
+
+class FrameBudgetManager {
+  const FrameBudgetManager();
+
+  int targetFps({
+    required double motionEnergy,
+    required bool cryActive,
+    required NetworkQualityTier networkTier,
+    required int activeClients,
+  }) {
+    if (activeClients >= 4) return cryActive ? 2 : 1;
+    if (networkTier == NetworkQualityTier.critical ||
+        networkTier == NetworkQualityTier.offline) {
+      return cryActive ? 2 : 1;
+    }
+    if (networkTier == NetworkQualityTier.weak) {
+      return motionEnergy < 0.04 && !cryActive ? 2 : 5;
+    }
+    return motionEnergy < 0.04 && !cryActive ? 3 : 8;
+  }
 }

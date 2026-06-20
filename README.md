@@ -144,9 +144,16 @@ Aktif client sayısı da kaliteyi sınırlar:
 - **2–3 client:** En fazla 640×360, 5fps, JPEG 42.
 - **4–5 client:** 426×240 veya çok düşük 640×360, 2–4fps, JPEG 36–40.
 
-Client `ClientStreamHealthState` ile video frame gap, audio gap, WebSocket disconnect/reconnect, stream timeout ve watchActive sinyallerini yalnız bellek içi state olarak toplar. Health ölçümü ikinci streamToken, ikinci stream slotu veya ekstra bandwidth oluşturmaz.
+Client `ClientStreamHealthState` ile video frame gap, audio gap, WebSocket disconnect/reconnect, stream timeout ve watchActive sinyallerini yalnız bellek içi state olarak toplar. Health ölçümü ikinci streamToken, ikinci stream slotu veya ekstra bandwidth oluşturmaz. Payload geriye uyumludur; `skippedFrames`, `skippedVideoFrames` ve `skippedAudioChunks` yoksa `0` kabul edilir.
 
-Server kaliteyi `MediaQualitySelector` ile seçer: cihaz tier profili, aktif clientların en kötü kalite raporu ve aktif client sayısı sırasıyla uygulanır. Kötü sinyalde kalite hızlı düşer; yükseliş için en az 30 saniye stabil metrik gerekir ve yalnız tek kademe yükselir.
+Server kaliteyi `MediaQualitySelector` + `UtilityBasedProfileSelector` ile seçer. Fayda hesabı görsel kaliteyi; video/audio gap, audio underrun, WS reconnect/failure, backpressure skip ve client load cezalarıyla dengeler. Kötü sinyalde kalite hızlı düşer; yükseliş için en az 30 saniye stabil metrik gerekir ve yalnız tek kademe yükselir.
+
+Ek bant genişliği kontrolü:
+
+- `FrameBudgetManager` motion düşükken FPS’i azaltır; ağ critical veya 4–5 client varsa audio öncelikli 1–2 FPS seçer.
+- `JpegByteBudgetController` profil başına byte/s hedefini izler ve profil düşmeden önce JPEG kalitesini 32–58 aralığında P-denetleyiciyle ayarlar.
+- Audio flush busy ise aynı client’ın video frame’i skip edilir; audio/event stream video’dan önceliklidir.
+- Bildirimler `EpisodeBasedNotificationAggregator` ile kısa ses yükselmesi, doğrulanmış/uzayan ağlama ve hareket bağlamını tek `baby_event` payload’ında toplar.
 
 ---
 
@@ -194,6 +201,9 @@ lib/
 - `ActiveClientRegistry`: aktif watch client, streamToken ve kalite raporu lifecycle’ı.
 - `RequestAuthGuard`: Bearer trusted token doğrulama.
 - `MediaQualitySelector`: cihaz/ağ/client yükünden profil seçimi.
+- `UtilityBasedProfileSelector`: kalite raporu + backpressure + client load fayda hesabı.
+- `FrameBudgetManager`: motion/cry/network/client yüküne göre hedef FPS.
+- `JpegByteBudgetController`: profil başına JPEG byte/s ve kalite denetimi.
 - `StreamBackpressureGate`: video/audio stream için busy-skip kontrolü.
 
 Client media tarafında:

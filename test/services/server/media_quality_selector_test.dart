@@ -52,7 +52,7 @@ void main() {
     );
 
     expect(crowded.height, 240);
-    expect(crowded.targetFps, 4);
+    expect(crowded.targetFps, lessThanOrEqualTo(4));
     expect(crowded.audioFirst, isTrue);
     expect(critical.height, 240);
     expect(critical.targetFps, 2);

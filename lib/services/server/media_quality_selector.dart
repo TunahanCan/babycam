@@ -1,15 +1,21 @@
 import '../../core/media/adaptive_media_profile.dart';
 import '../../core/media/client_quality_tracker.dart';
+import 'stream_backpressure_gate.dart';
+import 'utility_based_profile_selector.dart';
 
 class MediaQualitySelector {
   MediaQualitySelector({
     Duration upgradeCooldown = const Duration(seconds: 30),
     int Function()? nowMs,
+    UtilityBasedProfileSelector? utilitySelector,
   })  : _upgradeCooldown = upgradeCooldown,
-        _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch);
+        _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch),
+        _utilitySelector =
+            utilitySelector ?? const UtilityBasedProfileSelector();
 
   final Duration _upgradeCooldown;
   final int Function() _nowMs;
+  final UtilityBasedProfileSelector _utilitySelector;
   MediaQualityProfile? _currentProfile;
   int? _stableSinceMs;
 
@@ -18,14 +24,25 @@ class MediaQualitySelector {
     required NetworkQualityTier networkTier,
     required int activeClientCount,
     ClientQualityReport? worstReport,
+    Iterable<ClientQualityReport> qualityReports = const [],
+    StreamBackpressureMetrics backpressureMetrics =
+        const StreamBackpressureMetrics(),
   }) {
-    final effectiveTier = _worseTier(
-      networkTier,
-      worstReport?.effectiveTier ?? NetworkQualityTier.unknown,
+    final reports = [
+      ...qualityReports,
+      if (worstReport != null &&
+          !qualityReports
+              .any((report) => report.clientId == worstReport.clientId))
+        worstReport,
+    ];
+    final desired = _utilitySelector.choose(
+      deviceTier: deviceTier,
+      networkTier: networkTier,
+      activeClientCount: activeClientCount,
+      currentProfile: _currentProfile,
+      qualityReports: reports,
+      backpressureMetrics: backpressureMetrics,
     );
-    final desired = MediaQualityProfile.forDeviceTier(deviceTier)
-        .adaptForNetwork(effectiveTier)
-        .adaptForClientLoad(activeClientCount);
     if (activeClientCount == 0) {
       _currentProfile = desired;
       _stableSinceMs = null;
@@ -45,7 +62,7 @@ class MediaQualitySelector {
       return desired;
     }
     if (desiredSeverity < currentSeverity) {
-      if (worstReport?.recentlyReconnected ?? false) return current;
+      if (reports.any((report) => report.recentlyReconnected)) return current;
       final nowMs = _nowMs();
       _stableSinceMs ??= nowMs;
       if (nowMs - _stableSinceMs! < _upgradeCooldown.inMilliseconds) {
@@ -89,21 +106,6 @@ class MediaQualitySelector {
         ? stepped
         : desired;
   }
-
-  NetworkQualityTier _worseTier(
-    NetworkQualityTier current,
-    NetworkQualityTier next,
-  ) =>
-      _severity(next) > _severity(current) ? next : current;
-
-  int _severity(NetworkQualityTier tier) => switch (tier) {
-        NetworkQualityTier.offline => 5,
-        NetworkQualityTier.critical => 4,
-        NetworkQualityTier.weak => 3,
-        NetworkQualityTier.good => 2,
-        NetworkQualityTier.excellent => 1,
-        NetworkQualityTier.unknown => 0,
-      };
 
   int _profileSeverity(MediaQualityProfile profile) {
     if (profile.id.contains('survival') || profile.targetFps <= 1) return 4;
