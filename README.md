@@ -1,129 +1,129 @@
-# MimiCam — Yerel Ağda Güvenli Bebek Kamerası
+# MimiCam
 
-**MimiCam**, aynı Wi‑Fi ağı içindeki telefon veya tabletleri bebek kamerasına dönüştüren Flutter uygulamasıdır. Bir cihaz **Server / Bebek Odası** olarak kamera, mikrofon, analiz ve yayın tarafını yönetir; bir veya daha fazla **Client / Ebeveyn** cihaz eşleşir, canlı izleme oturumunu açar ve uyarıları takip eder.
+MimiCam, aynı Wi‑Fi/LAN içindeki iki veya daha fazla telefonu yerel bebek kamerası sistemine dönüştüren Flutter uygulamasıdır. Tek uygulama iki ayrı rol taşır:
 
-Cloud hesabı, abonelik, internet relay, UDP discovery veya Telegram otomasyonu yoktur. Kurulum QR veya manuel IP ile yapılır; yayın ve uyarılar yerel ağda kalır.
+- **Server / Bebek Odası:** Kamera, mikrofon, analiz, yayın ve eşleşme biletini yönetir.
+- **Client / Ebeveyn:** QR veya manuel IP ile eşleşir, canlı izleme oturumunu açar ve uyarıları takip eder.
+
+MimiCam cloud hesap, abonelik, internet relay, UDP discovery veya Telegram otomasyonu içermez. Yayın, tokenlar, uyarılar ve kalite raporları yerel ağ içinde kalır.
 
 ---
 
-## Güncel Ürün Akışı
+## Ürün Akışı
 
 ```text
-Uygulamayı aç
+Uygulama açılır
   ↓
-Bu cihaz Server mı Client mı seç
+Cihaz rolü seçilir: Server veya Client
   ↓
-Server cihazda QR/IP bağlantı bileti üret
+Server QR/IP bağlantı bileti üretir
   ↓
-Client cihazda QR okut veya IP:port gir
+Client QR tarar veya IP:port girer
   ↓
-Client İzle ekranından canlı izleme oturumunu aç
+Client eşleşir, uyarıları dinler ve canlı izleme başlatabilir
 ```
 
-Rol seçimi ilk açılışta yapılır ve cihazda saklanır. Günlük kullanımda rol değiştirme öne çıkarılmaz; sağ üstteki küçük rol rozeti yalnızca gerekli olduğunda rol değiştirmeyi sağlar. Server’dan Client’a geçerken aktif server runtime onaydan sonra kapatılır.
+Rol seçimi cihazda saklanır. Rol değişimi sağ üstteki küçük rol rozetiyle yapılır; Server’dan Client’a geçerken aktif Server runtime kapatılır ve pairing session temizlenir.
 
 ---
 
-## Temel Özellikler
+## Öne Çıkanlar
 
-| Alan | Açıklama |
+| Alan | Durum |
 | --- | --- |
-| Kesin rol ayrımı | Server ve Client graph'ları aynı anda kurulmaz; seçilmeyen role ait servisler kapalı kalır. |
-| QR + manuel IP eşleşme | Server QR/IP bileti üretir; Client QR tarar veya IP:port fallback kullanır. |
-| Büyük okunabilir QR | Server QR/IP ekranındaki QR, küçük telefonların okuyabilmesi için responsive olarak büyür. |
-| Yerel HTTPS/WSS | Release varsayılanı self-signed TLS + certificate fingerprint pinning’dir; HTTP/WS yalnızca debug geliştirici modunda açılabilir. |
-| Yerel yayın | Video MJPEG, ses PCM/WAV stream olarak aynı LAN içinde aktarılır. |
-| Çoklu ebeveyn cihazı | Eşleşmiş birden fazla Client aynı Server yayınına bağlanabilir; kalite ortak kapasiteye göre dengelenir. |
-| Akıllı uyarılar | Hareket ve ağlama analizlerinden ebeveyne anlamlı, lokalize mesajlar üretilir. |
-| Bildirim önceliği | Client tarafında Bildirim sekmesi bebeğin son durumunu ebeveyne hızlı gösterir. |
-| Adaptif medya | Yayın 480p altına düşmez; cihaz gücü, ağ kalitesi ve aktif izleyici sayısına göre FPS/JPEG dengelenir. |
-| Çok dil | Telefon dili algılanır; destek yoksa varsayılan İngilizce kullanılır. |
-| Performans koruması | Tek encode + çoklu dağıtım, frame budget, yavaş client frame atlama ve ihtiyaç yokken encode etmeme politikaları kullanılır. |
+| Rol izolasyonu | Server ve Client graph’ları aynı anda kurulmaz. |
+| Eşleşme | QR birincil akıştır; manuel IP:port fallback korunur. |
+| Transport | Release varsayılanı self-signed HTTPS/WSS + SHA-256 certificate pinning’dir. |
+| Debug esnekliği | HTTP/WS yalnızca debug geliştirici konfigürasyonunda açılabilir. |
+| Video | MJPEG stream, tek JPEG encode + çoklu client dağıtımı. |
+| Ses | PCM16LE/WAV stream ve ağlama analizi. |
+| Uyarılar | Hareket/ağlama analizi, cooldown ve lokalize ebeveyn mesajları. |
+| Adaptif kalite | Yayın 480p altına düşmez; FPS/JPEG kalite ağ ve client yüküne göre ayarlanır. |
+| Çoklu client | Aynı Server’a birden fazla ebeveyn cihazı bağlanabilir. |
+| UI dayanıklılığı | Kompakt ekran overflow testleri ve QR panel sınır testleri vardır. |
 
 ---
 
-## Roller ve Ekranlar
+## Ekranlar
 
 ### Server / Bebek Odası
 
-Server cihaz bebek odasında kalır ve yalnızca server özelliklerini gösterir:
+Server modu yalnızca bebek odası sorumluluklarını gösterir:
 
-- **Yayın:** Kamera önizleme, aktif medya profili, yayın durumu ve yayını durdur aksiyonu.
-- **QR/IP:** Büyük QR, IP:port payload alanı, QR yenileme ve kopyalama.
-- **Servis:** Kamera, mikrofon, analiz ve bağlantı servislerinin durumu.
-- **Ayarlar:** Hareket/ağlama eşikleri, minimum süreler ve cooldown ayarları.
+- **Yayın:** Kamera önizleme, medya profili, analiz özeti ve yayın durdurma.
+- **QR/IP:** Responsive QR bileti, QR yenileme ve adres kopyalama.
+- **Servis:** Kamera, mikrofon, analiz ve bağlantı durumları.
+- **Ayarlar:** Hareket/ağlama eşikleri, minimum süreler ve cooldown.
 
-Server modunda QR tarama, ebeveyn geçmişi veya client bildirim ayarları görünmez.
+Kompakt ekranlarda uzun HTTPS QR payload’ı ham metin olarak gösterilmez; QR paneli ekrana sığacak şekilde sınırlandırılır ve kopyalama aksiyonu korunur.
 
 ### Client / Ebeveyn
 
-Client cihaz ebeveynin elindedir ve yalnızca client özelliklerini gösterir:
+Client modu yalnızca ebeveyn akışlarını gösterir:
 
-- **İzle:** Eşleşmiş Server için canlı izleme oturumu, kalite durumu ve ebeveyn aksiyonları.
-- **Bul:** QR tarama ve manuel IP:port ile eşleşme.
-- **Bildirim:** Bebeğin son durumu ve ebeveyn için öncelikli uyarılar.
-- **Ayarlar:** Client bildirim/ebeveyn tercihleri için alan.
+- **İzle:** Eşleşmiş Server için canlı izleme, kalite ve hızlı aksiyonlar.
+- **Bul:** QR tarama ve manuel IP:port bağlantı.
+- **Bildirim:** Bebeğin son durumu ve uyarı geçmişi yüzeyi.
+- **Ayarlar:** Client tarafı tercih alanı.
 
-Client modunda yayın durdurma, QR üretme, kamera/mikrofon server kontrolleri veya servis yönetimi görünmez.
+Client modunda Server kamera/mikrofon yönetimi, QR üretme veya yayın durdurma kontrolleri bulunmaz.
 
 ---
 
 ## Güvenlik Modeli
 
-İlk güven QR payload ile kurulur:
+MimiCam’in güvenlik modeli yerel ağ için basit ve açık tutulur:
 
-```text
-serverDeviceId + certificateFingerprintSha256 + pairingNonce
-```
+1. Server ilk güvenli açılışta RSA 2048 self-signed sertifika üretir.
+2. Sertifika ve private key application support directory altında `mimicam_tls/` dizininde saklanır.
+3. QR payload aktif sertifikanın SHA-256 DER fingerprint’ini taşır.
+4. Client, QR veya manuel HTTPS `/status/public` keşfiyle fingerprint alır.
+5. Client HTTPS/WSS bağlantılarında sertifikayı host + port + fingerprint ile pin’ler.
+6. Fingerprint uyuşmazsa pairing ve stream bağlantıları reddedilir.
 
-Server ilk açılışta yerel self-signed RSA 2048 sertifika üretir ve bunu uygulama destek dizininde saklar. QR payload aktif sertifikanın SHA-256 DER fingerprint’ini taşır. Client, QR veya manuel HTTPS `/status/public` keşfinden aldığı fingerprint ile HTTPS/WSS bağlantılarını pin’ler; fingerprint uyuşmazsa eşleşme ve stream istekleri başarısız olur.
+Korunan endpointler Bearer token ister. Pairing sonrası Server 256-bit trusted token üretir, düz metin token saklamaz; token hash saklar. Token lifetime 60 gündür ve son 7 günde yenilenebilir.
 
-Eşleşme sonrasında Client süreli token ile çalışır:
-
-```text
-trustedClientToken / sessionToken
-```
-
-Kurallar:
-
-- Pairing nonce tek kullanımlık ve kısa ömürlüdür.
-- Eşleşme sonrası 256-bit rastgele token üretilir.
-- Server token düz metnini saklamaz; SHA-256 hash saklar.
-- Token varsayılan olarak 60 gün geçerlidir ve son 7 günde yenilenebilir.
-- Korunan endpointler Bearer token ister.
-- Token loglara yazılmamalıdır.
-- `/pair/confirm`, `/auth/renew`, `/session/start`, `/session/stop`, `/quality/report`, `/status`, `/video`, `/audio` ve `/ws/events` release modda HTTPS/WSS üzerinden çalışır.
-- HTTP/WS yalnızca debug build’de `insecureHttpDevOnly` geliştirici konfigürasyonu ile kullanılabilir.
+Debug dışında düz HTTP/WS açık kalmamalıdır. `TransportSecurityConfig.insecureHttpDevOnly` profile/release benzeri modlarda `StateError` fırlatır.
 
 ---
 
-## Medya ve Adaptasyon
+## Manuel IP Bağlantısı
 
-MimiCam eski Android/iPhone cihazlarda da çalışabilmek için kaliteyi üç sinyale göre ayarlar: cihaz kapasitesi, aktif Client ağ raporları ve aynı anda izleyen cihaz sayısı. Güncel kural: **yayın profili 480p altına düşmez.**
+Manuel IP hâlâ desteklenir, ama HTTPS sonrası davranışı değişmiştir:
 
-1. **Cihaz kapasitesi**
-   - `legacy`: 480p, düşük FPS, ses öncelikli.
-   - `balanced`: 480p dengeli profil.
-   - `modern`: 720p kalite profili.
+```text
+Client IP:port girer
+  ↓
+HTTPS /status/public çağrılır
+  ↓
+Self-signed cert fingerprint keşfedilir
+  ↓
+Payload oluşturulur
+  ↓
+/pair/confirm pinned HTTPS ile çağrılır
+```
 
-2. **Ağ kalitesi**
-   - Client `/status` ölçümü ve `/quality/report` ile RTT/failure bilgisini Server’a iletir.
-   - Server aktif izleyen Client’lar arasındaki en zayıf güncel raporu baz alır; aktif olmayan cihazın eski raporu canlı kaliteyi düşürmez.
-   - Zayıf ağda görüntü 480p kalır, FPS/JPEG düşer ve ses önceliği korunur.
+Release’te HTTP fallback yoktur. Debug’da geliştirme kolaylığı için HTTP fallback denenebilir.
 
-3. **Aktif izleyici sayısı**
-   - 2+ izleyicide modern 720p profil daha stabil FPS/JPEG aralığına çekilir.
-   - 4+ izleyicide ortak yayın 480p, en fazla 8 FPS ve JPG 52 kaliteye iner.
-   - Kritik/offline ağda yine 480p korunur; FPS 4’e kadar düşebilir.
+---
 
-Performans politikaları:
+## Medya ve Performans
 
-- Kamera frame’i her Client için ayrı ayrı encode edilmez; tek JPEG encode edilir ve tüm MJPEG clientlara dağıtılır.
-- Yavaş bir Client’a önceki frame hâlâ yazılıyorsa yeni frame o Client için atlanır; Server tarafında frame kuyruğu şişmez.
+MimiCam eski ve modern cihazları aynı kod yolu içinde destekler. Medya kalitesi üç sinyale göre belirlenir:
+
+- **Cihaz kapasitesi:** `legacy`, `balanced`, `modern`
+- **Ağ kalitesi:** Client RTT/failure ölçümü ve `/quality/report`
+- **Aktif izleyici sayısı:** Aynı anda canlı izleme yapan Client sayısı
+
+Güncel kurallar:
+
+- Yayın profili 480p altına düşmez.
+- Modern cihaz varsayılanı 720p olabilir.
+- Zayıf ağda FPS/JPEG kalite düşer, ses önceliği korunur.
+- 4+ aktif izleyicide ortak yayın 480p ve daha düşük FPS/JPEG kaliteye çekilir.
 - Video client yoksa JPEG encode yapılmaz.
-- Frame işleme `MediaFrameBudget` ile sınırlandırılır.
-- Kartlar ve QR gibi pahalı yüzeyler `RepaintBoundary` ile izole edilir.
-- Kamera preset değişirse controller kontrollü yeniden başlatılır.
+- Her client için ayrı frame encode edilmez; tek JPEG tüm MJPEG clientlara dağıtılır.
+- Yavaş client’a yeni frame yazmak yerine frame skip/backpressure uygulanır.
 
 ---
 
@@ -136,51 +136,35 @@ CameraImage → LumaDownsampler → MotionAnalyzerV2 → AlertEngine
 PCM audio  → GoertzelBandAnalyzer → CryAudioAnalyzerV2 → AlertEngine
 ```
 
-`AlertEngine` skoru, cooldown politikasını ve lokalize ebeveyn mesajını üretir. Mesajlar tanı koymaz; “ses yükseldi”, “ağlama ihtimali arttı”, “odada hareket var” gibi ebeveynin kontrol etmesine yardım eden pratik bilgi verir.
+`AlertEngine`, skorları cooldown politikasıyla birleştirir ve lokalize ebeveyn mesajı üretir. Mesajlar tanı koymaz; ebeveyne pratik kontrol sinyali verir.
 
 ---
 
-## Dil Desteği
+## Teknik Bileşenler
 
-Desteklenen diller:
+| Katman | Ana dosyalar |
+| --- | --- |
+| Bootstrap / rol | `lib/app/*` |
+| Server runtime | `lib/features/server/*`, `lib/services/mimicam_server.dart` |
+| Client runtime | `lib/features/client/*` |
+| Protokol | `lib/core/protocol/*` |
+| Güvenlik | `lib/core/security/*` |
+| Medya adaptasyonu | `lib/core/media/*` |
+| Analiz | `lib/analysis/*` |
+| Lokalizasyon | `lib/l10n/app_strings.dart` |
+| Platform servisleri | `lib/services/platform/*` |
 
-- İngilizce (`en`) — varsayılan fallback
-- Türkçe (`tr`)
-- Çince (`zh`)
-- Hintçe (`hi`)
-- İspanyolca (`es`)
-- Fransızca (`fr`)
-
-Tüm ana ekran yazıları, butonlar, rol metinleri, uyarı mesajları ve placeholder içerikler `AppStrings` üzerinden gelir. Flutter `Localizations` telefonun locale değerine göre doğru dili seçer; desteklenmeyen diller İngilizceye düşer.
-
----
-
-## Teknik Özet
-
-- Framework: Flutter / Dart
-- Platform hedefi: Android ve iOS
-- State/runtime: Role-aware composition root + runtime state stream
-- Transport: Self-signed local HTTPS/WSS + SHA-256 certificate fingerprint pinning
-- Pairing: QR payload + nonce + HTTPS pair confirm
-- Yetkilendirme: Bearer trusted client token
-- Video: MJPEG stream
-- Ses: PCM16LE/WAV stream
-- Event: JSON alert/status event DTO’ları
-- Analiz: `MotionAnalyzerV2`, `CryAudioAnalyzerV2`, `AlertEngine`
-- Saklama: `SharedPreferences` ile rol, ayar ve pairing session
-- Lokalizasyon: `AppStrings` + Flutter localization delegates
-
-Detaylı teknik açıklama için [`ARCHITECT.md`](ARCHITECT.md) dosyasına bakın.
+Detaylı mimari için `ARCHITECT.md` dosyasına bakın.
 
 ---
 
-## Geliştirici Kurulumu
+## Kurulum
 
 Gereksinimler:
 
 - Flutter SDK
 - Android Studio veya Xcode
-- Aynı Wi‑Fi/LAN üzerinde en az iki test cihazı
+- Aynı LAN üzerinde en az iki test cihazı
 - Kamera, mikrofon, bildirim ve Android battery optimization izinleri
 
 Komutlar:
@@ -188,14 +172,6 @@ Komutlar:
 ```bash
 flutter pub get
 flutter run
-```
-
-Kalite kontrolleri:
-
-```bash
-dart format .
-flutter analyze
-flutter test
 ```
 
 Debug APK:
@@ -206,9 +182,15 @@ flutter build apk --debug
 
 ---
 
-## Test Kapsamı
+## Kalite Kontrolleri
 
-Repo; rol izolasyonu, permission policy, pairing, runtime lifecycle, network quality, adaptive profile, analiz, alert, localization, ekran overflow ve performans bütçesi testlerini içerir.
+Standart doğrulama:
+
+```bash
+dart format .
+flutter analyze
+flutter test
+```
 
 Öne çıkan test alanları:
 
@@ -216,38 +198,38 @@ Repo; rol izolasyonu, permission policy, pairing, runtime lifecycle, network qua
 - `test/app/role_permission_coordinator_test.dart`
 - `test/features/hard_split_navigation_test.dart`
 - `test/features/performance/screen_render_budget_test.dart`
+- `test/core/security/*`
+- `test/core/pairing_payload_test.dart`
 - `test/core/media/adaptive_media_profile_test.dart`
 - `test/core/media/client_quality_tracker_test.dart`
 - `test/features/client/network_quality_monitor_test.dart`
-- `test/core/security/*`
-- `test/l10n/app_strings_test.dart`
 - `test/analysis/audio/*`
 - `test/analysis/video/*`
 - `test/analysis/alert/*`
+- `test/l10n/app_strings_test.dart`
 
 ---
 
-## Yol Haritası
+## Kapsam Dışı
 
-- Sertifika private key saklamasını secure storage katmanına taşıma.
-- Native Android foreground service kanalının tamamlanması.
-- iOS lifecycle ve yerel ağ izin metinlerinin olgunlaştırılması.
-- Token revoke/renew kullanıcı arayüzleri.
-- Daha zengin alert history ve manuel paylaşım deneyimi.
-- Native video/audio player entegrasyonu ve uzun vadede WebRTC/H264 yayın katmanı.
-
----
-
-## MimiCam Ne Değildir?
-
-MimiCam bir cloud kamera, internetten izleme servisi veya abonelik ürünü değildir. Bilinçli olarak şu kapsam dışıdır:
+MimiCam bilinçli olarak şunları içermez:
 
 - Cloud backend
-- İnternete yayın
-- UDP discovery
+- İnternet üzerinden yayın
+- Hesap veya abonelik
+- UDP discovery/broadcast
 - Telegram otomasyonu
-- WebRTC relay/STUN/TURN zorunluluğu
-- İnternet üzerinden otomatik üçüncü kişi paylaşımı
-- Hesap veya abonelik zorunluluğu
+- STUN/TURN relay zorunluluğu
+- Otomatik üçüncü kişi paylaşımı
 
-Odak net: **aynı ağda, QR/IP ile eşleşen bir Server ve yetkili Client cihazlar arasında güvenli, anlaşılır bebek izleme deneyimi.**
+---
+
+## Yakın Yol Haritası
+
+- TLS private key saklamasını secure storage arkasına taşıma.
+- Native Android foreground service kanalını üretim seviyesine tamamlama.
+- iOS yerel ağ/lifecycle/background davranışlarını netleştirme.
+- Token revoke/renew için kullanıcı arayüzleri.
+- Alert history ve filtreleme deneyimini olgunlaştırma.
+- Native video/audio player entegrasyonu.
+- Uzun vadede WebRTC/H264 yayın katmanı.
