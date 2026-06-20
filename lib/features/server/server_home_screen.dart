@@ -546,8 +546,8 @@ class _ConnectionCard extends StatelessWidget {
     required bool shortScreen,
   }) {
     final compactCap = shortScreen ? 212.0 : 244.0;
-    final maxSafeSize =
-        (maxWidth - 16).clamp(160.0, compact ? compactCap : 260.0);
+    final maxSafeSize = (maxWidth - _QrPanel.outerPadding * 2)
+        .clamp(160.0, compact ? compactCap : 260.0);
     final preferredSize = maxWidth * (compact ? .70 : .42);
     final minReadableSize = maxSafeSize < 220 ? maxSafeSize : 220.0;
     return preferredSize.clamp(minReadableSize, maxSafeSize).toDouble();
@@ -587,27 +587,30 @@ class _PayloadBox extends StatelessWidget {
 class _QrPanel extends StatelessWidget {
   const _QrPanel({required this.payload, required this.size});
 
+  static const outerPadding = 8.0;
+  static const _radius = 18.0;
+
   final String payload;
   final double size;
 
   @override
   Widget build(BuildContext context) {
     return RepaintBoundary(
-      child: DecoratedBox(
+      child: Container(
+        key: const ValueKey('server-qr-panel'),
+        clipBehavior: Clip.antiAlias,
+        padding: const EdgeInsets.all(outerPadding),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(_radius),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: QrImageView(
-            data: payload,
-            size: size,
-            padding: EdgeInsets.zero,
-            eyeStyle: const QrEyeStyle(color: MimiCamDesignTokens.navy),
-            dataModuleStyle:
-                const QrDataModuleStyle(color: MimiCamDesignTokens.navy),
-          ),
+        child: QrImageView(
+          data: payload,
+          size: size,
+          padding: EdgeInsets.zero,
+          eyeStyle: const QrEyeStyle(color: MimiCamDesignTokens.navy),
+          dataModuleStyle:
+              const QrDataModuleStyle(color: MimiCamDesignTokens.navy),
         ),
       ),
     );

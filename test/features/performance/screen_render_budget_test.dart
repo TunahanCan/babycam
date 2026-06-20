@@ -165,6 +165,10 @@ void main() {
     final qrSize = tester.getSize(find.byType(QrImageView));
     expect(qrSize.width, lessThanOrEqualTo(212));
     expect(qrSize.height, lessThanOrEqualTo(212));
+    final panelSize =
+        tester.getSize(find.byKey(const ValueKey('server-qr-panel')));
+    expect(panelSize.width, lessThanOrEqualTo(228));
+    expect(panelSize.height, lessThanOrEqualTo(228));
     expect(find.text(payload), findsNothing);
   });
 
