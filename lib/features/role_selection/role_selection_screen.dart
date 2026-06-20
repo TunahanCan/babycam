@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_role.dart';
 import '../../l10n/app_strings.dart';
+import '../shared/presentation/mimicam_design_tokens.dart';
 
 class RoleSelectionScreen extends StatelessWidget {
   const RoleSelectionScreen({super.key, required this.onRoleSelected});
@@ -25,11 +26,11 @@ class RoleSelectionScreen extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               _RoleChoiceCard(
-                dark: true,
                 icon: Icons.child_care,
                 title: strings.ui('babyRoomDeviceTitle'),
                 description: strings.ui('babyRoomDeviceDescription'),
-                chip: strings.ui('recommended'),
+                backgroundColor: MimiCamDesignTokens.blushSoft,
+                iconColor: const Color(0xFFFFC6D4),
                 onPressed: () => onRoleSelected(AppRole.server),
               ),
               const SizedBox(height: 14),
@@ -37,15 +38,11 @@ class RoleSelectionScreen extends StatelessWidget {
                 icon: Icons.monitor_heart,
                 title: strings.ui('parentDeviceTitle'),
                 description: strings.ui('parentDeviceDescription'),
-                chip: strings.ui('viewer'),
+                backgroundColor: MimiCamDesignTokens.mintSoft,
+                iconColor: const Color(0xFFB9F1E9),
                 onPressed: () => onRoleSelected(AppRole.client),
               ),
-              const SizedBox(height: 18),
-              _InfoStrip(
-                title: strings.ui('setupPermissionsTitle'),
-                text: strings.ui('setupPermissionsText'),
-              ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 132),
               _InfoStrip(
                 title: strings.ui('securityNoteTitle'),
                 text: strings.ui('securityNoteText'),
@@ -60,27 +57,23 @@ class RoleSelectionScreen extends StatelessWidget {
 
 class _RoleChoiceCard extends StatelessWidget {
   const _RoleChoiceCard({
-    this.dark = false,
     required this.icon,
     required this.title,
     required this.description,
-    required this.chip,
+    required this.backgroundColor,
+    required this.iconColor,
     required this.onPressed,
   });
 
-  final bool dark;
   final IconData icon;
   final String title;
   final String description;
-  final String chip;
+  final Color backgroundColor;
+  final Color iconColor;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final titleColor = dark ? Colors.white : _navy;
-    final bodyColor = dark ? Colors.white70 : _slate;
-    final iconColor = dark ? _pink : _mint;
-
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -88,7 +81,7 @@ class _RoleChoiceCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         child: Container(
           padding: const EdgeInsets.all(18),
-          decoration: _cardDecoration(dark: dark),
+          decoration: _cardDecoration(color: backgroundColor),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -96,9 +89,13 @@ class _RoleChoiceCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   CircleAvatar(
-                    radius: 24,
+                    radius: 34,
                     backgroundColor: iconColor,
-                    child: Icon(icon, color: _navy, size: 25),
+                    child: Icon(
+                      icon,
+                      color: MimiCamDesignTokens.nightPlum,
+                      size: 28,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -109,8 +106,8 @@ class _RoleChoiceCard extends StatelessWidget {
                           title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: titleColor,
+                          style: const TextStyle(
+                            color: MimiCamDesignTokens.nightPlum,
                             fontSize: 20,
                             height: 1.12,
                             fontWeight: FontWeight.w900,
@@ -119,24 +116,22 @@ class _RoleChoiceCard extends StatelessWidget {
                         const SizedBox(height: 7),
                         Text(
                           description,
-                          style: TextStyle(
-                              color: bodyColor, fontSize: 14.5, height: 1.28),
+                          style: const TextStyle(
+                            color: MimiCamDesignTokens.slate,
+                            fontSize: 14.5,
+                            height: 1.28,
+                          ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(width: 10),
-                  _Chip(text: chip, color: dark ? _pinkSoft : _mintSoft),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: MimiCamDesignTokens.nightPlum,
+                    size: 28,
+                  ),
                 ],
-              ),
-              const SizedBox(height: 14),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Icon(
-                  Icons.arrow_forward_rounded,
-                  color: dark ? Colors.white : _navy,
-                  size: 22,
-                ),
               ),
             ],
           ),
@@ -156,14 +151,17 @@ class _InfoStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration(),
+      decoration: _cardDecoration(color: MimiCamDesignTokens.amberSoft),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const CircleAvatar(
             radius: 20,
-            backgroundColor: _mintSoft,
-            child: Icon(Icons.lock_outline_rounded, color: _navy),
+            backgroundColor: Colors.white,
+            child: Icon(
+              Icons.shield_outlined,
+              color: MimiCamDesignTokens.nightPlum,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -173,7 +171,7 @@ class _InfoStrip extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    color: _navy,
+                    color: MimiCamDesignTokens.nightPlum,
                     fontSize: 17,
                     fontWeight: FontWeight.w900,
                   ),
@@ -181,7 +179,9 @@ class _InfoStrip extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(text,
                     style: const TextStyle(
-                        color: _slate, fontSize: 14, height: 1.25)),
+                        color: MimiCamDesignTokens.slate,
+                        fontSize: 14,
+                        height: 1.25)),
               ],
             ),
           ),
@@ -203,7 +203,11 @@ class _LightShell extends StatelessWidget {
         gradient: RadialGradient(
           center: Alignment(.55, -.78),
           radius: .8,
-          colors: [_mintSoft, Color(0xFFFDF7F4), Color(0xFFF9F7FC)],
+          colors: [
+            MimiCamDesignTokens.mintSoft,
+            MimiCamDesignTokens.cream,
+            Color(0xFFFFFBF8),
+          ],
         ),
       ),
       child: child,
@@ -211,50 +215,25 @@ class _LightShell extends StatelessWidget {
   }
 }
 
-class _Chip extends StatelessWidget {
-  const _Chip({required this.text, required this.color});
-
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: ShapeDecoration(color: color, shape: const StadiumBorder()),
-      child: Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-            color: _navy, fontWeight: FontWeight.w800, fontSize: 12),
-      ),
-    );
-  }
-}
-
-BoxDecoration _cardDecoration({bool dark = false}) {
+BoxDecoration _cardDecoration({Color? color}) {
   return BoxDecoration(
-    color: dark ? _navy : Colors.white,
+    color: color ?? Colors.white,
     borderRadius: BorderRadius.circular(22),
-    border: Border.all(color: const Color(0xFFE2E8F0)),
+    border: Border.all(color: const Color(0xFFEEDFD8)),
     boxShadow: const [
-      BoxShadow(color: Color(0x18111827), blurRadius: 18, offset: Offset(0, 8)),
+      BoxShadow(color: Color(0x14111827), blurRadius: 12, offset: Offset(0, 6)),
     ],
   );
 }
 
-const _navy = Color(0xFF101B31);
-const _slate = Color(0xFF6E7686);
-const _pink = Color(0xFFFF708B);
-const _pinkSoft = Color(0xFFFFDCE6);
-const _mint = Color(0xFF87D8CC);
-const _mintSoft = Color(0xFFD9F7F1);
-
 const _titleStyle = TextStyle(
-  color: _navy,
+  color: MimiCamDesignTokens.nightPlum,
   fontSize: 30,
   height: 1.08,
   fontWeight: FontWeight.w900,
 );
-const _subtitleStyle = TextStyle(color: _slate, fontSize: 15.5, height: 1.25);
+const _subtitleStyle = TextStyle(
+  color: MimiCamDesignTokens.slate,
+  fontSize: 15.5,
+  height: 1.25,
+);

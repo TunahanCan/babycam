@@ -7,11 +7,11 @@ Bu doküman MimiCam’in güncel Flutter mimarisini anlatır. Ana hedef, projeye
 ## 1. Mimari Prensipler
 
 1. **Strict role isolation:** Server ve Client aynı anda çalışmaz; sadece seçilen rolün composition root’u kurulur.
-2. **Local-first:** Video, ses, status ve event akışları aynı Wi‑Fi/LAN içinde kalır.
+2. **Local-first:** Video, ses, status ve event akışları aynı Wi‑Fi/LAN içinde kalır; cloud relay yoktur.
 3. **QR/IP-first pairing:** İlk güven QR payload ile kurulur; manuel IP fallback aynı pairing endpointine bağlanır.
 4. **Token continuity:** Pairing sonrası Client süreli trusted token ile oturumunu sürdürür.
 5. **Resource on demand:** Kamera, mikrofon, encoder ve analyzer ihtiyaç oldukça açılır.
-6. **Adaptive media:** Cihaz kapasitesi ve ağ ölçümü yayın profilini belirler.
+6. **Adaptive media:** Cihaz kapasitesi, aktif Client ağ ölçümleri ve izleyici sayısı yayın profilini belirler.
 7. **Localized parent language:** UI ve uyarı metinleri telefon locale değerine göre gelir; fallback İngilizcedir.
 8. **No hidden relay:** UDP discovery, Telegram otomasyonu ve cloud relay mimarinin parçası değildir.
 
@@ -46,7 +46,7 @@ RoleResolver + RoleRepository
 lib/
 ├── app/                    # bootstrap, role resolver, permission policy
 ├── core/
-│   ├── media/              # adaptive media profile + network classifier
+│   ├── media/              # adaptive media profile, client quality tracker, network classifier
 │   ├── protocol/           # pairing/session/protocol DTO sabitleri
 │   ├── security/           # token, fingerprint, local TLS soyutlamaları
 │   └── theme/              # global tema
@@ -113,7 +113,7 @@ Ortak yüzeyler `features/shared/presentation` altında toplanır:
 - `MimiCamBottomNav`
 - `MimiCamDesignTokens`
 
-Geçişler 220 ms hard wipe animasyonuyla yapılır. Ağır yüzeyler `RepaintBoundary` ile izole edilir.
+Güncel görsel sistem anne odaklı, sıcak krem/blush/mint renkleri ile Server tarafında koyu plum yüzeyleri birleştirir. Geçişler 220 ms hard wipe animasyonuyla yapılır. Ağır yüzeyler `RepaintBoundary` ile izole edilir ve kompakt ekranlar overflow testleriyle korunur.
 
 ### 6.1 Server Shell
 
@@ -138,7 +138,7 @@ Bottom nav:
 İzle | Bul | Bildirim | Ayarlar
 ```
 
-- **İzle:** Sadece eşleşmiş Server yayınına giriş.
+- **İzle:** Eşleşmiş Server için canlı izleme oturumu, kalite durumu ve ebeveyn aksiyonları.
 - **Bul:** QR scanner ve manuel IP:port fallback.
 - **Bildirim:** Ebeveyne bebeğin son durumunu öne çıkaran alan.
 - **Ayarlar:** Client bildirim tercihleri için ayrılmış yüzey.
@@ -273,9 +273,9 @@ Güncel runtime yerel HTTP/WS üstünde çalışır. Production hedefi `LocalTls
 | `/status/public` | Manual IP fallback için pairing payload bilgisi | Public / pairing-only |
 | `/pair/confirm` | İlk eşleşme | QR nonce |
 | `/auth/renew` | Token yenileme | Bearer token |
-| `/session/start` | Watch oturumu başlatma | Bearer token |
-| `/session/stop` | Watch oturumu durdurma | Bearer token |
-| `/quality/report` | Client ağ ölçümüyle medya profili güncelleme | Bearer token |
+| `/session/start` | Watch oturumu başlatma, aktif Client sayısını güncelleme | Bearer token |
+| `/session/stop` | Watch oturumu durdurma, Client kalite raporunu temizleme | Bearer token |
+| `/quality/report` | Client ağ ölçümünü gönderme; ortak medya profilini güncelleme | Bearer token |
 | `/video` | MJPEG video stream | Bearer token |
 | `/audio` | WAV/PCM audio stream | Bearer token |
 | `/ws/events` | Alert/status event akışı | Bearer token |
@@ -287,17 +287,18 @@ Geçici not: Native viewer tamamlanana kadar streamlerde query token desteği ko
 
 ## 10. Adaptif Medya Mimarisi
 
-`core/media/adaptive_media_profile.dart` üç katman sağlar:
+`core/media/adaptive_media_profile.dart` ve `core/media/client_quality_tracker.dart` medya kararını şu yapılarla verir:
 
 - `DeviceCapabilityTier`: `legacy`, `balanced`, `modern`
 - `NetworkQualityTier`: `unknown`, `excellent`, `good`, `weak`, `critical`, `offline`
 - `MediaQualityProfile`: çözünürlük, FPS, JPEG kalitesi, codec tercihleri
+- `ClientQualityTracker`: aktif Client raporları arasındaki en zayıf güncel tier
 
 Cihaz profilleri:
 
 | Tier | Varsayılan profil |
 | --- | --- |
-| `legacy` | 640x360, 8 fps, düşük JPEG, ses öncelikli |
+| `legacy` | 854x480, 8 fps, düşük JPEG, ses öncelikli |
 | `balanced` | 854x480, 10 fps |
 | `modern` | 1280x720, 15 fps |
 
@@ -305,10 +306,18 @@ Ağ adaptasyonu:
 
 - `excellent`: legacy cihazda kontrollü 480p denemesi yapabilir.
 - `good`: stabil FPS/JPEG aralığına iner.
-- `weak`: 360p ses öncelikli profil.
-- `critical/offline`: 480x270, 4 fps, ses öncelikli survival profil.
+- `weak`: 480p, 7 fps, JPG 50, ses öncelikli profil.
+- `critical/offline`: 480p, 4 fps, JPG 42, ses öncelikli survival profil.
 
-`NetworkQualityMonitor` Client tarafında `/status` RTT ölçer, `/quality/report` gönderir. Server profil değiştirir, gerekiyorsa camera preset değişimi için controller’ı yeniden başlatır ve UI’a yeni profili bildirir.
+Yayın profili 480p altına düşmez. `NetworkQualityMonitor` Client tarafında `/status` RTT ölçer, `/quality/report` gönderir. Server her aktif Client için kalite raporunu tutar; aktif izleyenler arasındaki en zayıf tier ortak yayın profilini belirler. Raporlar kısa TTL ile temizlenir ve session stop olduğunda ilgili Client’ın raporu düşer.
+
+Aktif izleyici adaptasyonu:
+
+- 2+ aktif izleyicide modern profil 720p kalabilir ama FPS/JPEG daha stabil aralığa çekilir.
+- 4+ aktif izleyicide `adaptForClientLoad` ortak yayını 854x480, en fazla 8 fps ve JPG 52 seviyesine indirir.
+- Kritik/offline ağ raporu varsa 480p korunur; FPS 4’e kadar düşebilir.
+
+Server profil değiştirir, gerekiyorsa camera preset değişimi için controller’ı yeniden başlatır ve UI’a yeni profili bildirir.
 
 ---
 
@@ -325,6 +334,8 @@ wantsMotionDetection
 localPreviewActive
 ```
 
+HTTP session tarafında `MimiCamServer` ayrıca `_activeStreamClients` listesini tutar. Bu liste kalite kararında aktif izleyici sayısını ve hangi Client kalite raporlarının dikkate alınacağını belirler.
+
 Power mode:
 
 | Mod | Anlam |
@@ -337,6 +348,9 @@ Performans kuralları:
 
 - `MediaFrameBudget` hedef FPS’e göre frame işleme aralığını ayarlar.
 - `MediaEncodingPolicy` sadece MJPEG client veya legacy WS gerekirse JPEG encode eder.
+- Kamera frame’i Client başına encode edilmez; tek JPEG üretilir ve tüm MJPEG response’larına dağıtılır.
+- `_busyMjpegClients` yavaş client için önceki frame yazımı bitmeden yeni frame göndermeyi atlar; bellek/kuyruk şişmesi engellenir.
+- `response.done` kapanan MJPEG/WAV clientları listeden temizler.
 - Audio stream client yoksa audio data yalnız analiz pipeline’ında kullanılır.
 - `ForegroundServiceController` Android native service kanalını çağırır; kanal yoksa sessiz no-op yapar.
 - `wakelock_plus` server medya runtime açıkken ekran uyumasını azaltmak için kullanılır.
@@ -390,7 +404,9 @@ StreamSessionController.start
   ↓
 /session/start
   ↓
-/video + /audio + /ws/events
+Server medya runtime açık kalır
+  ↓
+Viewer katmanı /video + /audio + /ws/events endpointlerini tüketebilir
   ↓
 Watch dispose / durdur
   ↓
@@ -403,7 +419,8 @@ Kurallar:
 
 - Session yokken `startWatching` no-op döner.
 - Pairing başarıyla tamamlanınca network quality monitor başlar.
-- Watch dispose olduğunda stream stop çağrılır.
+- Yenilenen WatchScreen session başlatır/durdurur ve kalite durumunu gösterir; native video/audio viewer entegrasyonu endpointler hazır tutularak ilerletilir.
+- Watch dispose olduğunda stream stop çağrılır; Server yalnız ilgili Client oturumunu düşürür, diğer aktif izleyiciler varsa medya runtime açık kalır.
 - Alert listening streamden bağımsız yönetilebilir.
 - Pairing temizlenirse watch, alert ve network subscription kapatılır.
 
@@ -443,6 +460,7 @@ Test katmanları:
 - **Hard split UI:** `test/features/hard_split_navigation_test.dart`
 - **Performance/overflow:** `test/features/performance/screen_render_budget_test.dart`
 - **Adaptive media:** `test/core/media/adaptive_media_profile_test.dart`
+- **Client quality aggregation:** `test/core/media/client_quality_tracker_test.dart`
 - **Network quality:** `test/features/client/network_quality_monitor_test.dart`
 - **Pairing:** `test/core/pairing_payload_test.dart`, `test/features/client/qr_pairing_client_test.dart`
 - **Runtime lifecycle:** `test/features/server/server_runtime_lifecycle_test.dart`, `test/features/client/client_runtime_lifecycle_test.dart`
@@ -485,7 +503,7 @@ Mimari şu parçaları özellikle içermez:
 - UDP discovery/broadcast
 - Telegram otomatik paylaşımı
 - STUN/TURN relay zorunluluğu
-- Otomatik üçüncü cihaz paylaşımı
+- İnternet üzerinden otomatik üçüncü kişi paylaşımı
 - Hesap/OAuth zorunluluğu
 
 ---
@@ -497,6 +515,7 @@ Mimari şu parçaları özellikle içermez:
 - Token revoke/renew ekranları.
 - Native Android foreground service implementasyonu.
 - Native video/audio player ile stream auth modelini güçlendirme.
+- WebRTC/H264 yayın katmanı ile ileride per-client kalite veya simulcast seçenekleri.
 - Daha ayrıntılı alert history, filtre ve manuel paylaşım.
 - iOS lifecycle/background açıklamalarının ürün kararıyla netleştirilmesi.
 

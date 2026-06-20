@@ -77,13 +77,13 @@ class MediaQualityProfile {
   static MediaQualityProfile forDeviceTier(DeviceCapabilityTier tier) =>
       switch (tier) {
         DeviceCapabilityTier.legacy => const MediaQualityProfile(
-            id: 'compat_360p',
+            id: 'compat_480p',
             label: 'Uyumluluk',
-            width: 640,
-            height: 360,
+            width: 854,
+            height: 480,
             targetFps: 8,
             jpegQuality: 54,
-            cameraPresetKey: 'low',
+            cameraPresetKey: 'medium',
             audioCodec: 'pcm16le',
             preferredAudioCodec: 'opus',
             videoCodec: 'mjpeg',
@@ -119,7 +119,7 @@ class MediaQualityProfile {
       };
 
   MediaQualityProfile adaptForNetwork(NetworkQualityTier tier) {
-    final baseIsLegacy = cameraPresetKey == 'low';
+    final baseIsLegacy = id.startsWith('compat_');
     return switch (tier) {
       NetworkQualityTier.unknown => this,
       NetworkQualityTier.excellent => baseIsLegacy
@@ -141,26 +141,49 @@ class MediaQualityProfile {
           jpegQuality: jpegQuality.clamp(56, 68),
         ),
       NetworkQualityTier.weak => copyWith(
-          id: 'audio_first_360p',
+          id: 'audio_first_480p',
           label: 'Ses öncelikli',
-          width: baseIsLegacy ? width : 640,
-          height: baseIsLegacy ? height : 360,
+          width: 854,
+          height: 480,
           targetFps: 7,
           jpegQuality: 50,
-          cameraPresetKey: baseIsLegacy ? cameraPresetKey : 'low',
+          cameraPresetKey: 'medium',
           audioFirst: true,
         ),
       NetworkQualityTier.critical || NetworkQualityTier.offline => copyWith(
-          id: 'survival_audio_first',
+          id: 'survival_audio_first_480p',
           label: 'Kritik ağ',
-          width: 480,
-          height: 270,
+          width: 854,
+          height: 480,
           targetFps: 4,
           jpegQuality: 42,
-          cameraPresetKey: 'low',
+          cameraPresetKey: 'medium',
           audioFirst: true,
         ),
     };
+  }
+
+  MediaQualityProfile adaptForClientLoad(int activeVideoClients) {
+    if (activeVideoClients >= 4) {
+      return copyWith(
+        id: height > 480 ? 'shared_480p' : '${id}_shared',
+        label: 'Çoklu izleme',
+        width: 854,
+        height: 480,
+        targetFps: targetFps > 8 ? 8 : targetFps,
+        jpegQuality: jpegQuality > 52 ? 52 : jpegQuality,
+        cameraPresetKey: 'medium',
+      );
+    }
+    if (activeVideoClients >= 2 && height > 480) {
+      return copyWith(
+        id: '${id}_shared_stable',
+        label: '$label / paylaşımlı',
+        targetFps: targetFps > 12 ? 12 : targetFps,
+        jpegQuality: jpegQuality > 64 ? 64 : jpegQuality,
+      );
+    }
+    return this;
   }
 
   MediaQualityProfile copyWith({

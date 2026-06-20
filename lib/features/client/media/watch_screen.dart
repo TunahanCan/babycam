@@ -36,14 +36,14 @@ class _WatchScreenState extends State<WatchScreen> {
       builder: (context, snapshot) {
         final state = snapshot.data ?? widget.runtime.currentState;
         final child = switch (_tab) {
-          0 => _DarkShell(child: _watch(context, state)),
+          0 => _LightShell(child: _watch(context, state)),
           1 => _LightShell(child: _history()),
           _ => _LightShell(child: _settings(state)),
         };
         return Scaffold(
           body: child,
           bottomNavigationBar: _PinnedNav(
-            dark: _tab == 0,
+            dark: false,
             child: _Nav(tab: _tab, onTap: (i) => setState(() => _tab = i)),
           ),
         );
@@ -59,47 +59,47 @@ class _WatchScreenState extends State<WatchScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 88),
         children: [
-          const _Top(dark: true),
-          const SizedBox(height: 16),
-          Text(strings.ui('liveWatching'), style: _darkTitle),
-          const SizedBox(height: 8),
-          Text(strings.ui('liveStreamConnectedSubtitle'), style: _darkSubtitle),
-          const SizedBox(height: 14),
-          _LightPill(strings.ui('connected')),
-          const SizedBox(height: 16),
-          _VideoPanel(quality: quality, profile: profile),
-          const SizedBox(height: 12),
-          _NetworkQualityCard(quality: quality, profile: profile),
-          const SizedBox(height: 16),
-          _Event(
-              label: strings.ui('lastAlert'),
-              value: strings.ui('cryingDetectedAt'),
-              color: _pink),
-          const SizedBox(height: 10),
-          _Event(
-              label: strings.ui('motion'),
-              value: strings.ui('motionCalmScore'),
-              color: _mint),
-          const SizedBox(height: 10),
-          _Event(
-              label: strings.ui('navNotifications'),
-              value: strings.ui('localNotificationOn'),
-              color: _amber),
-          const SizedBox(height: 18),
-          Text(
-            strings.ui('quickActions'),
-            style: const TextStyle(
-                color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900),
+          _Top(
+            trailing: _ConnectedBadge(text: strings.ui('connected')),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          Text(strings.ui('liveWatching'), style: _title),
+          const SizedBox(height: 8),
+          Text(strings.ui('liveStreamConnectedSubtitle'), style: _subtitle),
+          const SizedBox(height: 18),
+          const _VideoPanel(),
+          const SizedBox(height: 16),
+          _LiveMetricGrid(quality: quality, profile: profile),
+          const SizedBox(height: 18),
           _ActionGroup(
             actions: [
-              _ActionSpec(strings.ui('reconnect'), _mint, _navy, () {}),
-              _ActionSpec(strings.ui('changeAddress'), _pink, Colors.white,
-                  () => Navigator.pop(context)),
-              _ActionSpec(strings.ui('openHistory'), _amber, _navy,
-                  () => setState(() => _tab = 1)),
+              _ActionSpec(Icons.wifi_rounded, strings.ui('reconnect'),
+                  const Color(0xFFFFE3EA), () {}),
+              _ActionSpec(Icons.qr_code_2_rounded, strings.ui('changeAddress'),
+                  _mintSoft, () => Navigator.pop(context)),
+              _ActionSpec(Icons.nights_stay_rounded, strings.ui('openHistory'),
+                  const Color(0xFFF2EEFA), () => setState(() => _tab = 1)),
             ],
+          ),
+          const SizedBox(height: 28),
+          SizedBox(
+            width: double.infinity,
+            height: 58,
+            child: FilledButton(
+              onPressed: () => Navigator.pop(context),
+              style: FilledButton.styleFrom(
+                backgroundColor: _pink,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+              ),
+              child: Text(
+                strings.ui('stopLiveWatch'),
+                style:
+                    const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+              ),
+            ),
           ),
         ],
       ),
@@ -217,42 +217,49 @@ class _WatchScreenState extends State<WatchScreen> {
 }
 
 class _VideoPanel extends StatelessWidget {
-  const _VideoPanel({required this.quality, required this.profile});
-
-  final NetworkQualitySnapshot? quality;
-  final MediaQualityProfile? profile;
+  const _VideoPanel();
 
   @override
   Widget build(BuildContext context) {
-    final strings = AppStrings.of(context);
-    final networkLabel = quality == null
-        ? strings.ui('measuring')
-        : _networkLabel(strings, quality!.tier);
-    final latencyLabel = quality?.rttMs == null ? '—' : '${quality!.rttMs}ms';
-    final audioLabel = profile?.audioFirst == true
-        ? strings.ui('audioPriority')
-        : strings.ui('open');
     return AspectRatio(
-      aspectRatio: 4 / 3,
+      aspectRatio: 16 / 12,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: Colors.white, width: 1.2),
+          color: const Color(0xFFA47465),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFF2D8CD), width: 4),
         ),
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-        alignment: Alignment.bottomCenter,
-        child: Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 18,
-          runSpacing: 8,
+        child: Stack(
           children: [
-            _VideoMetric(
-                strings.uiFormat('audioMetric', {'value': audioLabel})),
-            _VideoMetric(
-                strings.uiFormat('latencyMetric', {'value': latencyLabel})),
-            _VideoMetric(
-                strings.uiFormat('networkMetric', {'value': networkLabel})),
+            for (final left in [22.0, 82.0, 142.0, 202.0, 262.0])
+              Positioned(
+                left: left,
+                top: 22,
+                bottom: 22,
+                child: Container(width: 1, color: Colors.white54),
+              ),
+            const Positioned(top: 10, left: 12, child: _LiveBadge()),
+            const Align(alignment: Alignment.center, child: _CribSketch()),
+            Positioned(
+              left: 14,
+              bottom: 12,
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor: Colors.black.withValues(alpha: .78),
+                child: const Icon(Icons.nights_stay_rounded,
+                    color: _mint, size: 18),
+              ),
+            ),
+            Positioned(
+              right: 14,
+              bottom: 12,
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor: Colors.black.withValues(alpha: .78),
+                child: const Icon(Icons.settings_suggest_rounded,
+                    color: _pink, size: 18),
+              ),
+            ),
           ],
         ),
       ),
@@ -270,8 +277,8 @@ class _VideoPanel extends StatelessWidget {
       };
 }
 
-class _NetworkQualityCard extends StatelessWidget {
-  const _NetworkQualityCard({required this.quality, required this.profile});
+class _LiveMetricGrid extends StatelessWidget {
+  const _LiveMetricGrid({required this.quality, required this.profile});
 
   final NetworkQualitySnapshot? quality;
   final MediaQualityProfile? profile;
@@ -279,64 +286,176 @@ class _NetworkQualityCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final isAudioFirst =
-        quality?.tier.shouldPreferAudio == true || profile?.audioFirst == true;
-    final title = isAudioFirst
-        ? strings.ui('audioFirstMode')
-        : strings.ui('connectionStable');
-    final text = isAudioFirst
-        ? strings.ui('audioFirstModeText')
-        : strings.ui('autoQualityModeText');
+    final networkLabel = quality == null
+        ? strings.ui('measuring')
+        : _VideoPanel._networkLabel(strings, quality!.tier);
+    final latencyLabel =
+        quality?.rttMs == null ? '120 ms' : '${quality!.rttMs} ms';
+    final audioLabel = profile?.audioFirst == true
+        ? strings.ui('audioPriority')
+        : strings.ui('active');
+    return Row(
+      children: [
+        Expanded(
+          child: _MetricTile(
+            icon: Icons.mic_rounded,
+            title: strings.ui('audio'),
+            value: audioLabel,
+            color: _mintSoft,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _MetricTile(
+            icon: Icons.directions_run_rounded,
+            title: strings.ui('motion'),
+            value: networkLabel,
+            color: const Color(0xFFFFE3EA),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _MetricTile(
+            icon: Icons.wifi_tethering_rounded,
+            title: strings.ui('latency'),
+            value: latencyLabel,
+            color: const Color(0xFFF8FFF9),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  const _MetricTile({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String title;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration(dark: true),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      height: 98,
+      padding: const EdgeInsets.all(10),
+      decoration: _cardDecoration().copyWith(color: Colors.white),
+      child: Column(
         children: [
           CircleAvatar(
-            radius: 21,
-            backgroundColor: isAudioFirst ? _amber : _mint,
-            child: Icon(
-              isAudioFirst
-                  ? Icons.hearing_rounded
-                  : Icons.network_check_rounded,
+            radius: 16,
+            backgroundColor: color,
+            child: Icon(icon, color: _navy, size: 18),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: _slate, fontSize: 11),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
               color: _navy,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  text,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    height: 1.25,
-                  ),
-                ),
-                if (profile != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    profile!.summary,
-                    style: const TextStyle(
-                      color: _mint,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LiveBadge extends StatelessWidget {
+  const _LiveBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      decoration: const ShapeDecoration(
+        color: Colors.white,
+        shape: StadiumBorder(),
+      ),
+      child: Text(
+        AppStrings.of(context).ui('live').toUpperCase(),
+        style: const TextStyle(
+          color: Color(0xFF218765),
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _CribSketch extends StatelessWidget {
+  const _CribSketch();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 220,
+      height: 116,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 34,
+            right: 22,
+            top: 44,
+            child: Container(
+              height: 62,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFDCCD),
+                borderRadius: BorderRadius.circular(50),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 84,
+            top: 22,
+            child: Container(
+              width: 70,
+              height: 42,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0BFAE),
+                borderRadius: BorderRadius.circular(32),
+              ),
+            ),
+          ),
+          const Positioned(
+            right: 20,
+            top: 42,
+            child: CircleAvatar(
+              radius: 18,
+              backgroundColor: Color(0xFFC4A08E),
+            ),
+          ),
+          const Positioned(
+            right: 0,
+            top: 58,
+            child: CircleAvatar(
+              radius: 13,
+              backgroundColor: Color(0xFFC4A08E),
+            ),
+          ),
+          const Positioned(
+            left: 104,
+            top: 48,
+            child: SizedBox(
+              width: 28,
+              child: Divider(color: _navy, thickness: 1),
             ),
           ),
         ],
@@ -377,18 +496,6 @@ class _QualityPreferenceCard extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _VideoMetric extends StatelessWidget {
-  const _VideoMetric(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(text,
-        style: const TextStyle(color: Colors.white, fontSize: 13.5));
   }
 }
 
@@ -521,45 +628,6 @@ class _Timeline extends StatelessWidget {
   }
 }
 
-class _Event extends StatelessWidget {
-  const _Event({required this.label, required this.value, required this.color});
-
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration(),
-      child: Row(
-        children: [
-          CircleAvatar(radius: 22, backgroundColor: color),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: const TextStyle(color: _slate, fontSize: 14)),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      color: _navy, fontSize: 17, fontWeight: FontWeight.w900),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ActionGroup extends StatelessWidget {
   const _ActionGroup({required this.actions});
 
@@ -594,12 +662,11 @@ class _ActionGroup extends StatelessWidget {
 }
 
 class _ActionSpec {
-  const _ActionSpec(
-      this.text, this.backgroundColor, this.foregroundColor, this.onTap);
+  const _ActionSpec(this.icon, this.text, this.backgroundColor, this.onTap);
 
+  final IconData icon;
   final String text;
   final Color backgroundColor;
-  final Color foregroundColor;
   final VoidCallback onTap;
 }
 
@@ -611,23 +678,38 @@ class _Action extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 52,
+      height: 94,
       width: double.infinity,
       child: FilledButton(
         onPressed: spec.onTap,
         style: FilledButton.styleFrom(
           backgroundColor: spec.backgroundColor,
+          foregroundColor: _navy,
+          padding: const EdgeInsets.all(10),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         ),
-        child: Text(
-          spec.text,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-              color: spec.foregroundColor,
-              fontWeight: FontWeight.w900,
-              fontSize: 15),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: Colors.white,
+              child: Icon(spec.icon, color: _navy, size: 20),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              spec.text,
+              maxLines: 2,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _navy,
+                fontWeight: FontWeight.w900,
+                fontSize: 12.5,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -738,67 +820,68 @@ class _PinnedNav extends StatelessWidget {
   }
 }
 
-class _LightPill extends StatelessWidget {
-  const _LightPill(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration:
-            const ShapeDecoration(color: Colors.white, shape: StadiumBorder()),
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: _navy, fontWeight: FontWeight.w900),
-        ),
-      ),
-    );
-  }
-}
-
 class _Top extends StatelessWidget {
-  const _Top({this.dark = false});
+  const _Top({this.trailing});
 
-  final bool dark;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
-    final color = dark ? Colors.white : _navy;
     return Row(
       children: [
-        Text('09:41',
-            style: TextStyle(
-                color: color, fontWeight: FontWeight.w900, fontSize: 14)),
+        IconButton(
+          onPressed: () => Navigator.maybePop(context),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          color: _navy,
+        ),
         const Spacer(),
-        Icon(Icons.signal_cellular_alt_rounded, color: color),
-        const SizedBox(width: 12),
-        Icon(Icons.battery_5_bar_rounded, color: color),
+        const Icon(Icons.circle, color: _pink, size: 10),
+        const SizedBox(width: 8),
+        const Text(
+          'MimiCam',
+          style: TextStyle(
+            color: _pink,
+            fontWeight: FontWeight.w900,
+            fontSize: 15,
+          ),
+        ),
+        const Spacer(),
+        if (trailing != null) trailing! else const SizedBox(width: 48),
       ],
     );
   }
 }
 
-class _DarkShell extends StatelessWidget {
-  const _DarkShell({required this.child});
+class _ConnectedBadge extends StatelessWidget {
+  const _ConnectedBadge({required this.text});
 
-  final Widget child;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment(.7, -.85),
-          radius: .9,
-          colors: [Color(0xFF24465A), _navy, Color(0xFF07111F)],
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: ShapeDecoration(
+        color: _mintSoft,
+        shape: StadiumBorder(
+          side: BorderSide(color: _mint.withValues(alpha: .45)),
         ),
       ),
-      child: child,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.circle, color: Color(0xFF42B883), size: 7),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: const TextStyle(
+              color: Color(0xFF2A9474),
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -844,10 +927,3 @@ const _amber = Color(0xFFFFD37B);
 const _title = TextStyle(
     color: _navy, fontSize: 30, height: 1.08, fontWeight: FontWeight.w900);
 const _subtitle = TextStyle(color: _slate, fontSize: 15.5, height: 1.25);
-const _darkTitle = TextStyle(
-    color: Colors.white,
-    fontSize: 30,
-    height: 1.08,
-    fontWeight: FontWeight.w900);
-const _darkSubtitle =
-    TextStyle(color: Colors.white70, fontSize: 15.5, height: 1.25);

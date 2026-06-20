@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mimicam/app/app_role.dart';
+import 'package:mimicam/core/protocol/pairing_payload.dart';
+import 'package:mimicam/core/protocol/pairing_session.dart';
 import 'package:mimicam/features/client/client_home_screen.dart';
 import 'package:mimicam/features/client/client_runtime.dart';
+import 'package:mimicam/features/client/media/watch_screen.dart';
 import 'package:mimicam/features/server/media/media_runtime_controller.dart';
 import 'package:mimicam/features/server/server_home_screen.dart';
 import 'package:mimicam/features/server/server_runtime.dart';
@@ -19,64 +22,112 @@ void main() {
 
   testWidgets('client tab geçişleri kompakt ekranda overflow üretmez',
       (tester) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final runtime = ClientRuntime(
-      pair: (_) => throw UnimplementedError(),
-    );
 
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('tr'),
-        supportedLocales: AppStrings.supportedLocales,
-        localizationsDelegates: _localizationsDelegates,
-        home: ClientHomeScreen(
-          runtime: runtime,
-          activeRole: AppRole.client,
-          onRoleSelected: (_) {},
+    for (final width in [320.0, 360.0, 390.0]) {
+      await tester.binding.setSurfaceSize(Size(width, 844));
+      final runtime = ClientRuntime(
+        pair: (_) => throw UnimplementedError(),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('tr'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: _localizationsDelegates,
+          home: ClientHomeScreen(
+            runtime: runtime,
+            activeRole: AppRole.client,
+            onRoleSelected: (_) {},
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    _expectNoFlutterException(tester);
-
-    for (final label in ['Bul', 'Bildirim', 'Ayarlar', 'İzle']) {
-      await tester.tap(find.text(label).last);
+      );
       await tester.pumpAndSettle();
       _expectNoFlutterException(tester);
+
+      for (final label in ['Bul', 'Bildirim', 'Ayarlar', 'İzle']) {
+        await tester.tap(find.text(label).last);
+        await tester.pumpAndSettle();
+        _expectNoFlutterException(tester);
+      }
+    }
+  });
+
+  testWidgets('paired client ve canlı izleme dar ekranda overflow üretmez',
+      (tester) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    for (final width in [320.0, 360.0]) {
+      await tester.binding.setSurfaceSize(Size(width, 844));
+      final runtime = await _pairedRuntime();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('tr'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: _localizationsDelegates,
+          home: ClientHomeScreen(
+            runtime: runtime,
+            activeRole: AppRole.client,
+            onRoleSelected: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      _expectNoFlutterException(tester);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('tr'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: _localizationsDelegates,
+          home: WatchScreen(runtime: runtime),
+        ),
+      );
+      await tester.pumpAndSettle();
+      _expectNoFlutterException(tester);
+
+      for (final label in ['Geçmiş', 'Ayarlar', 'İzle']) {
+        await tester.tap(find.text(label).last);
+        await tester.pumpAndSettle();
+        _expectNoFlutterException(tester);
+      }
     }
   });
 
   testWidgets('server tab geçişleri kompakt ekranda overflow üretmez',
       (tester) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final preferences = await SharedPreferences.getInstance();
-    final runtime = ServerRuntime(
-      mediaRuntime: MediaRuntimeController(),
-      onStartPairing: () async => 'mimicam://pair?payload=x',
-    );
 
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('tr'),
-        supportedLocales: AppStrings.supportedLocales,
-        localizationsDelegates: _localizationsDelegates,
-        home: ServerHomeScreen(
-          runtime: runtime,
-          config: ConfigurationService(preferences),
-          activeRole: AppRole.server,
-          onRoleSelected: (_) {},
+    for (final width in [320.0, 360.0, 390.0]) {
+      await tester.binding.setSurfaceSize(Size(width, 844));
+      final preferences = await SharedPreferences.getInstance();
+      final runtime = ServerRuntime(
+        mediaRuntime: MediaRuntimeController(),
+        onStartPairing: () async => 'mimicam://pair?payload=x',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('tr'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: _localizationsDelegates,
+          home: ServerHomeScreen(
+            runtime: runtime,
+            config: ConfigurationService(preferences),
+            activeRole: AppRole.server,
+            onRoleSelected: (_) {},
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    _expectNoFlutterException(tester);
-
-    for (final label in ['QR/IP', 'Servis', 'Ayarlar', 'Yayın']) {
-      await tester.tap(find.text(label).last);
+      );
       await tester.pumpAndSettle();
       _expectNoFlutterException(tester);
+
+      for (final label in ['QR/IP', 'Servis', 'Ayarlar', 'Yayın']) {
+        await tester.tap(find.text(label).last);
+        await tester.pumpAndSettle();
+        _expectNoFlutterException(tester);
+      }
     }
   });
 
@@ -107,6 +158,29 @@ void main() {
 void _expectNoFlutterException(WidgetTester tester) {
   expect(tester.takeException(), isNull);
 }
+
+Future<ClientRuntime> _pairedRuntime() async {
+  final session = PairingSession(payload: _payload(), sessionToken: 'token');
+  final runtime = ClientRuntime(
+    pair: (_) async => session,
+    startStream: (_) async {},
+    stopStream: (_) async {},
+  );
+  await runtime.pairWithServer(session.payload);
+  return runtime;
+}
+
+PairingPayload _payload() => PairingPayload(
+      schemaVersion: 1,
+      host: '192.168.1.20',
+      port: 8080,
+      deviceId: 'server',
+      deviceName: 'Bebek Odası',
+      pairingNonce: 'nonce',
+      expiresAtMs:
+          DateTime.now().add(const Duration(minutes: 1)).millisecondsSinceEpoch,
+      capabilities: const {'transport': 'http'},
+    );
 
 const _localizationsDelegates = [
   AppStrings.delegate,

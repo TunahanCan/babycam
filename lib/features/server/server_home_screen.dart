@@ -480,6 +480,7 @@ class _ConnectionCard extends StatelessWidget {
     final strings = AppStrings.of(context);
     final payload = qrPayload ?? 'mimicam://pairing/pending';
     return MimiCamCard(
+      dark: true,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isCompact = constraints.maxWidth < 430;
@@ -489,20 +490,22 @@ class _ConnectionCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(strings.ui('secureQrPairing'),
-                  style: MimiCamDesignTokens.cardTitle),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  )),
               const SizedBox(height: 6),
               Text(
                 strings.ui('parentQrScanText'),
-                style: const TextStyle(
-                    color: MimiCamDesignTokens.slate, fontSize: 14.5),
+                style: const TextStyle(color: Colors.white70, fontSize: 14.5),
               ),
               const SizedBox(height: 12),
               _PayloadBox(payload: payload),
               const SizedBox(height: 12),
               Text(
                 strings.ui('keepCodeVisible'),
-                style: const TextStyle(
-                    color: MimiCamDesignTokens.slate, fontSize: 14.5),
+                style: const TextStyle(color: Colors.white70, fontSize: 14.5),
               ),
             ],
           );
@@ -608,6 +611,7 @@ class _QrIpActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     return MimiCamCard(
+      dark: true,
       child: Wrap(
         spacing: 12,
         runSpacing: 12,
@@ -654,7 +658,8 @@ class _QrIpActions extends StatelessWidget {
                     },
               icon: const Icon(Icons.copy_rounded),
               style: OutlinedButton.styleFrom(
-                foregroundColor: MimiCamDesignTokens.navy,
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white24),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -756,7 +761,7 @@ class _ServiceStatusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: MimiCamDesignTokens.cardDecoration(),
+      decoration: MimiCamDesignTokens.cardDecoration(dark: true),
       child: Row(
         children: [
           CircleAvatar(
@@ -771,7 +776,7 @@ class _ServiceStatusCard extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.navy,
+                    color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.w900,
                   ),
@@ -780,7 +785,7 @@ class _ServiceStatusCard extends StatelessWidget {
                 Text(
                   value,
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.slate,
+                    color: Colors.white70,
                     fontSize: 13.5,
                   ),
                 ),
@@ -801,46 +806,29 @@ class _RuntimeStats extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    final profile = state.mediaProfile;
     final stats = [
       _Stat(
-          label: strings.ui('parent'),
-          value: state.activeClients == 0
-              ? strings.ui('waiting')
-              : strings
-                  .uiFormat('connectedCount', {'count': state.activeClients}),
+          label: strings.ui('viewers'),
+          value: state.activeClients == 0 ? '0' : '${state.activeClients}',
+          footnote: strings.ui('connection'),
           color: MimiCamDesignTokens.mint),
       _Stat(
-          label: strings.ui('camera'),
-          value:
-              state.cameraActive ? strings.ui('open') : strings.ui('preparing'),
+          label: 'FPS',
+          value: profile == null ? '12' : '${profile.targetFps}',
+          footnote: 'fps',
           color: MimiCamDesignTokens.pink),
       _Stat(
-          label: strings.ui('microphone'),
-          value: state.microphoneActive
-              ? strings.ui('listening')
-              : strings.ui('off'),
+          label: strings.ui('resolution'),
+          value: profile == null
+              ? '640x480'
+              : '${profile.width}x${profile.height}',
+          footnote: profile?.label ?? strings.ui('automatic'),
           color: MimiCamDesignTokens.amber),
-      _Stat(
-          label: strings.ui('quality'),
-          value: state.mediaProfile == null
-              ? strings.ui('automatic')
-              : '${state.mediaProfile!.height}p · ${state.mediaProfile!.targetFps}fps',
-          color: MimiCamDesignTokens.mint),
     ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 700) {
-          return Column(
-            children: [
-              for (final stat in stats) ...[
-                stat,
-                if (stat != stats.last) const SizedBox(height: 10),
-              ],
-            ],
-          );
-        }
-
         return Row(
           children: [
             for (final stat in stats) ...[
@@ -863,41 +851,45 @@ class _DetectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     return MimiCamCard(
-      child: Opacity(
-        opacity: .72,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(strings.ui('smartAlerts'),
-                style: MimiCamDesignTokens.cardTitle),
-            const SizedBox(height: 8),
-            Text(
-              strings.ui('smartAlertsSubtitle'),
-              style: const TextStyle(
-                  color: MimiCamDesignTokens.slate, fontSize: 14.5),
+      dark: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            strings.ui('detectionStatus'),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
             ),
-            const SizedBox(height: 14),
-            _KeyVal(
-                strings.ui('cryTracking'),
-                state.cryAnalyzerActive
-                    ? strings.ui('ready')
-                    : strings.ui('off')),
-            const SizedBox(height: 10),
-            _KeyVal(
-                strings.ui('motionTracking'),
-                state.motionAnalyzerActive
-                    ? strings.ui('ready')
-                    : strings.ui('off')),
-            const SizedBox(height: 10),
-            _KeyVal(strings.ui('operatingMode'),
-                _powerModeLabel(strings, state.powerMode.name)),
-            const SizedBox(height: 10),
-            _KeyVal(
-              strings.ui('streamProfile'),
-              state.mediaProfile?.summary ?? strings.ui('autoMeasuring'),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            strings.ui('smartAlertsSubtitle'),
+            style: const TextStyle(color: Colors.white70, fontSize: 14.5),
+          ),
+          const SizedBox(height: 14),
+          _KeyVal(strings.ui('cryTracking'),
+              state.cryAnalyzerActive ? strings.ui('ready') : strings.ui('off'),
+              dark: true),
+          const SizedBox(height: 10),
+          _KeyVal(
+              strings.ui('motionTracking'),
+              state.motionAnalyzerActive
+                  ? strings.ui('ready')
+                  : strings.ui('off'),
+              dark: true),
+          const SizedBox(height: 10),
+          _KeyVal(strings.ui('operatingMode'),
+              _powerModeLabel(strings, state.powerMode.name),
+              dark: true),
+          const SizedBox(height: 10),
+          _KeyVal(
+            strings.ui('streamProfile'),
+            state.mediaProfile?.summary ?? strings.ui('autoMeasuring'),
+            dark: true,
+          ),
+        ],
       ),
     );
   }
@@ -1303,40 +1295,55 @@ class _SettingSlider extends StatelessWidget {
 }
 
 class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value, required this.color});
+  const _Stat({
+    required this.label,
+    required this.value,
+    required this.footnote,
+    required this.color,
+  });
 
   final String label;
   final String value;
+  final String footnote;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 112,
+      height: 104,
       padding: const EdgeInsets.all(16),
-      decoration: MimiCamDesignTokens.cardDecoration(),
+      decoration: BoxDecoration(
+        color: MimiCamDesignTokens.plumSurface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: .12)),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(label,
-              style: const TextStyle(
-                  color: MimiCamDesignTokens.slate, fontSize: 14)),
+              style: const TextStyle(color: Colors.white70, fontSize: 12)),
           const Spacer(),
           Text(
             value,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: MimiCamDesignTokens.navy,
-              fontSize: 18,
+              color: Colors.white,
+              fontSize: 20,
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 8),
-          Container(
-              height: 8,
-              decoration: BoxDecoration(
-                  color: color, borderRadius: BorderRadius.circular(10))),
+          const SizedBox(height: 5),
+          Text(
+            footnote,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
         ],
       ),
     );
@@ -1344,10 +1351,11 @@ class _Stat extends StatelessWidget {
 }
 
 class _KeyVal extends StatelessWidget {
-  const _KeyVal(this.label, this.value);
+  const _KeyVal(this.label, this.value, {this.dark = false});
 
   final String label;
   final String value;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
@@ -1356,8 +1364,10 @@ class _KeyVal extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style:
-                const TextStyle(fontSize: 15, color: MimiCamDesignTokens.slate),
+            style: TextStyle(
+              fontSize: 15,
+              color: dark ? Colors.white70 : MimiCamDesignTokens.slate,
+            ),
           ),
         ),
         const SizedBox(width: 10),
@@ -1366,9 +1376,9 @@ class _KeyVal extends StatelessWidget {
             value,
             textAlign: TextAlign.right,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
-              color: MimiCamDesignTokens.slate,
+              color: dark ? Colors.white : MimiCamDesignTokens.slate,
               fontWeight: FontWeight.w900,
             ),
           ),

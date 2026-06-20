@@ -344,17 +344,17 @@ class MimiCamBottomNav extends StatelessWidget {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: dark
-              ? const Color(0xFF101B2B).withValues(alpha: .94)
+              ? MimiCamDesignTokens.plumSurface.withValues(alpha: .94)
               : Colors.white.withValues(alpha: .96),
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(30),
           border: Border.all(
-            color: dark ? Colors.white12 : const Color(0xFFE0E8EE),
+            color: dark ? Colors.white12 : const Color(0xFFEEDFD8),
           ),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x26111827),
-              blurRadius: 22,
-              offset: Offset(0, 10),
+              color: Color(0x1F111827),
+              blurRadius: 16,
+              offset: Offset(0, 8),
             ),
           ],
         ),
@@ -397,17 +397,17 @@ class _BottomNavButton extends StatelessWidget {
     final baseColor = dark ? Colors.white70 : MimiCamDesignTokens.slate;
     final selectedTextColor = dark ? Colors.white : MimiCamDesignTokens.navy;
     return InkWell(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(24),
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
         curve: Curves.easeOutCubic,
-        height: 62,
+        height: 58,
         padding: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
           color:
               selected ? activeColor.withValues(alpha: dark ? .22 : .25) : null,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(24),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -463,16 +463,16 @@ enum MimiCamShellVariant {
           colors: [
             MimiCamDesignTokens.mintSoft,
             MimiCamDesignTokens.lightClientBg,
-            Color(0xFFFFFFFF),
+            Color(0xFFFFFBF8),
           ],
         ),
       MimiCamShellVariant.server => const RadialGradient(
           center: Alignment(.7, -.85),
           radius: .9,
           colors: [
-            Color(0xFF24465A),
-            MimiCamDesignTokens.navy,
-            Color(0xFF07111F),
+            Color(0xFF4B3A61),
+            MimiCamDesignTokens.nightPlum,
+            Color(0xFF171023),
           ],
         ),
     };

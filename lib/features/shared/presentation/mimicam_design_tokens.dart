@@ -3,16 +3,22 @@ import 'package:flutter/material.dart';
 class MimiCamDesignTokens {
   const MimiCamDesignTokens._();
 
-  static const navy = Color(0xFF071120);
-  static const slate = Color(0xFF657083);
-  static const pink = Color(0xFFFF315A);
+  static const cream = Color(0xFFFFF8F3);
+  static const blushSoft = Color(0xFFFFE3EA);
+  static const nightPlum = Color(0xFF2B223B);
+  static const plumSurface = Color(0xFF3A2D4D);
+  static const navy = nightPlum;
+  static const slate = Color(0xFF687083);
+  static const pink = Color(0xFFFF5C7C);
   static const mint = Color(0xFF6EDCCE);
   static const mintSoft = Color(0xFFDDF8F4);
   static const amber = Color(0xFFF5C451);
-  static const lightClientBg = Color(0xFFF6FBFA);
-  static const softRed = Color(0xFFFF5D6C);
+  static const amberSoft = Color(0xFFFFF0D8);
+  static const lavenderSoft = Color(0xFFF2EEFA);
+  static const lightClientBg = cream;
+  static const softRed = pink;
 
-  static const screenPadding = EdgeInsets.fromLTRB(20, 12, 20, 22);
+  static const screenPadding = EdgeInsets.fromLTRB(22, 14, 22, 24);
   static const cardPadding = EdgeInsets.all(18);
 
   static const title = TextStyle(
@@ -49,14 +55,18 @@ class MimiCamDesignTokens {
 
   static BoxDecoration cardDecoration({bool dark = false}) {
     return BoxDecoration(
-      color: dark ? navy : Colors.white,
-      borderRadius: BorderRadius.circular(dark ? 22 : 18),
-      border: Border.all(color: const Color(0xFFE2E8F0)),
+      color: dark ? plumSurface : Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(
+        color: dark
+            ? Colors.white.withValues(alpha: .12)
+            : const Color(0xFFEEDFD8),
+      ),
       boxShadow: const [
         BoxShadow(
-          color: Color(0x18111827),
-          blurRadius: 18,
-          offset: Offset(0, 8),
+          color: Color(0x14111827),
+          blurRadius: 14,
+          offset: Offset(0, 7),
         ),
       ],
     );

@@ -2200,6 +2200,163 @@ const _uiText = <String, Map<String, String>>{
     'es': 'Ajustes reales',
     'fr': 'Réglages réels'
   },
+  'goodMorning': {
+    'tr': 'Günaydın',
+    'en': 'Good morning',
+  },
+  'babySleepingWell': {
+    'tr': 'Bebeğiniz iyi uyuyor.',
+    'en': 'Your baby is sleeping well.',
+  },
+  'noRoomCalmText': {
+    'tr':
+        'Bebek odası cihazını bulup bağladıktan sonra buradan izleyebilirsiniz.',
+    'en': 'After connecting the baby room device, you can watch it here.',
+  },
+  'findAndConnectRoom': {
+    'tr': 'Oda bul ve bağlan',
+    'en': 'Find and connect room',
+  },
+  'roomStatus': {
+    'tr': 'Oda Durumu',
+    'en': 'Room status',
+  },
+  'temperatureHumidity': {
+    'tr': '22.5 °C   %45',
+    'en': '22.5 °C   45%',
+  },
+  'fine': {
+    'tr': 'İyi',
+    'en': 'Good',
+  },
+  'lastMotion': {
+    'tr': 'Son Hareket',
+    'en': 'Last motion',
+  },
+  'twoMinutesAgo': {
+    'tr': '2 dk önce',
+    'en': '2 min ago',
+  },
+  'lightMotionDetected': {
+    'tr': 'Hafif hareket algılandı',
+    'en': 'Light motion detected',
+  },
+  'or': {
+    'tr': 'veya',
+    'en': 'or',
+  },
+  'manualIpConnectTitle': {
+    'tr': 'Manuel IP ile Bağlan',
+    'en': 'Connect with manual IP',
+  },
+  'manualIpConnectText': {
+    'tr': 'Cihazın IP adresini girerek bağlantı kurun.',
+    'en': 'Connect by entering the device IP address.',
+  },
+  'localNetworkPrivacyNote': {
+    'tr':
+        'Sadece yerel ağınızdaki cihazlar listelenir. Verileriniz dışarıya gönderilmez.',
+    'en':
+        'Only devices on your local network are listed. Your data is not sent outside.',
+  },
+  'important': {
+    'tr': 'Önemli',
+    'en': 'Important',
+  },
+  'info': {
+    'tr': 'Bilgi',
+    'en': 'Info',
+  },
+  'warning': {
+    'tr': 'Uyarı',
+    'en': 'Warning',
+  },
+  'cryDetectedTitle': {
+    'tr': 'Ağlama algılandı',
+    'en': 'Cry detected',
+  },
+  'cryDetectedText': {
+    'tr': 'Bebeğinizin ağlaması algılandı.',
+    'en': 'Your baby crying was detected.',
+  },
+  'motionDetectedTitle': {
+    'tr': 'Hareket algılandı',
+    'en': 'Motion detected',
+  },
+  'motionDetectedText': {
+    'tr': 'Bebek odasında hareket algılandı.',
+    'en': 'Motion was detected in the baby room.',
+  },
+  'temperatureWarningTitle': {
+    'tr': 'Sıcaklık uyarısı',
+    'en': 'Temperature warning',
+  },
+  'temperatureWarningText': {
+    'tr': 'Oda sıcaklığı 28.0 °C’ye yükseldi.',
+    'en': 'Room temperature rose to 28.0 °C.',
+  },
+  'connectionRenewedTitle': {
+    'tr': 'Bağlantı yenilendi',
+    'en': 'Connection renewed',
+  },
+  'connectionRenewedText': {
+    'tr': 'Bebek odası cihazı çevrimiçi.',
+    'en': 'The baby room device is online.',
+  },
+  'humidityNormalTitle': {
+    'tr': 'Nem seviyesi normal',
+    'en': 'Humidity level normal',
+  },
+  'humidityNormalText': {
+    'tr': 'Oda nem seviyesi %45.',
+    'en': 'Room humidity is 45%.',
+  },
+  'notificationsManageText': {
+    'tr': 'Uyarı ve sistem bildirimlerini yönetin.',
+    'en': 'Manage alert and system notifications.',
+  },
+  'languageSelectText': {
+    'tr': 'Uygulama dilini seçin.',
+    'en': 'Choose the app language.',
+  },
+  'turkishShort': {
+    'tr': 'Türkçe',
+    'en': 'TR',
+  },
+  'keepAwakeClientText': {
+    'tr': 'Ekranın canlı izleme sırasında uykuya geçmesini önler.',
+    'en': 'Prevents the screen from sleeping during live watch.',
+  },
+  'serverSettingsHiddenText': {
+    'tr':
+        'Sunucu ayarları bu cihazda gösterilmez. Sunucu yönetimi için server cihazını kullanın.',
+    'en':
+        'Server settings are not shown on this device. Use the server device to manage them.',
+  },
+  'stopLiveWatch': {
+    'tr': 'Canlı İzlemeyi Durdur',
+    'en': 'Stop live watch',
+  },
+  'latency': {
+    'tr': 'Gecikme',
+    'en': 'Latency',
+  },
+  'viewers': {
+    'tr': 'İzleyen',
+    'en': 'Viewers',
+  },
+  'connection': {
+    'tr': 'bağlantı',
+    'en': 'connection',
+  },
+  'resolution': {
+    'tr': 'Çözünürlük',
+    'en': 'Resolution',
+  },
+  'detectionStatus': {
+    'tr': 'Algılama Durumu',
+    'en': 'Detection status',
+  },
 };
 
 class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {
