@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import '../core/media/adaptive_media_profile.dart';
+
 class AppStrings {
   AppStrings(this.locale);
 
@@ -45,6 +47,29 @@ class AppStrings {
     if (isSpanish) return es ?? en;
     if (isFrench) return fr ?? en;
     return en;
+  }
+
+  String _variant({
+    required int seed,
+    required List<String> tr,
+    required List<String> en,
+    required List<String> zh,
+    required List<String> hi,
+    required List<String> es,
+    required List<String> fr,
+  }) {
+    final values = isTurkish
+        ? tr
+        : isChinese
+            ? zh
+            : isHindi
+                ? hi
+                : isSpanish
+                    ? es
+                    : isFrench
+                        ? fr
+                        : en;
+    return values[seed.abs() % values.length];
   }
 
   String get appTitle => 'MimiCam';
@@ -305,54 +330,311 @@ class AppStrings {
             hi: 'कैलिब्रेशन जारी है',
             es: 'calibrando',
             fr: 'calibrage en cours');
-    return _t(
-      tr: '🔊 Ağlama olasılığı yüksek ($confidencePercent%). Ses ortamdan ${ambientDeltaDb.toStringAsFixed(1)} dB yüksek; ağlama bandı %$cryBandPercent. $calibration. Önce güvenli şekilde odayı kontrol et: açlık, bez, gaz, sıcak/soğuk veya sarılma ihtiyacı olabilir.',
-      en: '🔊 Cry likelihood is high ($confidencePercent%). Sound is ${ambientDeltaDb.toStringAsFixed(1)} dB above ambient; cry-band energy is $cryBandPercent%. $calibration. Please check the room safely: hunger, diaper, gas, temperature, or need for comfort may be possible.',
-      zh: '🔊 哭声可能性较高（$confidencePercent%）。声音比环境高 ${ambientDeltaDb.toStringAsFixed(1)} dB；哭声频段能量 $cryBandPercent%。$calibration。请安全查看房间：可能是饿了、尿布、胀气、冷热或需要安抚。',
-      hi: '🔊 रोने की संभावना अधिक है ($confidencePercent%)। आवाज़ परिवेश से ${ambientDeltaDb.toStringAsFixed(1)} dB अधिक है; रोने वाले बैंड की ऊर्जा $cryBandPercent%। $calibration। कमरे को सुरक्षित रूप से देखें: भूख, डायपर, गैस, तापमान या आराम की ज़रूरत हो सकती है।',
-      es: '🔊 La probabilidad de llanto es alta ($confidencePercent%). El sonido está ${ambientDeltaDb.toStringAsFixed(1)} dB por encima del ambiente; energía de banda de llanto $cryBandPercent%. $calibration. Revisa la habitación con seguridad: puede ser hambre, pañal, gases, temperatura o necesidad de consuelo.',
-      fr: '🔊 Probabilité de pleurs élevée ($confidencePercent %). Le son est ${ambientDeltaDb.toStringAsFixed(1)} dB au-dessus de l’ambiance ; énergie de la bande des pleurs $cryBandPercent %. $calibration. Vérifiez la chambre en sécurité : faim, couche, gaz, température ou besoin de réconfort possibles.',
+    final delta = ambientDeltaDb.toStringAsFixed(1);
+    final seed = confidencePercent +
+        cryBandPercent +
+        ambientDeltaDb.round() +
+        (calibrated ? 1 : 0);
+    return _variant(
+      seed: seed,
+      tr: [
+        '🔊 Ağlama olasılığı yüksek ($confidencePercent%). Ses ortamdan $delta dB yüksek; ağlama bandı %$cryBandPercent. $calibration. Önce güvenli şekilde odayı kontrol et: açlık, bez, gaz, sıcak/soğuk veya sarılma ihtiyacı olabilir.',
+        '👶 Bebeğin sesi ağlamaya benziyor ($confidencePercent%). Ortamın $delta dB üstünde ve ağlama bandı %$cryBandPercent. $calibration. Kısa bir oda kontrolü iyi olur: rahatlık, bez, gaz ve sıcaklık.',
+        '🍼 Uzayan bir huzursuzluk sinyali var ($confidencePercent%). Ses $delta dB yükseldi; ağlama bandı %$cryBandPercent. $calibration. Önce sakin bir görsel kontrol yap, sonra ihtiyaçları sırayla değerlendir.',
+      ],
+      en: [
+        '🔊 Cry likelihood is high ($confidencePercent%). Sound is $delta dB above ambient; cry-band energy is $cryBandPercent%. $calibration. Please check the room safely: hunger, diaper, gas, temperature, or need for comfort may be possible.',
+        '👶 Baby sounds likely to be crying ($confidencePercent%). The room is $delta dB louder than baseline and cry-band energy is $cryBandPercent%. $calibration. A calm room check is recommended: comfort, diaper, gas, and temperature.',
+        '🍼 A sustained fuss/cry signal is building ($confidencePercent%). Audio rose $delta dB; cry-band energy is $cryBandPercent%. $calibration. Start with a safe visual check, then review likely needs one by one.',
+      ],
+      zh: [
+        '🔊 哭声可能性较高（$confidencePercent%）。声音比环境高 $delta dB；哭声频段能量 $cryBandPercent%。$calibration。请安全查看房间：可能是饿了、尿布、胀气、冷热或需要安抚。',
+        '👶 宝宝的声音像在哭（$confidencePercent%）。房间声音比基线高 $delta dB，哭声频段 $cryBandPercent%。$calibration。建议平静地查看：安抚、尿布、胀气和温度。',
+        '🍼 检测到持续烦躁/哭声信号（$confidencePercent%）。声音上升 $delta dB；哭声频段 $cryBandPercent%。$calibration。先安全查看画面，再逐项确认需求。',
+      ],
+      hi: [
+        '🔊 रोने की संभावना अधिक है ($confidencePercent%)। आवाज़ परिवेश से $delta dB अधिक है; रोने वाले बैंड की ऊर्जा $cryBandPercent%। $calibration। कमरे को सुरक्षित रूप से देखें: भूख, डायपर, गैस, तापमान या आराम की ज़रूरत हो सकती है।',
+        '👶 बच्चे की आवाज़ रोने जैसी लग रही है ($confidencePercent%)। कमरा बेसलाइन से $delta dB तेज़ है और cry-band ऊर्जा $cryBandPercent% है। $calibration। शांत होकर देखें: आराम, डायपर, गैस और तापमान।',
+        '🍼 लगातार बेचैनी/रोने का संकेत बन रहा है ($confidencePercent%)। ऑडियो $delta dB बढ़ा; cry-band ऊर्जा $cryBandPercent%। $calibration। पहले सुरक्षित दृश्य जाँच करें, फिर ज़रूरतों को क्रम से देखें।',
+      ],
+      es: [
+        '🔊 La probabilidad de llanto es alta ($confidencePercent%). El sonido está $delta dB por encima del ambiente; energía de banda de llanto $cryBandPercent%. $calibration. Revisa la habitación con seguridad: puede ser hambre, pañal, gases, temperatura o necesidad de consuelo.',
+        '👶 El sonido del bebé parece llanto ($confidencePercent%). La habitación está $delta dB sobre la base y la banda de llanto marca $cryBandPercent%. $calibration. Conviene revisar con calma: consuelo, pañal, gases y temperatura.',
+        '🍼 Se forma una señal sostenida de inquietud/llanto ($confidencePercent%). El audio subió $delta dB; banda de llanto $cryBandPercent%. $calibration. Empieza con una revisión visual segura y luego mira las necesidades probables.',
+      ],
+      fr: [
+        '🔊 Probabilité de pleurs élevée ($confidencePercent %). Le son est $delta dB au-dessus de l’ambiance ; énergie de la bande des pleurs $cryBandPercent %. $calibration. Vérifiez la chambre en sécurité : faim, couche, gaz, température ou besoin de réconfort possibles.',
+        '👶 Le son du bébé ressemble à des pleurs ($confidencePercent %). La chambre est $delta dB au-dessus du niveau de base et la bande des pleurs est à $cryBandPercent %. $calibration. Vérifiez calmement : réconfort, couche, gaz et température.',
+        '🍼 Un signal prolongé d’inconfort/pleurs apparaît ($confidencePercent %). L’audio a monté de $delta dB ; bande des pleurs $cryBandPercent %. $calibration. Commencez par un contrôle visuel sûr, puis vérifiez les besoins probables.',
+      ],
     );
   }
 
   String parentLoudSoundAlert({
     required double dbfs,
     required double ambientDeltaDb,
-  }) =>
-      _t(
-        tr: '🔔 Ani yüksek ses algılandı. Seviye ${dbfs.toStringAsFixed(1)} dBFS; ortamdan ${ambientDeltaDb.toStringAsFixed(1)} dB yüksek. Bebeğin uyanıp uyanmadığını ve odada beklenmeyen bir ses kaynağı olup olmadığını kontrol et.',
-        en: '🔔 Sudden loud sound detected. Level ${dbfs.toStringAsFixed(1)} dBFS; ${ambientDeltaDb.toStringAsFixed(1)} dB above ambient. Check whether the baby woke up and whether there is an unexpected noise source.',
-        zh: '🔔 检测到突然的大声响。音量 ${dbfs.toStringAsFixed(1)} dBFS，比环境高 ${ambientDeltaDb.toStringAsFixed(1)} dB。请查看宝宝是否醒来，以及房间是否有异常声源。',
-        hi: '🔔 अचानक तेज़ आवाज़ मिली। स्तर ${dbfs.toStringAsFixed(1)} dBFS; परिवेश से ${ambientDeltaDb.toStringAsFixed(1)} dB अधिक। देखें कि बच्चा जागा है या कमरे में कोई अनपेक्षित आवाज़ है।',
-        es: '🔔 Se detectó un sonido fuerte repentino. Nivel ${dbfs.toStringAsFixed(1)} dBFS; ${ambientDeltaDb.toStringAsFixed(1)} dB sobre el ambiente. Revisa si el bebé se despertó o si hay una fuente de ruido inesperada.',
-        fr: '🔔 Son fort soudain détecté. Niveau ${dbfs.toStringAsFixed(1)} dBFS ; ${ambientDeltaDb.toStringAsFixed(1)} dB au-dessus de l’ambiance. Vérifiez si le bébé s’est réveillé ou s’il y a une source de bruit inattendue.',
-      );
+  }) {
+    final level = dbfs.toStringAsFixed(1);
+    final delta = ambientDeltaDb.toStringAsFixed(1);
+    final seed = (dbfs.abs() + ambientDeltaDb).floor();
+    return _variant(
+      seed: seed,
+      tr: [
+        '🔔 Ani yüksek ses algılandı. Seviye $level dBFS; ortamdan $delta dB yüksek. Bebeğin uyanıp uyanmadığını ve odada beklenmeyen bir ses kaynağı olup olmadığını kontrol et.',
+        '🚪 Odada kısa ve güçlü bir ses yükselmesi var. Seviye $level dBFS, ortamın $delta dB üstünde. Kapı, oyuncak, ev sesi veya bebeğin irkilmesi açısından bakmak iyi olur.',
+        '⚠️ Ses seviyesi bir anda yükseldi ($level dBFS). Ortam farkı $delta dB. Eğer bebek uyuyorsa görüntüyü ve çevrede düşen/çarpan bir şey olup olmadığını kontrol et.',
+      ],
+      en: [
+        '🔔 Sudden loud sound detected. Level $level dBFS; $delta dB above ambient. Check whether the baby woke up and whether there is an unexpected noise source.',
+        '🚪 A short, strong sound spike happened in the room. Level $level dBFS, $delta dB above baseline. Check for a door, toy, household noise, or a startled baby.',
+        '⚠️ Audio jumped quickly ($level dBFS). Difference from ambient is $delta dB. If the baby is sleeping, check the image and whether something fell or bumped nearby.',
+      ],
+      zh: [
+        '🔔 检测到突然的大声响。音量 $level dBFS，比环境高 $delta dB。请查看宝宝是否醒来，以及房间是否有异常声源。',
+        '🚪 房间出现短促而明显的声音峰值。音量 $level dBFS，比基线高 $delta dB。请查看门、玩具、家中噪声或宝宝是否受惊。',
+        '⚠️ 声音突然升高（$level dBFS）。比环境高 $delta dB。如果宝宝在睡觉，请查看画面以及附近是否有掉落或碰撞。',
+      ],
+      hi: [
+        '🔔 अचानक तेज़ आवाज़ मिली। स्तर $level dBFS; परिवेश से $delta dB अधिक। देखें कि बच्चा जागा है या कमरे में कोई अनपेक्षित आवाज़ है।',
+        '🚪 कमरे में छोटी लेकिन तेज़ आवाज़ आई। स्तर $level dBFS, बेसलाइन से $delta dB ऊपर। दरवाज़ा, खिलौना, घर की आवाज़ या बच्चे के चौंकने की जाँच करें।',
+        '⚠️ आवाज़ अचानक बढ़ी ($level dBFS)। परिवेश से फर्क $delta dB है। बच्चा सो रहा हो तो तस्वीर और आसपास गिरी/टकराई चीज़ देखें।',
+      ],
+      es: [
+        '🔔 Se detectó un sonido fuerte repentino. Nivel $level dBFS; $delta dB sobre el ambiente. Revisa si el bebé se despertó o si hay una fuente de ruido inesperada.',
+        '🚪 Hubo un pico de sonido breve y fuerte en la habitación. Nivel $level dBFS, $delta dB sobre la base. Revisa puerta, juguete, ruido de casa o si el bebé se sobresaltó.',
+        '⚠️ El audio subió de golpe ($level dBFS). Diferencia con el ambiente: $delta dB. Si el bebé duerme, mira la imagen y si algo cayó o golpeó cerca.',
+      ],
+      fr: [
+        '🔔 Son fort soudain détecté. Niveau $level dBFS ; $delta dB au-dessus de l’ambiance. Vérifiez si le bébé s’est réveillé ou s’il y a une source de bruit inattendue.',
+        '🚪 Un pic sonore bref et fort a eu lieu dans la chambre. Niveau $level dBFS, $delta dB au-dessus du niveau de base. Vérifiez porte, jouet, bruit domestique ou bébé surpris.',
+        '⚠️ L’audio a brusquement monté ($level dBFS). Écart avec l’ambiance : $delta dB. Si le bébé dort, regardez l’image et vérifiez si quelque chose est tombé ou a heurté.',
+      ],
+    );
+  }
 
   String parentMotionAlert({
     required int scorePercent,
     required int activeAreaPercent,
     required double meanDiff,
-  }) =>
-      _t(
-        tr: '👶 Hareket algılandı ($scorePercent%). Görüntünün yaklaşık %$activeAreaPercent bölgesinde değişim var; ortalama değişim ${meanDiff.toStringAsFixed(1)}. Bebeğin pozisyonunu ve örtü/kenar güvenliğini kontrol et.',
-        en: '👶 Motion detected ($scorePercent%). About $activeAreaPercent% of the image changed; average change ${meanDiff.toStringAsFixed(1)}. Check the baby’s position and blanket/edge safety.',
-        zh: '👶 检测到活动（$scorePercent%）。画面约 $activeAreaPercent% 区域发生变化；平均变化 ${meanDiff.toStringAsFixed(1)}。请查看宝宝姿势以及毯子/床边安全。',
-        hi: '👶 गतिविधि मिली ($scorePercent%)। चित्र के लगभग $activeAreaPercent% हिस्से में बदलाव है; औसत बदलाव ${meanDiff.toStringAsFixed(1)}। बच्चे की स्थिति और कंबल/किनारे की सुरक्षा देखें।',
-        es: '👶 Movimiento detectado ($scorePercent%). Cambió aproximadamente el $activeAreaPercent% de la imagen; cambio medio ${meanDiff.toStringAsFixed(1)}. Revisa la posición del bebé y la seguridad de la manta/borde.',
-        fr: '👶 Mouvement détecté ($scorePercent %). Environ $activeAreaPercent % de l’image a changé ; variation moyenne ${meanDiff.toStringAsFixed(1)}. Vérifiez la position du bébé et la sécurité couverture/bord.',
-      );
+  }) {
+    final mean = meanDiff.toStringAsFixed(1);
+    final seed = scorePercent + activeAreaPercent + meanDiff.round();
+    return _variant(
+      seed: seed,
+      tr: [
+        '👶 Hareket algılandı ($scorePercent%). Görüntünün yaklaşık %$activeAreaPercent bölgesinde değişim var; ortalama değişim $mean. Bebeğin pozisyonunu ve örtü/kenar güvenliğini kontrol et.',
+        '🧸 Bebek alanında hareket var ($scorePercent%). Görüntü değişimi %$activeAreaPercent, ortalama fark $mean. Pozisyon değiştiyse örtü ve yatak kenarını hızlıca kontrol et.',
+        '📹 Kamera hareket sinyali yakaladı ($scorePercent%). Aktif alan %$activeAreaPercent; değişim $mean. Görüntüye bakıp bebeğin rahat durduğundan emin ol.',
+      ],
+      en: [
+        '👶 Motion detected ($scorePercent%). About $activeAreaPercent% of the image changed; average change $mean. Check the baby’s position and blanket/edge safety.',
+        '🧸 Movement appeared around the baby area ($scorePercent%). Image change $activeAreaPercent%, average difference $mean. If position changed, quickly check blanket and crib edge.',
+        '📹 Camera caught a motion signal ($scorePercent%). Active area $activeAreaPercent%; change $mean. Look at the image and make sure the baby is resting comfortably.',
+      ],
+      zh: [
+        '👶 检测到活动（$scorePercent%）。画面约 $activeAreaPercent% 区域发生变化；平均变化 $mean。请查看宝宝姿势以及毯子/床边安全。',
+        '🧸 宝宝区域有活动（$scorePercent%）。画面变化 $activeAreaPercent%，平均差异 $mean。若姿势改变，请快速检查毯子和床边。',
+        '📹 摄像头捕捉到活动信号（$scorePercent%）。活动区域 $activeAreaPercent%；变化 $mean。请查看画面，确认宝宝舒适安全。',
+      ],
+      hi: [
+        '👶 गतिविधि मिली ($scorePercent%)। चित्र के लगभग $activeAreaPercent% हिस्से में बदलाव है; औसत बदलाव $mean। बच्चे की स्थिति और कंबल/किनारे की सुरक्षा देखें।',
+        '🧸 बच्चे वाले क्षेत्र में हलचल है ($scorePercent%)। चित्र बदलाव $activeAreaPercent%, औसत फर्क $mean। स्थिति बदली हो तो कंबल और पालने के किनारे को जल्दी देखें।',
+        '📹 कैमरे ने गतिविधि संकेत पकड़ा ($scorePercent%)। सक्रिय क्षेत्र $activeAreaPercent%; बदलाव $mean। चित्र देखकर सुनिश्चित करें कि बच्चा आराम से है।',
+      ],
+      es: [
+        '👶 Movimiento detectado ($scorePercent%). Cambió aproximadamente el $activeAreaPercent% de la imagen; cambio medio $mean. Revisa la posición del bebé y la seguridad de la manta/borde.',
+        '🧸 Hay movimiento en la zona del bebé ($scorePercent%). Cambio de imagen $activeAreaPercent%, diferencia media $mean. Si cambió de posición, revisa rápido manta y borde de la cuna.',
+        '📹 La cámara captó movimiento ($scorePercent%). Área activa $activeAreaPercent%; cambio $mean. Mira la imagen y confirma que el bebé está cómodo.',
+      ],
+      fr: [
+        '👶 Mouvement détecté ($scorePercent %). Environ $activeAreaPercent % de l’image a changé ; variation moyenne $mean. Vérifiez la position du bébé et la sécurité couverture/bord.',
+        '🧸 Mouvement dans la zone du bébé ($scorePercent %). Changement d’image $activeAreaPercent %, écart moyen $mean. Si la position a changé, vérifiez vite couverture et bord du lit.',
+        '📹 La caméra a capté un mouvement ($scorePercent %). Zone active $activeAreaPercent % ; variation $mean. Regardez l’image et confirmez que le bébé est bien installé.',
+      ],
+    );
+  }
 
   String parentLightChangeAlert({
     required int scorePercent,
     required double lumaShift,
+  }) {
+    final shift = lumaShift.toStringAsFixed(1);
+    final seed = scorePercent + lumaShift.round();
+    return _variant(
+      seed: seed,
+      tr: [
+        '💡 Oda ışığı değişti ($scorePercent%). Parlaklık kayması $shift. Kamera görüşü veya gece lambası değişmiş olabilir; görüntüyü hızlıca kontrol et.',
+        '🌙 Işık seviyesi farklılaştı ($scorePercent%). Parlaklık farkı $shift. Perde, kapı aralığı ya da gece lambası görüntüyü etkilemiş olabilir.',
+        '📷 Kamera ışık değişimi algıladı ($scorePercent%). Luma kayması $shift. Hareket değil ışık değişimi gibi görünüyor; yine de görüntüyü bir kez kontrol et.',
+      ],
+      en: [
+        '💡 Room light changed ($scorePercent%). Brightness shift $shift. Camera view or night light may have changed; quickly check the image.',
+        '🌙 Light level changed ($scorePercent%). Brightness difference $shift. Curtain, door gap, or night light may be affecting the image.',
+        '📷 Camera detected a lighting change ($scorePercent%). Luma shift $shift. It looks like light rather than motion; still, check the image once.',
+      ],
+      zh: [
+        '💡 房间光线发生变化（$scorePercent%）。亮度偏移 $shift。可能是摄像头视野或夜灯变化；请快速查看画面。',
+        '🌙 光线水平有变化（$scorePercent%）。亮度差 $shift。窗帘、门缝或夜灯可能影响画面。',
+        '📷 摄像头检测到光线变化（$scorePercent%）。亮度偏移 $shift。看起来更像光线而非动作；仍建议查看一次画面。',
+      ],
+      hi: [
+        '💡 कमरे की रोशनी बदली ($scorePercent%)। चमक बदलाव $shift। कैमरा दृश्य या नाइट लाइट बदली हो सकती है; चित्र जल्दी देखें।',
+        '🌙 रोशनी का स्तर बदला ($scorePercent%)। चमक अंतर $shift। पर्दा, दरवाज़े की दरार या नाइट लाइट चित्र को प्रभावित कर सकती है।',
+        '📷 कैमरे ने रोशनी बदलाव पकड़ा ($scorePercent%)। लूमा बदलाव $shift। यह हलचल से ज़्यादा रोशनी जैसा लगता है; फिर भी चित्र एक बार देखें।',
+      ],
+      es: [
+        '💡 Cambió la luz de la habitación ($scorePercent%). Desplazamiento de brillo $shift. Puede haber cambiado la vista de la cámara o la luz nocturna; revisa la imagen.',
+        '🌙 Cambió el nivel de luz ($scorePercent%). Diferencia de brillo $shift. Cortina, rendija de puerta o luz nocturna pueden afectar la imagen.',
+        '📷 La cámara detectó cambio de luz ($scorePercent%). Desplazamiento luma $shift. Parece luz más que movimiento; aun así revisa la imagen una vez.',
+      ],
+      fr: [
+        '💡 La lumière de la chambre a changé ($scorePercent %). Décalage de luminosité $shift. La vue caméra ou la veilleuse a peut-être changé ; vérifiez rapidement l’image.',
+        '🌙 Le niveau de lumière a changé ($scorePercent %). Différence de luminosité $shift. Rideau, porte entrouverte ou veilleuse peuvent affecter l’image.',
+        '📷 La caméra a détecté un changement lumineux ($scorePercent %). Décalage luma $shift. Cela ressemble plus à la lumière qu’à un mouvement ; vérifiez quand même l’image.',
+      ],
+    );
+  }
+
+  String networkQualityLabel(NetworkQualityTier tier) => switch (tier) {
+        NetworkQualityTier.excellent => ui('netExcellent'),
+        NetworkQualityTier.good => ui('netGood'),
+        NetworkQualityTier.weak => ui('netWeak'),
+        NetworkQualityTier.critical => ui('netCritical'),
+        NetworkQualityTier.offline => ui('netOffline'),
+        NetworkQualityTier.unknown => ui('measuring'),
+      };
+
+  String parentMotionAgo(int? agoMs) {
+    if (agoMs == null) {
+      return _t(
+        tr: 'son hareket yok',
+        en: 'no recent motion',
+        zh: '最近没有动作',
+        hi: 'हाल की हलचल नहीं',
+        es: 'sin movimiento reciente',
+        fr: 'aucun mouvement récent',
+      );
+    }
+    final seconds = (agoMs / 1000).round();
+    return _t(
+      tr: '$seconds sn önce',
+      en: '$seconds sec ago',
+      zh: '$seconds 秒前',
+      hi: '$seconds सेकंड पहले',
+      es: 'hace $seconds s',
+      fr: 'il y a $seconds s',
+    );
+  }
+
+  String parentEpisodeHighCryAlert({
+    required int seconds,
+    required String motionAgo,
+    required String networkTier,
   }) =>
-      _t(
-        tr: '💡 Oda ışığı değişti ($scorePercent%). Parlaklık kayması ${lumaShift.toStringAsFixed(1)}. Kamera görüşü veya gece lambası değişmiş olabilir; görüntüyü hızlıca kontrol et.',
-        en: '💡 Room light changed ($scorePercent%). Brightness shift ${lumaShift.toStringAsFixed(1)}. Camera view or night light may have changed; quickly check the image.',
-        zh: '💡 房间光线发生变化（$scorePercent%）。亮度偏移 ${lumaShift.toStringAsFixed(1)}。可能是摄像头视野或夜灯变化；请快速查看画面。',
-        hi: '💡 कमरे की रोशनी बदली ($scorePercent%)। चमक बदलाव ${lumaShift.toStringAsFixed(1)}। कैमरा दृश्य या नाइट लाइट बदली हो सकती है; चित्र जल्दी देखें।',
-        es: '💡 Cambió la luz de la habitación ($scorePercent%). Desplazamiento de brillo ${lumaShift.toStringAsFixed(1)}. Puede haber cambiado la vista de la cámara o la luz nocturna; revisa la imagen.',
-        fr: '💡 La lumière de la chambre a changé ($scorePercent %). Décalage de luminosité ${lumaShift.toStringAsFixed(1)}. La vue caméra ou la veilleuse a peut-être changé ; vérifiez rapidement l’image.',
+      _variant(
+        seed: seconds,
+        tr: [
+          'Yaklaşık $seconds sn süren yüksek ağlama algılandı. Son hareket $motionAgo. Yayın $networkTier modunda.',
+          'Ağlama güçlü ve $seconds sn civarı sürdü. Hareket bilgisi: $motionAgo. Bağlantı kalitesi $networkTier; önce odayı güvenle kontrol et.',
+          'Uzayan yüksek ağlama var: ~$seconds sn. Son hareket $motionAgo. Yayın $networkTier seviyesinde; ses önceliği korunuyor.',
+        ],
+        en: [
+          'High-intensity crying lasted about $seconds sec. Last motion $motionAgo. Stream is in $networkTier mode.',
+          'Crying stayed strong for around $seconds sec. Motion info: $motionAgo. Connection quality is $networkTier; please check the room safely.',
+          'Sustained high crying detected: ~$seconds sec. Last motion $motionAgo. Stream is $networkTier; audio priority is preserved.',
+        ],
+        zh: [
+          '检测到约 $seconds 秒的高强度哭声。最后动作：$motionAgo。直播处于 $networkTier 模式。',
+          '哭声明显持续约 $seconds 秒。动作信息：$motionAgo。连接质量为 $networkTier；请安全查看房间。',
+          '检测到持续高强度哭声：约 $seconds 秒。最后动作 $motionAgo。直播 $networkTier，已保持音频优先。',
+        ],
+        hi: [
+          'लगभग $seconds सेकंड तक तेज़ रोना मिला। अंतिम हलचल $motionAgo। स्ट्रीम $networkTier मोड में है।',
+          'रोना करीब $seconds सेकंड तक तेज़ रहा। हलचल जानकारी: $motionAgo। कनेक्शन गुणवत्ता $networkTier है; कमरे को सुरक्षित रूप से देखें।',
+          'लगातार तेज़ रोना मिला: ~$seconds सेकंड। अंतिम हलचल $motionAgo। स्ट्रीम $networkTier है; ऑडियो प्राथमिकता सुरक्षित है।',
+        ],
+        es: [
+          'Llanto intenso durante unos $seconds s. Último movimiento $motionAgo. La transmisión está en modo $networkTier.',
+          'El llanto se mantuvo fuerte unos $seconds s. Movimiento: $motionAgo. Calidad de conexión $networkTier; revisa la habitación con seguridad.',
+          'Llanto intenso sostenido: ~$seconds s. Último movimiento $motionAgo. Transmisión $networkTier; se mantiene prioridad de audio.',
+        ],
+        fr: [
+          'Pleurs intenses pendant environ $seconds s. Dernier mouvement $motionAgo. Le flux est en mode $networkTier.',
+          'Les pleurs sont restés forts environ $seconds s. Mouvement : $motionAgo. Qualité de connexion $networkTier ; vérifiez la chambre en sécurité.',
+          'Pleurs intenses prolongés : ~$seconds s. Dernier mouvement $motionAgo. Flux $networkTier ; priorité audio conservée.',
+        ],
+      );
+
+  String parentEpisodeShortSoundAlert({required int seconds}) => _variant(
+        seed: seconds,
+        tr: [
+          'Kısa süreli ses yükselmesi algılandı. Devam ederse tekrar bildirilecek.',
+          'Kısa bir huzursuzluk sesi duyuldu; şu an uzayan ağlama gibi görünmüyor.',
+          'Ses kısa süre yükseldi ve sakinleşti. Tekrarlarsa yeni uyarı göndereceğim.',
+        ],
+        en: [
+          'Short sound rise detected. If it continues, another alert will be sent.',
+          'A brief fuss sound was heard; it does not look like sustained crying right now.',
+          'Audio rose briefly and settled. I’ll alert again if it repeats.',
+        ],
+        zh: [
+          '检测到短暂声音升高。如果持续，会再次提醒。',
+          '听到短暂烦躁声；目前不像持续哭声。',
+          '声音短暂升高后恢复。若再次出现，会再次提醒。',
+        ],
+        hi: [
+          'थोड़ी देर की आवाज़ बढ़ी। जारी रही तो फिर सूचना भेजी जाएगी।',
+          'छोटी बेचैनी की आवाज़ सुनी गई; अभी यह लगातार रोना नहीं लग रहा।',
+          'आवाज़ थोड़ी देर बढ़ी और शांत हुई। दोहराई तो फिर अलर्ट भेजूँगा।',
+        ],
+        es: [
+          'Se detectó una subida breve de sonido. Si continúa, se enviará otra alerta.',
+          'Se oyó un sonido breve de inquietud; ahora no parece llanto sostenido.',
+          'El audio subió un momento y se calmó. Avisaré de nuevo si se repite.',
+        ],
+        fr: [
+          'Courte hausse sonore détectée. Si elle continue, une autre alerte sera envoyée.',
+          'Un bref son d’inconfort a été entendu ; cela ne ressemble pas à des pleurs prolongés pour l’instant.',
+          'Le son a monté brièvement puis s’est calmé. J’alerterai à nouveau si cela se répète.',
+        ],
+      );
+
+  String parentEpisodeCryAlert({
+    required int seconds,
+    required String networkTier,
+  }) =>
+      _variant(
+        seed: seconds,
+        tr: [
+          'Yaklaşık $seconds sn süren ağlama sinyali algılandı. Yayın $networkTier modunda.',
+          '$seconds sn civarı devam eden huzursuzluk/ağlama var. Bağlantı $networkTier; ses takibi aktif.',
+          'Ağlama sinyali doğrulandı ve $seconds sn sürdü. Yayın $networkTier; görüntü kalitesi gerekirse düşürüldü.',
+        ],
+        en: [
+          'Crying signal lasted about $seconds sec. Stream is in $networkTier mode.',
+          'Fuss/cry signal continued for around $seconds sec. Connection $networkTier; audio monitoring is active.',
+          'Crying signal was confirmed and lasted $seconds sec. Stream $networkTier; video quality may be reduced if needed.',
+        ],
+        zh: [
+          '检测到约 $seconds 秒的哭声信号。直播处于 $networkTier 模式。',
+          '烦躁/哭声信号持续约 $seconds 秒。连接 $networkTier；声音监测已开启。',
+          '哭声信号已确认并持续 $seconds 秒。直播 $networkTier；必要时会降低画质。',
+        ],
+        hi: [
+          'लगभग $seconds सेकंड का रोने का संकेत मिला। स्ट्रीम $networkTier मोड में है।',
+          'बेचैनी/रोने का संकेत करीब $seconds सेकंड चला। कनेक्शन $networkTier; ऑडियो निगरानी सक्रिय है।',
+          'रोने का संकेत पुष्टि हुआ और $seconds सेकंड चला। स्ट्रीम $networkTier; ज़रूरत हो तो वीडियो गुणवत्ता घटेगी।',
+        ],
+        es: [
+          'Se detectó señal de llanto durante unos $seconds s. La transmisión está en modo $networkTier.',
+          'La señal de inquietud/llanto continuó unos $seconds s. Conexión $networkTier; monitoreo de audio activo.',
+          'La señal de llanto se confirmó y duró $seconds s. Transmisión $networkTier; la calidad de video puede bajar si hace falta.',
+        ],
+        fr: [
+          'Signal de pleurs détecté pendant environ $seconds s. Le flux est en mode $networkTier.',
+          'Le signal inconfort/pleurs a continué environ $seconds s. Connexion $networkTier ; suivi audio actif.',
+          'Signal de pleurs confirmé pendant $seconds s. Flux $networkTier ; la qualité vidéo peut baisser si nécessaire.',
+        ],
       );
 
   String ui(String key) {
@@ -2216,159 +2498,319 @@ const _uiText = <String, Map<String, String>>{
   'goodMorning': {
     'tr': 'Günaydın',
     'en': 'Good morning',
+    'zh': '早上好',
+    'hi': 'सुप्रभात',
+    'es': 'Buenos días',
+    'fr': 'Bonjour',
   },
   'babySleepingWell': {
     'tr': 'Bebeğiniz iyi uyuyor.',
     'en': 'Your baby is sleeping well.',
+    'zh': '宝宝睡得很好。',
+    'hi': 'आपका बच्चा अच्छी तरह सो रहा है।',
+    'es': 'Tu bebé está durmiendo bien.',
+    'fr': 'Votre bébé dort bien.',
   },
   'noRoomCalmText': {
     'tr':
         'Bebek odası cihazını bulup bağladıktan sonra buradan izleyebilirsiniz.',
     'en': 'After connecting the baby room device, you can watch it here.',
+    'zh': '连接宝宝房设备后，你可以在这里观看。',
+    'hi': 'बच्चे के कमरे का डिवाइस जोड़ने के बाद आप यहाँ देख सकते हैं।',
+    'es':
+        'Después de conectar el dispositivo de la habitación, podrás verlo aquí.',
+    'fr':
+        'Après connexion à l’appareil de la chambre, vous pourrez regarder ici.',
   },
   'findAndConnectRoom': {
     'tr': 'Oda bul ve bağlan',
     'en': 'Find and connect room',
+    'zh': '查找并连接房间',
+    'hi': 'कमरा ढूँढें और जोड़ें',
+    'es': 'Buscar y conectar habitación',
+    'fr': 'Trouver et connecter la chambre',
   },
   'roomStatus': {
     'tr': 'Oda Durumu',
     'en': 'Room status',
+    'zh': '房间状态',
+    'hi': 'कमरे की स्थिति',
+    'es': 'Estado de la habitación',
+    'fr': 'État de la chambre',
   },
   'temperatureHumidity': {
     'tr': '22.5 °C   %45',
     'en': '22.5 °C   45%',
+    'zh': '22.5 °C   45%',
+    'hi': '22.5 °C   45%',
+    'es': '22.5 °C   45%',
+    'fr': '22.5 °C   45 %',
   },
   'fine': {
     'tr': 'İyi',
     'en': 'Good',
+    'zh': '良好',
+    'hi': 'ठीक',
+    'es': 'Bien',
+    'fr': 'Bien',
   },
   'lastMotion': {
     'tr': 'Son Hareket',
     'en': 'Last motion',
+    'zh': '最近活动',
+    'hi': 'अंतिम हलचल',
+    'es': 'Último movimiento',
+    'fr': 'Dernier mouvement',
   },
   'twoMinutesAgo': {
     'tr': '2 dk önce',
     'en': '2 min ago',
+    'zh': '2 分钟前',
+    'hi': '2 मिनट पहले',
+    'es': 'Hace 2 min',
+    'fr': 'Il y a 2 min',
   },
   'lightMotionDetected': {
     'tr': 'Hafif hareket algılandı',
     'en': 'Light motion detected',
+    'zh': '检测到轻微活动',
+    'hi': 'हल्की हलचल मिली',
+    'es': 'Movimiento leve detectado',
+    'fr': 'Mouvement léger détecté',
   },
   'or': {
     'tr': 'veya',
     'en': 'or',
+    'zh': '或',
+    'hi': 'या',
+    'es': 'o',
+    'fr': 'ou',
   },
   'manualIpConnectTitle': {
     'tr': 'Manuel IP ile Bağlan',
     'en': 'Connect with manual IP',
+    'zh': '使用手动 IP 连接',
+    'hi': 'मैनुअल IP से कनेक्ट करें',
+    'es': 'Conectar con IP manual',
+    'fr': 'Connexion par IP manuelle',
   },
   'manualIpConnectText': {
     'tr': 'Cihazın IP adresini girerek bağlantı kurun.',
     'en': 'Connect by entering the device IP address.',
+    'zh': '输入设备 IP 地址进行连接。',
+    'hi': 'डिवाइस का IP पता डालकर कनेक्ट करें।',
+    'es': 'Conecta ingresando la dirección IP del dispositivo.',
+    'fr': 'Connectez-vous en saisissant l’adresse IP de l’appareil.',
   },
   'localNetworkPrivacyNote': {
     'tr':
         'Sadece yerel ağınızdaki cihazlar listelenir. Verileriniz dışarıya gönderilmez.',
     'en':
         'Only devices on your local network are listed. Your data is not sent outside.',
+    'zh': '只会列出本地网络中的设备。你的数据不会发送到外部。',
+    'hi':
+        'केवल आपके स्थानीय नेटवर्क के डिवाइस दिखते हैं। आपका डेटा बाहर नहीं भेजा जाता।',
+    'es':
+        'Solo se muestran dispositivos de tu red local. Tus datos no se envían fuera.',
+    'fr':
+        'Seuls les appareils de votre réseau local sont listés. Vos données ne sortent pas.',
   },
   'important': {
     'tr': 'Önemli',
     'en': 'Important',
+    'zh': '重要',
+    'hi': 'महत्वपूर्ण',
+    'es': 'Importante',
+    'fr': 'Important',
   },
   'info': {
     'tr': 'Bilgi',
     'en': 'Info',
+    'zh': '信息',
+    'hi': 'जानकारी',
+    'es': 'Información',
+    'fr': 'Info',
   },
   'warning': {
     'tr': 'Uyarı',
     'en': 'Warning',
+    'zh': '警告',
+    'hi': 'चेतावनी',
+    'es': 'Advertencia',
+    'fr': 'Avertissement',
   },
   'cryDetectedTitle': {
     'tr': 'Ağlama algılandı',
     'en': 'Cry detected',
+    'zh': '检测到哭声',
+    'hi': 'रोना मिला',
+    'es': 'Llanto detectado',
+    'fr': 'Pleurs détectés',
   },
   'cryDetectedText': {
     'tr': 'Bebeğinizin ağlaması algılandı.',
     'en': 'Your baby crying was detected.',
+    'zh': '检测到宝宝哭声。',
+    'hi': 'आपके बच्चे के रोने का संकेत मिला।',
+    'es': 'Se detectó el llanto de tu bebé.',
+    'fr': 'Les pleurs de votre bébé ont été détectés.',
   },
   'motionDetectedTitle': {
     'tr': 'Hareket algılandı',
     'en': 'Motion detected',
+    'zh': '检测到活动',
+    'hi': 'हलचल मिली',
+    'es': 'Movimiento detectado',
+    'fr': 'Mouvement détecté',
   },
   'motionDetectedText': {
     'tr': 'Bebek odasında hareket algılandı.',
     'en': 'Motion was detected in the baby room.',
+    'zh': '宝宝房检测到活动。',
+    'hi': 'बच्चे के कमरे में हलचल मिली।',
+    'es': 'Se detectó movimiento en la habitación del bebé.',
+    'fr': 'Un mouvement a été détecté dans la chambre du bébé.',
   },
   'temperatureWarningTitle': {
     'tr': 'Sıcaklık uyarısı',
     'en': 'Temperature warning',
+    'zh': '温度警告',
+    'hi': 'तापमान चेतावनी',
+    'es': 'Alerta de temperatura',
+    'fr': 'Alerte température',
   },
   'temperatureWarningText': {
     'tr': 'Oda sıcaklığı 28.0 °C’ye yükseldi.',
     'en': 'Room temperature rose to 28.0 °C.',
+    'zh': '房间温度升至 28.0 °C。',
+    'hi': 'कमरे का तापमान 28.0 °C तक बढ़ गया।',
+    'es': 'La temperatura de la habitación subió a 28.0 °C.',
+    'fr': 'La température de la chambre est montée à 28,0 °C.',
   },
   'connectionRenewedTitle': {
     'tr': 'Bağlantı yenilendi',
     'en': 'Connection renewed',
+    'zh': '连接已恢复',
+    'hi': 'कनेक्शन नवीनीकृत',
+    'es': 'Conexión renovada',
+    'fr': 'Connexion renouvelée',
   },
   'connectionRenewedText': {
     'tr': 'Bebek odası cihazı çevrimiçi.',
     'en': 'The baby room device is online.',
+    'zh': '宝宝房设备已在线。',
+    'hi': 'बच्चे के कमरे का डिवाइस ऑनलाइन है।',
+    'es': 'El dispositivo de la habitación está en línea.',
+    'fr': 'L’appareil de la chambre est en ligne.',
   },
   'humidityNormalTitle': {
     'tr': 'Nem seviyesi normal',
     'en': 'Humidity level normal',
+    'zh': '湿度正常',
+    'hi': 'नमी स्तर सामान्य',
+    'es': 'Humedad normal',
+    'fr': 'Humidité normale',
   },
   'humidityNormalText': {
     'tr': 'Oda nem seviyesi %45.',
     'en': 'Room humidity is 45%.',
+    'zh': '房间湿度为 45%。',
+    'hi': 'कमरे की नमी 45% है।',
+    'es': 'La humedad de la habitación es 45%.',
+    'fr': 'L’humidité de la chambre est de 45 %.',
   },
   'notificationsManageText': {
     'tr': 'Uyarı ve sistem bildirimlerini yönetin.',
     'en': 'Manage alert and system notifications.',
+    'zh': '管理提醒和系统通知。',
+    'hi': 'अलर्ट और सिस्टम सूचनाएँ प्रबंधित करें।',
+    'es': 'Gestiona alertas y notificaciones del sistema.',
+    'fr': 'Gérez les alertes et notifications système.',
   },
   'languageSelectText': {
     'tr': 'Uygulama dilini seçin.',
     'en': 'Choose the app language.',
+    'zh': '选择应用语言。',
+    'hi': 'ऐप की भाषा चुनें।',
+    'es': 'Elige el idioma de la app.',
+    'fr': 'Choisissez la langue de l’application.',
   },
   'turkishShort': {
     'tr': 'Türkçe',
     'en': 'TR',
+    'zh': 'TR',
+    'hi': 'TR',
+    'es': 'TR',
+    'fr': 'TR',
   },
   'keepAwakeClientText': {
     'tr': 'Ekranın canlı izleme sırasında uykuya geçmesini önler.',
     'en': 'Prevents the screen from sleeping during live watch.',
+    'zh': '防止屏幕在实时观看时休眠。',
+    'hi': 'लाइव देखने के दौरान स्क्रीन को स्लीप होने से रोकता है।',
+    'es': 'Evita que la pantalla se apague durante la vista en vivo.',
+    'fr': 'Empêche l’écran de se mettre en veille pendant le direct.',
   },
   'serverSettingsHiddenText': {
     'tr':
         'Sunucu ayarları bu cihazda gösterilmez. Sunucu yönetimi için server cihazını kullanın.',
     'en':
         'Server settings are not shown on this device. Use the server device to manage them.',
+    'zh': '此设备不显示 Server 设置。请使用 Server 设备进行管理。',
+    'hi':
+        'इस डिवाइस पर Server सेटिंग्स नहीं दिखतीं। प्रबंधन के लिए Server डिवाइस इस्तेमाल करें।',
+    'es':
+        'Los ajustes del Server no se muestran en este dispositivo. Usa el dispositivo Server para gestionarlos.',
+    'fr':
+        'Les réglages Server ne sont pas affichés sur cet appareil. Utilisez l’appareil Server pour les gérer.',
   },
   'stopLiveWatch': {
     'tr': 'Canlı İzlemeyi Durdur',
     'en': 'Stop live watch',
+    'zh': '停止实时观看',
+    'hi': 'लाइव देखना रोकें',
+    'es': 'Detener vista en vivo',
+    'fr': 'Arrêter le direct',
   },
   'latency': {
     'tr': 'Gecikme',
     'en': 'Latency',
+    'zh': '延迟',
+    'hi': 'विलंब',
+    'es': 'Latencia',
+    'fr': 'Latence',
   },
   'viewers': {
     'tr': 'İzleyen',
     'en': 'Viewers',
+    'zh': '观看者',
+    'hi': 'दर्शक',
+    'es': 'Visores',
+    'fr': 'Spectateurs',
   },
   'connection': {
     'tr': 'bağlantı',
     'en': 'connection',
+    'zh': '连接',
+    'hi': 'कनेक्शन',
+    'es': 'conexión',
+    'fr': 'connexion',
   },
   'resolution': {
     'tr': 'Çözünürlük',
     'en': 'Resolution',
+    'zh': '分辨率',
+    'hi': 'रिज़ॉल्यूशन',
+    'es': 'Resolución',
+    'fr': 'Résolution',
   },
   'detectionStatus': {
     'tr': 'Algılama Durumu',
     'en': 'Detection status',
+    'zh': '检测状态',
+    'hi': 'पहचान स्थिति',
+    'es': 'Estado de detección',
+    'fr': 'État de détection',
   },
 };
 

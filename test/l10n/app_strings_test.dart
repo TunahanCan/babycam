@@ -79,6 +79,27 @@ void main() {
     expect(message, contains('diaper'));
   });
 
+  test('parent alert messages use deterministic variants', () {
+    final strings = AppStrings(const Locale('en'));
+
+    final first = strings.parentCryAlert(
+      confidencePercent: 82,
+      ambientDeltaDb: 14.5,
+      cryBandPercent: 61,
+      calibrated: true,
+    );
+    final second = strings.parentCryAlert(
+      confidencePercent: 83,
+      ambientDeltaDb: 14.5,
+      cryBandPercent: 61,
+      calibrated: true,
+    );
+
+    expect(first, isNot(second));
+    expect(first, contains('Cry likelihood'));
+    expect(second, contains('Baby sounds likely'));
+  });
+
   test('parent alert messages are localized for new languages', () {
     final hindi = AppStrings(const Locale('hi')).parentCryAlert(
       confidencePercent: 82,
@@ -102,5 +123,25 @@ void main() {
     expect(spanish, contains('posición del bebé'));
     expect(french, contains('Son fort soudain détecté'));
     expect(french, contains('source de bruit inattendue'));
+  });
+
+  test('episode alert helper messages are localized', () {
+    final english = AppStrings(const Locale('en')).parentEpisodeHighCryAlert(
+      seconds: 18,
+      motionAgo: '4 sec ago',
+      networkTier: 'Weak',
+    );
+    final spanish = AppStrings(const Locale('es')).parentEpisodeShortSoundAlert(
+      seconds: 3,
+    );
+    final hindi = AppStrings(const Locale('hi')).parentEpisodeCryAlert(
+      seconds: 7,
+      networkTier: 'कमज़ोर',
+    );
+
+    expect(english, contains('crying'));
+    expect(english, contains('Weak'));
+    expect(spanish, contains('sonido'));
+    expect(hindi, contains('रोने'));
   });
 }

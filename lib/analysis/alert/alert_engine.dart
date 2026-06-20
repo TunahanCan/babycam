@@ -101,7 +101,7 @@ class AlertEngine {
       return _tryEmit(
         type: AlertType.cryDetected,
         severity: episode.severity,
-        message: _notificationComposer.compose(episode),
+        message: _notificationComposer.compose(episode, strings: _strings),
         score: episode.maxCryScore,
         timestampMs: episode.lastUpdatedAtMs,
         metadata: episode.toJson(),

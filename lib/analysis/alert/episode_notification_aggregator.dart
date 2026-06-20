@@ -1,4 +1,5 @@
 import '../../core/media/adaptive_media_profile.dart';
+import '../../l10n/app_strings.dart';
 import '../audio/audio_analysis_result.dart';
 import '../video/motion_analysis_result.dart';
 import 'alert_severity.dart';
@@ -265,8 +266,28 @@ class EpisodeBasedNotificationAggregator {
 class NotificationComposer {
   const NotificationComposer();
 
-  String compose(BabyEventEpisode episode) {
+  String compose(BabyEventEpisode episode, {AppStrings? strings}) {
     final seconds = (episode.totalCryDurationMs / 1000).round();
+    final localized = strings;
+    if (localized != null) {
+      final networkTier = localized.networkQualityLabel(
+        episode.streamQualityTier,
+      );
+      if (episode.maxCryScore > 0.8 && episode.totalCryDurationMs > 15000) {
+        return localized.parentEpisodeHighCryAlert(
+          seconds: seconds,
+          motionAgo: localized.parentMotionAgo(episode.lastMotionAgoMs()),
+          networkTier: networkTier,
+        );
+      }
+      if (episode.resolved && episode.totalCryDurationMs < 5000) {
+        return localized.parentEpisodeShortSoundAlert(seconds: seconds);
+      }
+      return localized.parentEpisodeCryAlert(
+        seconds: seconds,
+        networkTier: networkTier,
+      );
+    }
     if (episode.maxCryScore > 0.8 && episode.totalCryDurationMs > 15000) {
       final ago = episode.lastMotionAgoMs();
       final motionText =

@@ -1,10 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart';
 import 'package:mimicam/analysis/alert/alert_severity.dart';
 import 'package:mimicam/analysis/alert/episode_notification_aggregator.dart';
 import 'package:mimicam/analysis/audio/audio_analysis_result.dart';
 import 'package:mimicam/analysis/audio/audio_calibration_state.dart';
 import 'package:mimicam/analysis/video/motion_analysis_result.dart';
 import 'package:mimicam/core/media/adaptive_media_profile.dart';
+import 'package:mimicam/l10n/app_strings.dart';
 
 void main() {
   test('LowCostCryScorer enerji ve voiced/harmonic oranlardan skor üretir', () {
@@ -60,6 +62,39 @@ void main() {
     expect(resolved!.resolved, isTrue);
     expect(composer.compose(resolved), contains('Kısa süreli ses yükselmesi'));
     expect(aggregator.state, BabyEventEpisodeState.quiet);
+  });
+
+  test('NotificationComposer episode mesajını locale ile üretir', () {
+    const composer = NotificationComposer();
+    const episode = BabyEventEpisode(
+      episodeId: 'episode-1',
+      startedAtMs: 1000,
+      lastUpdatedAtMs: 21000,
+      totalCryDurationMs: 18000,
+      maxCryScore: 0.9,
+      avgCryScore: 0.7,
+      motionBursts: 1,
+      lastMotionAtMs: 17000,
+      streamQualityTier: NetworkQualityTier.weak,
+      audioReliable: true,
+      videoReliable: false,
+      severity: AlertSeverity.warning,
+      intensity: 'high',
+    );
+
+    final english = composer.compose(
+      episode,
+      strings: AppStrings(const Locale('en')),
+    );
+    final french = composer.compose(
+      episode,
+      strings: AppStrings(const Locale('fr')),
+    );
+
+    expect(english, contains('crying'));
+    expect(english, contains('Weak'));
+    expect(french.toLowerCase(), contains('pleurs'));
+    expect(french, isNot(contains('Yayın')));
   });
 }
 
