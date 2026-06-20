@@ -13,6 +13,7 @@ import 'package:mimicam/features/server/server_runtime.dart';
 import 'package:mimicam/features/shared/presentation/mimicam_shells.dart';
 import 'package:mimicam/l10n/app_strings.dart';
 import 'package:mimicam/services/configuration_service.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -131,6 +132,42 @@ void main() {
     }
   });
 
+  testWidgets('server QR uzun HTTPS payload ile kısa ekrana sığar',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final preferences = await SharedPreferences.getInstance();
+    final payload = _longSecureQrPayload();
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(),
+      onStartPairing: () async => payload,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ServerHomeScreen(
+          runtime: runtime,
+          config: ConfigurationService(preferences),
+          activeRole: AppRole.server,
+          onRoleSelected: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('QR/IP').last);
+    await tester.pumpAndSettle();
+
+    _expectNoFlutterException(tester);
+    final qrSize = tester.getSize(find.byType(QrImageView));
+    expect(qrSize.width, lessThanOrEqualTo(212));
+    expect(qrSize.height, lessThanOrEqualTo(212));
+    expect(find.text(payload), findsNothing);
+  });
+
   testWidgets('pahalı ortak yüzeyler repaint boundary ile izole edilir',
       (tester) async {
     final runtime = ClientRuntime(
@@ -181,6 +218,11 @@ PairingPayload _payload() => PairingPayload(
           DateTime.now().add(const Duration(minutes: 1)).millisecondsSinceEpoch,
       capabilities: const {'transport': 'http'},
     );
+
+String _longSecureQrPayload() {
+  final noisyPayload = List.filled(720, 'a').join();
+  return 'mimicam://pair?payload=$noisyPayload';
+}
 
 const _localizationsDelegates = [
   AppStrings.delegate,

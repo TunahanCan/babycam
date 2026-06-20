@@ -484,8 +484,12 @@ class _ConnectionCard extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isCompact = constraints.maxWidth < 430;
-          final qrSize =
-              _readableQrSize(constraints.maxWidth, compact: isCompact);
+          final isShortScreen = MediaQuery.sizeOf(context).height < 720;
+          final qrSize = _readableQrSize(
+            constraints.maxWidth,
+            compact: isCompact,
+            shortScreen: isShortScreen,
+          );
           final details = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -500,9 +504,12 @@ class _ConnectionCard extends StatelessWidget {
                 strings.ui('parentQrScanText'),
                 style: const TextStyle(color: Colors.white70, fontSize: 14.5),
               ),
-              const SizedBox(height: 12),
-              _PayloadBox(payload: payload),
-              const SizedBox(height: 12),
+              if (!isCompact) ...[
+                const SizedBox(height: 12),
+                _PayloadBox(payload: payload),
+                const SizedBox(height: 12),
+              ] else
+                const SizedBox(height: 8),
               Text(
                 strings.ui('keepCodeVisible'),
                 style: const TextStyle(color: Colors.white70, fontSize: 14.5),
@@ -533,9 +540,15 @@ class _ConnectionCard extends StatelessWidget {
     );
   }
 
-  double _readableQrSize(double maxWidth, {required bool compact}) {
-    final maxSafeSize = (maxWidth - 16).clamp(120.0, compact ? 280.0 : 260.0);
-    final preferredSize = maxWidth * (compact ? .72 : .42);
+  double _readableQrSize(
+    double maxWidth, {
+    required bool compact,
+    required bool shortScreen,
+  }) {
+    final compactCap = shortScreen ? 212.0 : 244.0;
+    final maxSafeSize =
+        (maxWidth - 16).clamp(160.0, compact ? compactCap : 260.0);
+    final preferredSize = maxWidth * (compact ? .70 : .42);
     final minReadableSize = maxSafeSize < 220 ? maxSafeSize : 220.0;
     return preferredSize.clamp(minReadableSize, maxSafeSize).toDouble();
   }
