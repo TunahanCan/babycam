@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_role.dart';
 import '../../l10n/app_strings.dart';
 import '../shared/presentation/mimicam_design_tokens.dart';
+import '../shared/presentation/mimicam_role_presentation.dart';
 
 class RoleSelectionScreen extends StatelessWidget {
   const RoleSelectionScreen({super.key, required this.onRoleSelected});
@@ -12,6 +13,8 @@ class RoleSelectionScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    final serverRole = MimiCamRolePresentation.of(AppRole.server, strings);
+    final clientRole = MimiCamRolePresentation.of(AppRole.client, strings);
     return Scaffold(
       body: _LightShell(
         child: SafeArea(
@@ -28,20 +31,12 @@ class RoleSelectionScreen extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               _RoleChoiceCard(
-                icon: Icons.child_care,
-                title: strings.ui('babyRoomDeviceTitle'),
-                description: strings.ui('babyRoomDeviceDescription'),
-                backgroundColor: const Color(0xFFDFFBFF),
-                iconColor: MimiCamDesignTokens.serverCyan,
+                role: serverRole,
                 onPressed: () => onRoleSelected(AppRole.server),
               ),
               const SizedBox(height: 14),
               _RoleChoiceCard(
-                icon: Icons.monitor_heart,
-                title: strings.ui('parentDeviceTitle'),
-                description: strings.ui('parentDeviceDescription'),
-                backgroundColor: MimiCamDesignTokens.mintSoft,
-                iconColor: const Color(0xFFB9F1E9),
+                role: clientRole,
                 onPressed: () => onRoleSelected(AppRole.client),
               ),
               const SizedBox(height: 18),
@@ -96,19 +91,11 @@ class _BrandHeader extends StatelessWidget {
 
 class _RoleChoiceCard extends StatelessWidget {
   const _RoleChoiceCard({
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.backgroundColor,
-    required this.iconColor,
+    required this.role,
     required this.onPressed,
   });
 
-  final IconData icon;
-  final String title;
-  final String description;
-  final Color backgroundColor;
-  final Color iconColor;
+  final MimiCamRolePresentation role;
   final VoidCallback onPressed;
 
   @override
@@ -120,7 +107,7 @@ class _RoleChoiceCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         child: Container(
           padding: const EdgeInsets.all(18),
-          decoration: _cardDecoration(color: backgroundColor),
+          decoration: _cardDecoration(color: role.choiceBackgroundColor),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -129,9 +116,9 @@ class _RoleChoiceCard extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 34,
-                    backgroundColor: iconColor,
+                    backgroundColor: role.choiceIconColor,
                     child: Icon(
-                      icon,
+                      role.choiceIcon,
                       color: MimiCamDesignTokens.nightPlum,
                       size: 28,
                     ),
@@ -142,7 +129,7 @@ class _RoleChoiceCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          title,
+                          role.choiceTitle,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -154,7 +141,7 @@ class _RoleChoiceCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 7),
                         Text(
-                          description,
+                          role.choiceDescription,
                           style: const TextStyle(
                             color: MimiCamDesignTokens.slate,
                             fontSize: 14.5,

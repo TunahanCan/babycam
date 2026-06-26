@@ -34,11 +34,11 @@ void main() {
       ),
     );
 
-    expect(find.text('CLIENT'), findsOneWidget);
-    expect(find.text('EBEVEYN'), findsOneWidget);
+    expect(find.text('CLIENT'), findsNothing);
+    expect(find.text('EBEVEYN'), findsNWidgets(2));
     expect(find.text('ANNE İÇİN ÖNCELİK'), findsOneWidget);
     expect(find.text('Bildirim'), findsOneWidget);
-    expect(find.text('SERVER'), findsNothing);
+    expect(find.text('SUNUCU'), findsNothing);
     expect(find.text('BEBEK ODASI'), findsNothing);
     expect(find.text('İzle'), findsOneWidget);
     expect(find.text('Bul'), findsOneWidget);

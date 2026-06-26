@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/app_role.dart';
 import '../../../l10n/app_strings.dart';
 import 'mimicam_design_tokens.dart';
+import 'mimicam_role_presentation.dart';
 
 class MimiCamCard extends StatelessWidget {
   const MimiCamCard({super.key, required this.child, this.dark = false});
@@ -89,6 +90,8 @@ class MimiCamRoleSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    final clientRole = MimiCamRolePresentation.of(AppRole.client, strings);
+    final serverRole = MimiCamRolePresentation.of(AppRole.server, strings);
     final borderColor =
         dark ? Colors.white.withValues(alpha: .24) : const Color(0xFFD7E1E8);
     final backgroundColor =
@@ -106,8 +109,9 @@ class MimiCamRoleSwitch extends StatelessWidget {
             child: _RoleSwitchSide(
               role: AppRole.client,
               activeRole: activeRole,
-              title: strings.ui('clientRoleTitle'),
-              subtitle: strings.ui('parentRoleSubtitle'),
+              title: clientRole.badgeTitle,
+              subtitle: clientRole.badgeSubtitle,
+              activeColor: clientRole.accentColor(dark: dark),
               dark: dark,
               enabled: enabled,
               onTap: onRoleSelected,
@@ -122,8 +126,9 @@ class MimiCamRoleSwitch extends StatelessWidget {
             child: _RoleSwitchSide(
               role: AppRole.server,
               activeRole: activeRole,
-              title: strings.ui('serverRoleTitle'),
-              subtitle: strings.ui('babyRoomRoleSubtitle'),
+              title: serverRole.badgeTitle,
+              subtitle: serverRole.badgeSubtitle,
+              activeColor: serverRole.accentColor(dark: dark),
               dark: dark,
               enabled: enabled,
               onTap: onRoleSelected,
@@ -154,17 +159,8 @@ class MimiCamRoleBadge extends StatelessWidget {
     final strings = AppStrings.of(context);
     final isClient = activeRole == AppRole.client;
     final nextRole = isClient ? AppRole.server : AppRole.client;
-    final accent = isClient
-        ? MimiCamDesignTokens.mint
-        : dark
-            ? MimiCamDesignTokens.serverCyan
-            : MimiCamDesignTokens.serverBlue;
-    final title = isClient
-        ? strings.ui('clientRoleTitle')
-        : strings.ui('serverRoleTitle');
-    final subtitle = isClient
-        ? strings.ui('parentRoleSubtitle')
-        : strings.ui('babyRoomRoleSubtitle');
+    final role = MimiCamRolePresentation.of(activeRole, strings);
+    final accent = role.accentColor(dark: dark);
     final textColor = dark ? Colors.white : MimiCamDesignTokens.navy;
     final mutedColor = dark ? Colors.white70 : MimiCamDesignTokens.slate;
     final backgroundColor = dark
@@ -176,7 +172,8 @@ class MimiCamRoleBadge extends StatelessWidget {
 
     return RepaintBoundary(
       child: Tooltip(
-        message: strings.uiFormat('roleBadgeTooltip', {'title': title}),
+        message:
+            strings.uiFormat('roleBadgeTooltip', {'title': role.badgeTitle}),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
@@ -210,7 +207,7 @@ class MimiCamRoleBadge extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        title,
+                        role.badgeTitle,
                         style: TextStyle(
                           color: textColor,
                           fontSize: 11,
@@ -219,7 +216,7 @@ class MimiCamRoleBadge extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        subtitle,
+                        role.badgeSubtitle,
                         style: TextStyle(
                           color: mutedColor,
                           fontSize: 8,
@@ -251,6 +248,7 @@ class _RoleSwitchSide extends StatelessWidget {
     required this.activeRole,
     required this.title,
     required this.subtitle,
+    required this.activeColor,
     required this.dark,
     required this.enabled,
     required this.onTap,
@@ -260,6 +258,7 @@ class _RoleSwitchSide extends StatelessWidget {
   final AppRole activeRole;
   final String title;
   final String subtitle;
+  final Color activeColor;
   final bool dark;
   final bool enabled;
   final ValueChanged<AppRole> onTap;
@@ -267,9 +266,6 @@ class _RoleSwitchSide extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = role == activeRole;
-    final activeColor = role == AppRole.client
-        ? MimiCamDesignTokens.mint
-        : MimiCamDesignTokens.pink;
     final textColor = dark ? Colors.white : MimiCamDesignTokens.navy;
     return InkWell(
       onTap: enabled && !active ? () => onTap(role) : null,
@@ -480,7 +476,7 @@ enum MimiCamShellVariant {
           center: Alignment(.7, -.85),
           radius: 1.05,
           colors: [
-            Color(0xFF18D8C7),
+            Color(0xFF6ED9CE),
             MimiCamDesignTokens.serverNavy,
             MimiCamDesignTokens.serverInk,
           ],
