@@ -480,7 +480,7 @@ enum MimiCamShellVariant {
           center: Alignment(.7, -.85),
           radius: 1.05,
           colors: [
-            Color(0xFF1B62A5),
+            Color(0xFF18D8C7),
             MimiCamDesignTokens.serverNavy,
             MimiCamDesignTokens.serverInk,
           ],
