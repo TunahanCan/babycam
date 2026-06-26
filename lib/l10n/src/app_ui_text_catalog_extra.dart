@@ -38,6 +38,7 @@ const _deUiText = <String, String>{
   'roleSelectionSubtitle':
       'Diese Auswahl wird meist einmal getroffen; der Rollenwechsel bleibt als kleines Badge in den Einstellungen.',
   'babyRoomDeviceTitle': 'Babyzimmer-Gerät',
+  'babyRoomName': 'Babyzimmer',
   'babyRoomDeviceDescription':
       'Kamera und Mikrofon laufen auf diesem Telefon. Der Stream wird per QR-Code geteilt.',
   'recommended': 'Empfohlen',
@@ -208,7 +209,7 @@ const _deUiText = <String, String>{
   'phaseStopped': 'Gestoppt',
   'phasePairingIdle': 'Wartet auf Kopplung',
   'phasePairingActive': 'Kopplung aktiv',
-  'phaseClientPaired': 'Client gekoppelt',
+  'phaseClientPaired': 'Eltern-Gerät gekoppelt',
   'phaseMediaIdle': 'Medien warten',
   'phaseMediaStarting': 'Medien starten',
   'phaseMediaActive': 'Medien aktiv',
@@ -336,6 +337,7 @@ const _arUiText = <String, String>{
   'roleSelectionSubtitle':
       'عادة يتم اختيار هذا مرة واحدة؛ ويبقى تبديل الدور كشارة صغيرة في الإعدادات.',
   'babyRoomDeviceTitle': 'جهاز غرفة الطفل',
+  'babyRoomName': 'غرفة الطفل',
   'babyRoomDeviceDescription':
       'تعمل الكاميرا والميكروفون على هذا الهاتف. تتم مشاركة البث عبر رمز QR.',
   'recommended': 'موصى به',
@@ -494,7 +496,7 @@ const _arUiText = <String, String>{
   'phaseStopped': 'متوقف',
   'phasePairingIdle': 'بانتظار الإقران',
   'phasePairingActive': 'الإقران نشط',
-  'phaseClientPaired': 'العميل مقترن',
+  'phaseClientPaired': 'جهاز الوالدين مقترن',
   'phaseMediaIdle': 'الوسائط تنتظر',
   'phaseMediaStarting': 'بدء الوسائط',
   'phaseMediaActive': 'الوسائط نشطة',

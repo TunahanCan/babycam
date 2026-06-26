@@ -84,6 +84,14 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'Dispositivo de la habitación',
     'fr': 'Appareil chambre bébé'
   },
+  'babyRoomName': {
+    'tr': 'Bebek Odası',
+    'en': 'Baby Room',
+    'zh': '婴儿房',
+    'hi': 'बच्चे का कमरा',
+    'es': 'Habitación del bebé',
+    'fr': 'Chambre bébé'
+  },
   'babyRoomDeviceDescription': {
     'tr':
         'Kamera ve mikrofon bu telefonda açılır. Yayın QR kod ile paylaşılır.',
@@ -118,13 +126,13 @@ const appUiTextCatalog = <String, Map<String, String>>{
         'Aynı Wi-Fi içinde server bulunur, canlı yayın izlenir ve uyarılar bildirim olur.',
     'en':
         'The server is found on the same Wi‑Fi, live video is watched, and alerts become notifications.',
-    'zh': '在同一 Wi‑Fi 中找到 server，可观看直播，提醒会变成通知。',
+    'zh': '在同一 Wi‑Fi 中找到婴儿房设备，可观看直播，提醒会变成通知。',
     'hi':
         'उसी Wi‑Fi में server मिलता है, लाइव स्ट्रीम देखी जाती है और अलर्ट सूचना बनते हैं।',
     'es':
-        'Encuentra el server en el mismo Wi‑Fi, mira el directo y recibe las alertas como notificaciones.',
+        'Encuentra el dispositivo de la habitación en el mismo Wi‑Fi, mira el directo y recibe las alertas como notificaciones.',
     'fr':
-        'Trouve le server sur le même Wi‑Fi, regarde le direct et reçoit les alertes en notifications.',
+        'Trouve l’appareil de la chambre sur le même Wi‑Fi, regarde le direct et reçoit les alertes en notifications.',
   },
   'viewer': {
     'tr': 'İzleyici',
@@ -1328,12 +1336,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Diffusion'
   },
   'phaseClientPaired': {
-    'tr': 'Client bağlı',
+    'tr': 'Ebeveyn cihazı bağlı',
     'en': 'Client connected',
-    'zh': 'Client 已连接',
-    'hi': 'Client जुड़ा',
-    'es': 'Client conectado',
-    'fr': 'Client connecté'
+    'zh': '家长设备已连接',
+    'hi': 'पैरेंट डिवाइस जुड़ा',
+    'es': 'Dispositivo padre conectado',
+    'fr': 'Appareil parent connecté'
   },
   'phaseMediaIdle': {
     'tr': 'Medya beklemede',

@@ -57,6 +57,8 @@ def run(command: list[str], *, cwd: Path = ROOT, stdout=None) -> None:
 
 
 def launch(scene: str, locale: str) -> None:
+    run([str(ADB), '-s', DEVICE, 'shell', 'input', 'keyevent', 'KEYCODE_WAKEUP'])
+    run([str(ADB), '-s', DEVICE, 'shell', 'wm', 'dismiss-keyguard'])
     parts = locale.split('_', maxsplit=1)
     language_code = parts[0]
     country_code = parts[1] if len(parts) == 2 else ''
@@ -81,7 +83,7 @@ def launch(scene: str, locale: str) -> None:
     with LOG.open('a', encoding='utf-8') as log:
         log.write(f'\n=== {locale}/{scene} ===\n')
         subprocess.run(command, cwd=ROOT, check=True, stdout=log, stderr=subprocess.STDOUT)
-    time.sleep(12)
+    time.sleep(25)
 
 
 def tap(x: int) -> None:
@@ -94,6 +96,9 @@ def is_probably_splash(path: Path) -> bool:
     width, height = image.size
     crop = image.crop((0, int(height * 0.08), width, int(height * 0.90)))
     pixels = list(crop.resize((80, 160), Image.Resampling.BILINEAR).get_flattened_data())
+    black = sum(1 for r, g, b in pixels if r + g + b < 25) / len(pixels)
+    if black > 0.90:
+        return True
     dark = sum(1 for r, g, b in pixels if r + g + b < 115) / len(pixels)
     light = sum(1 for r, g, b in pixels if r > 210 and g > 210 and b > 210) / len(pixels)
     saturated_cyan = sum(1 for r, g, b in pixels if g > 150 and b > 150 and r < 140) / len(pixels)

@@ -243,7 +243,9 @@ class AppStrings {
       zh: '👶 检测到活动。评分：$scorePercent%',
       hi: '👶 गतिविधि मिली। स्कोर: $scorePercent%',
       es: '👶 Movimiento detectado. Puntuación: $scorePercent%',
-      fr: '👶 Mouvement détecté. Score : $scorePercent %');
+      fr: '👶 Mouvement détecté. Note : $scorePercent %',
+      de: '👶 Bewegung erkannt. Wert: $scorePercent%',
+      ar: '👶 تم رصد حركة. النتيجة: $scorePercent%');
   String webSocketClientConnected(String address) => _t(
       tr: 'WebSocket client bağlandı: $address',
       en: 'WebSocket client connected: $address',
@@ -272,7 +274,9 @@ class AppStrings {
       zh: '哭声',
       hi: 'रोना',
       es: 'llanto',
-      fr: 'pleurs');
+      fr: 'pleurs',
+      de: 'Weinen',
+      ar: 'بكاء');
   String get moaningSound => _t(
       tr: 'inleme',
       en: 'moaning',

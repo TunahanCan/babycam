@@ -141,7 +141,7 @@ PairingPayload _payload() => PairingPayload(
       host: '192.168.1.42',
       port: 8080,
       deviceId: 'server-lg-g6',
-      deviceName: 'Bebek Odası',
+      deviceName: AppStrings(_reportLocale()).ui('babyRoomName'),
       pairingNonce: 'nonce-report',
       expiresAtMs: DateTime.now()
           .add(const Duration(minutes: 10))
