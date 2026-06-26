@@ -6,6 +6,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../app/app_role.dart';
 import '../../l10n/app_strings.dart';
 import '../../services/configuration_service.dart';
+import '../shared/presentation/localized_measurement_text.dart';
+import '../shared/presentation/media_profile_text.dart';
 import '../shared/presentation/mimicam_design_tokens.dart';
 import '../shared/presentation/mimicam_shells.dart';
 import 'server_runtime.dart';
@@ -93,7 +95,7 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
           bottomNavigationBar: MimiCamBottomNav(
             items: _serverNavItems(context),
             currentIndex: _tab,
-            activeColor: MimiCamDesignTokens.pink,
+            activeColor: MimiCamDesignTokens.serverCyan,
             dark: true,
             onTap: _selectTab,
           ),
@@ -305,9 +307,18 @@ class _ServerHeroCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: .10),
+        color: MimiCamDesignTokens.serverPanel.withValues(alpha: .82),
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white24),
+        border: Border.all(
+          color: MimiCamDesignTokens.serverCyan.withValues(alpha: .40),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: MimiCamDesignTokens.serverBlue.withValues(alpha: .34),
+            blurRadius: 34,
+            offset: const Offset(0, 12),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,12 +330,12 @@ class _ServerHeroCard extends StatelessWidget {
                 width: 56,
                 height: 56,
                 decoration: const BoxDecoration(
-                  color: MimiCamDesignTokens.pink,
+                  color: MimiCamDesignTokens.serverCyan,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.child_care_rounded,
-                  color: MimiCamDesignTokens.navy,
+                  color: MimiCamDesignTokens.serverInk,
                   size: 31,
                 ),
               ),
@@ -336,7 +347,7 @@ class _ServerHeroCard extends StatelessWidget {
                     Text(
                       strings.ui('babyRoomMode'),
                       style: const TextStyle(
-                        color: MimiCamDesignTokens.mint,
+                        color: MimiCamDesignTokens.serverCyan,
                         fontSize: 10.5,
                         letterSpacing: 1.0,
                         fontWeight: FontWeight.w900,
@@ -374,26 +385,27 @@ class _ServerHeroCard extends StatelessWidget {
               _ServerPill(
                 label: phaseLabel,
                 color: state.phase == ServerRuntimePhase.error
-                    ? MimiCamDesignTokens.amber
-                    : MimiCamDesignTokens.mint,
+                    ? MimiCamDesignTokens.serverViolet
+                    : MimiCamDesignTokens.serverCyan,
               ),
               _ServerPill(
                 label: state.cameraActive
                     ? strings.ui('cameraOpen')
                     : strings.ui('cameraWaiting'),
                 color: state.cameraActive
-                    ? MimiCamDesignTokens.mint
-                    : MimiCamDesignTokens.amber,
+                    ? MimiCamDesignTokens.serverCyan
+                    : MimiCamDesignTokens.serverViolet,
               ),
               _ServerPill(
                 label: strings
                     .uiFormat('parentsCount', {'count': state.activeClients}),
-                color: MimiCamDesignTokens.pink,
+                color: MimiCamDesignTokens.serverBlue,
               ),
               _ServerPill(
-                label:
-                    state.mediaProfile?.label ?? strings.ui('qualityMeasuring'),
-                color: MimiCamDesignTokens.amber,
+                label: state.mediaProfile == null
+                    ? strings.ui('qualityMeasuring')
+                    : localizedMediaProfileLabel(strings, state.mediaProfile!),
+                color: MimiCamDesignTokens.serverViolet,
               ),
             ],
           ),
@@ -584,7 +596,7 @@ class _PayloadBox extends StatelessWidget {
           payload,
           maxLines: 1,
           style: const TextStyle(
-            color: MimiCamDesignTokens.navy,
+            color: MimiCamDesignTokens.serverInk,
             fontSize: 14,
             fontWeight: FontWeight.w800,
           ),
@@ -618,9 +630,9 @@ class _QrPanel extends StatelessWidget {
           data: payload,
           size: size,
           padding: EdgeInsets.zero,
-          eyeStyle: const QrEyeStyle(color: MimiCamDesignTokens.navy),
+          eyeStyle: const QrEyeStyle(color: MimiCamDesignTokens.serverInk),
           dataModuleStyle:
-              const QrDataModuleStyle(color: MimiCamDesignTokens.navy),
+              const QrDataModuleStyle(color: MimiCamDesignTokens.serverInk),
         ),
       ),
     );
@@ -656,8 +668,8 @@ class _QrIpActions extends StatelessWidget {
               },
               icon: const Icon(Icons.refresh_rounded),
               style: FilledButton.styleFrom(
-                backgroundColor: MimiCamDesignTokens.pink,
-                foregroundColor: Colors.white,
+                backgroundColor: MimiCamDesignTokens.serverCyan,
+                foregroundColor: MimiCamDesignTokens.serverInk,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -717,8 +729,8 @@ class _ServiceStatusGrid extends StatelessWidget {
         value:
             state.cameraActive ? strings.ui('active') : strings.ui('preparing'),
         color: state.cameraActive
-            ? MimiCamDesignTokens.mint
-            : MimiCamDesignTokens.amber,
+            ? MimiCamDesignTokens.serverCyan
+            : MimiCamDesignTokens.serverViolet,
       ),
       _ServiceStatusCard(
         icon: Icons.mic_rounded,
@@ -726,22 +738,22 @@ class _ServiceStatusGrid extends StatelessWidget {
         value:
             state.microphoneActive ? strings.ui('active') : strings.ui('off'),
         color: state.microphoneActive
-            ? MimiCamDesignTokens.mint
-            : MimiCamDesignTokens.amber,
+            ? MimiCamDesignTokens.serverCyan
+            : MimiCamDesignTokens.serverViolet,
       ),
       _ServiceStatusCard(
         icon: Icons.hub_rounded,
         title: 'WebSocket',
         value: strings
             .uiFormat('eventClientsCount', {'count': state.activeEventClients}),
-        color: MimiCamDesignTokens.pink,
+        color: MimiCamDesignTokens.serverBlue,
       ),
       _ServiceStatusCard(
         icon: Icons.people_alt_rounded,
         title: strings.ui('clientCount'),
         value:
             strings.uiFormat('connectedCount', {'count': state.activeClients}),
-        color: MimiCamDesignTokens.amber,
+        color: MimiCamDesignTokens.serverViolet,
       ),
     ];
 
@@ -792,7 +804,7 @@ class _ServiceStatusCard extends StatelessWidget {
         children: [
           CircleAvatar(
             backgroundColor: color,
-            child: Icon(icon, color: MimiCamDesignTokens.navy),
+            child: Icon(icon, color: MimiCamDesignTokens.serverInk),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -838,19 +850,19 @@ class _RuntimeStats extends StatelessWidget {
           label: strings.ui('viewers'),
           value: state.activeClients == 0 ? '0' : '${state.activeClients}',
           footnote: strings.ui('connection'),
-          color: MimiCamDesignTokens.mint),
+          color: MimiCamDesignTokens.serverCyan),
       _Stat(
           label: 'FPS',
           value: profile == null ? '12' : '${profile.targetFps}',
           footnote: 'fps',
-          color: MimiCamDesignTokens.pink),
+          color: MimiCamDesignTokens.serverBlue),
       _Stat(
           label: strings.ui('resolution'),
           value: profile == null
               ? '640x480'
               : '${profile.width}x${profile.height}',
           footnote: profile?.label ?? strings.ui('automatic'),
-          color: MimiCamDesignTokens.amber),
+          color: MimiCamDesignTokens.serverViolet),
     ];
 
     return LayoutBuilder(
@@ -912,7 +924,9 @@ class _DetectionCard extends StatelessWidget {
           const SizedBox(height: 10),
           _KeyVal(
             strings.ui('streamProfile'),
-            state.mediaProfile?.summary ?? strings.ui('autoMeasuring'),
+            state.mediaProfile == null
+                ? strings.ui('autoMeasuring')
+                : localizedMediaProfileSummary(strings, state.mediaProfile!),
             dark: true,
           ),
         ],
@@ -971,8 +985,8 @@ class _LivePreviewCard extends StatelessWidget {
                         ? strings.ui('livePreview')
                         : strings.ui('cameraStarting'),
                     color: showCamera
-                        ? MimiCamDesignTokens.mint
-                        : MimiCamDesignTokens.amber,
+                        ? MimiCamDesignTokens.serverCyan
+                        : MimiCamDesignTokens.serverViolet,
                   ),
                 ],
               ),
@@ -1178,7 +1192,7 @@ class _ServerSettingsCard extends StatelessWidget {
         min: .20,
         max: .95,
         divisions: 75,
-        color: MimiCamDesignTokens.mint,
+        color: MimiCamDesignTokens.serverCyan,
         onChanged: onCryScoreThresholdChanged,
         onChangeEnd: onCryScoreThresholdChangeEnd,
       ),
@@ -1190,43 +1204,51 @@ class _ServerSettingsCard extends StatelessWidget {
         min: .05,
         max: .60,
         divisions: 55,
-        color: MimiCamDesignTokens.amber,
+        color: MimiCamDesignTokens.serverViolet,
         onChanged: onMotionThresholdChanged,
         onChangeEnd: onMotionThresholdChangeEnd,
       ),
       _SettingSliderSpec(
         title: strings.ui('notificationCooldown'),
         description: strings.ui('notificationCooldownDescription'),
-        valueLabel: '${notifyCooldownSeconds.round()} sn',
+        valueLabel: localizedSecondsLabel(strings, notifyCooldownSeconds),
         value: notifyCooldownSeconds,
         min: 10,
         max: 180,
         divisions: 34,
-        color: MimiCamDesignTokens.pink,
+        color: MimiCamDesignTokens.serverBlue,
         onChanged: onNotifyCooldownChanged,
         onChangeEnd: onNotifyCooldownChangeEnd,
       ),
       _SettingSliderSpec(
         title: strings.ui('cryMinimumDuration'),
         description: strings.ui('cryMinimumDurationDescription'),
-        valueLabel: '${cryDurationSeconds.toStringAsFixed(1)} sn',
+        valueLabel: localizedSecondsLabel(
+          strings,
+          cryDurationSeconds,
+          fractionDigits: 1,
+        ),
         value: cryDurationSeconds,
         min: .5,
         max: 6,
         divisions: 11,
-        color: MimiCamDesignTokens.mint,
+        color: MimiCamDesignTokens.serverCyan,
         onChanged: onCryDurationChanged,
         onChangeEnd: onCryDurationChangeEnd,
       ),
       _SettingSliderSpec(
         title: strings.ui('motionMinimumDuration'),
         description: strings.ui('motionMinimumDurationDescription'),
-        valueLabel: '${motionDurationSeconds.toStringAsFixed(1)} sn',
+        valueLabel: localizedSecondsLabel(
+          strings,
+          motionDurationSeconds,
+          fractionDigits: 1,
+        ),
         value: motionDurationSeconds,
         min: .5,
         max: 6,
         divisions: 11,
-        color: MimiCamDesignTokens.amber,
+        color: MimiCamDesignTokens.serverViolet,
         onChanged: onMotionDurationChanged,
         onChangeEnd: onMotionDurationChangeEnd,
       ),
@@ -1271,14 +1293,15 @@ class _SettingsSaveChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: ShapeDecoration(
-        color:
-            saving ? MimiCamDesignTokens.amber : MimiCamDesignTokens.mintSoft,
+        color: saving
+            ? MimiCamDesignTokens.serverViolet
+            : MimiCamDesignTokens.serverCyan,
         shape: const StadiumBorder(),
       ),
       child: Text(
         saving ? strings.ui('saving') : strings.ui('realSettings'),
         style: const TextStyle(
-          color: MimiCamDesignTokens.navy,
+          color: MimiCamDesignTokens.serverInk,
           fontSize: 12,
           fontWeight: FontWeight.w900,
         ),
@@ -1383,9 +1406,11 @@ class _Stat extends StatelessWidget {
       height: 104,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: MimiCamDesignTokens.plumSurface,
+        color: MimiCamDesignTokens.serverPanel.withValues(alpha: .92),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: .12)),
+        border: Border.all(
+          color: MimiCamDesignTokens.serverCyan.withValues(alpha: .16),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,

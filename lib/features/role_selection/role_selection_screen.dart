@@ -31,8 +31,8 @@ class RoleSelectionScreen extends StatelessWidget {
                 icon: Icons.child_care,
                 title: strings.ui('babyRoomDeviceTitle'),
                 description: strings.ui('babyRoomDeviceDescription'),
-                backgroundColor: MimiCamDesignTokens.blushSoft,
-                iconColor: const Color(0xFFFFC6D4),
+                backgroundColor: const Color(0xFFDFFBFF),
+                iconColor: MimiCamDesignTokens.serverCyan,
                 onPressed: () => onRoleSelected(AppRole.server),
               ),
               const SizedBox(height: 14),
@@ -64,15 +64,31 @@ class _BrandHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Semantics(
-        label: 'MimiCam',
-        image: true,
-        child: Image.asset(
-          'assets/branding/mimicam_wordmark.png',
-          width: 230,
-          fit: BoxFit.contain,
-          filterQuality: FilterQuality.high,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Semantics(
+            label: 'MimiCam',
+            image: true,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: Image.asset(
+                'assets/branding/mimicam_launcher_icon.png',
+                width: 66,
+                height: 66,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.high,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Image.asset(
+            'assets/branding/mimicam_wordmark.png',
+            width: 178,
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
+          ),
+        ],
       ),
     );
   }

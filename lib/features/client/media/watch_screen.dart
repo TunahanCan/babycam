@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/media/adaptive_media_profile.dart';
 import '../../../l10n/app_strings.dart';
+import '../../shared/presentation/localized_measurement_text.dart';
+import '../../shared/presentation/media_profile_text.dart';
 import '../client_runtime.dart';
 
 class WatchScreen extends StatefulWidget {
@@ -175,8 +177,12 @@ class _WatchScreenState extends State<WatchScreen> {
           const SizedBox(height: 18),
           _QualityPreferenceCard(profile: profile),
           const SizedBox(height: 12),
-          _SliderCard(strings.ui('notificationCooldown'),
-              strings.ui('repeatedAlertsLimit'), '60 sn', _pink, .68),
+          _SliderCard(
+              strings.ui('notificationCooldown'),
+              strings.ui('repeatedAlertsLimit'),
+              localizedSecondsLabel(strings, 60),
+              _pink,
+              .68),
           const SizedBox(height: 12),
           _SliderCard(strings.ui('cryThreshold'),
               strings.ui('ambientCrySensitivity'), '%65', _mint, .65),
@@ -364,7 +370,7 @@ class _MetricTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 98,
+      height: 116,
       padding: const EdgeInsets.all(10),
       decoration: _cardDecoration().copyWith(color: Colors.white),
       child: Column(
@@ -511,7 +517,7 @@ class _QualityPreferenceCard extends StatelessWidget {
           Text(
             profile == null
                 ? strings.ui('autoQualityDescription')
-                : profile!.summary,
+                : localizedMediaProfileSummary(strings, profile!),
             style: const TextStyle(color: _slate, fontSize: 14.5, height: 1.25),
           ),
         ],

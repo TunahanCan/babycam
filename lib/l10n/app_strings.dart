@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 
 import '../core/media/adaptive_media_profile.dart';
 import 'src/app_ui_text_catalog.dart';
+import 'src/app_ui_text_catalog_extra.dart';
 
 class AppStrings {
   AppStrings(this.locale);
@@ -16,6 +17,9 @@ class AppStrings {
     Locale('hi'),
     Locale('es'),
     Locale('fr'),
+    Locale('de'),
+    Locale('ar', 'SA'),
+    Locale('ar', 'QA'),
   ];
 
   static const LocalizationsDelegate<AppStrings> delegate =
@@ -33,6 +37,8 @@ class AppStrings {
   bool get isHindi => locale.languageCode == 'hi';
   bool get isSpanish => locale.languageCode == 'es';
   bool get isFrench => locale.languageCode == 'fr';
+  bool get isGerman => locale.languageCode == 'de';
+  bool get isArabic => locale.languageCode == 'ar';
 
   String _t({
     required String tr,
@@ -41,12 +47,16 @@ class AppStrings {
     String? hi,
     String? es,
     String? fr,
+    String? de,
+    String? ar,
   }) {
     if (isTurkish) return tr;
     if (isChinese) return zh;
     if (isHindi) return hi ?? en;
     if (isSpanish) return es ?? en;
     if (isFrench) return fr ?? en;
+    if (isGerman) return de ?? en;
+    if (isArabic) return ar ?? en;
     return en;
   }
 
@@ -58,6 +68,8 @@ class AppStrings {
     required List<String> hi,
     required List<String> es,
     required List<String> fr,
+    List<String>? de,
+    List<String>? ar,
   }) {
     // Seeded variants keep parent messages varied without random output that
     // would make alert tests and history snapshots flaky.
@@ -71,7 +83,11 @@ class AppStrings {
                     ? es
                     : isFrench
                         ? fr
-                        : en;
+                        : isGerman && de != null
+                            ? de
+                            : isArabic && ar != null
+                                ? ar
+                                : en;
     return values[seed.abs() % values.length];
   }
 
@@ -82,7 +98,9 @@ class AppStrings {
       zh: '重置',
       hi: 'रीसेट',
       es: 'Restablecer',
-      fr: 'Réinitialiser');
+      fr: 'Réinitialiser',
+      de: 'Zurücksetzen',
+      ar: 'إعادة ضبط');
   String get server => 'Server';
   String get client => 'Client';
   String get selectRoleStatus => _t(
@@ -169,14 +187,18 @@ class AppStrings {
       zh: 'MimiCam 提醒',
       hi: 'MimiCam अलर्ट',
       es: 'Alerta de MimiCam',
-      fr: 'Alerte MimiCam');
+      fr: 'Alerte MimiCam',
+      de: 'MimiCam Warnung',
+      ar: 'تنبيه MimiCam');
   String get notificationChannelName => _t(
       tr: 'MimiCam Uyarıları',
       en: 'MimiCam Alerts',
       zh: 'MimiCam 提醒',
       hi: 'MimiCam अलर्ट',
       es: 'Alertas de MimiCam',
-      fr: 'Alertes MimiCam');
+      fr: 'Alertes MimiCam',
+      de: 'MimiCam Warnungen',
+      ar: 'تنبيهات MimiCam');
 
   String get cameraNotFound => _t(
       tr: 'Kamera bulunamadı.',
@@ -184,7 +206,9 @@ class AppStrings {
       zh: '未找到摄像头。',
       hi: 'कैमरा नहीं मिला।',
       es: 'No se encontró la cámara.',
-      fr: 'Caméra introuvable.');
+      fr: 'Caméra introuvable.',
+      de: 'Kamera nicht gefunden.',
+      ar: 'لم يتم العثور على الكاميرا.');
   String serverStartedLog(String url) => _t(
       tr: 'Server başladı: $url',
       en: 'Server started: $url',
@@ -370,6 +394,12 @@ class AppStrings {
         '👶 Le son du bébé ressemble à des pleurs ($confidencePercent %). La chambre est $delta dB au-dessus du niveau de base et la bande des pleurs est à $cryBandPercent %. $calibration. Vérifiez calmement : réconfort, couche, gaz et température.',
         '🍼 Un signal prolongé d’inconfort/pleurs apparaît ($confidencePercent %). L’audio a monté de $delta dB ; bande des pleurs $cryBandPercent %. $calibration. Commencez par un contrôle visuel sûr, puis vérifiez les besoins probables.',
       ],
+      de: [
+        '🔊 Die Wahrscheinlichkeit für Weinen ist hoch ($confidencePercent%). Der Ton liegt $delta dB über der Umgebung; Weinband-Energie $cryBandPercent%. $calibration. Prüfe das Zimmer sicher: Hunger, Windel, Bauchweh, Temperatur oder Trostbedarf sind möglich.',
+      ],
+      ar: [
+        '🔊 احتمال البكاء مرتفع ($confidencePercent%). الصوت أعلى من البيئة بـ $delta dB؛ طاقة نطاق البكاء $cryBandPercent%. $calibration. افحص الغرفة بأمان: قد يكون السبب الجوع أو الحفاض أو الغازات أو الحرارة أو الحاجة للتهدئة.',
+      ],
     );
   }
 
@@ -411,6 +441,12 @@ class AppStrings {
         '🔔 Son fort soudain détecté. Niveau $level dBFS ; $delta dB au-dessus de l’ambiance. Vérifiez si le bébé s’est réveillé ou s’il y a une source de bruit inattendue.',
         '🚪 Un pic sonore bref et fort a eu lieu dans la chambre. Niveau $level dBFS, $delta dB au-dessus du niveau de base. Vérifiez porte, jouet, bruit domestique ou bébé surpris.',
         '⚠️ L’audio a brusquement monté ($level dBFS). Écart avec l’ambiance : $delta dB. Si le bébé dort, regardez l’image et vérifiez si quelque chose est tombé ou a heurté.',
+      ],
+      de: [
+        '🔔 Plötzlicher lauter Ton erkannt. Pegel $level dBFS; $delta dB über der Umgebung. Prüfe, ob das Baby wach wurde oder ob es eine unerwartete Geräuschquelle gibt.',
+      ],
+      ar: [
+        '🔔 تم رصد صوت عالٍ مفاجئ. المستوى $level dBFS؛ أعلى من البيئة بـ $delta dB. تحقق مما إذا كان الطفل قد استيقظ أو توجد ضوضاء غير متوقعة.',
       ],
     );
   }
@@ -454,6 +490,12 @@ class AppStrings {
         '🧸 Mouvement dans la zone du bébé ($scorePercent %). Changement d’image $activeAreaPercent %, écart moyen $mean. Si la position a changé, vérifiez vite couverture et bord du lit.',
         '📹 La caméra a capté un mouvement ($scorePercent %). Zone active $activeAreaPercent % ; variation $mean. Regardez l’image et confirmez que le bébé est bien installé.',
       ],
+      de: [
+        '👶 Bewegung erkannt ($scorePercent%). Etwa $activeAreaPercent% des Bildes hat sich verändert; mittlere Änderung $mean. Prüfe die Position des Babys sowie Decke und Bettrand.',
+      ],
+      ar: [
+        '👶 تم رصد حركة ($scorePercent%). تغيّر حوالي $activeAreaPercent% من الصورة؛ متوسط التغير $mean. تحقق من وضع الطفل وسلامة البطانية والحافة.',
+      ],
     );
   }
 
@@ -495,6 +537,12 @@ class AppStrings {
         '🌙 Le niveau de lumière a changé ($scorePercent %). Différence de luminosité $shift. Rideau, porte entrouverte ou veilleuse peuvent affecter l’image.',
         '📷 La caméra a détecté un changement lumineux ($scorePercent %). Décalage luma $shift. Cela ressemble plus à la lumière qu’à un mouvement ; vérifiez quand même l’image.',
       ],
+      de: [
+        '💡 Das Zimmerlicht hat sich geändert ($scorePercent%). Helligkeitsverschiebung $shift. Kameraansicht oder Nachtlicht können sich geändert haben; prüfe kurz das Bild.',
+      ],
+      ar: [
+        '💡 تغيّرت إضاءة الغرفة ($scorePercent%). انحراف السطوع $shift. قد تكون زاوية الكاميرا أو ضوء الليل تغيرت؛ تحقق من الصورة سريعاً.',
+      ],
     );
   }
 
@@ -516,6 +564,8 @@ class AppStrings {
         hi: 'हाल की हलचल नहीं',
         es: 'sin movimiento reciente',
         fr: 'aucun mouvement récent',
+        de: 'keine aktuelle Bewegung',
+        ar: 'لا توجد حركة حديثة',
       );
     }
     final seconds = (agoMs / 1000).round();
@@ -526,6 +576,8 @@ class AppStrings {
       hi: '$seconds सेकंड पहले',
       es: 'hace $seconds s',
       fr: 'il y a $seconds s',
+      de: 'vor $seconds s',
+      ar: 'قبل $seconds ث',
     );
   }
 
@@ -566,6 +618,12 @@ class AppStrings {
           'Les pleurs sont restés forts environ $seconds s. Mouvement : $motionAgo. Qualité de connexion $networkTier ; vérifiez la chambre en sécurité.',
           'Pleurs intenses prolongés : ~$seconds s. Dernier mouvement $motionAgo. Flux $networkTier ; priorité audio conservée.',
         ],
+        de: [
+          'Starkes Weinen dauerte etwa $seconds s. Letzte Bewegung: $motionAgo. Der Stream ist im Modus $networkTier.',
+        ],
+        ar: [
+          'استمر بكاء قوي حوالي $seconds ثانية. آخر حركة: $motionAgo. البث في وضع $networkTier.',
+        ],
       );
 
   String parentEpisodeShortSoundAlert({required int seconds}) => _variant(
@@ -599,6 +657,12 @@ class AppStrings {
           'Courte hausse sonore détectée. Si elle continue, une autre alerte sera envoyée.',
           'Un bref son d’inconfort a été entendu ; cela ne ressemble pas à des pleurs prolongés pour l’instant.',
           'Le son a monté brièvement puis s’est calmé. J’alerterai à nouveau si cela se répète.',
+        ],
+        de: [
+          'Kurzer Tonanstieg erkannt. Wenn er anhält, wird eine weitere Warnung gesendet.',
+        ],
+        ar: [
+          'تم رصد ارتفاع صوت قصير. إذا استمر، سيتم إرسال تنبيه آخر.',
         ],
       );
 
@@ -638,12 +702,22 @@ class AppStrings {
           'Le signal inconfort/pleurs a continué environ $seconds s. Connexion $networkTier ; suivi audio actif.',
           'Signal de pleurs confirmé pendant $seconds s. Flux $networkTier ; la qualité vidéo peut baisser si nécessaire.',
         ],
+        de: [
+          'Weinsignal dauerte etwa $seconds s. Der Stream ist im Modus $networkTier.',
+        ],
+        ar: [
+          'استمرت إشارة البكاء حوالي $seconds ثانية. البث في وضع $networkTier.',
+        ],
       );
 
   String ui(String key) {
     final values = appUiTextCatalog[key];
     if (values == null) return key;
-    return values[locale.languageCode] ?? values['en'] ?? key;
+    final languageCode = locale.languageCode;
+    return extraUiText(languageCode, key, values['en']) ??
+        values[languageCode] ??
+        values['en'] ??
+        key;
   }
 
   String uiFormat(String key, Map<String, Object?> params) {
@@ -664,11 +738,18 @@ class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {
 
   @override
   Future<AppStrings> load(Locale locale) {
-    final languageCode = AppStrings.supportedLocales
-            .any((supported) => supported.languageCode == locale.languageCode)
-        ? locale.languageCode
-        : 'en';
-    return SynchronousFuture(AppStrings(Locale(languageCode)));
+    for (final supported in AppStrings.supportedLocales) {
+      if (supported.languageCode == locale.languageCode &&
+          supported.countryCode == locale.countryCode) {
+        return SynchronousFuture(AppStrings(supported));
+      }
+    }
+    for (final supported in AppStrings.supportedLocales) {
+      if (supported.languageCode == locale.languageCode) {
+        return SynchronousFuture(AppStrings(supported));
+      }
+    }
+    return SynchronousFuture(AppStrings(const Locale('en')));
   }
 
   @override

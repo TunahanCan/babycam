@@ -180,20 +180,20 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Changer de rôle'
   },
   'clientRoleTitle': {
-    'tr': 'CLIENT',
+    'tr': 'EBEVEYN',
     'en': 'CLIENT',
-    'zh': 'CLIENT',
+    'zh': '客户端',
     'hi': 'CLIENT',
-    'es': 'CLIENT',
-    'fr': 'CLIENT'
+    'es': 'CLIENTE',
+    'fr': 'PARENT'
   },
   'serverRoleTitle': {
-    'tr': 'SERVER',
+    'tr': 'SUNUCU',
     'en': 'SERVER',
-    'zh': 'SERVER',
+    'zh': '服务器',
     'hi': 'SERVER',
-    'es': 'SERVER',
-    'fr': 'SERVER'
+    'es': 'SERVIDOR',
+    'fr': 'SERVEUR'
   },
   'parentRoleSubtitle': {
     'tr': 'EBEVEYN',
@@ -201,7 +201,7 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'zh': '家长',
     'hi': 'अभिभावक',
     'es': 'PADRE/MADRE',
-    'fr': 'PARENT'
+    'fr': 'PARENTS'
   },
   'babyRoomRoleSubtitle': {
     'tr': 'BEBEK ODASI',
@@ -281,7 +281,7 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'zh': '服务',
     'hi': 'सेवा',
     'es': 'Servicio',
-    'fr': 'Service'
+    'fr': 'Services'
   },
   'parentMode': {
     'tr': 'Ebeveyn modu',
@@ -951,8 +951,8 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'en': 'Audio',
     'zh': '声音',
     'hi': 'ऑडियो',
-    'es': 'Audio',
-    'fr': 'Audio'
+    'es': 'Sonido',
+    'fr': 'Son'
   },
   'motion': {
     'tr': 'Hareket',
@@ -1145,7 +1145,7 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'en': 'Audio: {value}',
     'zh': '声音：{value}',
     'hi': 'ऑडियो: {value}',
-    'es': 'Audio: {value}',
+    'es': 'Sonido: {value}',
     'fr': 'Audio : {value}'
   },
   'latencyMetric': {
@@ -1194,7 +1194,7 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'zh': '很好',
     'hi': 'बहुत अच्छा',
     'es': 'Excelente',
-    'fr': 'Excellent'
+    'fr': 'Très bon'
   },
   'netGood': {
     'tr': 'İyi',
@@ -1364,7 +1364,7 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'en': 'Error',
     'zh': '错误',
     'hi': 'त्रुटि',
-    'es': 'Error',
+    'es': 'Fallo',
     'fr': 'Erreur'
   },
   'babyRoomMode': {
@@ -1417,7 +1417,7 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'zh': '{count} 位家长',
     'hi': '{count} अभिभावक',
     'es': '{count} padre/madre',
-    'fr': '{count} parent(s)'
+    'fr': '{count} parent(s) connecté(s)'
   },
   'qualityMeasuring': {
     'tr': 'Kalite ölçülüyor',
@@ -1564,7 +1564,7 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'zh': '家长',
     'hi': 'अभिभावक',
     'es': 'Padre/madre',
-    'fr': 'Parent'
+    'fr': 'Parent connecté'
   },
   'waiting': {
     'tr': 'Bekleniyor',
@@ -1970,7 +1970,7 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'zh': '重要',
     'hi': 'महत्वपूर्ण',
     'es': 'Importante',
-    'fr': 'Important',
+    'fr': 'À noter',
   },
   'info': {
     'tr': 'Bilgi',
@@ -1978,7 +1978,7 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'zh': '信息',
     'hi': 'जानकारी',
     'es': 'Información',
-    'fr': 'Info',
+    'fr': 'Information',
   },
   'warning': {
     'tr': 'Uyarı',

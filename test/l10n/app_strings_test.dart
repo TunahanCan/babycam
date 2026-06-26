@@ -17,13 +17,17 @@ void main() {
     expect(strings.cameraNotFound, '未找到摄像头。');
   });
 
-  test('Hindi, Spanish and French locales are supported and loaded', () async {
+  test('Hindi, Spanish, French, German and Arabic locales are supported',
+      () async {
     const delegate = AppStrings.delegate;
 
     for (final locale in [
       const Locale('hi'),
       const Locale('es'),
       const Locale('fr'),
+      const Locale('de'),
+      const Locale('ar', 'SA'),
+      const Locale('ar', 'QA'),
     ]) {
       expect(AppStrings.supportedLocales, contains(locale));
       expect(delegate.isSupported(locale), isTrue);
@@ -32,6 +36,9 @@ void main() {
     final hindi = await delegate.load(const Locale('hi'));
     final spanish = await delegate.load(const Locale('es'));
     final french = await delegate.load(const Locale('fr'));
+    final german = await delegate.load(const Locale('de'));
+    final arabicSaudi = await delegate.load(const Locale('ar', 'SA'));
+    final arabicQatar = await delegate.load(const Locale('ar', 'QA'));
 
     expect(hindi.isHindi, isTrue);
     expect(hindi.notificationTitle, 'MimiCam अलर्ट');
@@ -39,12 +46,19 @@ void main() {
     expect(spanish.cameraNotFound, 'No se encontró la cámara.');
     expect(french.isFrench, isTrue);
     expect(french.reset, 'Réinitialiser');
+    expect(german.isGerman, isTrue);
+    expect(german.notificationTitle, 'MimiCam Warnung');
+    expect(arabicSaudi.isArabic, isTrue);
+    expect(arabicSaudi.notificationTitle, 'تنبيه MimiCam');
+    expect(arabicSaudi.locale.countryCode, 'SA');
+    expect(arabicQatar.isArabic, isTrue);
+    expect(arabicQatar.locale.countryCode, 'QA');
   });
 
   test('unsupported locale falls back to English', () async {
     const delegate = AppStrings.delegate;
 
-    final strings = await delegate.load(const Locale('de'));
+    final strings = await delegate.load(const Locale('ru'));
 
     expect(strings.locale, const Locale('en'));
     expect(strings.reset, 'Reset');
@@ -55,26 +69,98 @@ void main() {
 
     expect(AppStrings(const Locale('es')).ui('scanQr'), 'Escanear QR');
     expect(AppStrings(const Locale('fr')).ui('navSettings'), 'Réglages');
+    expect(AppStrings(const Locale('de')).ui('scanQr'), 'QR scannen');
+    expect(AppStrings(const Locale('ar', 'SA')).ui('scanQr'), 'مسح QR');
     expect(AppStrings(const Locale('hi')).ui('parentDeviceTitle'),
         'माता-पिता का डिवाइस');
 
-    final fallback = await delegate.load(const Locale('de'));
+    final fallback = await delegate.load(const Locale('ru'));
 
     expect(fallback.ui('scanQr'), 'Scan QR');
     expect(fallback.ui('roleSelectionTitle'), 'What will this device be?');
   });
 
   test('UI catalog tüm desteklenen diller için değer taşır', () {
-    final languageCodes = AppStrings.supportedLocales
-        .map((locale) => locale.languageCode)
-        .toSet();
+    const baseLanguageCodes = {'tr', 'en', 'zh', 'hi', 'es', 'fr'};
 
     for (final entry in appUiTextCatalog.entries) {
       expect(
         entry.value.keys.toSet(),
-        containsAll(languageCodes),
+        containsAll(baseLanguageCodes),
         reason: '${entry.key} eksik locale içeriyor',
       );
+    }
+  });
+
+  test('rapor dillerinde UI metinleri İngilizce fallback kullanmaz', () {
+    const allowedSameAsEnglish = {
+      'clientRoleTitle',
+      'navQrIp',
+      'temperatureHumidity',
+      'turkishShort',
+    };
+
+    for (final entry in appUiTextCatalog.entries) {
+      for (final languageCode in ['tr', 'zh', 'es', 'fr', 'de', 'ar']) {
+        if (allowedSameAsEnglish.contains(entry.key)) continue;
+        final localized = AppStrings(Locale(languageCode)).ui(entry.key);
+        expect(
+          localized,
+          isNot(entry.value['en']),
+          reason: '${entry.key} $languageCode İngilizce fallback gibi duruyor',
+        );
+      }
+    }
+  });
+
+  test('Almanca ve Arapça ek katalogda eksik anahtar yoktur', () {
+    for (final key in appUiTextCatalog.keys) {
+      expect(AppStrings(const Locale('de')).ui(key),
+          isNot(startsWith('Nicht übersetzt:')));
+      expect(AppStrings(const Locale('ar', 'SA')).ui(key),
+          isNot(startsWith('غير مترجم:')));
+      expect(AppStrings(const Locale('ar', 'QA')).ui(key),
+          isNot(startsWith('غير مترجم:')));
+    }
+  });
+
+  test('rapor dillerinde bildirim helper metinleri yerelleştirilir', () {
+    final samples = {
+      'tr': AppStrings(const Locale('tr')).parentEpisodeCryAlert(
+        seconds: 9,
+        networkTier: 'zayıf',
+      ),
+      'zh': AppStrings(const Locale('zh')).parentEpisodeCryAlert(
+        seconds: 9,
+        networkTier: '弱',
+      ),
+      'es': AppStrings(const Locale('es')).parentEpisodeCryAlert(
+        seconds: 9,
+        networkTier: 'débil',
+      ),
+      'fr': AppStrings(const Locale('fr')).parentEpisodeCryAlert(
+        seconds: 9,
+        networkTier: 'faible',
+      ),
+      'de': AppStrings(const Locale('de')).parentEpisodeCryAlert(
+        seconds: 9,
+        networkTier: 'schwach',
+      ),
+      'ar': AppStrings(const Locale('ar', 'SA')).parentEpisodeCryAlert(
+        seconds: 9,
+        networkTier: 'ضعيف',
+      ),
+    };
+
+    expect(samples['tr'], contains('ağlama'));
+    expect(samples['zh'], contains('哭声'));
+    expect(samples['es'], contains('llanto'));
+    expect(samples['fr'], contains('pleurs'));
+    expect(samples['de'], contains('Weinsignal'));
+    expect(samples['ar'], contains('البكاء'));
+    for (final entry in samples.entries) {
+      expect(entry.value, isNot(contains('Crying signal')));
+      expect(entry.value, isNot(contains('Stream is in')));
     }
   });
 

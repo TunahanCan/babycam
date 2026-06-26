@@ -154,8 +154,11 @@ class MimiCamRoleBadge extends StatelessWidget {
     final strings = AppStrings.of(context);
     final isClient = activeRole == AppRole.client;
     final nextRole = isClient ? AppRole.server : AppRole.client;
-    final accent =
-        isClient ? MimiCamDesignTokens.mint : MimiCamDesignTokens.pink;
+    final accent = isClient
+        ? MimiCamDesignTokens.mint
+        : dark
+            ? MimiCamDesignTokens.serverCyan
+            : MimiCamDesignTokens.serverBlue;
     final title = isClient
         ? strings.ui('clientRoleTitle')
         : strings.ui('serverRoleTitle');
@@ -165,10 +168,11 @@ class MimiCamRoleBadge extends StatelessWidget {
     final textColor = dark ? Colors.white : MimiCamDesignTokens.navy;
     final mutedColor = dark ? Colors.white70 : MimiCamDesignTokens.slate;
     final backgroundColor = dark
-        ? Colors.white.withValues(alpha: .08)
+        ? MimiCamDesignTokens.serverPanel.withValues(alpha: .72)
         : Colors.white.withValues(alpha: .92);
-    final borderColor =
-        dark ? Colors.white.withValues(alpha: .18) : const Color(0xFFDDE7EE);
+    final borderColor = dark
+        ? MimiCamDesignTokens.serverCyan.withValues(alpha: .28)
+        : const Color(0xFFDDE7EE);
 
     return RepaintBoundary(
       child: Tooltip(
@@ -186,11 +190,13 @@ class MimiCamRoleBadge extends StatelessWidget {
                 color: backgroundColor,
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(color: borderColor),
-                boxShadow: const [
+                boxShadow: [
                   BoxShadow(
-                    color: Color(0x16111827),
-                    blurRadius: 12,
-                    offset: Offset(0, 6),
+                    color: dark
+                        ? MimiCamDesignTokens.serverBlue.withValues(alpha: .24)
+                        : const Color(0x16111827),
+                    blurRadius: dark ? 18 : 12,
+                    offset: const Offset(0, 6),
                   ),
                 ],
               ),
@@ -344,17 +350,21 @@ class MimiCamBottomNav extends StatelessWidget {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: dark
-              ? MimiCamDesignTokens.plumSurface.withValues(alpha: .94)
+              ? MimiCamDesignTokens.serverPanel.withValues(alpha: .96)
               : Colors.white.withValues(alpha: .96),
           borderRadius: BorderRadius.circular(30),
           border: Border.all(
-            color: dark ? Colors.white12 : const Color(0xFFEEDFD8),
+            color: dark
+                ? MimiCamDesignTokens.serverCyan.withValues(alpha: .26)
+                : const Color(0xFFEEDFD8),
           ),
-          boxShadow: const [
+          boxShadow: [
             BoxShadow(
-              color: Color(0x1F111827),
-              blurRadius: 16,
-              offset: Offset(0, 8),
+              color: dark
+                  ? MimiCamDesignTokens.serverBlue.withValues(alpha: .28)
+                  : const Color(0x1F111827),
+              blurRadius: dark ? 22 : 16,
+              offset: const Offset(0, 8),
             ),
           ],
         ),
@@ -468,11 +478,11 @@ enum MimiCamShellVariant {
         ),
       MimiCamShellVariant.server => const RadialGradient(
           center: Alignment(.7, -.85),
-          radius: .9,
+          radius: 1.05,
           colors: [
-            Color(0xFF4B3A61),
-            MimiCamDesignTokens.nightPlum,
-            Color(0xFF171023),
+            Color(0xFF1B62A5),
+            MimiCamDesignTokens.serverNavy,
+            MimiCamDesignTokens.serverInk,
           ],
         ),
     };
