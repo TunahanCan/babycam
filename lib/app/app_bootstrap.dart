@@ -53,6 +53,9 @@ class _AppBootstrapState extends State<AppBootstrap> {
       _role = role;
       _loaded = true;
     });
+    if (role != null) {
+      unawaited(_permissionCoordinator.requestFor(role));
+    }
   }
 
   Future<void> _select(AppRole role) async {
