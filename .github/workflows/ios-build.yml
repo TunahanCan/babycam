@@ -50,8 +50,5 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Refresh iOS scaffold
-        run: flutter create --platforms=ios --project-name mimicam .
-
       - name: Build unsigned iOS app
         run: flutter build ios --release --no-codesign

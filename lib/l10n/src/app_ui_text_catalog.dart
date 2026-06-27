@@ -664,6 +664,51 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'Escanear QR',
     'fr': 'Scanner QR'
   },
+  'qrScanPreparingCamera': {
+    'tr': 'Kamera izni kontrol ediliyor...',
+    'en': 'Checking camera permission...',
+    'zh': '正在检查摄像头权限…',
+    'hi': 'कैमरा अनुमति जाँची जा रही है…',
+    'es': 'Comprobando permiso de cámara…',
+    'fr': 'Vérification de l’autorisation caméra…'
+  },
+  'qrScanCameraPermissionRequired': {
+    'tr':
+        'QR taramak için kamera izni gerekli. QR kod metnini alttan yapıştırabilirsin.',
+    'en':
+        'Camera permission is required to scan QR. You can paste the QR text below.',
+    'zh': '扫描二维码需要摄像头权限。你也可以在下方粘贴二维码文本。',
+    'hi':
+        'QR स्कैन करने के लिए कैमरा अनुमति चाहिए। आप नीचे QR टेक्स्ट पेस्ट कर सकते हैं।',
+    'es':
+        'Se necesita permiso de cámara para escanear QR. Puedes pegar el texto QR abajo.',
+    'fr':
+        'L’autorisation caméra est nécessaire pour scanner le QR. Vous pouvez coller le texte QR ci-dessous.'
+  },
+  'qrScanProcessing': {
+    'tr': 'QR okundu, bağlantı hazırlanıyor...',
+    'en': 'QR scanned, preparing connection...',
+    'zh': '已扫描二维码，正在准备连接…',
+    'hi': 'QR स्कैन हो गया, कनेक्शन तैयार हो रहा है…',
+    'es': 'QR escaneado, preparando conexión…',
+    'fr': 'QR scanné, préparation de la connexion…'
+  },
+  'openAppSettings': {
+    'tr': 'Ayarları aç',
+    'en': 'Open settings',
+    'zh': '打开设置',
+    'hi': 'सेटिंग खोलें',
+    'es': 'Abrir ajustes',
+    'fr': 'Ouvrir les réglages'
+  },
+  'tryAgain': {
+    'tr': 'Tekrar dene',
+    'en': 'Try again',
+    'zh': '重试',
+    'hi': 'फिर कोशिश करें',
+    'es': 'Intentar de nuevo',
+    'fr': 'Réessayer'
+  },
   'ipOrHostPort': {
     'tr': 'IP veya IP:port',
     'en': 'IP or IP:port',

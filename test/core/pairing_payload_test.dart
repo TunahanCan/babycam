@@ -33,6 +33,31 @@ void main() {
     expect(parsed.wsScheme, 'ws');
   });
 
+  test('QR payload Türkçe ve İngilizce cihaz adlarını UTF-8 taşır', () {
+    final turkish = payload();
+    final english = PairingPayload(
+      schemaVersion: 1,
+      host: '192.168.1.21',
+      port: 8080,
+      deviceId: 'server_en',
+      deviceName: 'Baby Room / Bebek Odası',
+      pairingNonce: 'nonce-en',
+      expiresAtMs:
+          DateTime.now().add(const Duration(minutes: 1)).millisecondsSinceEpoch,
+      transport: 'http_ws',
+      capabilities: const {'transport': 'http_ws'},
+    );
+
+    expect(
+      PairingPayload.parseUri(turkish.toUriString())?.deviceName,
+      'Bebek Odası',
+    );
+    expect(
+      PairingPayload.parseUri(english.toUriString())?.deviceName,
+      'Baby Room / Bebek Odası',
+    );
+  });
+
   test('expired QR payload reddedilir', () {
     final parsed = PairingPayload.parseUri(payload(
             expiresAtMs: DateTime.now()
