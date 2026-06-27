@@ -475,10 +475,23 @@ class MimiCamServer {
           request.connectionInfo?.remoteAddress.address ?? 'unknown'));
       return;
     }
+    if (request.uri.path == '/ws/stream' ||
+        request.uri.path == protocol_v2.MimiCamProtocolV2.events) {
+      request.response.statusCode = HttpStatus.upgradeRequired;
+      await request.response.close();
+      return;
+    }
 
     final route = _routeFor(request.uri.path);
     if (route == null) {
       await _writeLandingPage(request.response);
+      return;
+    }
+    if (!route.allowsMethod(request.method)) {
+      request.response
+        ..statusCode = HttpStatus.methodNotAllowed
+        ..headers.set(HttpHeaders.allowHeader, route.allowedMethods.join(', '));
+      await request.response.close();
       return;
     }
 
@@ -491,46 +504,55 @@ class MimiCamServer {
         _RouteSpec(
           protocol_v2.MimiCamProtocolV2.pairConfirm,
           _AuthMode.none,
+          const {HttpMethod.post},
           (request, _) => _handlePairConfirm(request),
         ),
         _RouteSpec(
           protocol_v2.MimiCamProtocolV2.authRenew,
           _AuthMode.none,
+          const {HttpMethod.post},
           (request, _) => _handleAuthRenew(request),
         ),
         _RouteSpec(
           protocol_v2.MimiCamProtocolV2.sessionStart,
           _AuthMode.bearer,
+          const {HttpMethod.post},
           (request, _) => _handleSessionStart(request),
         ),
         _RouteSpec(
           protocol_v2.MimiCamProtocolV2.sessionStop,
           _AuthMode.bearer,
+          const {HttpMethod.post},
           (request, _) => _handleSessionStop(request),
         ),
         _RouteSpec(
           protocol_v2.MimiCamProtocolV2.qualityReport,
           _AuthMode.bearer,
+          const {HttpMethod.post},
           (request, _) => _handleQualityReport(request),
         ),
         _RouteSpec(
           protocol_v2.MimiCamProtocolV2.statusPublic,
           _AuthMode.none,
+          const {HttpMethod.get},
           (request, _) => _handlePublicStatus(request),
         ),
         _RouteSpec(
           '/video',
           _AuthMode.streamToken,
+          const {HttpMethod.get},
           _handleVideoRoute,
         ),
         _RouteSpec(
           '/audio',
           _AuthMode.streamToken,
+          const {HttpMethod.get},
           _handleAudioRoute,
         ),
         _RouteSpec(
           '/status',
           _AuthMode.bearer,
+          const {HttpMethod.get},
           (request, _) => _handlePrivateStatus(request),
         ),
       ];
@@ -691,7 +713,7 @@ class MimiCamServer {
   Future<void> _handleSessionStart(HttpRequest request) async {
     Object? json;
     try {
-      json = await _readJsonBody(request);
+      json = await _readJsonObjectBody(request);
     } catch (_) {
       request.response.statusCode = HttpStatus.badRequest;
       await request.response.close();
@@ -733,7 +755,7 @@ class MimiCamServer {
   Future<void> _handleSessionStop(HttpRequest request) async {
     Object? json;
     try {
-      json = await _readJsonBody(request);
+      json = await _readJsonObjectBody(request);
     } catch (_) {
       request.response.statusCode = HttpStatus.badRequest;
       await request.response.close();
@@ -905,6 +927,14 @@ class MimiCamServer {
     final body = await utf8.decoder.bind(request).join();
     if (body.trim().isEmpty) return null;
     return jsonDecode(body);
+  }
+
+  Future<Map<Object?, Object?>?> _readJsonObjectBody(
+      HttpRequest request) async {
+    final json = await _readJsonBody(request);
+    if (json == null) return null;
+    if (json is! Map) throw const FormatException('Expected JSON object');
+    return Map<Object?, Object?>.from(json);
   }
 
   Future<bool> _requireAuth(HttpRequest request) async {
@@ -1114,9 +1144,19 @@ class MimiCamServer {
 enum _AuthMode { none, bearer, streamToken }
 
 class _RouteSpec {
-  const _RouteSpec(this.path, this.authMode, this.handle);
+  const _RouteSpec(this.path, this.authMode, this.allowedMethods, this.handle);
 
   final String path;
   final _AuthMode authMode;
+  final Set<String> allowedMethods;
   final Future<void> Function(HttpRequest request, String? clientId) handle;
+
+  bool allowsMethod(String method) => allowedMethods.contains(method);
+}
+
+class HttpMethod {
+  const HttpMethod._();
+
+  static const get = 'GET';
+  static const post = 'POST';
 }
