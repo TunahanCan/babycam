@@ -95,13 +95,14 @@ void main() {
   test('rapor dillerinde UI metinleri İngilizce fallback kullanmaz', () {
     const allowedSameAsEnglish = {
       'clientRoleTitle',
+      'serverRoleTitle',
       'navQrIp',
       'temperatureHumidity',
       'turkishShort',
     };
 
     for (final entry in appUiTextCatalog.entries) {
-      for (final languageCode in ['tr', 'zh', 'es', 'fr', 'de', 'ar']) {
+      for (final languageCode in ['tr', 'zh', 'hi', 'es', 'fr', 'de', 'ar']) {
         if (allowedSameAsEnglish.contains(entry.key)) continue;
         final localized = AppStrings(Locale(languageCode)).ui(entry.key);
         expect(
@@ -152,15 +153,83 @@ void main() {
       ),
     };
 
-    expect(samples['tr'], contains('ağlama'));
+    expect(samples['tr'], contains('Ağlama'));
     expect(samples['zh'], contains('哭声'));
     expect(samples['es'], contains('llanto'));
     expect(samples['fr'], contains('pleurs'));
-    expect(samples['de'], contains('Weinsignal'));
+    expect(samples['de'], contains('Weinähnlicher'));
     expect(samples['ar'], contains('البكاء'));
     for (final entry in samples.entries) {
       expect(entry.value, isNot(contains('Crying signal')));
       expect(entry.value, isNot(contains('Stream is in')));
+    }
+  });
+
+  test('Almanca ve Arapça bildirim şablonları İngilizceye düşmez', () {
+    final german = AppStrings(const Locale('de'));
+    final arabic = AppStrings(const Locale('ar', 'SA'));
+    final samples = [
+      german.alertWebSocketDisconnected,
+      german.serverAlertLog('x'),
+      german.audioAlert('Ton erkannt', 82, 'Bitte prüfen.'),
+      german.parentCryAlert(
+        confidencePercent: 82,
+        ambientDeltaDb: 14.5,
+        cryBandPercent: 61,
+        calibrated: true,
+      ),
+      arabic.alertWebSocketDisconnected,
+      arabic.serverAlertLog('x'),
+      arabic.audioAlert('تم رصد صوت', 82, 'يرجى التحقق.'),
+      arabic.parentCryAlert(
+        confidencePercent: 82,
+        ambientDeltaDb: 14.5,
+        cryBandPercent: 61,
+        calibrated: true,
+      ),
+    ];
+
+    for (final message in samples) {
+      expect(message, isNot(contains('Alert WebSocket connection was lost')));
+      expect(message, isNot(contains('Server alert')));
+      expect(message, isNot(contains('Confidence')));
+      expect(message, isNot(contains('room-calibrated')));
+      expect(message, isNot(contains('..')));
+    }
+  });
+
+  test('desteklenen dillerde durum ve analiz metinleri fallback yapmaz', () {
+    final samples = {
+      'tr': AppStrings(const Locale('tr')).audioSummary(
+        dbfs: -22.4,
+        ambientDbfs: -37.1,
+        f0: '440 Hz',
+        centroidHz: 2100,
+        bandwidthHz: 1200,
+        zcr: 0.14,
+        entropy: 0.62,
+        cryPercent: 71,
+        moanPercent: 12,
+      ),
+      'zh': AppStrings(const Locale('zh')).cryLikeReason(', 基频 440 Hz', 2100),
+      'hi': AppStrings(const Locale('hi')).moanLikeReason(
+        ', मूल आवृत्ति 220 Hz',
+        900,
+      ),
+      'es': AppStrings(const Locale('es')).waitingForServer,
+      'fr': AppStrings(const Locale('fr')).serverActiveStatus('http://x'),
+      'de': AppStrings(const Locale('de')).clientActiveStatus,
+      'ar': AppStrings(const Locale('ar', 'QA')).serverAddressLabel,
+    };
+
+    for (final sample in samples.values) {
+      expect(sample, isNot(contains('unknown')));
+      expect(sample, isNot(contains('No sound')));
+      expect(sample, isNot(contains('Waiting for server')));
+      expect(sample, isNot(contains('Server is active')));
+      expect(sample, isNot(contains('Client mode is active')));
+      expect(sample, isNot(contains('Cry-like vocal sound')));
+      expect(sample, isNot(contains('Moan-like low-frequency')));
     }
   });
 
@@ -187,9 +256,9 @@ void main() {
       calibrated: true,
     );
 
-    expect(message, contains('Cry likelihood is high'));
-    expect(message, contains('14.5 dB above ambient'));
-    expect(message, contains('hunger'));
+    expect(message, contains('Baby may be crying'));
+    expect(message, contains('14.5 dB above the room level'));
+    expect(message, contains('feeding'));
     expect(message, contains('diaper'));
   });
 
@@ -210,8 +279,8 @@ void main() {
     );
 
     expect(first, isNot(second));
-    expect(first, contains('Cry likelihood'));
-    expect(second, contains('Baby sounds likely'));
+    expect(first, contains('Baby may be crying'));
+    expect(second, contains('A gentle room check'));
   });
 
   test('parent alert messages are localized for new languages', () {
@@ -231,12 +300,12 @@ void main() {
       ambientDeltaDb: 21.7,
     );
 
-    expect(hindi, contains('रोने की संभावना'));
+    expect(hindi, contains('बच्चा रो रहा'));
     expect(hindi, contains('डायपर'));
-    expect(spanish, contains('Movimiento detectado'));
-    expect(spanish, contains('posición del bebé'));
-    expect(french, contains('Son fort soudain détecté'));
-    expect(french, contains('source de bruit inattendue'));
+    expect(spanish, contains('movimiento suave'));
+    expect(spanish, contains('bebé esté cómodo'));
+    expect(french, contains('Brève hausse sonore'));
+    expect(french, contains('bébé est bien'));
   });
 
   test('episode alert helper messages are localized', () {
@@ -256,6 +325,6 @@ void main() {
     expect(english, contains('crying'));
     expect(english, contains('Weak'));
     expect(spanish, contains('sonido'));
-    expect(hindi, contains('रोने'));
+    expect(hindi, contains('बेचैनी'));
   });
 }

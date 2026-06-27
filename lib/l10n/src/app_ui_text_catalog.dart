@@ -123,12 +123,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
   },
   'parentDeviceDescription': {
     'tr':
-        'Aynı Wi-Fi içinde server bulunur, canlı yayın izlenir ve uyarılar bildirim olur.',
+        'Aynı Wi-Fi içinde bebek odası cihazı bulunur, canlı yayın izlenir ve uyarılar bildirim olur.',
     'en':
         'The server is found on the same Wi‑Fi, live video is watched, and alerts become notifications.',
     'zh': '在同一 Wi‑Fi 中找到婴儿房设备，可观看直播，提醒会变成通知。',
     'hi':
-        'उसी Wi‑Fi में server मिलता है, लाइव स्ट्रीम देखी जाती है और अलर्ट सूचना बनते हैं।',
+        'उसी Wi‑Fi में बच्चे के कमरे का डिवाइस मिलता है, लाइव स्ट्रीम देखी जाती है और अलर्ट सूचना बनते हैं।',
     'es':
         'Encuentra el dispositivo de la habitación en el mismo Wi‑Fi, mira el directo y recibe las alertas como notificaciones.',
     'fr':
@@ -191,7 +191,7 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'tr': 'EBEVEYN',
     'en': 'CLIENT',
     'zh': '客户端',
-    'hi': 'CLIENT',
+    'hi': 'अभिभावक',
     'es': 'CLIENTE',
     'fr': 'PARENT'
   },
@@ -199,7 +199,7 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'tr': 'SUNUCU',
     'en': 'SERVER',
     'zh': '服务器',
-    'hi': 'SERVER',
+    'hi': 'सर्वर',
     'es': 'SERVIDOR',
     'fr': 'SERVEUR'
   },
@@ -530,12 +530,15 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Choisissez d’abord une chambre'
   },
   'clientWatchOnlyPairedStream': {
-    'tr': 'Client izleme ekranı sadece eşleşmiş server yayınını gösterir.',
+    'tr':
+        'Ebeveyn izleme ekranı sadece eşleşmiş bebek odası yayınını gösterir.',
     'en': 'The Client watch screen only shows the paired Server stream.',
-    'zh': 'Client 观看屏幕只显示已配对 Server 的直播。',
-    'hi': 'Client देखने की स्क्रीन केवल पेयर Server की स्ट्रीम दिखाती है।',
-    'es': 'La pantalla Client solo muestra el directo del Server emparejado.',
-    'fr': 'L’écran Client montre uniquement le flux du Server appairé.'
+    'zh': '家长观看屏幕只显示已配对婴儿房设备的直播。',
+    'hi':
+        'अभिभावक देखने की स्क्रीन केवल पेयर बच्चे के कमरे की स्ट्रीम दिखाती है।',
+    'es':
+        'La pantalla de padres solo muestra el directo del cuarto emparejado.',
+    'fr': 'L’écran parent montre uniquement le direct de la chambre appairée.'
   },
   'liveAndAlertsParentText': {
     'tr': 'Canlı yayın ve son uyarılar ebeveyn cihazında takip edilir.',
@@ -571,13 +574,14 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'En attente du QR'
   },
   'onlyScannedServerConnects': {
-    'tr': 'Kendi kendine oda göstermeyecek; sadece taranan server bağlanır.',
+    'tr':
+        'Kendi kendine oda göstermeyecek; sadece taranan bebek odası cihazı bağlanır.',
     'en': 'It will not invent a room; only the scanned server will connect.',
-    'zh': '不会自动虚构房间；只会连接已扫描的 server。',
-    'hi': 'यह अपने-आप कमरा नहीं दिखाएगा; केवल स्कैन किया server जुड़ेगा।',
+    'zh': '不会自动虚构房间；只会连接已扫描的婴儿房设备。',
+    'hi': 'यह अपने-आप कमरा नहीं दिखाएगा; केवल स्कैन किया सर्वर डिवाइस जुड़ेगा।',
     'es':
-        'No mostrará una habitación inventada; solo conecta el server escaneado.',
-    'fr': 'Aucune chambre fictive ; seul le server scanné se connecte.'
+        'No mostrará una habitación inventada; solo conecta el dispositivo escaneado.',
+    'fr': 'Aucune chambre fictive ; seul l’appareil scanné se connecte.'
   },
   'liveWatchDashboard': {
     'tr': 'Canlı izleme dashboard',
@@ -702,16 +706,16 @@ const appUiTextCatalog = <String, Map<String, String>>{
   },
   'securityFingerprintMismatch': {
     'tr':
-        'Server güvenlik parmak izi eşleşmedi. QR’ı yenileyip tekrar deneyin.',
+        'Sunucu güvenlik parmak izi eşleşmedi. QR’ı yenileyip tekrar deneyin.',
     'en':
         'Server security fingerprint did not match. Refresh the QR and try again.',
-    'zh': 'Server 安全指纹不匹配。请刷新二维码后重试。',
+    'zh': '服务器安全指纹不匹配。请刷新二维码后重试。',
     'hi':
-        'Server सुरक्षा फिंगरप्रिंट मेल नहीं खाया। QR को रीफ़्रेश करके फिर कोशिश करें।',
+        'सर्वर सुरक्षा फिंगरप्रिंट मेल नहीं खाया। QR को रीफ़्रेश करके फिर कोशिश करें।',
     'es':
-        'La huella de seguridad del server no coincide. Actualiza el QR e inténtalo de nuevo.',
+        'La huella de seguridad del servidor no coincide. Actualiza el QR e inténtalo de nuevo.',
     'fr':
-        'L’empreinte de sécurité du server ne correspond pas. Actualisez le QR puis réessayez.'
+        'L’empreinte de sécurité du serveur ne correspond pas. Actualisez le QR puis réessayez.'
   },
   'invalidIpFormat': {
     'tr': 'IP formatı geçersiz. Örnek: 192.168.1.20:8080',
@@ -730,36 +734,36 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Échec de l’appairage par IP : {error}'
   },
   'serverNotFound': {
-    'tr': 'Server bulunamadı: {code}',
+    'tr': 'Sunucu bulunamadı: {code}',
     'en': 'Server not found: {code}',
-    'zh': '未找到 Server：{code}',
-    'hi': 'Server नहीं मिला: {code}',
-    'es': 'Server no encontrado: {code}',
-    'fr': 'Server introuvable : {code}'
+    'zh': '未找到服务器：{code}',
+    'hi': 'सर्वर नहीं मिला: {code}',
+    'es': 'Servidor no encontrado: {code}',
+    'fr': 'Serveur introuvable : {code}'
   },
   'invalidServerResponse': {
-    'tr': 'Geçersiz server yanıtı',
+    'tr': 'Geçersiz sunucu yanıtı',
     'en': 'Invalid server response',
-    'zh': 'Server 响应无效',
-    'hi': 'Server प्रतिक्रिया अमान्य है',
-    'es': 'Respuesta del server no válida',
-    'fr': 'Réponse server invalide'
+    'zh': '服务器响应无效',
+    'hi': 'सर्वर प्रतिक्रिया अमान्य है',
+    'es': 'Respuesta del servidor no válida',
+    'fr': 'Réponse du serveur invalide'
   },
   'missingPairingNonce': {
-    'tr': 'Server pairing nonce üretmedi',
+    'tr': 'Sunucu eşleşme nonce değerini üretmedi',
     'en': 'Server did not create a pairing nonce',
-    'zh': 'Server 未生成配对 nonce',
-    'hi': 'Server ने pairing nonce नहीं बनाया',
-    'es': 'El server no creó nonce de emparejamiento',
-    'fr': 'Le server n’a pas créé de nonce d’appairage'
+    'zh': '服务器未生成配对 nonce',
+    'hi': 'सर्वर ने pairing nonce नहीं बनाया',
+    'es': 'El servidor no creó el nonce de emparejamiento',
+    'fr': 'Le serveur n’a pas créé le nonce d’appairage'
   },
   'scanServerQrFirst': {
-    'tr': 'Önce server QR kodunu tara.',
+    'tr': 'Önce sunucu QR kodunu tara.',
     'en': 'Scan the Server QR code first.',
-    'zh': '请先扫描 Server 二维码。',
-    'hi': 'पहले Server QR कोड स्कैन करें।',
-    'es': 'Escanea primero el QR del Server.',
-    'fr': 'Scannez d’abord le QR du Server.'
+    'zh': '请先扫描服务器二维码。',
+    'hi': 'पहले सर्वर QR कोड स्कैन करें।',
+    'es': 'Escanea primero el QR del servidor.',
+    'fr': 'Scannez d’abord le QR du serveur.'
   },
   'latestStatusAndNotifications': {
     'tr': 'Son durum ve bildirimler',
@@ -770,14 +774,14 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Dernier état et alertes'
   },
   'parentEventsPriorityText': {
-    'tr': 'Ağlama, hareket ve sistem olayları anne ekranında öne çıkar.',
-    'en': 'Cry, motion, and system events stand out on the parent screen.',
-    'zh': '哭声、活动和系统事件会在家长屏幕突出显示。',
-    'hi': 'रोना, गतिविधि और सिस्टम घटनाएँ अभिभावक स्क्रीन पर प्रमुख दिखती हैं।',
+    'tr': 'Önemli ses, hareket ve sistem notları burada sakin şekilde görünür.',
+    'en': 'Important sound, motion, and system notes appear here calmly.',
+    'zh': '重要声音、活动和系统提示会在这里平静显示。',
+    'hi': 'ज़रूरी ध्वनि, हलचल और सिस्टम नोट यहाँ शांत ढंग से दिखते हैं।',
     'es':
-        'Llanto, movimiento y eventos del sistema destacan en la pantalla de padres.',
+        'Las notas importantes de sonido, movimiento y sistema aparecen aquí con calma.',
     'fr':
-        'Pleurs, mouvement et événements système ressortent sur l’écran parent.'
+        'Les notes importantes de son, mouvement et système apparaissent ici calmement.'
   },
   'waitingLatestStatus': {
     'tr': 'Son durum bekleniyor',
@@ -789,15 +793,16 @@ const appUiTextCatalog = <String, Map<String, String>>{
   },
   'pairedServerAlertAppears': {
     'tr':
-        'Eşleşmiş server uyarı gönderdiğinde en önemli durum burada görünecek.',
+        'Eşleşmiş bebek odası cihazı uyarı gönderdiğinde en önemli durum burada görünecek.',
     'en':
         'When the paired Server sends an alert, the most important status appears here.',
-    'zh': '已配对 Server 发送提醒时，最重要的状态会显示在这里。',
-    'hi': 'पेयर Server अलर्ट भेजेगा तो सबसे महत्वपूर्ण स्थिति यहाँ दिखेगी।',
+    'zh': '已配对婴儿房设备发送提醒时，最重要的状态会显示在这里。',
+    'hi':
+        'पेयर बच्चे के कमरे का डिवाइस अलर्ट भेजेगा तो सबसे महत्वपूर्ण स्थिति यहाँ दिखेगी।',
     'es':
-        'Cuando el Server emparejado envíe una alerta, el estado más importante aparecerá aquí.',
+        'Cuando el cuarto emparejado envíe una alerta, el estado más importante aparecerá aquí.',
     'fr':
-        'Quand le Server appairé enverra une alerte, l’état le plus important apparaîtra ici.'
+        'Quand la chambre appairée enverra une alerte, l’état le plus important apparaîtra ici.'
   },
   'parentDevicePreferences': {
     'tr': 'Ebeveyn cihazı tercihleri',
@@ -809,24 +814,24 @@ const appUiTextCatalog = <String, Map<String, String>>{
   },
   'noServerControlsText': {
     'tr':
-        'Bildirim ve izleme davranışı burada kalır; server portu veya yayın kontrolü yoktur.',
+        'Bildirim ve izleme davranışı burada kalır; sunucu portu veya yayın kontrolü yoktur.',
     'en':
         'Notification and watch behavior stays here; there are no server port or stream controls.',
-    'zh': '通知和观看行为在这里设置；没有 server 端口或直播控制。',
+    'zh': '通知和观看行为在这里设置；没有服务器端口或直播控制。',
     'hi':
-        'सूचना और देखने का व्यवहार यहाँ रहता है; server पोर्ट या स्ट्रीम नियंत्रण नहीं हैं।',
+        'सूचना और देखने का व्यवहार यहाँ रहता है; सर्वर पोर्ट या स्ट्रीम नियंत्रण नहीं हैं।',
     'es':
-        'Aquí quedan notificaciones y vista; no hay puerto server ni control del directo.',
+        'Aquí quedan notificaciones y vista; no hay puerto de servidor ni control del directo.',
     'fr':
-        'Notifications et visionnage restent ici ; pas de port server ni contrôle de flux.'
+        'Notifications et visionnage restent ici ; pas de port serveur ni contrôle de flux.'
   },
   'clientSettings': {
-    'tr': 'Client ayarları',
+    'tr': 'Ebeveyn cihazı ayarları',
     'en': 'Client settings',
-    'zh': 'Client 设置',
-    'hi': 'Client सेटिंग्स',
-    'es': 'Ajustes Client',
-    'fr': 'Réglages Client'
+    'zh': '家长设备设置',
+    'hi': 'अभिभावक डिवाइस सेटिंग्स',
+    'es': 'Ajustes del dispositivo padre/madre',
+    'fr': 'Réglages de l’appareil parent'
   },
   'clientSettingsPlaceholder': {
     'tr': 'Yerel bildirim, reconnect ve viewer tercihleri burada yönetilecek.',
@@ -1001,19 +1006,19 @@ const appUiTextCatalog = <String, Map<String, String>>{
         'Manage noise, motion, notifications, and integrations with simple controls.',
     'zh': '用简单控制管理噪声、活动、通知和集成。',
     'hi':
-        'सरल नियंत्रणों से शोर, गतिविधि, सूचनाएँ और integrations प्रबंधित करें।',
+        'सरल नियंत्रणों से शोर, गतिविधि, सूचनाएँ और जोड़ विकल्प प्रबंधित करें।',
     'es':
         'Gestiona ruido, movimiento, notificaciones e integraciones con controles simples.',
     'fr':
         'Gérez bruit, mouvement, notifications et intégrations avec des contrôles simples.'
   },
   'notificationCooldown': {
-    'tr': 'Bildirim cooldown',
+    'tr': 'Bildirim aralığı',
     'en': 'Notification cooldown',
     'zh': '通知冷却',
-    'hi': 'सूचना cooldown',
+    'hi': 'सूचना विराम',
     'es': 'Pausa de notificaciones',
-    'fr': 'Cooldown des notifications'
+    'fr': 'Pause des notifications'
   },
   'repeatedAlertsLimit': {
     'tr': 'Tekrarlayan uyarıları sınırlar.',
@@ -1059,7 +1064,7 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'tr': 'Entegrasyonlar',
     'en': 'Integrations',
     'zh': '集成',
-    'hi': 'इंटीग्रेशन',
+    'hi': 'जोड़ विकल्प',
     'es': 'Integraciones',
     'fr': 'Intégrations'
   },
@@ -1125,12 +1130,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
         'Si le Wi‑Fi faiblit, FPS/qualité vidéo baissent ; audio et alertes restent prioritaires.'
   },
   'autoQualityModeText': {
-    'tr': 'Ağ ölçülüyor; server kaliteyi otomatik ayarlıyor.',
+    'tr': 'Ağ ölçülüyor; sunucu kaliteyi otomatik ayarlıyor.',
     'en': 'Network is measured; the Server adjusts quality automatically.',
-    'zh': '正在测量网络；Server 会自动调整质量。',
-    'hi': 'नेटवर्क मापा जा रहा है; Server गुणवत्ता अपने-आप समायोजित करता है।',
-    'es': 'Se mide la red; el Server ajusta la calidad automáticamente.',
-    'fr': 'Le réseau est mesuré ; le Server ajuste la qualité automatiquement.'
+    'zh': '正在测量网络；服务器会自动调整质量。',
+    'hi': 'नेटवर्क मापा जा रहा है; सर्वर गुणवत्ता अपने-आप समायोजित करता है।',
+    'es': 'Se mide la red; el servidor ajusta la calidad automáticamente.',
+    'fr': 'Le réseau est mesuré ; le serveur ajuste la qualité automatiquement.'
   },
   'automaticQuality': {
     'tr': 'Otomatik kalite',
@@ -1141,12 +1146,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Qualité automatique'
   },
   'autoQualityDescription': {
-    'tr': 'Server eski/yeni cihaz ve Wi‑Fi durumuna göre profili seçer.',
+    'tr': 'Sunucu cihaz ve Wi‑Fi durumuna göre profili seçer.',
     'en': 'The Server chooses a profile based on device age and Wi‑Fi state.',
-    'zh': 'Server 会根据设备新旧和 Wi‑Fi 状态选择配置。',
-    'hi': 'Server डिवाइस और Wi‑Fi स्थिति के आधार पर प्रोफ़ाइल चुनता है।',
-    'es': 'El Server elige perfil según dispositivo y estado Wi‑Fi.',
-    'fr': 'Le Server choisit un profil selon l’appareil et l’état Wi‑Fi.'
+    'zh': '服务器会根据设备新旧和 Wi‑Fi 状态选择配置。',
+    'hi': 'सर्वर डिवाइस और Wi‑Fi स्थिति के आधार पर प्रोफ़ाइल चुनता है।',
+    'es': 'El servidor elige perfil según dispositivo y estado Wi‑Fi.',
+    'fr': 'Le serveur choisit un profil selon l’appareil et l’état Wi‑Fi.'
   },
   'audioMetric': {
     'tr': 'Ses: {value}',
@@ -1200,7 +1205,7 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'tr': 'Çok iyi',
     'en': 'Excellent',
     'zh': '很好',
-    'hi': 'बहुत अच्छा',
+    'hi': 'बहुत अच्छी',
     'es': 'Excelente',
     'fr': 'Très bon'
   },
@@ -1208,7 +1213,7 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'tr': 'İyi',
     'en': 'Good',
     'zh': '良好',
-    'hi': 'अच्छा',
+    'hi': 'अच्छी',
     'es': 'Buena',
     'fr': 'Bonne'
   },
@@ -1283,33 +1288,33 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'État du service'
   },
   'serviceStatusSubtitle': {
-    'tr': 'Kamera, mikrofon ve WebSocket server alanında izlenir.',
+    'tr': 'Kamera, mikrofon ve WebSocket sunucu alanında izlenir.',
     'en': 'Camera, microphone, and WebSocket are monitored in the Server area.',
-    'zh': '摄像头、麦克风和 WebSocket 在 Server 区域监控。',
-    'hi': 'कैमरा, माइक्रोफ़ोन और WebSocket Server क्षेत्र में देखे जाते हैं।',
-    'es': 'Cámara, micrófono y WebSocket se vigilan en el área Server.',
-    'fr': 'Caméra, micro et WebSocket sont suivis dans la zone Server.'
+    'zh': '摄像头、麦克风和 WebSocket 在服务器区域监控。',
+    'hi': 'कैमरा, माइक्रोफ़ोन और WebSocket सर्वर क्षेत्र में देखे जाते हैं।',
+    'es': 'Cámara, micrófono y WebSocket se vigilan en el área del servidor.',
+    'fr': 'Caméra, micro et WebSocket sont suivis dans la zone serveur.'
   },
   'serverSettings': {
-    'tr': 'Server ayarları',
+    'tr': 'Sunucu ayarları',
     'en': 'Server settings',
-    'zh': 'Server 设置',
-    'hi': 'Server सेटिंग्स',
-    'es': 'Ajustes Server',
-    'fr': 'Réglages Server'
+    'zh': '服务器设置',
+    'hi': 'सर्वर सेटिंग्स',
+    'es': 'Ajustes del servidor',
+    'fr': 'Réglages du serveur'
   },
   'serverSettingsSubtitle': {
     'tr':
-        'Eşikler, cooldown ve teknik davranış yalnızca bebek odası cihazını etkiler.',
+        'Eşikler, bildirim aralığı ve teknik davranış yalnızca bebek odası cihazını etkiler.',
     'en':
         'Thresholds, cooldown, and technical behavior affect only the baby room device.',
     'zh': '阈值、冷却和技术行为只影响婴儿房设备。',
     'hi':
-        'सीमाएँ, cooldown और तकनीकी व्यवहार केवल बच्चे के कमरे के डिवाइस को प्रभावित करते हैं।',
+        'सीमाएँ, सूचना विराम और तकनीकी व्यवहार केवल बच्चे के कमरे के डिवाइस को प्रभावित करते हैं।',
     'es':
         'Umbrales, pausas y comportamiento técnico solo afectan al dispositivo de la habitación.',
     'fr':
-        'Seuils, cooldown et comportement technique n’affectent que l’appareil de la chambre.'
+        'Seuils, pause de notifications et comportement technique n’affectent que l’appareil de la chambre.'
   },
   'phaseStopped': {
     'tr': 'Durdu',
@@ -1519,12 +1524,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Micro'
   },
   'clientCount': {
-    'tr': 'Client sayısı',
+    'tr': 'Ebeveyn cihazı sayısı',
     'en': 'Client count',
-    'zh': 'Client 数量',
-    'hi': 'Client संख्या',
-    'es': 'Número de Client',
-    'fr': 'Nombre de Client'
+    'zh': '客户端数量',
+    'hi': 'क्लाइंट संख्या',
+    'es': 'Número de clientes',
+    'fr': 'Nombre de clients'
   },
   'active': {
     'tr': 'Aktif',
@@ -1551,12 +1556,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Désactivé'
   },
   'eventClientsCount': {
-    'tr': '{count} event client',
+    'tr': '{count} olay bağlantısı',
     'en': '{count} event client(s)',
-    'zh': '{count} 个事件 client',
-    'hi': '{count} event client',
-    'es': '{count} client de eventos',
-    'fr': '{count} client(s) événement'
+    'zh': '{count} 个事件连接',
+    'hi': '{count} घटना कनेक्शन',
+    'es': '{count} conexión de eventos',
+    'fr': '{count} connexion événement'
   },
   'connectedCount': {
     'tr': '{count} bağlı',
@@ -1997,92 +2002,92 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Avertissement',
   },
   'cryDetectedTitle': {
-    'tr': 'Ağlama algılandı',
-    'en': 'Cry detected',
-    'zh': '检测到哭声',
-    'hi': 'रोना मिला',
-    'es': 'Llanto detectado',
-    'fr': 'Pleurs détectés',
+    'tr': 'Ağlama sesi',
+    'en': 'Crying sound',
+    'zh': '哭声提示',
+    'hi': 'रोने की आवाज़',
+    'es': 'Sonido de llanto',
+    'fr': 'Son de pleurs',
   },
   'cryDetectedText': {
-    'tr': 'Bebeğinizin ağlaması algılandı.',
-    'en': 'Your baby crying was detected.',
-    'zh': '检测到宝宝哭声。',
-    'hi': 'आपके बच्चे के रोने का संकेत मिला।',
-    'es': 'Se detectó el llanto de tu bebé.',
-    'fr': 'Les pleurs de votre bébé ont été détectés.',
+    'tr': 'Bebeğinizden ağlama benzeri bir ses geldi.',
+    'en': 'A cry-like sound came from the baby room.',
+    'zh': '宝宝房传来类似哭声。',
+    'hi': 'बच्चे के कमरे से रोने जैसी आवाज़ आई।',
+    'es': 'Llegó un sonido parecido al llanto desde la habitación.',
+    'fr': 'Un son proche de pleurs vient de la chambre.',
   },
   'motionDetectedTitle': {
-    'tr': 'Hareket algılandı',
-    'en': 'Motion detected',
-    'zh': '检测到活动',
-    'hi': 'हलचल मिली',
-    'es': 'Movimiento detectado',
-    'fr': 'Mouvement détecté',
+    'tr': 'Hareket notu',
+    'en': 'Motion note',
+    'zh': '活动提示',
+    'hi': 'हलचल नोट',
+    'es': 'Nota de movimiento',
+    'fr': 'Note de mouvement',
   },
   'motionDetectedText': {
-    'tr': 'Bebek odasında hareket algılandı.',
-    'en': 'Motion was detected in the baby room.',
-    'zh': '宝宝房检测到活动。',
-    'hi': 'बच्चे के कमरे में हलचल मिली।',
-    'es': 'Se detectó movimiento en la habitación del bebé.',
-    'fr': 'Un mouvement a été détecté dans la chambre du bébé.',
+    'tr': 'Bebek odasında hafif bir hareket fark edildi.',
+    'en': 'Gentle movement was noticed in the baby room.',
+    'zh': '宝宝房里注意到轻微活动。',
+    'hi': 'बच्चे के कमरे में हल्की हलचल दिखी।',
+    'es': 'Se notó un movimiento suave en la habitación.',
+    'fr': 'Un léger mouvement a été remarqué dans la chambre.',
   },
   'temperatureWarningTitle': {
-    'tr': 'Sıcaklık uyarısı',
-    'en': 'Temperature warning',
-    'zh': '温度警告',
-    'hi': 'तापमान चेतावनी',
-    'es': 'Alerta de temperatura',
-    'fr': 'Alerte température',
+    'tr': 'Sıcaklık kontrolü',
+    'en': 'Temperature check',
+    'zh': '温度检查',
+    'hi': 'तापमान जाँच',
+    'es': 'Revisión de temperatura',
+    'fr': 'Contrôle température',
   },
   'temperatureWarningText': {
-    'tr': 'Oda sıcaklığı 28.0 °C’ye yükseldi.',
-    'en': 'Room temperature rose to 28.0 °C.',
-    'zh': '房间温度升至 28.0 °C。',
-    'hi': 'कमरे का तापमान 28.0 °C तक बढ़ गया।',
-    'es': 'La temperatura de la habitación subió a 28.0 °C.',
-    'fr': 'La température de la chambre est montée à 28,0 °C.',
+    'tr': 'Oda sıcaklığı biraz yükseldi; konforu kontrol edin.',
+    'en': 'Room temperature is a little higher; check comfort.',
+    'zh': '房间温度略高；请确认舒适度。',
+    'hi': 'कमरे का तापमान थोड़ा बढ़ा है; आराम जाँचें।',
+    'es': 'La temperatura subió un poco; revisa la comodidad.',
+    'fr': 'La température a un peu monté ; vérifiez le confort.',
   },
   'connectionRenewedTitle': {
-    'tr': 'Bağlantı yenilendi',
-    'en': 'Connection renewed',
-    'zh': '连接已恢复',
-    'hi': 'कनेक्शन नवीनीकृत',
-    'es': 'Conexión renovada',
-    'fr': 'Connexion renouvelée',
+    'tr': 'Bağlantı iyi',
+    'en': 'Connection is good',
+    'zh': '连接正常',
+    'hi': 'कनेक्शन ठीक है',
+    'es': 'Conexión correcta',
+    'fr': 'Connexion correcte',
   },
   'connectionRenewedText': {
-    'tr': 'Bebek odası cihazı çevrimiçi.',
-    'en': 'The baby room device is online.',
-    'zh': '宝宝房设备已在线。',
-    'hi': 'बच्चे के कमरे का डिवाइस ऑनलाइन है।',
-    'es': 'El dispositivo de la habitación está en línea.',
-    'fr': 'L’appareil de la chambre est en ligne.',
+    'tr': 'Bebek odası cihazı yeniden düzenli görünüyor.',
+    'en': 'The baby room device looks steady again.',
+    'zh': '宝宝房设备看起来已恢复稳定。',
+    'hi': 'बच्चे के कमरे का डिवाइस फिर स्थिर दिख रहा है।',
+    'es': 'El dispositivo de la habitación vuelve a verse estable.',
+    'fr': 'L’appareil de la chambre semble stable à nouveau.',
   },
   'humidityNormalTitle': {
-    'tr': 'Nem seviyesi normal',
-    'en': 'Humidity level normal',
-    'zh': '湿度正常',
-    'hi': 'नमी स्तर सामान्य',
-    'es': 'Humedad normal',
-    'fr': 'Humidité normale',
+    'tr': 'Nem dengede',
+    'en': 'Humidity is steady',
+    'zh': '湿度稳定',
+    'hi': 'नमी स्थिर है',
+    'es': 'Humedad estable',
+    'fr': 'Humidité stable',
   },
   'humidityNormalText': {
-    'tr': 'Oda nem seviyesi %45.',
-    'en': 'Room humidity is 45%.',
-    'zh': '房间湿度为 45%。',
-    'hi': 'कमरे की नमी 45% है।',
-    'es': 'La humedad de la habitación es 45%.',
-    'fr': 'L’humidité de la chambre est de 45 %.',
+    'tr': 'Oda havası beklenen aralıkta görünüyor.',
+    'en': 'Room air looks within the expected range.',
+    'zh': '房间空气看起来在预期范围内。',
+    'hi': 'कमरे की हवा अपेक्षित सीमा में दिख रही है।',
+    'es': 'El aire de la habitación está dentro de lo esperado.',
+    'fr': 'L’air de la chambre semble dans la plage attendue.',
   },
   'notificationsManageText': {
-    'tr': 'Uyarı ve sistem bildirimlerini yönetin.',
-    'en': 'Manage alert and system notifications.',
-    'zh': '管理提醒和系统通知。',
-    'hi': 'अलर्ट और सिस्टम सूचनाएँ प्रबंधित करें।',
-    'es': 'Gestiona alertas y notificaciones del sistema.',
-    'fr': 'Gérez les alertes et notifications système.',
+    'tr': 'Bildirimlerin ne zaman ve nasıl görüneceğini ayarlayın.',
+    'en': 'Choose when and how notifications appear.',
+    'zh': '选择通知何时以及如何显示。',
+    'hi': 'सूचनाएँ कब और कैसे दिखें, यह चुनें।',
+    'es': 'Elige cuándo y cómo aparecen las notificaciones.',
+    'fr': 'Choisissez quand et comment les notifications apparaissent.',
   },
   'languageSelectText': {
     'tr': 'Uygulama dilini seçin.',
@@ -2110,16 +2115,16 @@ const appUiTextCatalog = <String, Map<String, String>>{
   },
   'serverSettingsHiddenText': {
     'tr':
-        'Sunucu ayarları bu cihazda gösterilmez. Sunucu yönetimi için server cihazını kullanın.',
+        'Sunucu ayarları bu cihazda gösterilmez. Sunucu yönetimi için bebek odası cihazını kullanın.',
     'en':
         'Server settings are not shown on this device. Use the server device to manage them.',
-    'zh': '此设备不显示 Server 设置。请使用 Server 设备进行管理。',
+    'zh': '此设备不显示服务器设置。请使用服务器设备进行管理。',
     'hi':
-        'इस डिवाइस पर Server सेटिंग्स नहीं दिखतीं। प्रबंधन के लिए Server डिवाइस इस्तेमाल करें।',
+        'इस डिवाइस पर सर्वर सेटिंग्स नहीं दिखतीं। प्रबंधन के लिए सर्वर डिवाइस इस्तेमाल करें।',
     'es':
-        'Los ajustes del Server no se muestran en este dispositivo. Usa el dispositivo Server para gestionarlos.',
+        'Los ajustes del servidor no se muestran en este dispositivo. Usa el dispositivo servidor para gestionarlos.',
     'fr':
-        'Les réglages Server ne sont pas affichés sur cet appareil. Utilisez l’appareil Server pour les gérer.',
+        'Les réglages du serveur ne sont pas affichés sur cet appareil. Utilisez l’appareil serveur pour les gérer.',
   },
   'stopLiveWatch': {
     'tr': 'Canlı İzlemeyi Durdur',

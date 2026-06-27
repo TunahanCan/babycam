@@ -21,12 +21,14 @@ class ClientHomeScreen extends StatefulWidget {
     required this.activeRole,
     required this.onRoleSelected,
     this.switchingRole = false,
+    this.initialTab = 0,
   });
 
   final ClientRuntime runtime;
   final AppRole activeRole;
   final ValueChanged<AppRole> onRoleSelected;
   final bool switchingRole;
+  final int initialTab;
 
   @override
   State<ClientHomeScreen> createState() => _ClientHomeScreenState();
@@ -34,7 +36,13 @@ class ClientHomeScreen extends StatefulWidget {
 
 class _ClientHomeScreenState extends State<ClientHomeScreen> {
   final _manualIpController = TextEditingController();
-  int _tab = 0;
+  late int _tab;
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = widget.initialTab.clamp(0, 3);
+  }
 
   @override
   void dispose() {

@@ -24,8 +24,11 @@ class ClientCompositionRoot {
     final streamHealth = ClientStreamHealthState();
     final streams = StreamSessionController(healthState: streamHealth);
     final networkQuality = NetworkQualityMonitor(healthState: streamHealth);
-    final alerts = ClientAlertListener(healthState: streamHealth);
     final notifications = ClientNotificationService();
+    final alerts = ClientAlertListener(
+      healthState: streamHealth,
+      onAlert: (alert) => notifications.showAlert(alert),
+    );
     return ClientRuntime(
       pair: (payload) async {
         final session = await pairingClient.pair(payload);

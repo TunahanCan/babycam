@@ -20,6 +20,7 @@ const _scene = String.fromEnvironment('REPORT_SCENE', defaultValue: 'role');
 const _localeCode = String.fromEnvironment('REPORT_LOCALE', defaultValue: 'tr');
 const _localeCountry =
     String.fromEnvironment('REPORT_LOCALE_COUNTRY', defaultValue: '');
+const _reportTab = int.fromEnvironment('REPORT_TAB', defaultValue: 0);
 
 Locale _reportLocale() => _localeCountry.isEmpty
     ? const Locale(_localeCode)
@@ -43,6 +44,7 @@ Future<Widget> _buildScene(String scene) async {
           runtime: ClientRuntime(pair: (_) async => _session()),
           activeRole: AppRole.client,
           onRoleSelected: (_) {},
+          initialTab: _reportTab,
         ),
       );
     case 'client_paired':
@@ -58,6 +60,7 @@ Future<Widget> _buildScene(String scene) async {
           runtime: runtime,
           activeRole: AppRole.client,
           onRoleSelected: (_) {},
+          initialTab: _reportTab,
         ),
       );
     case 'watch':
@@ -69,7 +72,7 @@ Future<Widget> _buildScene(String scene) async {
       await runtime.pairWithServer(_payload());
       return _ThemedScene(
         theme: MimiCamTheme.clientTheme(),
-        child: WatchScreen(runtime: runtime),
+        child: WatchScreen(runtime: runtime, initialTab: _reportTab),
       );
     case 'qr_scanner':
       return const _QrScannerReportScene();
@@ -93,6 +96,7 @@ Future<Widget> _buildScene(String scene) async {
           config: ConfigurationService(preferences),
           activeRole: AppRole.server,
           onRoleSelected: (_) {},
+          initialTab: _reportTab,
         ),
       );
     case 'role':

@@ -75,8 +75,8 @@ void main() {
 
       final event = engine.onAudioResult(fakeAudioResult())!;
 
-      expect(event.message, contains('哭声可能性较高'));
-      expect(event.message, contains('请安全查看房间'));
+      expect(event.message, contains('宝宝可能在哭'));
+      expect(event.message, contains('请平静查看'));
       expect(event.message, isNot(contains('诊断')));
       expect(event.metadata['confidencePercent'], 80);
       expect(event.metadata['cryBandPercent'], 60);
@@ -174,7 +174,7 @@ void main() {
       final event = engine.onMotionResult(fakeMotionResult())!;
 
       expect(event.message, contains('Görüntünün yaklaşık %10'));
-      expect(event.message, contains('pozisyonunu'));
+      expect(event.message, contains('rahat pozisyonda'));
       expect(event.metadata['activeAreaPercent'], 10);
     });
   });

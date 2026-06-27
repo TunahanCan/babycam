@@ -28,8 +28,9 @@ LOCALES = [
     ('es', 'Español', 'Capturas en español'),
     ('fr', 'Français', 'Captures en français'),
     ('de', 'Deutsch', 'Deutsche Screenshots'),
-    ('ar_SA', 'العربية - السعودية', 'لقطات شاشة بالعربية للسعودية'),
-    ('ar_QA', 'العربية - قطر', 'لقطات شاشة بالعربية لقطر'),
+    ('hi', 'Hintçe', 'Hintçe ekran görüntüleri'),
+    ('ar_SA', 'Arapça - Suudi Arabistan', 'Arapça (Suudi Arabistan) ekran görüntüleri'),
+    ('ar_QA', 'Arapça - Katar', 'Arapça (Katar) ekran görüntüleri'),
 ]
 
 SCREEN_META = [
@@ -72,7 +73,7 @@ USE_CASES = [
     ),
     (
         'UC-05 Çok dilli kullanım',
-        'Aynı ana ekranlar Türkçe, Çince, İngilizce, İspanyolca, Fransızca, Almanca ve Arapça locale ile doğrulanır.',
+        'Aynı ana ekranlar Türkçe, Çince, İngilizce, İspanyolca, Fransızca, Almanca, Hintçe ve Arapça locale ile doğrulanır.',
         'All localized pages',
     ),
 ]
@@ -177,13 +178,13 @@ draw_text(
 draw_text(
     draw,
     (M, 650),
-    'Türkçe, Çince, İngilizce, İspanyolca, Fransızca, Almanca ve Arapça (Suudi Arabistan/Katar) locale ile LG H870 Android cihazından alınan ana ekran görüntüleri ve ürün use-case özeti.',
+    'Türkçe, Çince, İngilizce, İspanyolca, Fransızca, Almanca, Hintçe ve Arapça (Suudi Arabistan/Katar) locale ile LG H870 Android cihazından alınan ana ekran görüntüleri ve ürün use-case özeti.',
     F['body'],
     (210, 226, 242),
     W - 2 * M,
 )
 y = 820
-for label, color in [('8 locale', CYAN), ('112 ekran', BLUE), ('5 use-case', VIOLET), ('LG H870', CYAN)]:
+for label, color in [('9 locale', CYAN), ('126 ekran', BLUE), ('5 use-case', VIOLET), ('LG H870', CYAN)]:
     width = int(draw.textlength(label, font=F['smallb'])) + 44
     rounded(draw, (M, y, M + width, y + 48), 24, color)
     draw.text((M + 22, y + 12), label, font=F['smallb'], fill=INK)

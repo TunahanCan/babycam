@@ -7,20 +7,22 @@ import '../../shared/presentation/media_profile_text.dart';
 import '../client_runtime.dart';
 
 class WatchScreen extends StatefulWidget {
-  const WatchScreen({super.key, required this.runtime});
+  const WatchScreen({super.key, required this.runtime, this.initialTab = 0});
 
   final ClientRuntime runtime;
+  final int initialTab;
 
   @override
   State<WatchScreen> createState() => _WatchScreenState();
 }
 
 class _WatchScreenState extends State<WatchScreen> {
-  int _tab = 0;
+  late int _tab;
 
   @override
   void initState() {
     super.initState();
+    _tab = widget.initialTab.clamp(0, 2);
     widget.runtime.startWatching().catchError((Object _) {});
   }
 

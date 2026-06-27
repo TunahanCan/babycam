@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import time
-import os
 from pathlib import Path
 
 from PIL import Image
@@ -14,41 +14,23 @@ ADB = Path('/home/tnnhn/Android/Sdk/platform-tools/adb')
 DEVICE = 'LGH8708da5c4b'
 TARGET = 'tool/screen_report_device_app.dart'
 
-LOCALES = ('tr', 'zh', 'en', 'es', 'fr', 'de', 'ar_SA', 'ar_QA')
-NAV_Y = 2600
-CLIENT_NAV = (180, 540, 900, 1260)
-WATCH_NAV = (240, 720, 1200)
+LOCALES = ('tr', 'zh', 'en', 'es', 'fr', 'de', 'hi', 'ar_SA', 'ar_QA')
 
 CAPTURES = (
-    ('role', (('01_role_selection.png', None),)),
-    (
-        'client_unpaired',
-        (
-            ('02_client_watch_empty.png', None),
-            ('03_client_find_pair.png', CLIENT_NAV[1]),
-            ('04_client_notifications.png', CLIENT_NAV[2]),
-            ('05_client_settings.png', CLIENT_NAV[3]),
-        ),
-    ),
-    ('client_paired', (('06_client_watch_paired.png', None),)),
-    ('qr_scanner', (('07_client_qr_scanner.png', None),)),
-    (
-        'watch',
-        (
-            ('08_watch_live.png', None),
-            ('09_watch_history.png', WATCH_NAV[1]),
-            ('10_watch_settings.png', WATCH_NAV[2]),
-        ),
-    ),
-    (
-        'server',
-        (
-            ('11_server_stream.png', None),
-            ('12_server_qr_ip.png', CLIENT_NAV[1]),
-            ('13_server_services.png', CLIENT_NAV[2]),
-            ('14_server_settings.png', CLIENT_NAV[3]),
-        ),
-    ),
+    ('role', '01_role_selection.png', 0),
+    ('client_unpaired', '02_client_watch_empty.png', 0),
+    ('client_unpaired', '03_client_find_pair.png', 1),
+    ('client_unpaired', '04_client_notifications.png', 2),
+    ('client_unpaired', '05_client_settings.png', 3),
+    ('client_paired', '06_client_watch_paired.png', 0),
+    ('qr_scanner', '07_client_qr_scanner.png', 0),
+    ('watch', '08_watch_live.png', 0),
+    ('watch', '09_watch_history.png', 1),
+    ('watch', '10_watch_settings.png', 2),
+    ('server', '11_server_stream.png', 0),
+    ('server', '12_server_qr_ip.png', 1),
+    ('server', '13_server_services.png', 2),
+    ('server', '14_server_settings.png', 3),
 )
 
 
@@ -56,7 +38,7 @@ def run(command: list[str], *, cwd: Path = ROOT, stdout=None) -> None:
     subprocess.run(command, cwd=cwd, check=True, stdout=stdout)
 
 
-def launch(scene: str, locale: str) -> None:
+def launch(scene: str, locale: str, tab: int) -> None:
     run([str(ADB), '-s', DEVICE, 'shell', 'input', 'keyevent', 'KEYCODE_WAKEUP'])
     run([str(ADB), '-s', DEVICE, 'shell', 'wm', 'dismiss-keyguard'])
     parts = locale.split('_', maxsplit=1)
@@ -75,20 +57,17 @@ def launch(scene: str, locale: str) -> None:
         f'REPORT_LOCALE={language_code}',
         '--dart-define',
         f'REPORT_LOCALE_COUNTRY={country_code}',
+        '--dart-define',
+        f'REPORT_TAB={tab}',
         '--no-pub',
         '--no-resident',
     ]
-    print(f'launch {locale}/{scene}', flush=True)
+    print(f'launch {locale}/{scene}/tab-{tab}', flush=True)
     LOG.parent.mkdir(parents=True, exist_ok=True)
     with LOG.open('a', encoding='utf-8') as log:
-        log.write(f'\n=== {locale}/{scene} ===\n')
+        log.write(f'\n=== {locale}/{scene}/tab-{tab} ===\n')
         subprocess.run(command, cwd=ROOT, check=True, stdout=log, stderr=subprocess.STDOUT)
     time.sleep(25)
-
-
-def tap(x: int) -> None:
-    run([str(ADB), '-s', DEVICE, 'shell', 'input', 'tap', str(x), str(NAV_Y)])
-    time.sleep(1.6)
 
 
 def is_probably_splash(path: Path) -> bool:
@@ -127,14 +106,11 @@ def main() -> None:
     scenes = set(scene_filter.split(',')) if scene_filter else None
     for locale in locales:
         locale_dir = OUT / locale
-        for scene, captures in CAPTURES:
+        for scene, filename, tab in CAPTURES:
             if scenes is not None and scene not in scenes:
                 continue
-            launch(scene, locale)
-            for filename, tap_x in captures:
-                if tap_x is not None:
-                    tap(tap_x)
-                screenshot(locale_dir / filename)
+            launch(scene, locale, tab)
+            screenshot(locale_dir / filename)
 
 
 if __name__ == '__main__':

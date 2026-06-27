@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import '../../../core/mimicam_protocol.dart';
+import '../../../core/protocol/alert_event_dto.dart';
 import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
@@ -10,11 +13,13 @@ class ClientAlertListener {
   ClientAlertListener({
     this.healthState,
     this.reconnectDelay = const Duration(seconds: 1),
+    this.onAlert,
     HttpClient Function(PairingSession session)? clientFactory,
   }) : _clientFactory = clientFactory;
 
   final ClientStreamHealthState? healthState;
   final Duration reconnectDelay;
+  final void Function(AlertEventDto alert)? onAlert;
   final HttpClient Function(PairingSession session)? _clientFactory;
   bool isListening = false;
   WebSocket? _socket;
@@ -46,7 +51,7 @@ class ClientAlertListener {
     _hadUnexpectedDisconnect = false;
     healthState?.markWsConnected();
     _socketSubscription = socket.listen(
-      (_) {},
+      _handleSocketMessage,
       onError: (_) => _handleSocketClosed(socket),
       onDone: () => _handleSocketClosed(socket),
       cancelOnError: false,
@@ -78,5 +83,43 @@ class ClientAlertListener {
       _hadUnexpectedDisconnect = true;
       healthState?.markWsDisconnected();
     }
+  }
+
+  void _handleSocketMessage(dynamic data) {
+    final alert = _parseAlert(data);
+    if (alert != null) onAlert?.call(alert);
+  }
+
+  AlertEventDto? _parseAlert(dynamic data) {
+    try {
+      if (data is String) {
+        final decoded = jsonDecode(data);
+        if (decoded is Map<String, Object?>) {
+          return AlertEventDto.fromJson(decoded);
+        }
+        if (decoded is Map) {
+          return AlertEventDto.fromJson(Map<String, Object?>.from(decoded));
+        }
+      }
+      if (data is List<int> &&
+          data.isNotEmpty &&
+          data.first == MimiCamProtocol.packetAlertText) {
+        final message = utf8.decode(data.skip(1).toList());
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+        return AlertEventDto(
+          id: 'legacy-$nowMs',
+          type: 'legacyAlert',
+          severity: 'info',
+          messageKey: 'legacyAlert',
+          message: message,
+          score: 0,
+          timestampMs: nowMs,
+          sourceDeviceId: 'server',
+        );
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
   }
 }

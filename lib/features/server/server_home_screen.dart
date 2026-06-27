@@ -20,6 +20,7 @@ class ServerHomeScreen extends StatefulWidget {
     required this.activeRole,
     required this.onRoleSelected,
     this.switchingRole = false,
+    this.initialTab = 0,
   });
 
   final ServerRuntime runtime;
@@ -27,6 +28,7 @@ class ServerHomeScreen extends StatefulWidget {
   final AppRole activeRole;
   final ValueChanged<AppRole> onRoleSelected;
   final bool switchingRole;
+  final int initialTab;
 
   @override
   State<ServerHomeScreen> createState() => _ServerHomeScreenState();
@@ -39,12 +41,16 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
   late double _motionDurationSeconds;
   late double _cryDurationSeconds;
   bool _savingSettings = false;
-  int _tab = 0;
+  late int _tab;
 
   @override
   void initState() {
     super.initState();
+    _tab = widget.initialTab.clamp(0, 3);
     _loadSettings();
+    if (_tab == 1) {
+      widget.runtime.startPairingMode();
+    }
   }
 
   void _loadSettings() {
