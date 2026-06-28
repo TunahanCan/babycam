@@ -1,12 +1,26 @@
 import 'package:flutter/services.dart';
 
-class PcmAudioOutput {
+abstract class PcmAudioSink {
+  Future<void> start({
+    required int sampleRate,
+    required int channels,
+  });
+
+  Future<bool> write(Uint8List pcm16le);
+
+  Future<Map<String, Object?>> status();
+
+  Future<void> stop();
+}
+
+class PcmAudioOutput implements PcmAudioSink {
   const PcmAudioOutput({
     MethodChannel channel = const MethodChannel('mimicam/pcm_audio'),
   }) : _channel = channel;
 
   final MethodChannel _channel;
 
+  @override
   Future<void> start({
     required int sampleRate,
     required int channels,
@@ -16,11 +30,13 @@ class PcmAudioOutput {
         'channels': channels,
       });
 
-  Future<void> write(Uint8List pcm16le) async {
-    if (pcm16le.isEmpty) return;
-    await _channel.invokeMethod<void>('write', pcm16le);
+  @override
+  Future<bool> write(Uint8List pcm16le) async {
+    if (pcm16le.isEmpty) return false;
+    return await _channel.invokeMethod<bool>('write', pcm16le) ?? true;
   }
 
+  @override
   Future<Map<String, Object?>> status() async {
     final status = await _channel.invokeMapMethod<String, Object?>('status');
     return status ?? const {};
@@ -41,5 +57,6 @@ class PcmAudioOutput {
         'amplitude': amplitude,
       });
 
+  @override
   Future<void> stop() => _channel.invokeMethod<void>('stop');
 }

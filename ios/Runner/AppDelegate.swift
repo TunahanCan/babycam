@@ -89,9 +89,10 @@ import UIKit
         result(nil)
       case "write":
         if let typed = call.arguments as? FlutterStandardTypedData {
-          self.pcmAudioPlayer.write(typed.data)
+          result(self.pcmAudioPlayer.write(typed.data))
+        } else {
+          result(false)
         }
-        result(nil)
       case "status":
         result(self.pcmAudioPlayer.status())
       case "playTestTone":
@@ -263,8 +264,9 @@ private final class PcmAudioPlayer {
     }
   }
 
-  func write(_ data: Data) {
-    if data.isEmpty { return }
+  @discardableResult
+  func write(_ data: Data) -> Bool {
+    if data.isEmpty { return false }
     queue.async { [weak self] in
       guard let self else { return }
       guard let playerNode = self.playerNode,
@@ -323,6 +325,7 @@ private final class PcmAudioPlayer {
         }
       }
     }
+    return true
   }
 
   func playTestTone(

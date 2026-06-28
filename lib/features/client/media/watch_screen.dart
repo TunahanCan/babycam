@@ -509,6 +509,7 @@ class _StreamSurface extends StatelessWidget {
           pairedServerHost: session!.host,
           pairedServerPort: session.port,
           url: streamUrl,
+          authToken: session.sessionToken,
           fit: fit,
           onFrameReceived: streamHealthState?.markVideoFrameReceived,
         ),
@@ -525,6 +526,7 @@ class _StreamSurface extends StatelessWidget {
                   pairedServerHost: session.host,
                   pairedServerPort: session.port,
                   url: audioUrl,
+                  authToken: session.sessionToken,
                   onAudioChunkReceived:
                       streamHealthState?.markAudioChunkReceived,
                 ),

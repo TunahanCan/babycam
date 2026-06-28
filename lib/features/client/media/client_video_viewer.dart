@@ -12,12 +12,14 @@ class ClientVideoViewer extends StatefulWidget {
     required this.pairedServerHost,
     required this.pairedServerPort,
     required this.url,
+    this.authToken,
     this.fit = BoxFit.cover,
     this.onFrameReceived,
   });
   final String pairedServerHost;
   final int pairedServerPort;
   final String url;
+  final String? authToken;
   final BoxFit fit;
   final VoidCallback? onFrameReceived;
 
@@ -43,7 +45,9 @@ class _ClientVideoViewerState extends State<ClientVideoViewer> {
   @override
   void didUpdateWidget(covariant ClientVideoViewer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.url != widget.url || oldWidget.fit != widget.fit) {
+    if (oldWidget.url != widget.url ||
+        oldWidget.authToken != widget.authToken ||
+        oldWidget.fit != widget.fit) {
       unawaited(_startVideo());
     }
   }
@@ -95,6 +99,11 @@ class _ClientVideoViewerState extends State<ClientVideoViewer> {
         HttpHeaders.acceptHeader,
         'multipart/x-mixed-replace, image/jpeg',
       );
+      final authToken = widget.authToken;
+      if (authToken != null && authToken.isNotEmpty) {
+        request.headers
+            .set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+      }
       final response = await request.close();
       if (response.statusCode != HttpStatus.ok) {
         throw HttpException(

@@ -57,8 +57,7 @@ class MainActivity : FlutterActivity() {
                 }
                 "write" -> {
                     val bytes = call.arguments as? ByteArray
-                    if (bytes != null) pcmAudioPlayer.write(bytes)
-                    result.success(null)
+                    result.success(bytes != null && pcmAudioPlayer.write(bytes))
                 }
                 "status" -> {
                     result.success(pcmAudioPlayer.status())
@@ -180,19 +179,19 @@ private class PcmAudioPlayer {
     }
 
     @Synchronized
-    fun write(bytes: ByteArray) {
+    fun write(bytes: ByteArray): Boolean {
         val track = audioTrack
         if (track == null) {
             writesDropped += 1
             lastError = "write before start"
-            return
+            return false
         }
         val payload = bytes.copyOf()
         val currentGeneration = generation
         if (pendingWrites.incrementAndGet() > maxPendingWrites) {
             pendingWrites.decrementAndGet()
             writesDropped += 1
-            return
+            return false
         }
         executor.execute {
             try {
@@ -229,6 +228,7 @@ private class PcmAudioPlayer {
                 pendingWrites.decrementAndGet()
             }
         }
+        return true
     }
 
     fun playTestTone(
