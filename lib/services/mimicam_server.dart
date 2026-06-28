@@ -221,7 +221,7 @@ class MimiCamServer {
         throw StateError('MimiCamServer is disposed.');
       }
       await controller.startImageStream(_handleCameraFrame);
-      await _startAudioAnalysis();
+      await _startAudioAnalysisBestEffort();
       if (_disposed) {
         throw StateError('MimiCamServer is disposed.');
       }
@@ -342,6 +342,18 @@ class MimiCamServer {
       }
       _logAudioDiagnostics();
     });
+  }
+
+  Future<void> _startAudioAnalysisBestEffort() async {
+    if (_audioSubscription != null) return;
+    try {
+      await _startAudioAnalysis();
+    } catch (error) {
+      _analysisMetrics?.recordAudioError();
+      await _audioSubscription?.cancel();
+      _audioSubscription = null;
+      onLog('Ses başlatılamadı: $error');
+    }
   }
 
   void _logAudioDiagnostics() {
@@ -673,6 +685,7 @@ class MimiCamServer {
     if (clientId == null) return;
     try {
       await startMediaRuntime();
+      await _startAudioAnalysisBestEffort();
       await _handleAudio(request.response, clientId);
     } catch (_) {
       _activeClientRegistry.detachStream(clientId);
@@ -1102,7 +1115,14 @@ class MimiCamServer {
   }
 
   Future<void> _handleAudio(HttpResponse response, String clientId) async {
-    response.headers.contentType = ContentType('audio', 'wav');
+    response.headers
+      ..contentType = ContentType('audio', 'wav')
+      ..chunkedTransferEncoding = true
+      ..set(HttpHeaders.cacheControlHeader, 'no-store')
+      ..set(HttpHeaders.acceptRangesHeader, 'none')
+      ..set('X-Audio-Sample-Rate', '$_audioSampleRate')
+      ..set('X-Audio-Channels', '$_audioChannels')
+      ..set('X-Audio-Bits-Per-Sample', '$_audioBitsPerSample');
     response.add(_wavHeader(
         sampleRate: _audioSampleRate,
         channels: _audioChannels,
@@ -1157,8 +1177,9 @@ class MimiCamServer {
       }
     }
 
+    const dataSize = 0x7fffffff;
     writeAscii(0, 'RIFF');
-    data.setUint32(4, 0x7fffffff, Endian.little);
+    data.setUint32(4, 36 + dataSize, Endian.little);
     writeAscii(8, 'WAVE');
     writeAscii(12, 'fmt ');
     data.setUint32(16, 16, Endian.little);
@@ -1169,7 +1190,7 @@ class MimiCamServer {
     data.setUint16(32, blockAlign, Endian.little);
     data.setUint16(34, bitsPerSample, Endian.little);
     writeAscii(36, 'data');
-    data.setUint32(40, 0x7fffffff, Endian.little);
+    data.setUint32(40, dataSize, Endian.little);
     return data.buffer.asUint8List();
   }
 
