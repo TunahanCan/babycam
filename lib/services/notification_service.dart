@@ -8,10 +8,29 @@ class NotificationService {
   final AppStrings _strings;
   final _plugin = FlutterLocalNotificationsPlugin();
 
-  Future<void> initialize() => _plugin.initialize(const InitializationSettings(
-        android: AndroidInitializationSettings('ic_launcher'),
-        iOS: DarwinInitializationSettings(),
-      ));
+  Future<bool> initialize() async {
+    await _plugin.initialize(const InitializationSettings(
+      android: AndroidInitializationSettings('ic_launcher'),
+      iOS: DarwinInitializationSettings(),
+    ));
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android != null) {
+      final granted = await android.requestNotificationsPermission();
+      return granted ?? await android.areNotificationsEnabled() ?? true;
+    }
+    final ios = _plugin.resolvePlatformSpecificImplementation<
+        IOSFlutterLocalNotificationsPlugin>();
+    if (ios != null) {
+      return await ios.requestPermissions(
+            alert: true,
+            badge: true,
+            sound: true,
+          ) ??
+          true;
+    }
+    return true;
+  }
 
   Future<void> showAlert(String message) => _plugin.show(
         2001,

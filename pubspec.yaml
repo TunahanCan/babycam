@@ -16,8 +16,6 @@ dependencies:
   shared_preferences: ^2.2.3
   qr_flutter: ^4.1.0
   webview_flutter: ^4.8.0
-  webview_flutter_android: ^4.13.0
-  webview_flutter_wkwebview: ^3.26.0
   web_socket_channel: ^3.0.1
   flutter_local_notifications: ^17.2.2
   wakelock_plus: ^1.2.8
@@ -25,6 +23,7 @@ dependencies:
   record: ^7.1.0
   crypto: ^3.0.3
   mobile_scanner: ^7.2.0
+  just_audio: ^0.10.5
 
 dev_dependencies:
   flutter_test:

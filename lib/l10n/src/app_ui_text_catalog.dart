@@ -1076,6 +1076,30 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'Alertas desactivadas',
     'fr': 'Alertes désactivées'
   },
+  'enableNotifications': {
+    'tr': 'Bildirimi aç',
+    'en': 'Enable alerts',
+    'zh': '开启提醒',
+    'hi': 'अलर्ट चालू करें',
+    'es': 'Activar alertas',
+    'fr': 'Activer les alertes'
+  },
+  'disableNotifications': {
+    'tr': 'Bildirimi kapat',
+    'en': 'Disable alerts',
+    'zh': '关闭提醒',
+    'hi': 'अलर्ट बंद करें',
+    'es': 'Desactivar alertas',
+    'fr': 'Désactiver les alertes'
+  },
+  'notificationOff': {
+    'tr': 'Bildirim izni kapalı',
+    'en': 'Notification permission is off',
+    'zh': '通知权限已关闭',
+    'hi': 'नोटिफिकेशन अनुमति बंद है',
+    'es': 'El permiso de notificación está desactivado',
+    'fr': 'L’autorisation de notification est désactivée'
+  },
   'motion': {
     'tr': 'Hareket',
     'en': 'Motion',

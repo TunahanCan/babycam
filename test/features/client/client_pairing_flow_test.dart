@@ -15,7 +15,10 @@ void main() {
         pairCount++;
         return PairingSession(payload: payload, sessionToken: 'token');
       },
-      startAlerts: (_) async => alertStartCount++,
+      startAlerts: (_) async {
+        alertStartCount++;
+        return true;
+      },
     );
 
     await ClientPairingFlow(runtime).pairAndArmAlerts(payload);
@@ -30,7 +33,10 @@ void main() {
     var alertStartCount = 0;
     final runtime = ClientRuntime(
       pair: (_) async => throw StateError('pair failed'),
-      startAlerts: (_) async => alertStartCount++,
+      startAlerts: (_) async {
+        alertStartCount++;
+        return true;
+      },
     );
 
     await expectLater(

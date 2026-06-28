@@ -129,7 +129,10 @@ void main() {
     var alertStopped = 0;
     final runtime = ClientRuntime(
       pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
-      startAlerts: (_) async => alertStarted++,
+      startAlerts: (_) async {
+        alertStarted++;
+        return true;
+      },
       stopAlerts: () async => alertStopped++,
       startStream: (_, {bool audioEnabled = false}) async =>
           const ActiveStreamSession(streamToken: 'stream'),
@@ -150,6 +153,25 @@ void main() {
 
     await runtime.stopAlertListening();
     expect(alertStopped, 1);
+    expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
+    expect(runtime.currentState.alertsActive, isFalse);
+  });
+
+  test('bildirim izni açılmazsa alert listener kapalı kalır', () async {
+    var alertStarted = 0;
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      startAlerts: (_) async {
+        alertStarted++;
+        return false;
+      },
+    );
+
+    await runtime.pairWithServer(payload());
+    final started = await runtime.startAlertListening();
+
+    expect(started, isFalse);
+    expect(alertStarted, 1);
     expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
     expect(runtime.currentState.alertsActive, isFalse);
   });

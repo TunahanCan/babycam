@@ -44,8 +44,11 @@ class ClientCompositionRoot {
       stopStream: streams.stop,
       watchNetworkQuality: networkQuality.watch,
       startAlerts: (session) async {
-        await notifications.initialize(strings: strings);
+        final notificationsEnabled =
+            await notifications.initialize(strings: strings);
+        if (!notificationsEnabled) return false;
         await alerts.start(session);
+        return true;
       },
       stopAlerts: alerts.stop,
       clearStore: store.clear,

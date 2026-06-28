@@ -6,12 +6,11 @@ class ClientNotificationService {
   NotificationService? _service;
   AppStrings? _strings;
 
-  Future<void> initialize({AppStrings? strings}) async {
-    if (strings == null) return;
+  Future<bool> initialize({AppStrings? strings}) async {
+    if (strings == null) return false;
     _strings = strings;
-    if (_service != null) return;
-    _service = NotificationService(strings);
-    await _service!.initialize();
+    _service ??= NotificationService(strings);
+    return _service!.initialize();
   }
 
   Future<void> show(String message) async => _service?.showAlert(message);

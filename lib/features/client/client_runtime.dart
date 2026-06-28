@@ -50,7 +50,7 @@ class ClientRuntime {
     Future<void> Function(PairingSession session)? stopStream,
     Stream<NetworkQualityUpdate> Function(PairingSession session)?
         watchNetworkQuality,
-    Future<void> Function(PairingSession session)? startAlerts,
+    Future<bool> Function(PairingSession session)? startAlerts,
     Future<void> Function()? stopAlerts,
     Future<void> Function()? clearStore,
   })  : _pair = pair,
@@ -71,7 +71,7 @@ class ClientRuntime {
   final Future<void> Function(PairingSession session)? _stopStream;
   final Stream<NetworkQualityUpdate> Function(PairingSession session)?
       _watchNetworkQuality;
-  final Future<void> Function(PairingSession session)? _startAlerts;
+  final Future<bool> Function(PairingSession session)? _startAlerts;
   final Future<void> Function()? _stopAlerts;
   final Future<void> Function()? _clearStore;
   final _states = StreamController<ClientRuntimeState>.broadcast();
@@ -184,11 +184,26 @@ class ClientRuntime {
     ));
   }
 
-  Future<void> startAlertListening() async {
-    if (_disposed || _state.session == null) return;
+  Future<bool> startAlertListening() async {
+    if (_disposed || _state.session == null) return false;
     final session = _state.session!;
     try {
-      await _startAlerts?.call(session);
+      final started = await _startAlerts?.call(session) ?? false;
+      if (!started) {
+        if (!_disposed) {
+          _emit(ClientRuntimeState(
+            phase: _state.activeStream == null
+                ? ClientRuntimePhase.pairedIdle
+                : ClientRuntimePhase.watching,
+            session: _state.session,
+            networkQuality: _state.networkQuality,
+            mediaProfile: _state.mediaProfile,
+            activeStream: _state.activeStream,
+            alertsActive: false,
+          ));
+        }
+        return false;
+      }
     } catch (error) {
       if (!_disposed) {
         _emit(ClientRuntimeState(
@@ -205,7 +220,7 @@ class ClientRuntime {
     }
     if (_disposed) {
       await _stopAlerts?.call();
-      return;
+      return false;
     }
     _emit(ClientRuntimeState(
       phase: _state.activeStream == null
@@ -217,6 +232,7 @@ class ClientRuntime {
       activeStream: _state.activeStream,
       alertsActive: true,
     ));
+    return true;
   }
 
   Future<void> stopAlertListening() async {

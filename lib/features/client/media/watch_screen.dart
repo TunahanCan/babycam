@@ -47,7 +47,9 @@ class _WatchScreenState extends State<WatchScreen> {
 
   void _startLiveWatch() {
     if (!widget.runtime.currentState.alertsActive) {
-      unawaited(widget.runtime.startAlertListening().catchError((Object _) {}));
+      unawaited(
+        widget.runtime.startAlertListening().catchError((Object _) => false),
+      );
     }
     unawaited(
       widget.runtime
@@ -60,6 +62,21 @@ class _WatchScreenState extends State<WatchScreen> {
     setState(() => _audioEnabled = !_audioEnabled);
     if (_audioEnabled && widget.runtime.currentState.activeStream == null) {
       _startLiveWatch();
+    }
+  }
+
+  Future<void> _toggleNotifications(ClientRuntimeState state) async {
+    if (state.alertsActive) {
+      await widget.runtime.stopAlertListening();
+      return;
+    }
+    final started = await widget.runtime.startAlertListening();
+    if (!started && mounted) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(content: Text(AppStrings.of(context).ui('notificationOff'))),
+        );
     }
   }
 
@@ -183,7 +200,7 @@ class _WatchScreenState extends State<WatchScreen> {
           ),
           const SizedBox(height: 18),
           _ActionGroup(
-            actions: _watchActionSpecs(strings),
+            actions: _watchActionSpecs(strings, state),
           ),
           const SizedBox(height: 28),
           SizedBox(
@@ -323,7 +340,10 @@ class _WatchScreenState extends State<WatchScreen> {
     );
   }
 
-  List<_ActionSpec> _watchActionSpecs(AppStrings strings) {
+  List<_ActionSpec> _watchActionSpecs(
+    AppStrings strings,
+    ClientRuntimeState state,
+  ) {
     // Keep watch actions as specs so responsive layout is isolated from the
     // navigation callbacks each button triggers.
     return [
@@ -334,15 +354,25 @@ class _WatchScreenState extends State<WatchScreen> {
         _toggleAudio,
       ),
       _ActionSpec(
+        state.alertsActive
+            ? Icons.notifications_off_rounded
+            : Icons.notifications_active_rounded,
+        state.alertsActive
+            ? strings.ui('disableNotifications')
+            : strings.ui('enableNotifications'),
+        _mintSoft,
+        () => unawaited(_toggleNotifications(state)),
+      ),
+      _ActionSpec(
         Icons.fullscreen_rounded,
         strings.ui('fullScreen'),
-        _mintSoft,
+        const Color(0xFFF2EEFA),
         _enterFullscreen,
       ),
       _ActionSpec(
-        Icons.notifications_active_rounded,
+        Icons.nights_stay_rounded,
         strings.ui('openHistory'),
-        const Color(0xFFF2EEFA),
+        const Color(0xFFF8FFF9),
         () => setState(() => _tab = 1),
       ),
     ];
