@@ -14,12 +14,14 @@ class ClientAudioStreamPlayer extends StatefulWidget {
     required this.pairedServerPort,
     required this.url,
     this.audioOutput = const PcmAudioOutput(),
+    this.onAudioChunkReceived,
   });
 
   final String pairedServerHost;
   final int pairedServerPort;
   final String url;
   final PcmAudioOutput audioOutput;
+  final VoidCallback? onAudioChunkReceived;
 
   @override
   State<ClientAudioStreamPlayer> createState() =>
@@ -92,8 +94,10 @@ class _ClientAudioStreamPlayerState extends State<ClientAudioStreamPlayer> {
         }
         if (_outputStarted && parsed.pcm16le.isNotEmpty) {
           await widget.audioOutput.write(parsed.pcm16le);
+          widget.onAudioChunkReceived?.call();
         }
       }
+      throw HttpException('Audio stream ended', uri: Uri.parse(widget.url));
     } catch (_) {
       if (!mounted || generation != _loadGeneration) return;
       await Future<void>.delayed(_retryDelay);

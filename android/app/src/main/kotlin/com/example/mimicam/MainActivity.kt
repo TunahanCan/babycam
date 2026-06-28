@@ -10,6 +10,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity : FlutterActivity() {
     private val pcmAudioPlayer = PcmAudioPlayer()
@@ -73,6 +74,8 @@ private class PcmAudioPlayer {
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private var audioTrack: AudioTrack? = null
     private var generation = 0
+    private val pendingWrites = AtomicInteger(0)
+    private val maxPendingWrites = 4
 
     @Synchronized
     fun start(sampleRate: Int, channels: Int) {
@@ -112,12 +115,20 @@ private class PcmAudioPlayer {
     fun write(bytes: ByteArray) {
         val track = audioTrack ?: return
         val currentGeneration = generation
+        if (pendingWrites.incrementAndGet() > maxPendingWrites) {
+            pendingWrites.decrementAndGet()
+            return
+        }
         executor.execute {
-            val shouldWrite = synchronized(this) {
-                currentGeneration == generation && audioTrack === track
-            }
-            if (shouldWrite) {
-                track.write(bytes, 0, bytes.size, AudioTrack.WRITE_BLOCKING)
+            try {
+                val shouldWrite = synchronized(this) {
+                    currentGeneration == generation && audioTrack === track
+                }
+                if (shouldWrite) {
+                    track.write(bytes, 0, bytes.size, AudioTrack.WRITE_BLOCKING)
+                }
+            } finally {
+                pendingWrites.decrementAndGet()
             }
         }
     }

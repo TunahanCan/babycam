@@ -4,6 +4,7 @@ import '../../core/media/adaptive_media_profile.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../core/protocol/pairing_session.dart';
 import 'media/active_stream_session.dart';
+import 'media/client_stream_health_state.dart';
 
 class ClientRuntimeState {
   const ClientRuntimeState({
@@ -53,6 +54,7 @@ class ClientRuntime {
     Future<bool> Function(PairingSession session)? startAlerts,
     Future<void> Function()? stopAlerts,
     Future<void> Function()? clearStore,
+    this.streamHealthState,
   })  : _pair = pair,
         _renew = renew,
         _startStream = startStream,
@@ -74,6 +76,7 @@ class ClientRuntime {
   final Future<bool> Function(PairingSession session)? _startAlerts;
   final Future<void> Function()? _stopAlerts;
   final Future<void> Function()? _clearStore;
+  final ClientStreamHealthState? streamHealthState;
   final _states = StreamController<ClientRuntimeState>.broadcast();
   ClientRuntimeState _state =
       const ClientRuntimeState(phase: ClientRuntimePhase.unpaired);

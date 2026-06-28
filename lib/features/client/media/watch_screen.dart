@@ -12,6 +12,7 @@ import '../../shared/presentation/localized_measurement_text.dart';
 import '../../shared/presentation/media_profile_text.dart';
 import '../client_runtime.dart';
 import 'client_audio_stream_player.dart';
+import 'client_stream_health_state.dart';
 import 'client_video_viewer.dart';
 
 class WatchScreen extends StatefulWidget {
@@ -137,6 +138,7 @@ class _WatchScreenState extends State<WatchScreen> {
             session: state.session,
             streamToken: state.activeStream?.streamToken,
             audioEnabled: _audioEnabled,
+            streamHealthState: widget.runtime.streamHealthState,
             fit: BoxFit.contain,
             error: state.error,
           ),
@@ -188,6 +190,7 @@ class _WatchScreenState extends State<WatchScreen> {
             streamToken: state.activeStream?.streamToken,
             error: state.error,
             audioEnabled: _audioEnabled,
+            streamHealthState: widget.runtime.streamHealthState,
             onToggleAudio: _toggleAudio,
             onEnterFullscreen: _enterFullscreen,
           ),
@@ -385,6 +388,7 @@ class _VideoPanel extends StatelessWidget {
     required this.streamToken,
     required this.error,
     required this.audioEnabled,
+    required this.streamHealthState,
     required this.onToggleAudio,
     required this.onEnterFullscreen,
   });
@@ -393,6 +397,7 @@ class _VideoPanel extends StatelessWidget {
   final String? streamToken;
   final Object? error;
   final bool audioEnabled;
+  final ClientStreamHealthState? streamHealthState;
   final VoidCallback onToggleAudio;
   final VoidCallback onEnterFullscreen;
 
@@ -415,6 +420,7 @@ class _VideoPanel extends StatelessWidget {
               session: session,
               streamToken: streamToken,
               audioEnabled: audioEnabled,
+              streamHealthState: streamHealthState,
               fit: BoxFit.cover,
               error: error,
             ),
@@ -464,6 +470,7 @@ class _StreamSurface extends StatelessWidget {
     required this.session,
     required this.streamToken,
     required this.audioEnabled,
+    required this.streamHealthState,
     required this.fit,
     required this.error,
   });
@@ -471,6 +478,7 @@ class _StreamSurface extends StatelessWidget {
   final PairingSession? session;
   final String? streamToken;
   final bool audioEnabled;
+  final ClientStreamHealthState? streamHealthState;
   final BoxFit fit;
   final Object? error;
 
@@ -502,6 +510,7 @@ class _StreamSurface extends StatelessWidget {
           pairedServerPort: session.port,
           url: streamUrl,
           fit: fit,
+          onFrameReceived: streamHealthState?.markVideoFrameReceived,
         ),
         if (audioUrl != null)
           Positioned(
@@ -516,6 +525,8 @@ class _StreamSurface extends StatelessWidget {
                   pairedServerHost: session.host,
                   pairedServerPort: session.port,
                   url: audioUrl,
+                  onAudioChunkReceived:
+                      streamHealthState?.markAudioChunkReceived,
                 ),
               ),
             ),

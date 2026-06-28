@@ -52,6 +52,7 @@ class ClientCompositionRoot {
       },
       stopAlerts: alerts.stop,
       clearStore: store.clear,
+      streamHealthState: streamHealth,
     );
   }
 }

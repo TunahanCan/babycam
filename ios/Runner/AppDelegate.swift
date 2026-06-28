@@ -189,6 +189,7 @@ private final class PcmAudioPlayer {
   private var engine: AVAudioEngine?
   private var playerNode: AVAudioPlayerNode?
   private var format: AVAudioFormat?
+  private var queuedFrames = 0
 
   func start(sampleRate: Int, channels: Int) {
     let safeSampleRate = max(sampleRate, 8000)
@@ -241,6 +242,10 @@ private final class PcmAudioPlayer {
       let alignedByteCount = data.count - (data.count % bytesPerFrame)
       guard alignedByteCount > 0 else { return }
       let frameCount = AVAudioFrameCount(alignedByteCount / bytesPerFrame)
+      let maxQueuedFrames = Int(format.sampleRate * 0.6)
+      if self.queuedFrames > maxQueuedFrames {
+        return
+      }
       guard let buffer = AVAudioPCMBuffer(
         pcmFormat: format,
         frameCapacity: frameCount
@@ -261,7 +266,13 @@ private final class PcmAudioPlayer {
       if !playerNode.isPlaying {
         playerNode.play()
       }
-      playerNode.scheduleBuffer(buffer, completionHandler: nil)
+      self.queuedFrames += Int(frameCount)
+      playerNode.scheduleBuffer(buffer) { [weak self] in
+        self?.queue.async {
+          guard let self else { return }
+          self.queuedFrames = max(0, self.queuedFrames - Int(frameCount))
+        }
+      }
     }
   }
 
@@ -280,5 +291,6 @@ private final class PcmAudioPlayer {
     playerNode = nil
     engine = nil
     format = nil
+    queuedFrames = 0
   }
 }

@@ -10,4 +10,8 @@ class MimiCamProtocolV2 {
   static const events = '/ws/events';
   static const status = '/status';
   static const statusPublic = '/status/public';
+  static const testStatus = '/test/status';
+  static const testStart = '/test/start';
+  static const testProbe = '/test/probe';
+  static const testAlert = '/test/alert';
 }
