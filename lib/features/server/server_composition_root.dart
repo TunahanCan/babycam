@@ -28,9 +28,14 @@ class ServerCompositionRoot {
         onLog: onLog ?? (_) {},
         onAlert: (_) {},
         onMediaProfileChanged: (_) => notifyMediaProfileChanged?.call(),
-        onStreamSessionStarted: (clientId) => runtime.startStreamSession(
+        onStreamSessionStarted: (
+          clientId, {
+          required bool video,
+          required bool audio,
+        }) =>
+            runtime.startStreamSession(
               clientId,
-              const StreamSessionOptions(video: true, audio: false),
+              StreamSessionOptions(video: video, audio: audio),
             ),
         onStreamSessionStopped: (clientId) => runtime.endSession(clientId),
         tokenService: tokenService,

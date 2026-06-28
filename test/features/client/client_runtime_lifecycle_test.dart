@@ -22,22 +22,29 @@ void main() {
   test(
       'WatchScreen/runtime açılınca video audio session başlar, kapanınca durur, clearPairing token siler',
       () async {
+    bool? audioRequested;
     var streamStarted = 0;
     var streamStopped = 0;
     var cleared = 0;
     final runtime = ClientRuntime(
         pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
-        startStream: (_) async {
+        startStream: (_, {bool audioEnabled = false}) async {
           streamStarted++;
-          return const ActiveStreamSession(streamToken: 'stream');
+          audioRequested = audioEnabled;
+          return ActiveStreamSession(
+            streamToken: 'stream',
+            audioEnabled: audioEnabled,
+          );
         },
         stopStream: (_) async => streamStopped++,
         clearStore: () async => cleared++);
     await runtime.pairWithServer(payload());
     expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
-    await runtime.startWatching();
+    await runtime.startWatching(audioEnabled: true);
     expect(streamStarted, 1);
+    expect(audioRequested, isTrue);
     expect(runtime.currentState.phase, ClientRuntimePhase.watching);
+    expect(runtime.currentState.activeStream?.audioEnabled, isTrue);
     await runtime.stopWatching();
     expect(streamStopped, 1);
     await runtime.clearPairing();
@@ -49,7 +56,7 @@ void main() {
     var streamStarted = 0;
     final runtime = ClientRuntime(
       pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
-      startStream: (_) async {
+      startStream: (_, {bool audioEnabled = false}) async {
         streamStarted++;
         return const ActiveStreamSession(streamToken: 'stream');
       },
@@ -64,7 +71,8 @@ void main() {
   test('canlı izleme başlatma hatası runtime state içinde görünür', () async {
     final runtime = ClientRuntime(
       pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
-      startStream: (_) async => throw StateError('MEDIA_START_FAILED'),
+      startStream: (_, {bool audioEnabled = false}) async =>
+          throw StateError('MEDIA_START_FAILED'),
     );
 
     await runtime.pairWithServer(payload());
@@ -113,6 +121,37 @@ void main() {
 
     expect(runtime.currentState.networkQuality?.tier, NetworkQualityTier.weak);
     expect(runtime.currentState.mediaProfile?.audioFirst, isTrue);
+  });
+
+  test('canlı izleme sırasında bildirim dinleme state içinde korunur',
+      () async {
+    var alertStarted = 0;
+    var alertStopped = 0;
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      startAlerts: (_) async => alertStarted++,
+      stopAlerts: () async => alertStopped++,
+      startStream: (_, {bool audioEnabled = false}) async =>
+          const ActiveStreamSession(streamToken: 'stream'),
+      stopStream: (_) async {},
+    );
+
+    await runtime.pairWithServer(payload());
+    await runtime.startAlertListening();
+    await runtime.startWatching(audioEnabled: true);
+
+    expect(alertStarted, 1);
+    expect(runtime.currentState.phase, ClientRuntimePhase.watching);
+    expect(runtime.currentState.alertsActive, isTrue);
+
+    await runtime.stopWatching();
+    expect(runtime.currentState.phase, ClientRuntimePhase.alertOnly);
+    expect(runtime.currentState.alertsActive, isTrue);
+
+    await runtime.stopAlertListening();
+    expect(alertStopped, 1);
+    expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
+    expect(runtime.currentState.alertsActive, isFalse);
   });
 
   test('eşleşme sonrası kalite ölçümü canlı ekran açılmadan başlar', () async {

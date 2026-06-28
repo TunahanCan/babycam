@@ -51,8 +51,11 @@ Future<Widget> _buildScene(String scene) async {
     case 'client_paired':
       final runtime = ClientRuntime(
         pair: (_) async => _session(),
-        startStream: (_) async =>
-            const ActiveStreamSession(streamToken: 'stream'),
+        startStream: (_, {bool audioEnabled = false}) async =>
+            ActiveStreamSession(
+          streamToken: 'stream',
+          audioEnabled: audioEnabled,
+        ),
         stopStream: (_) async {},
       );
       await runtime.pairWithServer(_payload());
@@ -68,8 +71,11 @@ Future<Widget> _buildScene(String scene) async {
     case 'watch':
       final runtime = ClientRuntime(
         pair: (_) async => _session(),
-        startStream: (_) async =>
-            const ActiveStreamSession(streamToken: 'stream'),
+        startStream: (_, {bool audioEnabled = false}) async =>
+            ActiveStreamSession(
+          streamToken: 'stream',
+          audioEnabled: audioEnabled,
+        ),
         stopStream: (_) async {},
       );
       await runtime.pairWithServer(_payload());

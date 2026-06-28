@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -81,6 +82,54 @@ void main() {
     expect(body['streamToken'], isNotEmpty);
     expect(tokenService.validateStreamToken(body['streamToken'] as String),
         isNotNull);
+  });
+
+  test('session/start audio talebini runtime callbackine taşır', () async {
+    final tokenService = PairingTokenService();
+    ({String clientId, bool video, bool audio})? started;
+    final server = await _testServer(
+      tokenService,
+      onStreamSessionStarted: (
+        clientId, {
+        required bool video,
+        required bool audio,
+      }) {
+        started = (clientId: clientId, video: video, audio: audio);
+      },
+    );
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    final request = await client.postUrl(Uri(
+      scheme: 'http',
+      host: InternetAddress.loopbackIPv4.address,
+      port: base.port,
+      path: MimiCamProtocolV2.sessionStart,
+    ));
+    request.headers
+      ..contentType = ContentType.json
+      ..set(HttpHeaders.authorizationHeader, 'Bearer ${trusted.token}');
+    request.write(jsonEncode({
+      'clientId': trusted.clientId,
+      'video': true,
+      'audio': true,
+    }));
+    final response = await request.close();
+    final body = jsonDecode(await utf8.decoder.bind(response).join()) as Map;
+
+    expect(response.statusCode, HttpStatus.ok);
+    expect(body['video'], isTrue);
+    expect(body['audio'], isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(started?.clientId, trusted.clientId);
+    expect(started?.video, isTrue);
+    expect(started?.audio, isTrue);
   });
 
   test('streamToken private endpointlerde ana token yerine geçmez', () async {
@@ -276,7 +325,14 @@ void main() {
   });
 }
 
-Future<MimiCamServer> _testServer(PairingTokenService tokenService) async {
+Future<MimiCamServer> _testServer(
+  PairingTokenService tokenService, {
+  FutureOr<void> Function(
+    String clientId, {
+    required bool video,
+    required bool audio,
+  })? onStreamSessionStarted,
+}) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
   return MimiCamServer(
@@ -284,6 +340,7 @@ Future<MimiCamServer> _testServer(PairingTokenService tokenService) async {
     strings: AppStrings(const Locale('tr')),
     onLog: (_) {},
     onAlert: (_) {},
+    onStreamSessionStarted: onStreamSessionStarted,
     tokenService: tokenService,
     httpPort: 0,
     startMediaOnSessionStart: false,

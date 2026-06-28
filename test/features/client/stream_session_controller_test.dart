@@ -15,8 +15,11 @@ void main() {
     addTearDown(() => server.close(force: true));
     var videoRequests = 0;
     var audioRequests = 0;
+    Map<String, Object?>? sessionStartBody;
     server.listen((request) async {
       if (request.uri.path == MimiCamProtocolV2.sessionStart) {
+        final body = await utf8.decoder.bind(request).join();
+        sessionStartBody = Map<String, Object?>.from(jsonDecode(body) as Map);
         request.response.headers.contentType = ContentType.json;
         request.response.write(jsonEncode({
           'ok': true,
@@ -50,12 +53,18 @@ void main() {
     );
     addTearDown(controller.dispose);
 
-    await controller.start(_session(server.port));
+    final active = await controller.start(
+      _session(server.port),
+      audioEnabled: true,
+    );
     await Future<void>.delayed(const Duration(milliseconds: 50));
     final snapshot = health.snapshot();
 
     expect(snapshot.watchActive, isTrue);
+    expect(sessionStartBody?['audio'], isTrue);
+    expect(sessionStartBody?['video'], isTrue);
     expect(controller.lastStreamToken, 'stream_token');
+    expect(active?.audioEnabled, isTrue);
     expect(snapshot.lastVideoFrameAtMs, isNull);
     expect(snapshot.lastAudioChunkAtMs, isNull);
     expect(videoRequests, 0);

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/media/adaptive_media_profile.dart';
 import '../../../core/protocol/mimicam_protocol.dart';
@@ -8,6 +11,7 @@ import '../../../l10n/app_strings.dart';
 import '../../shared/presentation/localized_measurement_text.dart';
 import '../../shared/presentation/media_profile_text.dart';
 import '../client_runtime.dart';
+import 'client_audio_stream_player.dart';
 import 'client_video_viewer.dart';
 
 class WatchScreen extends StatefulWidget {
@@ -22,18 +26,53 @@ class WatchScreen extends StatefulWidget {
 
 class _WatchScreenState extends State<WatchScreen> {
   late int _tab;
+  bool _audioEnabled = true;
+  bool _fullscreen = false;
 
   @override
   void initState() {
     super.initState();
     _tab = widget.initialTab.clamp(0, 2);
-    widget.runtime.startWatching().catchError((Object _) {});
+    _startLiveWatch();
   }
 
   @override
   void dispose() {
+    if (_fullscreen) {
+      unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
+    }
     widget.runtime.stopWatching().catchError((Object _) {});
     super.dispose();
+  }
+
+  void _startLiveWatch() {
+    if (!widget.runtime.currentState.alertsActive) {
+      unawaited(widget.runtime.startAlertListening().catchError((Object _) {}));
+    }
+    unawaited(
+      widget.runtime
+          .startWatching(audioEnabled: _audioEnabled)
+          .catchError((Object _) {}),
+    );
+  }
+
+  void _toggleAudio() {
+    setState(() => _audioEnabled = !_audioEnabled);
+    if (_audioEnabled && widget.runtime.currentState.activeStream == null) {
+      _startLiveWatch();
+    }
+  }
+
+  void _enterFullscreen() {
+    setState(() => _fullscreen = true);
+    unawaited(
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky),
+    );
+  }
+
+  void _exitFullscreen() {
+    setState(() => _fullscreen = false);
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
   }
 
   @override
@@ -43,6 +82,18 @@ class _WatchScreenState extends State<WatchScreen> {
       initialData: widget.runtime.currentState,
       builder: (context, snapshot) {
         final state = snapshot.data ?? widget.runtime.currentState;
+        if (_fullscreen) {
+          return PopScope<void>(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) _exitFullscreen();
+            },
+            child: Scaffold(
+              backgroundColor: Colors.black,
+              body: _fullscreenWatch(context, state),
+            ),
+          );
+        }
         final child = switch (_tab) {
           0 => _LightShell(child: _watch(context, state)),
           1 => _LightShell(child: _history()),
@@ -56,6 +107,46 @@ class _WatchScreenState extends State<WatchScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _fullscreenWatch(BuildContext context, ClientRuntimeState state) {
+    final strings = AppStrings.of(context);
+    return SafeArea(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _StreamSurface(
+            session: state.session,
+            streamToken: state.activeStream?.streamToken,
+            audioEnabled: _audioEnabled,
+            fit: BoxFit.contain,
+            error: state.error,
+          ),
+          Positioned(
+            top: 12,
+            left: 12,
+            child: _RoundIconButton(
+              icon: Icons.close_rounded,
+              tooltip: strings.ui('exitFullScreen'),
+              onTap: _exitFullscreen,
+            ),
+          ),
+          Positioned(
+            top: 12,
+            right: 12,
+            child: _RoundIconButton(
+              icon: _audioEnabled
+                  ? Icons.volume_up_rounded
+                  : Icons.volume_off_rounded,
+              tooltip: _audioEnabled
+                  ? strings.ui('muteAudio')
+                  : strings.ui('unmuteAudio'),
+              onTap: _toggleAudio,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -79,12 +170,20 @@ class _WatchScreenState extends State<WatchScreen> {
             session: state.session,
             streamToken: state.activeStream?.streamToken,
             error: state.error,
+            audioEnabled: _audioEnabled,
+            onToggleAudio: _toggleAudio,
+            onEnterFullscreen: _enterFullscreen,
           ),
           const SizedBox(height: 16),
-          _LiveMetricGrid(quality: quality, profile: profile),
+          _LiveMetricGrid(
+            quality: quality,
+            profile: profile,
+            audioEnabled: _audioEnabled,
+            alertsActive: state.alertsActive,
+          ),
           const SizedBox(height: 18),
           _ActionGroup(
-            actions: _watchActionSpecs(context, strings),
+            actions: _watchActionSpecs(strings),
           ),
           const SizedBox(height: 28),
           SizedBox(
@@ -224,27 +323,24 @@ class _WatchScreenState extends State<WatchScreen> {
     );
   }
 
-  List<_ActionSpec> _watchActionSpecs(
-    BuildContext context,
-    AppStrings strings,
-  ) {
+  List<_ActionSpec> _watchActionSpecs(AppStrings strings) {
     // Keep watch actions as specs so responsive layout is isolated from the
     // navigation callbacks each button triggers.
     return [
       _ActionSpec(
-        Icons.wifi_rounded,
-        strings.ui('reconnect'),
+        _audioEnabled ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+        _audioEnabled ? strings.ui('muteAudio') : strings.ui('unmuteAudio'),
         const Color(0xFFFFE3EA),
-        () {},
+        _toggleAudio,
       ),
       _ActionSpec(
-        Icons.qr_code_2_rounded,
-        strings.ui('changeAddress'),
+        Icons.fullscreen_rounded,
+        strings.ui('fullScreen'),
         _mintSoft,
-        () => Navigator.pop(context),
+        _enterFullscreen,
       ),
       _ActionSpec(
-        Icons.nights_stay_rounded,
+        Icons.notifications_active_rounded,
         strings.ui('openHistory'),
         const Color(0xFFF2EEFA),
         () => setState(() => _tab = 1),
@@ -258,22 +354,21 @@ class _VideoPanel extends StatelessWidget {
     required this.session,
     required this.streamToken,
     required this.error,
+    required this.audioEnabled,
+    required this.onToggleAudio,
+    required this.onEnterFullscreen,
   });
 
   final PairingSession? session;
   final String? streamToken;
   final Object? error;
+  final bool audioEnabled;
+  final VoidCallback onToggleAudio;
+  final VoidCallback onEnterFullscreen;
 
   @override
   Widget build(BuildContext context) {
-    final session = this.session;
-    final streamToken = this.streamToken;
-    final streamUrl = session == null || streamToken == null
-        ? null
-        : ServerEndpointBuilder(session).http(
-            MimiCamProtocolV2.video,
-            query: {'streamToken': streamToken},
-          ).toString();
+    final strings = AppStrings.of(context);
     return AspectRatio(
       aspectRatio: 16 / 12,
       child: Container(
@@ -283,54 +378,42 @@ class _VideoPanel extends StatelessWidget {
           border: Border.all(color: const Color(0xFFF2D8CD), width: 4),
         ),
         clipBehavior: Clip.antiAlias,
-        child: streamUrl == null && error != null
-            ? _StreamErrorPanel(message: error.toString())
-            : streamUrl == null
-                ? Stack(
-                    children: [
-                      for (final left in [22.0, 82.0, 142.0, 202.0, 262.0])
-                        Positioned(
-                          left: left,
-                          top: 22,
-                          bottom: 22,
-                          child: Container(width: 1, color: Colors.white54),
-                        ),
-                      const Positioned(top: 10, left: 12, child: _LiveBadge()),
-                      const Align(
-                          alignment: Alignment.center, child: _CribSketch()),
-                      Positioned(
-                        left: 14,
-                        bottom: 12,
-                        child: CircleAvatar(
-                          radius: 16,
-                          backgroundColor: Colors.black.withValues(alpha: .78),
-                          child: const Icon(Icons.nights_stay_rounded,
-                              color: _mint, size: 18),
-                        ),
-                      ),
-                      Positioned(
-                        right: 14,
-                        bottom: 12,
-                        child: CircleAvatar(
-                          radius: 16,
-                          backgroundColor: Colors.black.withValues(alpha: .78),
-                          child: const Icon(Icons.settings_suggest_rounded,
-                              color: _pink, size: 18),
-                        ),
-                      ),
-                    ],
-                  )
-                : Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      ClientVideoViewer(
-                        pairedServerHost: session!.host,
-                        pairedServerPort: session.port,
-                        url: streamUrl,
-                      ),
-                      const Positioned(top: 10, left: 12, child: _LiveBadge()),
-                    ],
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _StreamSurface(
+              session: session,
+              streamToken: streamToken,
+              audioEnabled: audioEnabled,
+              fit: BoxFit.cover,
+              error: error,
+            ),
+            const Positioned(top: 10, left: 12, child: _LiveBadge()),
+            Positioned(
+              right: 10,
+              bottom: 10,
+              child: Row(
+                children: [
+                  _RoundIconButton(
+                    icon: audioEnabled
+                        ? Icons.volume_up_rounded
+                        : Icons.volume_off_rounded,
+                    tooltip: audioEnabled
+                        ? strings.ui('muteAudio')
+                        : strings.ui('unmuteAudio'),
+                    onTap: onToggleAudio,
                   ),
+                  const SizedBox(width: 8),
+                  _RoundIconButton(
+                    icon: Icons.fullscreen_rounded,
+                    tooltip: strings.ui('fullScreen'),
+                    onTap: onEnterFullscreen,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -344,6 +427,150 @@ class _VideoPanel extends StatelessWidget {
         NetworkQualityTier.offline => strings.ui('netOffline'),
         NetworkQualityTier.unknown => strings.ui('measuring'),
       };
+}
+
+class _StreamSurface extends StatelessWidget {
+  const _StreamSurface({
+    required this.session,
+    required this.streamToken,
+    required this.audioEnabled,
+    required this.fit,
+    required this.error,
+  });
+
+  final PairingSession? session;
+  final String? streamToken;
+  final bool audioEnabled;
+  final BoxFit fit;
+  final Object? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final session = this.session;
+    final streamToken = this.streamToken;
+    final streamUrl = session == null || streamToken == null
+        ? null
+        : ServerEndpointBuilder(session).http(
+            MimiCamProtocolV2.video,
+            query: {'streamToken': streamToken},
+          ).toString();
+    final audioUrl = session == null || streamToken == null || !audioEnabled
+        ? null
+        : ServerEndpointBuilder(session).http(
+            MimiCamProtocolV2.audio,
+            query: {'streamToken': streamToken},
+          ).toString();
+    if (streamUrl == null && error != null) {
+      return _StreamErrorPanel(message: error.toString());
+    }
+    if (streamUrl == null) return const _StreamPlaceholder();
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ClientVideoViewer(
+          pairedServerHost: session!.host,
+          pairedServerPort: session.port,
+          url: streamUrl,
+          fit: fit,
+        ),
+        if (audioUrl != null)
+          Positioned(
+            left: 0,
+            bottom: 0,
+            width: 2,
+            height: 2,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: .01,
+                child: ClientAudioStreamPlayer(
+                  pairedServerHost: session.host,
+                  pairedServerPort: session.port,
+                  url: audioUrl,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _StreamPlaceholder extends StatelessWidget {
+  const _StreamPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        for (final left in [22.0, 82.0, 142.0, 202.0, 262.0])
+          Positioned(
+            left: left,
+            top: 22,
+            bottom: 22,
+            child: Container(width: 1, color: Colors.white54),
+          ),
+        const Align(alignment: Alignment.center, child: _CribSketch()),
+        Positioned(
+          left: 14,
+          bottom: 12,
+          child: CircleAvatar(
+            radius: 16,
+            backgroundColor: Colors.black.withValues(alpha: .78),
+            child: const Icon(
+              Icons.nights_stay_rounded,
+              color: _mint,
+              size: 18,
+            ),
+          ),
+        ),
+        Positioned(
+          right: 14,
+          bottom: 12,
+          child: CircleAvatar(
+            radius: 16,
+            backgroundColor: Colors.black.withValues(alpha: .78),
+            child: const Icon(
+              Icons.settings_suggest_rounded,
+              color: _pink,
+              size: 18,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RoundIconButton extends StatelessWidget {
+  const _RoundIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.black.withValues(alpha: .68),
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Icon(icon, color: Colors.white, size: 22),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _StreamErrorPanel extends StatelessWidget {
@@ -394,10 +621,17 @@ class _StreamErrorPanel extends StatelessWidget {
 }
 
 class _LiveMetricGrid extends StatelessWidget {
-  const _LiveMetricGrid({required this.quality, required this.profile});
+  const _LiveMetricGrid({
+    required this.quality,
+    required this.profile,
+    required this.audioEnabled,
+    required this.alertsActive,
+  });
 
   final NetworkQualitySnapshot? quality;
   final MediaQualityProfile? profile;
+  final bool audioEnabled;
+  final bool alertsActive;
 
   @override
   Widget build(BuildContext context) {
@@ -407,9 +641,11 @@ class _LiveMetricGrid extends StatelessWidget {
         : _VideoPanel._networkLabel(strings, quality!.tier);
     final latencyLabel =
         quality?.rttMs == null ? '120 ms' : '${quality!.rttMs} ms';
-    final audioLabel = profile?.audioFirst == true
-        ? strings.ui('audioPriority')
-        : strings.ui('active');
+    final audioLabel = audioEnabled
+        ? profile?.audioFirst == true
+            ? strings.ui('audioPriority')
+            : strings.ui('audioOn')
+        : strings.ui('audioMuted');
     return Row(
       children: [
         Expanded(
@@ -423,9 +659,11 @@ class _LiveMetricGrid extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: _MetricTile(
-            icon: Icons.directions_run_rounded,
-            title: strings.ui('motion'),
-            value: networkLabel,
+            icon: Icons.notifications_active_rounded,
+            title: strings.ui('navNotifications'),
+            value: alertsActive
+                ? strings.ui('notificationsOn')
+                : strings.ui('notificationsOff'),
             color: const Color(0xFFFFE3EA),
           ),
         ),
@@ -434,7 +672,7 @@ class _LiveMetricGrid extends StatelessWidget {
           child: _MetricTile(
             icon: Icons.wifi_tethering_rounded,
             title: strings.ui('latency'),
-            value: latencyLabel,
+            value: '$networkLabel · $latencyLabel',
             color: const Color(0xFFF8FFF9),
           ),
         ),

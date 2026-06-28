@@ -13,6 +13,7 @@ class ClientRuntimeState {
     this.networkQuality,
     this.mediaProfile,
     this.activeStream,
+    this.alertsActive = false,
   });
 
   final ClientRuntimePhase phase;
@@ -21,6 +22,7 @@ class ClientRuntimeState {
   final NetworkQualitySnapshot? networkQuality;
   final MediaQualityProfile? mediaProfile;
   final ActiveStreamSession? activeStream;
+  final bool alertsActive;
 }
 
 enum ClientRuntimePhase {
@@ -41,7 +43,10 @@ class ClientRuntime {
   ClientRuntime({
     required Future<PairingSession> Function(PairingPayload payload) pair,
     Future<PairingSession?> Function(PairingSession session)? renew,
-    Future<ActiveStreamSession?> Function(PairingSession session)? startStream,
+    Future<ActiveStreamSession?> Function(
+      PairingSession session, {
+      bool audioEnabled,
+    })? startStream,
     Future<void> Function(PairingSession session)? stopStream,
     Stream<NetworkQualityUpdate> Function(PairingSession session)?
         watchNetworkQuality,
@@ -59,8 +64,10 @@ class ClientRuntime {
 
   final Future<PairingSession> Function(PairingPayload payload) _pair;
   final Future<PairingSession?> Function(PairingSession session)? _renew;
-  final Future<ActiveStreamSession?> Function(PairingSession session)?
-      _startStream;
+  final Future<ActiveStreamSession?> Function(
+    PairingSession session, {
+    bool audioEnabled,
+  })? _startStream;
   final Future<void> Function(PairingSession session)? _stopStream;
   final Stream<NetworkQualityUpdate> Function(PairingSession session)?
       _watchNetworkQuality;
@@ -119,6 +126,8 @@ class ClientRuntime {
       session: nextSession,
       networkQuality: _state.networkQuality,
       mediaProfile: _state.mediaProfile,
+      activeStream: _state.activeStream,
+      alertsActive: _state.alertsActive,
     ));
     _startNetworkQuality(nextSession);
   }
@@ -128,7 +137,10 @@ class ClientRuntime {
     final session = _state.session!;
     late final ActiveStreamSession? activeStream;
     try {
-      activeStream = await _startStream?.call(session);
+      activeStream = await _startStream?.call(
+        session,
+        audioEnabled: audioEnabled,
+      );
     } catch (error) {
       if (!_disposed) {
         _emit(ClientRuntimeState(
@@ -137,6 +149,7 @@ class ClientRuntime {
           error: error,
           networkQuality: _state.networkQuality,
           mediaProfile: _state.mediaProfile,
+          alertsActive: _state.alertsActive,
         ));
       }
       rethrow;
@@ -150,7 +163,8 @@ class ClientRuntime {
       session: session,
       networkQuality: _state.networkQuality,
       mediaProfile: _state.mediaProfile,
-      activeStream: activeStream,
+      activeStream: activeStream?.copyWith(audioEnabled: audioEnabled),
+      alertsActive: _state.alertsActive,
     ));
   }
 
@@ -159,28 +173,49 @@ class ClientRuntime {
     if (session != null) await _stopStream?.call(session);
     if (_disposed) return;
     _emit(ClientRuntimeState(
-      phase: ClientRuntimePhase.pairedIdle,
+      phase: _state.alertsActive
+          ? ClientRuntimePhase.alertOnly
+          : ClientRuntimePhase.pairedIdle,
       session: session,
       networkQuality: _state.networkQuality,
       mediaProfile: _state.mediaProfile,
       activeStream: null,
+      alertsActive: _state.alertsActive,
     ));
   }
 
   Future<void> startAlertListening() async {
     if (_disposed || _state.session == null) return;
     final session = _state.session!;
-    await _startAlerts?.call(session);
+    try {
+      await _startAlerts?.call(session);
+    } catch (error) {
+      if (!_disposed) {
+        _emit(ClientRuntimeState(
+          phase: ClientRuntimePhase.error,
+          session: session,
+          error: error,
+          networkQuality: _state.networkQuality,
+          mediaProfile: _state.mediaProfile,
+          activeStream: _state.activeStream,
+          alertsActive: false,
+        ));
+      }
+      rethrow;
+    }
     if (_disposed) {
       await _stopAlerts?.call();
       return;
     }
     _emit(ClientRuntimeState(
-      phase: ClientRuntimePhase.alertOnly,
+      phase: _state.activeStream == null
+          ? ClientRuntimePhase.alertOnly
+          : ClientRuntimePhase.watching,
       session: _state.session,
       networkQuality: _state.networkQuality,
       mediaProfile: _state.mediaProfile,
       activeStream: _state.activeStream,
+      alertsActive: true,
     ));
   }
 
@@ -188,11 +223,14 @@ class ClientRuntime {
     await _stopAlerts?.call();
     if (_disposed) return;
     _emit(ClientRuntimeState(
-      phase: ClientRuntimePhase.pairedIdle,
+      phase: _state.activeStream == null
+          ? ClientRuntimePhase.pairedIdle
+          : ClientRuntimePhase.watching,
       session: _state.session,
       networkQuality: _state.networkQuality,
       mediaProfile: _state.mediaProfile,
       activeStream: _state.activeStream,
+      alertsActive: false,
     ));
   }
 
@@ -229,6 +267,7 @@ class ClientRuntime {
         networkQuality: update.snapshot,
         mediaProfile: update.serverProfile ?? _state.mediaProfile,
         activeStream: _state.activeStream,
+        alertsActive: _state.alertsActive,
       ));
     });
   }

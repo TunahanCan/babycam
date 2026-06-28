@@ -1012,6 +1012,70 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'Sonido',
     'fr': 'Son'
   },
+  'audioOn': {
+    'tr': 'Ses açık',
+    'en': 'Audio on',
+    'zh': '声音开启',
+    'hi': 'ऑडियो चालू',
+    'es': 'Audio activo',
+    'fr': 'Audio activé'
+  },
+  'audioMuted': {
+    'tr': 'Sessiz',
+    'en': 'Muted',
+    'zh': '已静音',
+    'hi': 'म्यूट',
+    'es': 'Silenciado',
+    'fr': 'Muet'
+  },
+  'muteAudio': {
+    'tr': 'Sesi kapat',
+    'en': 'Mute audio',
+    'zh': '静音',
+    'hi': 'ऑडियो म्यूट करें',
+    'es': 'Silenciar audio',
+    'fr': 'Couper le son'
+  },
+  'unmuteAudio': {
+    'tr': 'Sesi aç',
+    'en': 'Unmute audio',
+    'zh': '开启声音',
+    'hi': 'ऑडियो चालू करें',
+    'es': 'Activar audio',
+    'fr': 'Réactiver le son'
+  },
+  'fullScreen': {
+    'tr': 'Tam ekran',
+    'en': 'Full screen',
+    'zh': '全屏',
+    'hi': 'पूर्ण स्क्रीन',
+    'es': 'Pantalla completa',
+    'fr': 'Plein écran'
+  },
+  'exitFullScreen': {
+    'tr': 'Tam ekrandan çık',
+    'en': 'Exit full screen',
+    'zh': '退出全屏',
+    'hi': 'पूर्ण स्क्रीन से बाहर निकलें',
+    'es': 'Salir de pantalla completa',
+    'fr': 'Quitter le plein écran'
+  },
+  'notificationsOn': {
+    'tr': 'Bildirim açık',
+    'en': 'Alerts on',
+    'zh': '提醒开启',
+    'hi': 'अलर्ट चालू',
+    'es': 'Alertas activas',
+    'fr': 'Alertes activées'
+  },
+  'notificationsOff': {
+    'tr': 'Bildirim kapalı',
+    'en': 'Alerts off',
+    'zh': '提醒关闭',
+    'hi': 'अलर्ट बंद',
+    'es': 'Alertas desactivadas',
+    'fr': 'Alertes désactivées'
+  },
   'motion': {
     'tr': 'Hareket',
     'en': 'Motion',

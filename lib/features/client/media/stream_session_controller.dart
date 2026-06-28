@@ -23,8 +23,19 @@ class StreamSessionController {
   HttpClient? _client;
   String? _clientKey;
 
-  Future<ActiveStreamSession?> start(PairingSession session) async {
-    final json = await _post(session, MimiCamProtocolV2.sessionStart);
+  Future<ActiveStreamSession?> start(
+    PairingSession session, {
+    bool audioEnabled = false,
+  }) async {
+    final json = await _post(
+      session,
+      MimiCamProtocolV2.sessionStart,
+      requestBody: {
+        'clientId': session.clientId,
+        'video': true,
+        'audio': audioEnabled,
+      },
+    );
     lastStreamToken = json?['streamToken']?.toString();
     final expiresAtMs = json?['streamTokenExpiresAtMs'];
     lastStreamTokenExpiresAtMs = expiresAtMs is int ? expiresAtMs : null;
@@ -35,6 +46,7 @@ class StreamSessionController {
     return ActiveStreamSession(
       streamToken: token,
       expiresAtMs: lastStreamTokenExpiresAtMs,
+      audioEnabled: audioEnabled,
     );
   }
 
@@ -51,14 +63,17 @@ class StreamSessionController {
   }
 
   Future<Map<String, Object?>?> _post(
-      PairingSession session, String path) async {
+    PairingSession session,
+    String path, {
+    Map<String, Object?>? requestBody,
+  }) async {
     final client = _clientForSession(session);
     final request =
         await client.postUrl(ServerEndpointBuilder(session).http(path));
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.authorizationHeader, 'Bearer ${session.sessionToken}');
-    request.write(jsonEncode({'clientId': session.clientId}));
+    request.write(jsonEncode(requestBody ?? {'clientId': session.clientId}));
     final response = await request.close();
     final body = await utf8.decoder.bind(response).join();
     if (response.statusCode != HttpStatus.ok) {

@@ -84,7 +84,11 @@ class MimiCamServer {
   final void Function(String message) onLog;
   final void Function(String message) onAlert;
   final void Function(MediaQualityProfile profile)? onMediaProfileChanged;
-  final FutureOr<void> Function(String clientId)? onStreamSessionStarted;
+  final FutureOr<void> Function(
+    String clientId, {
+    required bool video,
+    required bool audio,
+  })? onStreamSessionStarted;
   final FutureOr<void> Function(String clientId)? onStreamSessionStopped;
   final PairingTokenService tokenService;
   final MediaPermissionGateway mediaPermissions;
@@ -753,6 +757,7 @@ class MimiCamServer {
     }
 
     final clientId = _clientIdForRequest(request, json);
+    final demand = _streamDemandForRequest(json);
     late final ActiveSessionStartResult startResult;
     try {
       startResult = _activeClientRegistry.startSession(clientId);
@@ -774,8 +779,14 @@ class MimiCamServer {
         'mediaProfile': _effectiveMediaProfile().toJson(),
         'streamToken': startResult.streamToken.token,
         'streamTokenExpiresAtMs': startResult.streamToken.expiresAtMs,
+        'video': demand.video,
+        'audio': demand.audio,
       });
-      _notifyStreamSessionStarted(startResult.clientId);
+      _notifyStreamSessionStarted(
+        startResult.clientId,
+        video: demand.video,
+        audio: demand.audio,
+      );
     } catch (error) {
       if (startResult.createdActiveSlot) {
         _activeClientRegistry.stopSession(startResult.clientId);
@@ -867,10 +878,18 @@ class MimiCamServer {
     await _setActiveMediaProfile(nextProfile);
   }
 
-  void _notifyStreamSessionStarted(String clientId) {
+  void _notifyStreamSessionStarted(
+    String clientId, {
+    required bool video,
+    required bool audio,
+  }) {
     final callback = onStreamSessionStarted;
     if (callback == null) return;
-    unawaited(Future<void>.sync(() => callback(clientId)).catchError((_) {}));
+    unawaited(
+      Future<void>.sync(
+        () => callback(clientId, video: video, audio: audio),
+      ).catchError((_) {}),
+    );
   }
 
   void _notifyStreamSessionStopped(String clientId) {
@@ -978,6 +997,16 @@ class MimiCamServer {
       if (clientId != null && clientId.isNotEmpty) return clientId;
     }
     return request.connectionInfo?.remoteAddress.address ?? 'unknown_client';
+  }
+
+  ({bool video, bool audio}) _streamDemandForRequest(Object? json) {
+    if (json is! Map) return (video: true, audio: false);
+    final video = json['video'];
+    final audio = json['audio'];
+    return (
+      video: video is bool ? video : true,
+      audio: audio is bool ? audio : false,
+    );
   }
 
   Future<Object?> _readJsonBody(HttpRequest request) async {

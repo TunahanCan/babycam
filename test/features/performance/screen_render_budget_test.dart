@@ -265,7 +265,7 @@ Future<ClientRuntime> _pairedRuntime() async {
   final session = PairingSession(payload: _payload(), sessionToken: 'token');
   final runtime = ClientRuntime(
     pair: (_) async => session,
-    startStream: (_) async => null,
+    startStream: (_, {bool audioEnabled = false}) async => null,
     stopStream: (_) async {},
   );
   await runtime.pairWithServer(session.payload);
