@@ -20,6 +20,7 @@ import '../analysis/video/motion_analysis_result.dart';
 import '../analysis/video/luma_frame.dart';
 import '../analysis/video/motion_analysis_config.dart';
 import '../analysis/video/motion_analyzer_v2.dart';
+import '../core/media/camera_permission_gateway.dart';
 import '../core/media/adaptive_media_profile.dart';
 import '../core/media/client_quality_tracker.dart';
 import '../core/mimicam_protocol.dart';
@@ -52,14 +53,19 @@ class MimiCamServer {
     this.enableLegacyWebSocketMediaPackets = false,
     this.enableAudioAutoCalibration = true,
     this.onMediaProfileChanged,
+    this.onStreamSessionStarted,
+    this.onStreamSessionStopped,
     DeviceCapabilityTier? deviceTier,
     PairingTokenService? tokenService,
     this.transportConfig = TransportConfig.local,
     this.localNetworkGuard = const LocalNetworkGuard(),
     this.maxActiveWatchClients = 5,
     this.startMediaOnSessionStart = true,
+    MediaPermissionGateway? mediaPermissions,
     this.httpPort = MimiCamProtocol.httpPort,
   })  : tokenService = tokenService ?? PairingTokenService(),
+        mediaPermissions =
+            mediaPermissions ?? const CameraMediaPermissionGateway(),
         _deviceTier = deviceTier ?? DeviceCapabilityProbe.detectTier() {
     _activeMediaProfile = MediaQualityProfile.forDeviceTier(_deviceTier);
     _frameBudget.updateMinInterval(_activeMediaProfile.frameInterval);
@@ -78,7 +84,10 @@ class MimiCamServer {
   final void Function(String message) onLog;
   final void Function(String message) onAlert;
   final void Function(MediaQualityProfile profile)? onMediaProfileChanged;
+  final FutureOr<void> Function(String clientId)? onStreamSessionStarted;
+  final FutureOr<void> Function(String clientId)? onStreamSessionStopped;
   final PairingTokenService tokenService;
+  final MediaPermissionGateway mediaPermissions;
   final TransportConfig transportConfig;
   final LocalNetworkGuard localNetworkGuard;
   final int maxActiveWatchClients;
@@ -170,6 +179,7 @@ class MimiCamServer {
   Future<void> startMediaRuntime() async {
     if (_disposed) throw StateError('MimiCamServer is disposed.');
     if (cameraController != null) return;
+    await _ensureCameraPermission();
     final cameras = await availableCameras();
     if (_disposed) throw StateError('MimiCamServer is disposed.');
     if (cameras.isEmpty) throw StateError(strings.cameraNotFound);
@@ -743,6 +753,7 @@ class MimiCamServer {
         'streamToken': startResult.streamToken.token,
         'streamTokenExpiresAtMs': startResult.streamToken.expiresAtMs,
       });
+      _notifyStreamSessionStarted(startResult.clientId);
     } catch (_) {
       if (startResult.createdActiveSlot) {
         _activeClientRegistry.stopSession(startResult.clientId);
@@ -777,6 +788,7 @@ class MimiCamServer {
         'activeStreamClients': _activeClientRegistry.activeClientCount,
         'mediaProfile': _effectiveMediaProfile().toJson(),
       });
+      _notifyStreamSessionStopped(clientId);
     } catch (_) {
       request.response.statusCode = HttpStatus.internalServerError;
       await request.response.close();
@@ -828,6 +840,18 @@ class MimiCamServer {
     await _setActiveMediaProfile(nextProfile);
   }
 
+  void _notifyStreamSessionStarted(String clientId) {
+    final callback = onStreamSessionStarted;
+    if (callback == null) return;
+    unawaited(Future<void>.sync(() => callback(clientId)).catchError((_) {}));
+  }
+
+  void _notifyStreamSessionStopped(String clientId) {
+    final callback = onStreamSessionStopped;
+    if (callback == null) return;
+    unawaited(Future<void>.sync(() => callback(clientId)).catchError((_) {}));
+  }
+
   StreamBackpressureMetrics _combinedBackpressureMetrics() =>
       combineBackpressureMetrics([
         _mjpegBackpressure.aggregateMetrics(),
@@ -862,6 +886,7 @@ class MimiCamServer {
     await previousController.dispose();
     if (_disposed) return;
 
+    await _ensureCameraPermission();
     final cameras = await availableCameras();
     if (_disposed) return;
     if (cameras.isEmpty) throw StateError(strings.cameraNotFound);
@@ -884,6 +909,11 @@ class MimiCamServer {
       await nextController.dispose();
       rethrow;
     }
+  }
+
+  Future<void> _ensureCameraPermission() async {
+    if (await mediaPermissions.requestCamera()) return;
+    throw StateError(strings.cameraPermissionMissing);
   }
 
   Map<String, Object?> _mediaCapabilities() => {
@@ -1140,6 +1170,29 @@ class MimiCamServer {
     _lastCryActiveAtMs = null;
   }
 }
+
+abstract interface class MediaPermissionGateway {
+  Future<bool> requestCamera();
+}
+
+class PermissionHandlerMediaPermissionGateway
+    implements MediaPermissionGateway {
+  const PermissionHandlerMediaPermissionGateway({
+    CameraPermissionGateway cameraPermissions =
+        const MethodChannelCameraPermissionGateway(),
+  }) : _cameraPermissions = cameraPermissions;
+
+  final CameraPermissionGateway _cameraPermissions;
+
+  @override
+  Future<bool> requestCamera() async {
+    var status = await _cameraPermissions.status();
+    if (status.isDenied) status = await _cameraPermissions.request();
+    return status.isGranted;
+  }
+}
+
+typedef CameraMediaPermissionGateway = PermissionHandlerMediaPermissionGateway;
 
 enum _AuthMode { none, bearer, streamToken }
 

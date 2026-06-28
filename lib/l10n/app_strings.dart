@@ -238,6 +238,15 @@ class AppStrings {
       fr: 'Caméra introuvable.',
       de: 'Kamera nicht gefunden.',
       ar: 'لم يتم العثور على الكاميرا.');
+  String get cameraPermissionMissing => _t(
+      tr: 'Kamera izni yok; kamera yayını başlatılamadı.',
+      en: 'Camera permission is missing; camera streaming could not start.',
+      zh: '缺少摄像头权限；无法开始摄像头直播。',
+      hi: 'कैमरा अनुमति नहीं है; कैमरा स्ट्रीम शुरू नहीं हो सकी।',
+      es: 'Falta el permiso de cámara; no se pudo iniciar la transmisión de cámara.',
+      fr: 'L’autorisation caméra manque ; le flux caméra n’a pas pu démarrer.',
+      de: 'Kameraberechtigung fehlt; der Kamerastream konnte nicht gestartet werden.',
+      ar: 'إذن الكاميرا مفقود؛ تعذر بدء بث الكاميرا.');
   String serverStartedLog(String url) => _t(
       tr: 'Server başladı: $url',
       en: 'Server started: $url',

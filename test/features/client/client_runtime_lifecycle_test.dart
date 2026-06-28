@@ -5,6 +5,7 @@ import 'package:mimicam/core/media/adaptive_media_profile.dart';
 import 'package:mimicam/core/protocol/pairing_payload.dart';
 import 'package:mimicam/core/protocol/pairing_session.dart';
 import 'package:mimicam/features/client/client_runtime.dart';
+import 'package:mimicam/features/client/media/active_stream_session.dart';
 
 void main() {
   PairingPayload payload() => PairingPayload(
@@ -26,7 +27,10 @@ void main() {
     var cleared = 0;
     final runtime = ClientRuntime(
         pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
-        startStream: (_) async => streamStarted++,
+        startStream: (_) async {
+          streamStarted++;
+          return const ActiveStreamSession(streamToken: 'stream');
+        },
         stopStream: (_) async => streamStopped++,
         clearStore: () async => cleared++);
     await runtime.pairWithServer(payload());
@@ -45,7 +49,10 @@ void main() {
     var streamStarted = 0;
     final runtime = ClientRuntime(
       pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
-      startStream: (_) async => streamStarted++,
+      startStream: (_) async {
+        streamStarted++;
+        return const ActiveStreamSession(streamToken: 'stream');
+      },
     );
 
     await runtime.startWatching();

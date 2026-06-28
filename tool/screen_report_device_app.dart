@@ -7,6 +7,7 @@ import 'package:mimicam/core/protocol/pairing_session.dart';
 import 'package:mimicam/core/theme/mimicam_theme.dart';
 import 'package:mimicam/features/client/client_home_screen.dart';
 import 'package:mimicam/features/client/client_runtime.dart';
+import 'package:mimicam/features/client/media/active_stream_session.dart';
 import 'package:mimicam/features/client/media/watch_screen.dart';
 import 'package:mimicam/features/role_selection/role_selection_screen.dart';
 import 'package:mimicam/features/server/media/media_runtime_controller.dart';
@@ -50,7 +51,8 @@ Future<Widget> _buildScene(String scene) async {
     case 'client_paired':
       final runtime = ClientRuntime(
         pair: (_) async => _session(),
-        startStream: (_) async {},
+        startStream: (_) async =>
+            const ActiveStreamSession(streamToken: 'stream'),
         stopStream: (_) async {},
       );
       await runtime.pairWithServer(_payload());
@@ -66,7 +68,8 @@ Future<Widget> _buildScene(String scene) async {
     case 'watch':
       final runtime = ClientRuntime(
         pair: (_) async => _session(),
-        startStream: (_) async {},
+        startStream: (_) async =>
+            const ActiveStreamSession(streamToken: 'stream'),
         stopStream: (_) async {},
       );
       await runtime.pairWithServer(_payload());

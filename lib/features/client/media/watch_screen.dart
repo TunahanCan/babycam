@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/media/adaptive_media_profile.dart';
+import '../../../core/protocol/mimicam_protocol.dart';
+import '../../../core/protocol/pairing_session.dart';
+import '../../../core/protocol/server_endpoint_builder.dart';
 import '../../../l10n/app_strings.dart';
 import '../../shared/presentation/localized_measurement_text.dart';
 import '../../shared/presentation/media_profile_text.dart';
 import '../client_runtime.dart';
+import 'client_video_viewer.dart';
 
 class WatchScreen extends StatefulWidget {
   const WatchScreen({super.key, required this.runtime, this.initialTab = 0});
@@ -71,7 +75,10 @@ class _WatchScreenState extends State<WatchScreen> {
           const SizedBox(height: 8),
           Text(strings.ui('liveStreamConnectedSubtitle'), style: _subtitle),
           const SizedBox(height: 18),
-          const _VideoPanel(),
+          _VideoPanel(
+            session: state.session,
+            streamToken: state.activeStream?.streamToken,
+          ),
           const SizedBox(height: 16),
           _LiveMetricGrid(quality: quality, profile: profile),
           const SizedBox(height: 18),
@@ -246,10 +253,24 @@ class _WatchScreenState extends State<WatchScreen> {
 }
 
 class _VideoPanel extends StatelessWidget {
-  const _VideoPanel();
+  const _VideoPanel({
+    required this.session,
+    required this.streamToken,
+  });
+
+  final PairingSession? session;
+  final String? streamToken;
 
   @override
   Widget build(BuildContext context) {
+    final session = this.session;
+    final streamToken = this.streamToken;
+    final streamUrl = session == null || streamToken == null
+        ? null
+        : ServerEndpointBuilder(session).http(
+            MimiCamProtocolV2.video,
+            query: {'streamToken': streamToken},
+          ).toString();
     return AspectRatio(
       aspectRatio: 16 / 12,
       child: Container(
@@ -258,39 +279,53 @@ class _VideoPanel extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
           border: Border.all(color: const Color(0xFFF2D8CD), width: 4),
         ),
-        child: Stack(
-          children: [
-            for (final left in [22.0, 82.0, 142.0, 202.0, 262.0])
-              Positioned(
-                left: left,
-                top: 22,
-                bottom: 22,
-                child: Container(width: 1, color: Colors.white54),
+        clipBehavior: Clip.antiAlias,
+        child: streamUrl == null
+            ? Stack(
+                children: [
+                  for (final left in [22.0, 82.0, 142.0, 202.0, 262.0])
+                    Positioned(
+                      left: left,
+                      top: 22,
+                      bottom: 22,
+                      child: Container(width: 1, color: Colors.white54),
+                    ),
+                  const Positioned(top: 10, left: 12, child: _LiveBadge()),
+                  const Align(
+                      alignment: Alignment.center, child: _CribSketch()),
+                  Positioned(
+                    left: 14,
+                    bottom: 12,
+                    child: CircleAvatar(
+                      radius: 16,
+                      backgroundColor: Colors.black.withValues(alpha: .78),
+                      child: const Icon(Icons.nights_stay_rounded,
+                          color: _mint, size: 18),
+                    ),
+                  ),
+                  Positioned(
+                    right: 14,
+                    bottom: 12,
+                    child: CircleAvatar(
+                      radius: 16,
+                      backgroundColor: Colors.black.withValues(alpha: .78),
+                      child: const Icon(Icons.settings_suggest_rounded,
+                          color: _pink, size: 18),
+                    ),
+                  ),
+                ],
+              )
+            : Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClientVideoViewer(
+                    pairedServerHost: session!.host,
+                    pairedServerPort: session.port,
+                    url: streamUrl,
+                  ),
+                  const Positioned(top: 10, left: 12, child: _LiveBadge()),
+                ],
               ),
-            const Positioned(top: 10, left: 12, child: _LiveBadge()),
-            const Align(alignment: Alignment.center, child: _CribSketch()),
-            Positioned(
-              left: 14,
-              bottom: 12,
-              child: CircleAvatar(
-                radius: 16,
-                backgroundColor: Colors.black.withValues(alpha: .78),
-                child: const Icon(Icons.nights_stay_rounded,
-                    color: _mint, size: 18),
-              ),
-            ),
-            Positioned(
-              right: 14,
-              bottom: 12,
-              child: CircleAvatar(
-                radius: 16,
-                backgroundColor: Colors.black.withValues(alpha: .78),
-                child: const Icon(Icons.settings_suggest_rounded,
-                    color: _pink, size: 18),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

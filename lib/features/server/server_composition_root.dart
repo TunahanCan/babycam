@@ -21,12 +21,18 @@ class ServerCompositionRoot {
     createCount++;
     final tokenService = PairingTokenService();
     void Function()? notifyMediaProfileChanged;
+    late final ServerRuntime runtime;
     final server = MimiCamServer(
         config: config,
         strings: strings,
         onLog: onLog ?? (_) {},
         onAlert: (_) {},
         onMediaProfileChanged: (_) => notifyMediaProfileChanged?.call(),
+        onStreamSessionStarted: (clientId) => runtime.startStreamSession(
+              clientId,
+              const StreamSessionOptions(video: true, audio: false),
+            ),
+        onStreamSessionStopped: (clientId) => runtime.endSession(clientId),
         tokenService: tokenService,
         transportConfig: transportConfig);
     final qrBuilder = ServerQrPayloadBuilder(
@@ -37,7 +43,7 @@ class ServerCompositionRoot {
     final media = MediaRuntimeController(
         onStart: startMediaOverride ?? server.startMediaRuntime,
         onStop: server.stopMediaRuntime);
-    final runtime = ServerRuntime(
+    runtime = ServerRuntime(
       mediaRuntime: media,
       previewSource: () => server.cameraController,
       mediaProfile: () => server.activeMediaProfile,

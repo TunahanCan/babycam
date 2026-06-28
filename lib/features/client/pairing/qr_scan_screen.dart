@@ -3,45 +3,23 @@ import 'dart:async';
 import 'package:camera/camera.dart' as camera;
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:permission_handler/permission_handler.dart';
 
+import '../../../core/media/camera_permission_gateway.dart';
 import '../../../l10n/app_strings.dart';
 
 class QRScanScreen extends StatefulWidget {
   const QRScanScreen({
     super.key,
-    this.permissionGateway = const PermissionHandlerQRCameraPermissionGateway(),
+    this.permissionGateway = const MethodChannelCameraPermissionGateway(),
     this.cameraAvailabilityGateway =
         const CameraPackageQRCameraAvailabilityGateway(),
   });
 
-  final QRCameraPermissionGateway permissionGateway;
+  final CameraPermissionGateway permissionGateway;
   final QRCameraAvailabilityGateway cameraAvailabilityGateway;
 
   @override
   State<QRScanScreen> createState() => _QRScanScreenState();
-}
-
-abstract interface class QRCameraPermissionGateway {
-  Future<PermissionStatus> status();
-
-  Future<PermissionStatus> request();
-
-  Future<bool> openSettings();
-}
-
-class PermissionHandlerQRCameraPermissionGateway
-    implements QRCameraPermissionGateway {
-  const PermissionHandlerQRCameraPermissionGateway();
-
-  @override
-  Future<PermissionStatus> status() => Permission.camera.status;
-
-  @override
-  Future<PermissionStatus> request() => Permission.camera.request();
-
-  @override
-  Future<bool> openSettings() => openAppSettings();
 }
 
 abstract interface class QRCameraAvailabilityGateway {
@@ -128,7 +106,7 @@ class _QRScanScreenState extends State<QRScanScreen>
       _cameraErrorMessage = null;
     });
 
-    PermissionStatus status;
+    CameraPermissionStatus status;
     try {
       status = await widget.permissionGateway.status();
       if (status.isDenied && requestIfNeeded) {

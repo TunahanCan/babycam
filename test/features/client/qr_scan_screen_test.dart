@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mimicam/core/media/camera_permission_gateway.dart';
 import 'package:mimicam/features/client/pairing/qr_scan_screen.dart';
 import 'package:mimicam/l10n/app_strings.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 void main() {
   testWidgets('kamera izni reddedilince manuel QR girişi açık kalır',
       (tester) async {
     final gateway = _FakeQRCameraPermissionGateway(
-      statusResult: PermissionStatus.denied,
-      requestResult: PermissionStatus.denied,
+      statusResult: CameraPermissionStatus.denied,
+      requestResult: CameraPermissionStatus.denied,
     );
 
     await tester.pumpWidget(_App(gateway: gateway));
@@ -34,7 +34,7 @@ void main() {
   testWidgets('ayarlar butonu permission gateway üzerinden açılır',
       (tester) async {
     final gateway = _FakeQRCameraPermissionGateway(
-      statusResult: PermissionStatus.permanentlyDenied,
+      statusResult: CameraPermissionStatus.permanentlyDenied,
     );
 
     await tester.pumpWidget(_App(gateway: gateway));
@@ -50,7 +50,7 @@ void main() {
   testWidgets('kamera yoksa native scanner açmadan manuel giriş gösterir',
       (tester) async {
     final gateway = _FakeQRCameraPermissionGateway(
-      statusResult: PermissionStatus.granted,
+      statusResult: CameraPermissionStatus.granted,
     );
     final availability = _FakeQRCameraAvailabilityGateway(available: false);
 
@@ -73,7 +73,7 @@ class _App extends StatelessWidget {
     this.cameraAvailabilityGateway,
   });
 
-  final QRCameraPermissionGateway gateway;
+  final CameraPermissionGateway gateway;
   final QRCameraAvailabilityGateway? cameraAvailabilityGateway;
 
   @override
@@ -96,26 +96,26 @@ class _App extends StatelessWidget {
   }
 }
 
-class _FakeQRCameraPermissionGateway implements QRCameraPermissionGateway {
+class _FakeQRCameraPermissionGateway implements CameraPermissionGateway {
   _FakeQRCameraPermissionGateway({
     required this.statusResult,
     this.requestResult,
   });
 
-  PermissionStatus statusResult;
-  final PermissionStatus? requestResult;
+  CameraPermissionStatus statusResult;
+  final CameraPermissionStatus? requestResult;
   int statusCalls = 0;
   int requestCalls = 0;
   int openSettingsCalls = 0;
 
   @override
-  Future<PermissionStatus> status() async {
+  Future<CameraPermissionStatus> status() async {
     statusCalls++;
     return statusResult;
   }
 
   @override
-  Future<PermissionStatus> request() async {
+  Future<CameraPermissionStatus> request() async {
     requestCalls++;
     statusResult = requestResult ?? statusResult;
     return statusResult;

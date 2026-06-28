@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../core/media/adaptive_media_profile.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../core/protocol/pairing_session.dart';
+import 'media/active_stream_session.dart';
 
 class ClientRuntimeState {
   const ClientRuntimeState({
@@ -11,6 +12,7 @@ class ClientRuntimeState {
     this.error,
     this.networkQuality,
     this.mediaProfile,
+    this.activeStream,
   });
 
   final ClientRuntimePhase phase;
@@ -18,6 +20,7 @@ class ClientRuntimeState {
   final Object? error;
   final NetworkQualitySnapshot? networkQuality;
   final MediaQualityProfile? mediaProfile;
+  final ActiveStreamSession? activeStream;
 }
 
 enum ClientRuntimePhase {
@@ -38,7 +41,7 @@ class ClientRuntime {
   ClientRuntime({
     required Future<PairingSession> Function(PairingPayload payload) pair,
     Future<PairingSession?> Function(PairingSession session)? renew,
-    Future<void> Function(PairingSession session)? startStream,
+    Future<ActiveStreamSession?> Function(PairingSession session)? startStream,
     Future<void> Function(PairingSession session)? stopStream,
     Stream<NetworkQualityUpdate> Function(PairingSession session)?
         watchNetworkQuality,
@@ -56,7 +59,8 @@ class ClientRuntime {
 
   final Future<PairingSession> Function(PairingPayload payload) _pair;
   final Future<PairingSession?> Function(PairingSession session)? _renew;
-  final Future<void> Function(PairingSession session)? _startStream;
+  final Future<ActiveStreamSession?> Function(PairingSession session)?
+      _startStream;
   final Future<void> Function(PairingSession session)? _stopStream;
   final Stream<NetworkQualityUpdate> Function(PairingSession session)?
       _watchNetworkQuality;
@@ -122,7 +126,7 @@ class ClientRuntime {
   Future<void> startWatching({bool audioEnabled = false}) async {
     if (_disposed || _state.session == null) return;
     final session = _state.session!;
-    await _startStream?.call(session);
+    final activeStream = await _startStream?.call(session);
     if (_disposed) {
       await _stopStream?.call(session);
       return;
@@ -132,6 +136,7 @@ class ClientRuntime {
       session: session,
       networkQuality: _state.networkQuality,
       mediaProfile: _state.mediaProfile,
+      activeStream: activeStream,
     ));
   }
 
@@ -144,6 +149,7 @@ class ClientRuntime {
       session: session,
       networkQuality: _state.networkQuality,
       mediaProfile: _state.mediaProfile,
+      activeStream: null,
     ));
   }
 
@@ -160,6 +166,7 @@ class ClientRuntime {
       session: _state.session,
       networkQuality: _state.networkQuality,
       mediaProfile: _state.mediaProfile,
+      activeStream: _state.activeStream,
     ));
   }
 
@@ -171,6 +178,7 @@ class ClientRuntime {
       session: _state.session,
       networkQuality: _state.networkQuality,
       mediaProfile: _state.mediaProfile,
+      activeStream: _state.activeStream,
     ));
   }
 
@@ -206,6 +214,7 @@ class ClientRuntime {
         error: _state.error,
         networkQuality: update.snapshot,
         mediaProfile: update.serverProfile ?? _state.mediaProfile,
+        activeStream: _state.activeStream,
       ));
     });
   }

@@ -4,6 +4,7 @@ import 'dart:io';
 import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
+import 'active_stream_session.dart';
 import 'client_stream_health_state.dart';
 
 class StreamSessionController {
@@ -22,13 +23,19 @@ class StreamSessionController {
   HttpClient? _client;
   String? _clientKey;
 
-  Future<void> start(PairingSession session) async {
+  Future<ActiveStreamSession?> start(PairingSession session) async {
     final json = await _post(session, MimiCamProtocolV2.sessionStart);
     lastStreamToken = json?['streamToken']?.toString();
     final expiresAtMs = json?['streamTokenExpiresAtMs'];
     lastStreamTokenExpiresAtMs = expiresAtMs is int ? expiresAtMs : null;
     isActive = true;
     healthState?.resetForNewWatchSession();
+    final token = lastStreamToken;
+    if (token == null || token.isEmpty) return null;
+    return ActiveStreamSession(
+      streamToken: token,
+      expiresAtMs: lastStreamTokenExpiresAtMs,
+    );
   }
 
   Future<void> stop(PairingSession session) async {
