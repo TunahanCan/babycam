@@ -34,6 +34,7 @@ import '../l10n/app_strings.dart';
 import 'configuration_service.dart';
 import 'motion_analyzer.dart' show CameraImageJpegEncoder;
 import 'server/active_client_registry.dart';
+import 'server/audio_stream_leveler.dart';
 import 'server/alert_protocol_adapter.dart';
 import 'server/jpeg_byte_budget_controller.dart';
 import 'server/media_analysis_coordinator.dart';
@@ -113,6 +114,7 @@ class MimiCamServer {
       StreamBackpressureGate<HttpResponse>(kind: StreamBackpressureKind.video);
   final _audioBackpressure =
       StreamBackpressureGate<HttpResponse>(kind: StreamBackpressureKind.audio);
+  final _audioStreamLeveler = AudioStreamLeveler();
   late final ActiveClientRegistry _activeClientRegistry;
   late final RequestAuthGuard _authGuard;
 
@@ -334,8 +336,9 @@ class MimiCamServer {
         channels: _audioChannels,
         timestampMs: nowMs,
       ));
+      final streamChunk = _audioStreamLeveler.processPcm16le(chunk);
       if (enableLegacyWebSocketMediaPackets) {
-        _broadcastBinary([MimiCamProtocol.packetAudioPcm16Le, ...chunk]);
+        _broadcastBinary([MimiCamProtocol.packetAudioPcm16Le, ...streamChunk]);
       }
       for (final client in _audioClients.toList()) {
         final clientId = _audioClientIds[client];
@@ -345,11 +348,11 @@ class MimiCamServer {
         if (clientId != null) _audioBusyClientIds.add(clientId);
         final startedAt = DateTime.now();
         try {
-          client.add(chunk);
+          client.add(streamChunk);
           client.flush().then<void>((_) {
             _audioChunksStreamed++;
             _lastAudioClientWriteAtMs = DateTime.now().millisecondsSinceEpoch;
-            _lastAudioClientWriteBytes = chunk.length;
+            _lastAudioClientWriteBytes = streamChunk.length;
             _audioBackpressure.recordSuccess(
               client,
               duration: DateTime.now().difference(startedAt),
@@ -661,6 +664,12 @@ class MimiCamServer {
           const {HttpMethod.post},
           (request, _) => _handleTestAlert(request),
         ),
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.testAudioTone,
+          _AuthMode.bearer,
+          const {HttpMethod.get},
+          (request, _) => _handleTestAudioTone(request),
+        ),
       ];
 
   _RouteSpec? _routeFor(String path) {
@@ -831,6 +840,39 @@ class MimiCamServer {
       'deliveredWebSocketClients': _lastAlertDeliveredWebSocketClients,
       'diagnostics': _testDiagnostics(),
     });
+  }
+
+  Future<void> _handleTestAudioTone(HttpRequest request) async {
+    final query = request.uri.queryParameters;
+    final durationMs =
+        _intFrom(query['durationMs'], defaultValue: 1200).clamp(100, 5000);
+    final frequencyHz =
+        _intFrom(query['frequencyHz'], defaultValue: 440).clamp(80, 2000);
+    final amplitude = (double.tryParse(query['amplitude'] ?? '') ?? .35)
+        .clamp(.02, .80)
+        .toDouble();
+    final pcm = _sineTonePcm16le(
+      durationMs: durationMs.toInt(),
+      frequencyHz: frequencyHz.toInt(),
+      amplitude: amplitude,
+    );
+
+    request.response.headers
+      ..contentType = ContentType('audio', 'wav')
+      ..set(HttpHeaders.cacheControlHeader, 'no-store')
+      ..set('X-Audio-Test-Tone', 'true')
+      ..set('X-Audio-Sample-Rate', '$_audioSampleRate')
+      ..set('X-Audio-Channels', '$_audioChannels')
+      ..set('X-Audio-Bits-Per-Sample', '$_audioBitsPerSample');
+    request.response
+      ..add(_wavHeader(
+        sampleRate: _audioSampleRate,
+        channels: _audioChannels,
+        bitsPerSample: _audioBitsPerSample,
+        dataSize: pcm.length,
+      ))
+      ..add(pcm);
+    await request.response.close();
   }
 
   Future<void> _handleVideoRoute(
@@ -1312,6 +1354,7 @@ class MimiCamServer {
         'lastChunkBytes': _lastAudioChunkBytes,
         'lastClientWriteBytes': _lastAudioClientWriteBytes,
         'lastStartError': _lastAudioStartError,
+        'leveler': _audioStreamLeveler.lastSnapshot.toJson(),
         'backpressure': _backpressureJson(audioMetrics),
       },
       'events': {
@@ -1431,6 +1474,7 @@ class MimiCamServer {
     _frameBudget.reset();
     _mjpegBackpressure.clear();
     _audioBackpressure.clear();
+    _audioStreamLeveler.reset();
     _mjpegClientIds.clear();
     _audioClientIds.clear();
     _audioBusyClientIds.clear();
@@ -1527,10 +1571,12 @@ class MimiCamServer {
     await response.close();
   }
 
-  Uint8List _wavHeader(
-      {required int sampleRate,
-      required int channels,
-      required int bitsPerSample}) {
+  Uint8List _wavHeader({
+    required int sampleRate,
+    required int channels,
+    required int bitsPerSample,
+    int dataSize = 0x7fffffff,
+  }) {
     final byteRate = sampleRate * channels * bitsPerSample ~/ 8;
     final blockAlign = channels * bitsPerSample ~/ 8;
     final data = ByteData(44);
@@ -1540,7 +1586,6 @@ class MimiCamServer {
       }
     }
 
-    const dataSize = 0x7fffffff;
     writeAscii(0, 'RIFF');
     data.setUint32(4, 36 + dataSize, Endian.little);
     writeAscii(8, 'WAVE');
@@ -1555,6 +1600,30 @@ class MimiCamServer {
     writeAscii(36, 'data');
     data.setUint32(40, dataSize, Endian.little);
     return data.buffer.asUint8List();
+  }
+
+  Uint8List _sineTonePcm16le({
+    required int durationMs,
+    required int frequencyHz,
+    required double amplitude,
+  }) {
+    final sampleCount = (_audioSampleRate * durationMs / 1000).round();
+    final output = Uint8List(sampleCount * 2);
+    final view = ByteData.sublistView(output);
+    final amplitudeInt = (32767 * amplitude).round();
+    final fadeSamples =
+        min(sampleCount ~/ 2, (_audioSampleRate * .008).round());
+    for (var i = 0; i < sampleCount; i++) {
+      final fade = fadeSamples <= 0
+          ? 1.0
+          : min(1.0, min(i + 1, sampleCount - i) / fadeSamples);
+      final sample = (sin(2 * pi * frequencyHz * i / _audioSampleRate) *
+              amplitudeInt *
+              fade)
+          .round();
+      view.setInt16(i * 2, sample, Endian.little);
+    }
+    return output;
   }
 
   int _broadcastBinary(List<int> data) {
@@ -1602,6 +1671,7 @@ class MimiCamServer {
     _activeClientRegistry.clear();
     _mjpegBackpressure.clear();
     _audioBackpressure.clear();
+    _audioStreamLeveler.reset();
     _mjpegClientIds.clear();
     _audioClientIds.clear();
     _audioBusyClientIds.clear();

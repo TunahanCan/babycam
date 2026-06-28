@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -134,6 +135,45 @@ void main() {
     });
     expect(jsonDecode(message as String), isA<Map>());
   });
+
+  test('/test/audio-tone Bearer token ile deterministik WAV tonu dondurur',
+      () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    expect(
+      await _statusCode(client, base.port, MimiCamProtocolV2.testAudioTone),
+      HttpStatus.unauthorized,
+    );
+
+    final bytes = await _getBytes(
+      client,
+      base.port,
+      MimiCamProtocolV2.testAudioTone,
+      trusted.token,
+      query: {
+        'durationMs': '200',
+        'frequencyHz': '1000',
+        'amplitude': '0.25',
+      },
+    );
+
+    expect(String.fromCharCodes(bytes.sublist(0, 4)), 'RIFF');
+    expect(String.fromCharCodes(bytes.sublist(8, 12)), 'WAVE');
+    final dataSize =
+        ByteData.sublistView(bytes, 40, 44).getUint32(0, Endian.little);
+    expect(dataSize, 16000 * 200 ~/ 1000 * 2);
+    expect(bytes.length, 44 + dataSize);
+    expect(_pcmPeak(bytes.sublist(44)), greaterThan(1000));
+  });
 }
 
 Future<MimiCamServer> _testServer(PairingTokenService tokenService) async {
@@ -185,6 +225,30 @@ Future<Map<String, Object?>> _getJson(
   return Map<String, Object?>.from(jsonDecode(body) as Map);
 }
 
+Future<Uint8List> _getBytes(
+  HttpClient client,
+  int port,
+  String path,
+  String bearerToken, {
+  Map<String, String>? query,
+}) async {
+  final request = await client.getUrl(Uri(
+    scheme: 'http',
+    host: InternetAddress.loopbackIPv4.address,
+    port: port,
+    path: path,
+    queryParameters: query,
+  ));
+  request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $bearerToken');
+  final response = await request.close();
+  final chunks = await response.fold<List<int>>(
+    <int>[],
+    (buffer, chunk) => buffer..addAll(chunk),
+  );
+  expect(response.statusCode, HttpStatus.ok);
+  return Uint8List.fromList(chunks);
+}
+
 Future<({int statusCode, Map<String, Object?> body})> _postJson(
   HttpClient client,
   int port,
@@ -208,4 +272,14 @@ Future<({int statusCode, Map<String, Object?> body})> _postJson(
     statusCode: response.statusCode,
     body: Map<String, Object?>.from(jsonDecode(responseBody) as Map),
   );
+}
+
+int _pcmPeak(Uint8List pcm16le) {
+  final view = ByteData.sublistView(pcm16le);
+  var peak = 0;
+  for (var i = 0; i < pcm16le.length ~/ 2; i++) {
+    final sample = view.getInt16(i * 2, Endian.little).abs();
+    if (sample > peak) peak = sample;
+  }
+  return peak;
 }

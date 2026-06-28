@@ -15,6 +15,8 @@ class ClientAudioStreamPlayer extends StatefulWidget {
     required this.url,
     this.audioOutput = const PcmAudioOutput(),
     this.onAudioChunkReceived,
+    this.onPlaybackStatus,
+    this.onAudioError,
   });
 
   final String pairedServerHost;
@@ -22,6 +24,8 @@ class ClientAudioStreamPlayer extends StatefulWidget {
   final String url;
   final PcmAudioOutput audioOutput;
   final VoidCallback? onAudioChunkReceived;
+  final ValueChanged<Map<String, Object?>>? onPlaybackStatus;
+  final ValueChanged<Object>? onAudioError;
 
   @override
   State<ClientAudioStreamPlayer> createState() =>
@@ -35,6 +39,7 @@ class _ClientAudioStreamPlayerState extends State<ClientAudioStreamPlayer> {
   HttpClient? _client;
   var _loadGeneration = 0;
   var _outputStarted = false;
+  var _chunksWritten = 0;
 
   @override
   void initState() {
@@ -65,6 +70,7 @@ class _ClientAudioStreamPlayerState extends State<ClientAudioStreamPlayer> {
     final generation = ++_loadGeneration;
     await _stopOutput();
     _closeClient();
+    _chunksWritten = 0;
     final client = HttpClient()..connectionTimeout = _connectTimeout;
     _client = client;
     final parser = WavPcmStreamParser();
@@ -91,15 +97,22 @@ class _ClientAudioStreamPlayerState extends State<ClientAudioStreamPlayer> {
             channels: parsed.channels,
           );
           _outputStarted = true;
+          unawaited(_reportPlaybackStatus('started'));
         }
         if (_outputStarted && parsed.pcm16le.isNotEmpty) {
           await widget.audioOutput.write(parsed.pcm16le);
+          _chunksWritten++;
+          if (_chunksWritten == 1 || _chunksWritten % 25 == 0) {
+            unawaited(_reportPlaybackStatus('write'));
+          }
           widget.onAudioChunkReceived?.call();
         }
       }
       throw HttpException('Audio stream ended', uri: Uri.parse(widget.url));
-    } catch (_) {
+    } catch (error) {
       if (!mounted || generation != _loadGeneration) return;
+      widget.onAudioError?.call(error);
+      debugPrint('MimiCam audio stream error: $error');
       await Future<void>.delayed(_retryDelay);
       if (mounted && generation == _loadGeneration) {
         unawaited(_startAudio());
@@ -109,6 +122,17 @@ class _ClientAudioStreamPlayerState extends State<ClientAudioStreamPlayer> {
         _client = null;
       }
       client.close(force: true);
+    }
+  }
+
+  Future<void> _reportPlaybackStatus(String event) async {
+    try {
+      final status = await widget.audioOutput.status();
+      final payload = {'event': event, ...status};
+      widget.onPlaybackStatus?.call(payload);
+      debugPrint('MimiCam audio playback $event: $payload');
+    } catch (error) {
+      debugPrint('MimiCam audio playback status failed: $error');
     }
   }
 

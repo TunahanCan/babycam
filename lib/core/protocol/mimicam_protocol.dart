@@ -14,4 +14,5 @@ class MimiCamProtocolV2 {
   static const testStart = '/test/start';
   static const testProbe = '/test/probe';
   static const testAlert = '/test/alert';
+  static const testAudioTone = '/test/audio-tone';
 }

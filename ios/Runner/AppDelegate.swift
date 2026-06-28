@@ -92,6 +92,23 @@ import UIKit
           self.pcmAudioPlayer.write(typed.data)
         }
         result(nil)
+      case "status":
+        result(self.pcmAudioPlayer.status())
+      case "playTestTone":
+        let args = call.arguments as? [String: Any]
+        let sampleRate = (args?["sampleRate"] as? NSNumber)?.intValue ?? 16000
+        let channels = (args?["channels"] as? NSNumber)?.intValue ?? 1
+        let durationMs = (args?["durationMs"] as? NSNumber)?.intValue ?? 1200
+        let frequencyHz = (args?["frequencyHz"] as? NSNumber)?.intValue ?? 440
+        let amplitude = (args?["amplitude"] as? NSNumber)?.doubleValue ?? 0.35
+        self.pcmAudioPlayer.playTestTone(
+          sampleRate: sampleRate,
+          channels: channels,
+          durationMs: durationMs,
+          frequencyHz: frequencyHz,
+          amplitude: amplitude
+        )
+        result(nil)
       case "stop":
         self.pcmAudioPlayer.stop()
         result(nil)
@@ -190,9 +207,19 @@ private final class PcmAudioPlayer {
   private var playerNode: AVAudioPlayerNode?
   private var format: AVAudioFormat?
   private var queuedFrames = 0
+  private var sampleRate = 0
+  private var channels = 0
+  private var starts = 0
+  private var writesAccepted = 0
+  private var writesDropped = 0
+  private var writeErrors = 0
+  private var bytesWritten = 0
+  private var lastStartAtMs = 0
+  private var lastWriteAtMs = 0
+  private var lastError: String?
 
   func start(sampleRate: Int, channels: Int) {
-    let safeSampleRate = max(sampleRate, 8000)
+    let safeSampleRate = min(max(sampleRate, 8000), 48000)
     let safeChannels = max(1, min(channels, 2))
     queue.async { [weak self] in
       guard let self else { return }
@@ -223,7 +250,14 @@ private final class PcmAudioPlayer {
         self.engine = engine
         self.playerNode = playerNode
         self.format = format
+        self.sampleRate = safeSampleRate
+        self.channels = safeChannels
+        self.starts += 1
+        self.lastStartAtMs = Self.nowMs()
+        self.lastError = nil
       } catch {
+        self.writeErrors += 1
+        self.lastError = "\(type(of: error)): \(error.localizedDescription)"
         self.stopLocked()
       }
     }
@@ -232,24 +266,36 @@ private final class PcmAudioPlayer {
   func write(_ data: Data) {
     if data.isEmpty { return }
     queue.async { [weak self] in
-      guard let self,
-            let playerNode = self.playerNode,
+      guard let self else { return }
+      guard let playerNode = self.playerNode,
             let format = self.format else {
+        self.writesDropped += 1
+        self.lastError = "write before start"
         return
       }
       let bytesPerFrame = Int(format.streamDescription.pointee.mBytesPerFrame)
-      guard bytesPerFrame > 0 else { return }
+      guard bytesPerFrame > 0 else {
+        self.writeErrors += 1
+        self.lastError = "invalid bytesPerFrame"
+        return
+      }
       let alignedByteCount = data.count - (data.count % bytesPerFrame)
-      guard alignedByteCount > 0 else { return }
+      guard alignedByteCount > 0 else {
+        self.writesDropped += 1
+        return
+      }
       let frameCount = AVAudioFrameCount(alignedByteCount / bytesPerFrame)
       let maxQueuedFrames = Int(format.sampleRate * 0.6)
       if self.queuedFrames > maxQueuedFrames {
+        self.writesDropped += 1
         return
       }
       guard let buffer = AVAudioPCMBuffer(
         pcmFormat: format,
         frameCapacity: frameCount
       ) else {
+        self.writeErrors += 1
+        self.lastError = "AVAudioPCMBuffer allocation failed"
         return
       }
       buffer.frameLength = frameCount
@@ -267,12 +313,64 @@ private final class PcmAudioPlayer {
         playerNode.play()
       }
       self.queuedFrames += Int(frameCount)
+      self.writesAccepted += 1
+      self.bytesWritten += alignedByteCount
+      self.lastWriteAtMs = Self.nowMs()
       playerNode.scheduleBuffer(buffer) { [weak self] in
         self?.queue.async {
           guard let self else { return }
           self.queuedFrames = max(0, self.queuedFrames - Int(frameCount))
         }
       }
+    }
+  }
+
+  func playTestTone(
+    sampleRate: Int,
+    channels: Int,
+    durationMs: Int,
+    frequencyHz: Int,
+    amplitude: Double
+  ) {
+    let safeSampleRate = min(max(sampleRate, 8000), 48000)
+    let safeChannels = max(1, min(channels, 2))
+    let safeDurationMs = min(max(durationMs, 100), 5000)
+    let safeFrequencyHz = min(max(frequencyHz, 80), 2000)
+    let safeAmplitude = min(max(amplitude, 0.02), 0.80)
+    let frameCount = safeSampleRate * safeDurationMs / 1000
+    var data = Data(capacity: frameCount * safeChannels * 2)
+    let amplitudeInt = Int(32767.0 * safeAmplitude)
+    for frame in 0..<frameCount {
+      let sample = Int(
+        sin(2.0 * Double.pi * Double(safeFrequencyHz) * Double(frame) / Double(safeSampleRate))
+          * Double(amplitudeInt)
+      )
+      for _ in 0..<safeChannels {
+        data.append(UInt8(sample & 0xff))
+        data.append(UInt8((sample >> 8) & 0xff))
+      }
+    }
+    start(sampleRate: safeSampleRate, channels: safeChannels)
+    write(data)
+  }
+
+  func status() -> [String: Any] {
+    queue.sync {
+      [
+        "started": playerNode != nil,
+        "sampleRate": sampleRate,
+        "channels": channels,
+        "queuedFrames": queuedFrames,
+        "starts": starts,
+        "writesAccepted": writesAccepted,
+        "writesDropped": writesDropped,
+        "writeErrors": writeErrors,
+        "bytesWritten": bytesWritten,
+        "lastStartAtMs": lastStartAtMs,
+        "lastWriteAtMs": lastWriteAtMs,
+        "lastError": lastError ?? NSNull(),
+        "playing": playerNode?.isPlaying ?? false
+      ]
     }
   }
 
@@ -292,5 +390,9 @@ private final class PcmAudioPlayer {
     engine = nil
     format = nil
     queuedFrames = 0
+  }
+
+  private static func nowMs() -> Int {
+    Int(Date().timeIntervalSince1970 * 1000)
   }
 }
