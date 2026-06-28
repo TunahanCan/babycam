@@ -264,6 +264,7 @@ const _deUiText = <String, String>{
   'roomReady': 'Zimmer bereit',
   'roomCamera': 'Zimmerkamera',
   'livePreview': 'Live-Vorschau',
+  'streamStartFailed': 'Stream konnte nicht starten',
   'cameraStarting': 'Kamera startet',
   'cameraRoomCheckText': 'Prüfe Bildausschnitt und Beleuchtung.',
   'cameraPermissionPreviewText':
@@ -556,6 +557,7 @@ const _arUiText = <String, String>{
   'roomReady': 'الغرفة جاهزة',
   'roomCamera': 'كاميرا الغرفة',
   'livePreview': 'معاينة مباشرة',
+  'streamStartFailed': 'تعذر بدء البث',
   'cameraStarting': 'تشغيل الكاميرا',
   'cameraRoomCheckText': 'تحقق من زاوية الصورة والإضاءة.',
   'cameraPermissionPreviewText': 'تظهر معاينة الكاميرا بعد التشغيل ومنح الإذن.',

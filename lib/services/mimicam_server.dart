@@ -120,6 +120,7 @@ class MimiCamServer {
   bool _pairingModeActive = false;
   bool _disposed = false;
   bool _wakelockEnabled = false;
+  Future<void>? _mediaStart;
   StreamSubscription<Uint8List>? _audioSubscription;
   Uint8List? _latestJpeg;
   int _lastAudioDebugLog = 0;
@@ -178,7 +179,25 @@ class MimiCamServer {
 
   Future<void> startMediaRuntime() async {
     if (_disposed) throw StateError('MimiCamServer is disposed.');
-    if (cameraController != null) return;
+    final existingController = cameraController;
+    if (existingController != null) {
+      if (existingController.value.isInitialized) return;
+      await existingController.dispose();
+      if (cameraController == existingController) cameraController = null;
+    }
+    final existingStart = _mediaStart;
+    if (existingStart != null) return existingStart;
+
+    final start = _startMediaRuntime();
+    _mediaStart = start;
+    try {
+      await start;
+    } finally {
+      if (_mediaStart == start) _mediaStart = null;
+    }
+  }
+
+  Future<void> _startMediaRuntime() async {
     await _ensureCameraPermission();
     final cameras = await availableCameras();
     if (_disposed) throw StateError('MimiCamServer is disposed.');
@@ -186,26 +205,29 @@ class MimiCamServer {
 
     _initializeAnalysisPipeline();
 
-    cameraController = CameraController(
+    final controller = CameraController(
       cameras.first,
       _resolutionPresetFor(_activeMediaProfile),
       enableAudio: false,
     );
-    await cameraController!.initialize();
-    if (_disposed) {
-      await cameraController?.dispose();
-      cameraController = null;
-      throw StateError('MimiCamServer is disposed.');
-    }
-    await cameraController!.startImageStream(_handleCameraFrame);
-    await _startAudioAnalysis();
-    if (_disposed) {
+    cameraController = controller;
+    try {
+      await controller.initialize();
+      if (_disposed) {
+        throw StateError('MimiCamServer is disposed.');
+      }
+      await controller.startImageStream(_handleCameraFrame);
+      await _startAudioAnalysis();
+      if (_disposed) {
+        throw StateError('MimiCamServer is disposed.');
+      }
+      await WakelockPlus.enable();
+      _wakelockEnabled = true;
+      await ForegroundServiceController.startServer();
+    } catch (_) {
       await stopMediaRuntime();
-      throw StateError('MimiCamServer is disposed.');
+      rethrow;
     }
-    await WakelockPlus.enable();
-    _wakelockEnabled = true;
-    await ForegroundServiceController.startServer();
   }
 
   void _initializeAnalysisPipeline() {
@@ -754,12 +776,17 @@ class MimiCamServer {
         'streamTokenExpiresAtMs': startResult.streamToken.expiresAtMs,
       });
       _notifyStreamSessionStarted(startResult.clientId);
-    } catch (_) {
+    } catch (error) {
       if (startResult.createdActiveSlot) {
         _activeClientRegistry.stopSession(startResult.clientId);
       }
       request.response.statusCode = HttpStatus.internalServerError;
-      await request.response.close();
+      onLog('Medya başlatılamadı: $error');
+      await _writeJson(request.response, {
+        'ok': false,
+        'code': 'MEDIA_START_FAILED',
+        'message': error.toString(),
+      });
     }
   }
 

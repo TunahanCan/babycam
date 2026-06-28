@@ -61,6 +61,22 @@ void main() {
     expect(runtime.currentState.phase, ClientRuntimePhase.unpaired);
   });
 
+  test('canlı izleme başlatma hatası runtime state içinde görünür', () async {
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      startStream: (_) async => throw StateError('MEDIA_START_FAILED'),
+    );
+
+    await runtime.pairWithServer(payload());
+    await expectLater(runtime.startWatching(), throwsStateError);
+
+    expect(runtime.currentState.phase, ClientRuntimePhase.error);
+    expect(runtime.currentState.session, isNotNull);
+    expect(runtime.currentState.error, isA<StateError>());
+    expect(
+        runtime.currentState.error.toString(), contains('MEDIA_START_FAILED'));
+  });
+
   test('pair hatası runtime state içinde görünür ve yeniden fırlatılır',
       () async {
     final runtime = ClientRuntime(

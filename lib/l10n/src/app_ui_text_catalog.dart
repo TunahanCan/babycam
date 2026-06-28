@@ -1752,6 +1752,14 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'Vista previa en directo',
     'fr': 'Aperçu en direct'
   },
+  'streamStartFailed': {
+    'tr': 'Yayın başlatılamadı',
+    'en': 'Stream could not start',
+    'zh': '无法开始直播',
+    'hi': 'स्ट्रीम शुरू नहीं हो सकी',
+    'es': 'No se pudo iniciar el directo',
+    'fr': 'Impossible de démarrer le flux'
+  },
   'cameraStarting': {
     'tr': 'Kamera açılıyor',
     'en': 'Camera starting',

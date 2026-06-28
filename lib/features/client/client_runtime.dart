@@ -126,7 +126,21 @@ class ClientRuntime {
   Future<void> startWatching({bool audioEnabled = false}) async {
     if (_disposed || _state.session == null) return;
     final session = _state.session!;
-    final activeStream = await _startStream?.call(session);
+    late final ActiveStreamSession? activeStream;
+    try {
+      activeStream = await _startStream?.call(session);
+    } catch (error) {
+      if (!_disposed) {
+        _emit(ClientRuntimeState(
+          phase: ClientRuntimePhase.error,
+          session: session,
+          error: error,
+          networkQuality: _state.networkQuality,
+          mediaProfile: _state.mediaProfile,
+        ));
+      }
+      rethrow;
+    }
     if (_disposed) {
       await _stopStream?.call(session);
       return;

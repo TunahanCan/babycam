@@ -78,6 +78,7 @@ class _WatchScreenState extends State<WatchScreen> {
           _VideoPanel(
             session: state.session,
             streamToken: state.activeStream?.streamToken,
+            error: state.error,
           ),
           const SizedBox(height: 16),
           _LiveMetricGrid(quality: quality, profile: profile),
@@ -256,10 +257,12 @@ class _VideoPanel extends StatelessWidget {
   const _VideoPanel({
     required this.session,
     required this.streamToken,
+    required this.error,
   });
 
   final PairingSession? session;
   final String? streamToken;
+  final Object? error;
 
   @override
   Widget build(BuildContext context) {
@@ -280,52 +283,54 @@ class _VideoPanel extends StatelessWidget {
           border: Border.all(color: const Color(0xFFF2D8CD), width: 4),
         ),
         clipBehavior: Clip.antiAlias,
-        child: streamUrl == null
-            ? Stack(
-                children: [
-                  for (final left in [22.0, 82.0, 142.0, 202.0, 262.0])
-                    Positioned(
-                      left: left,
-                      top: 22,
-                      bottom: 22,
-                      child: Container(width: 1, color: Colors.white54),
-                    ),
-                  const Positioned(top: 10, left: 12, child: _LiveBadge()),
-                  const Align(
-                      alignment: Alignment.center, child: _CribSketch()),
-                  Positioned(
-                    left: 14,
-                    bottom: 12,
-                    child: CircleAvatar(
-                      radius: 16,
-                      backgroundColor: Colors.black.withValues(alpha: .78),
-                      child: const Icon(Icons.nights_stay_rounded,
-                          color: _mint, size: 18),
-                    ),
+        child: streamUrl == null && error != null
+            ? _StreamErrorPanel(message: error.toString())
+            : streamUrl == null
+                ? Stack(
+                    children: [
+                      for (final left in [22.0, 82.0, 142.0, 202.0, 262.0])
+                        Positioned(
+                          left: left,
+                          top: 22,
+                          bottom: 22,
+                          child: Container(width: 1, color: Colors.white54),
+                        ),
+                      const Positioned(top: 10, left: 12, child: _LiveBadge()),
+                      const Align(
+                          alignment: Alignment.center, child: _CribSketch()),
+                      Positioned(
+                        left: 14,
+                        bottom: 12,
+                        child: CircleAvatar(
+                          radius: 16,
+                          backgroundColor: Colors.black.withValues(alpha: .78),
+                          child: const Icon(Icons.nights_stay_rounded,
+                              color: _mint, size: 18),
+                        ),
+                      ),
+                      Positioned(
+                        right: 14,
+                        bottom: 12,
+                        child: CircleAvatar(
+                          radius: 16,
+                          backgroundColor: Colors.black.withValues(alpha: .78),
+                          child: const Icon(Icons.settings_suggest_rounded,
+                              color: _pink, size: 18),
+                        ),
+                      ),
+                    ],
+                  )
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ClientVideoViewer(
+                        pairedServerHost: session!.host,
+                        pairedServerPort: session.port,
+                        url: streamUrl,
+                      ),
+                      const Positioned(top: 10, left: 12, child: _LiveBadge()),
+                    ],
                   ),
-                  Positioned(
-                    right: 14,
-                    bottom: 12,
-                    child: CircleAvatar(
-                      radius: 16,
-                      backgroundColor: Colors.black.withValues(alpha: .78),
-                      child: const Icon(Icons.settings_suggest_rounded,
-                          color: _pink, size: 18),
-                    ),
-                  ),
-                ],
-              )
-            : Stack(
-                fit: StackFit.expand,
-                children: [
-                  ClientVideoViewer(
-                    pairedServerHost: session!.host,
-                    pairedServerPort: session.port,
-                    url: streamUrl,
-                  ),
-                  const Positioned(top: 10, left: 12, child: _LiveBadge()),
-                ],
-              ),
       ),
     );
   }
@@ -339,6 +344,53 @@ class _VideoPanel extends StatelessWidget {
         NetworkQualityTier.offline => strings.ui('netOffline'),
         NetworkQualityTier.unknown => strings.ui('measuring'),
       };
+}
+
+class _StreamErrorPanel extends StatelessWidget {
+  const _StreamErrorPanel({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFF1D1420),
+      padding: const EdgeInsets.all(18),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.videocam_off_rounded,
+            color: Colors.white,
+            size: 34,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            AppStrings.of(context).ui('streamStartFailed'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12.5,
+              height: 1.25,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _LiveMetricGrid extends StatelessWidget {

@@ -61,6 +61,37 @@ void main() {
     expect(videoRequests, 0);
     expect(audioRequests, 0);
   });
+
+  test('session start hatası server mesajını taşır', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      request.response
+        ..statusCode = HttpStatus.internalServerError
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({
+          'ok': false,
+          'code': 'MEDIA_START_FAILED',
+          'message': 'Kamera izni verilmedi',
+        }));
+      await request.response.close();
+    });
+    final controller = StreamSessionController(
+      streamTimeout: const Duration(seconds: 1),
+    );
+    addTearDown(controller.dispose);
+
+    await expectLater(
+      controller.start(_session(server.port)),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('Kamera izni verilmedi'),
+        ),
+      ),
+    );
+  });
 }
 
 PairingSession _session(int port) => PairingSession(

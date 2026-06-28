@@ -137,8 +137,9 @@ class ServerRuntime {
         return;
       }
       _emit(_stateForPhase(ServerRuntimePhase.mediaActive));
-    } catch (_) {
+    } catch (error) {
       _resources.localPreviewActive = false;
+      _emit(_errorState(error));
       rethrow;
     }
   }
@@ -154,8 +155,15 @@ class ServerRuntime {
       String clientId, StreamSessionOptions options) async {
     if (_disposed) return;
     _activeSessions[clientId] = options;
-    await _recomputeResources(
-        startMediaIfNeeded: true, phase: ServerRuntimePhase.mediaActive);
+    try {
+      await _recomputeResources(
+          startMediaIfNeeded: true, phase: ServerRuntimePhase.mediaActive);
+    } catch (error) {
+      _activeSessions.remove(clientId);
+      _refreshResourceCounts();
+      _emit(_errorState(error));
+      rethrow;
+    }
   }
 
   Future<void> stopStreamSession(String clientId) => endSession(clientId);
@@ -172,9 +180,16 @@ class ServerRuntime {
       {required bool cry, required bool motion}) async {
     if (_disposed) return;
     _notificationClients[clientId] = (cry: cry, motion: motion);
-    await _recomputeResources(
-        startMediaIfNeeded: cry || motion,
-        phase: ServerRuntimePhase.mediaActive);
+    try {
+      await _recomputeResources(
+          startMediaIfNeeded: cry || motion,
+          phase: ServerRuntimePhase.mediaActive);
+    } catch (error) {
+      _notificationClients.remove(clientId);
+      _refreshResourceCounts();
+      _emit(_errorState(error));
+      rethrow;
+    }
   }
 
   Future<void> disableNotificationsForClient(String clientId) async {
@@ -218,6 +233,25 @@ class ServerRuntime {
       {required bool startMediaIfNeeded,
       required ServerRuntimePhase phase}) async {
     if (_disposed) return;
+    _refreshResourceCounts();
+    if (startMediaIfNeeded &&
+        (_resources.needsVideoCapture || _resources.needsAudioCapture)) {
+      _emit(_stateForPhase(ServerRuntimePhase.mediaStarting));
+      try {
+        await _mediaRuntime.start();
+      } catch (error) {
+        _emit(_errorState(error));
+        rethrow;
+      }
+      if (_disposed) {
+        await _mediaRuntime.stop();
+        return;
+      }
+    }
+    _emit(_stateForPhase(phase));
+  }
+
+  void _refreshResourceCounts() {
     _resources.activeVideoClients =
         _activeSessions.values.where((s) => s.video).length;
     _resources.activeAudioClients =
@@ -227,16 +261,6 @@ class ServerRuntime {
         _notificationClients.values.any((s) => s.cry);
     _resources.wantsMotionDetection =
         _notificationClients.values.any((s) => s.motion);
-    if (startMediaIfNeeded &&
-        (_resources.needsVideoCapture || _resources.needsAudioCapture)) {
-      _emit(_stateForPhase(ServerRuntimePhase.mediaStarting));
-      await _mediaRuntime.start();
-      if (_disposed) {
-        await _mediaRuntime.stop();
-        return;
-      }
-    }
-    _emit(_stateForPhase(phase));
   }
 
   ServerRuntimeState _stateForPhase(ServerRuntimePhase phase) {
@@ -262,6 +286,23 @@ class ServerRuntime {
       mediaProfile: mediaProfile,
     );
   }
+
+  ServerRuntimeState _errorState(Object error) => ServerRuntimeState(
+        phase: ServerRuntimePhase.error,
+        powerMode: _state.powerMode,
+        activeClients: _activeSessions.length,
+        activeVideoClients: _resources.activeVideoClients,
+        activeAudioClients: _resources.activeAudioClients,
+        activeEventClients: _notificationClients.length,
+        cameraActive: false,
+        microphoneActive: false,
+        motionAnalyzerActive: false,
+        cryAnalyzerActive: false,
+        qrPayload: _state.qrPayload,
+        lastAlert: _state.lastAlert,
+        errorMessage: error.toString(),
+        mediaProfile: mediaProfile,
+      );
 
   void _emit(ServerRuntimeState state) {
     if (_disposed && state.phase != ServerRuntimePhase.stopped) return;

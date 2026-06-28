@@ -105,6 +105,39 @@ void main() {
     expect(stopCount, 0);
   });
 
+  test('Server local preview media hatasını state içine yazar', () async {
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(
+        onStart: () async => throw StateError('camera unavailable'),
+      ),
+    );
+
+    await expectLater(runtime.startLocalPreview(), throwsStateError);
+
+    expect(runtime.currentState.phase, ServerRuntimePhase.error);
+    expect(runtime.currentState.cameraActive, isFalse);
+    expect(runtime.currentState.activeClients, 0);
+    expect(runtime.currentState.errorMessage, contains('camera unavailable'));
+  });
+
+  test('stream session media hatasında aktif client rollback yapar', () async {
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(
+        onStart: () async => throw StateError('camera unavailable'),
+      ),
+    );
+
+    await expectLater(
+      runtime.startStreamSession('client-1', const StreamSessionOptions()),
+      throwsStateError,
+    );
+
+    expect(runtime.currentState.phase, ServerRuntimePhase.error);
+    expect(runtime.currentState.activeClients, 0);
+    expect(runtime.currentState.activeVideoClients, 0);
+    expect(runtime.currentState.errorMessage, contains('camera unavailable'));
+  });
+
   test('Server dispose pairing start yarışından sonra medyayı başlatmaz',
       () async {
     final pairingStarted = Completer<void>();

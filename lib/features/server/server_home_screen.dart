@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -49,7 +51,9 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
     _tab = widget.initialTab.clamp(0, 3);
     _loadSettings();
     if (_tab == 1) {
-      widget.runtime.startPairingMode();
+      unawaited(widget.runtime.startPairingMode());
+    } else if (_tab == 0) {
+      _startLocalPreview();
     }
   }
 
@@ -117,8 +121,14 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
       widget.runtime.stopPairingMode();
     }
     if (index == 1) {
-      widget.runtime.startPairingMode();
+      unawaited(widget.runtime.startPairingMode());
+    } else if (index == 0) {
+      _startLocalPreview();
     }
+  }
+
+  void _startLocalPreview() {
+    unawaited(widget.runtime.startLocalPreview().catchError((_) {}));
   }
 
   Widget _buildTab(BuildContext context, ServerRuntimeState state) {

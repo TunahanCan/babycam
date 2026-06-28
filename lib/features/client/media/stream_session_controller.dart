@@ -60,14 +60,35 @@ class StreamSessionController {
       ..set(HttpHeaders.authorizationHeader, 'Bearer ${session.sessionToken}');
     request.write(jsonEncode({'clientId': session.clientId}));
     final response = await request.close();
-    if (response.statusCode != HttpStatus.ok) {
-      throw StateError('$path failed: ${response.statusCode}');
-    }
     final body = await utf8.decoder.bind(response).join();
+    if (response.statusCode != HttpStatus.ok) {
+      final detail = _errorDetail(body);
+      throw StateError(
+        detail == null
+            ? '$path failed: ${response.statusCode}'
+            : '$path failed: ${response.statusCode} - $detail',
+      );
+    }
     if (body.trim().isEmpty) return null;
     final json = jsonDecode(body);
     if (json is! Map) return null;
     return Map<String, Object?>.from(json);
+  }
+
+  String? _errorDetail(String body) {
+    if (body.trim().isEmpty) return null;
+    try {
+      final json = jsonDecode(body);
+      if (json is Map) {
+        final message = json['message']?.toString().trim();
+        if (message != null && message.isNotEmpty) return message;
+        final code = json['code']?.toString().trim();
+        if (code != null && code.isNotEmpty) return code;
+      }
+    } catch (_) {
+      return body.trim();
+    }
+    return body.trim();
   }
 
   HttpClient _clientForSession(PairingSession session) {
