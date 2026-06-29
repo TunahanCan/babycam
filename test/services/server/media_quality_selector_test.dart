@@ -4,7 +4,7 @@ import 'package:mimicam/core/media/client_quality_tracker.dart';
 import 'package:mimicam/services/server/media_quality_selector.dart';
 
 void main() {
-  test('tek client iyi ağda 480p profil seçer', () {
+  test('tek modern client iyi ağda 720p profil seçer', () {
     final selector = MediaQualitySelector();
     final profile = selector.select(
       deviceTier: DeviceCapabilityTier.modern,
@@ -12,12 +12,12 @@ void main() {
       activeClientCount: 1,
     );
 
-    expect(profile.height, 480);
-    expect(profile.targetFps, 8);
+    expect(profile.height, 720);
+    expect(profile.targetFps, 12);
     expect(profile.audioFirst, isFalse);
   });
 
-  test('2-3 client veya weak ağ 360p audio-first seçer', () {
+  test('2-3 client 480p, weak ağ 360p audio-first seçer', () {
     final selector = MediaQualitySelector();
     final shared = selector.select(
       deviceTier: DeviceCapabilityTier.modern,
@@ -30,15 +30,15 @@ void main() {
       activeClientCount: 1,
     );
 
-    expect(shared.height, 360);
-    expect(shared.targetFps, 5);
+    expect(shared.height, 480);
+    expect(shared.targetFps, 8);
     expect(shared.audioFirst, isTrue);
     expect(weak.height, 360);
-    expect(weak.targetFps, 5);
+    expect(weak.targetFps, 8);
     expect(weak.audioFirst, isTrue);
   });
 
-  test('4-5 client veya critical ağ 240p profil seçer', () {
+  test('4-5 client veya critical ağ 360p profil seçer', () {
     final selector = MediaQualitySelector();
     final crowded = selector.select(
       deviceTier: DeviceCapabilityTier.modern,
@@ -51,11 +51,11 @@ void main() {
       activeClientCount: 1,
     );
 
-    expect(crowded.height, 240);
-    expect(crowded.targetFps, lessThanOrEqualTo(4));
+    expect(crowded.height, 360);
+    expect(crowded.targetFps, lessThanOrEqualTo(5));
     expect(crowded.audioFirst, isTrue);
-    expect(critical.height, 240);
-    expect(critical.targetFps, 2);
+    expect(critical.height, 360);
+    expect(critical.targetFps, 5);
     expect(critical.audioFirst, isTrue);
   });
 
@@ -70,7 +70,7 @@ void main() {
       networkTier: NetworkQualityTier.good,
       activeClientCount: 1,
     );
-    expect(normal.height, 480);
+    expect(normal.height, 720);
 
     final critical = selector.select(
       deviceTier: DeviceCapabilityTier.modern,
@@ -84,7 +84,8 @@ void main() {
         watchActive: true,
       ),
     );
-    expect(critical.height, 240);
+    expect(critical.height, 360);
+    expect(critical.audioFirst, isTrue);
 
     nowMs += 29000;
     final blockedUpgrade = selector.select(
@@ -98,7 +99,7 @@ void main() {
         watchActive: true,
       ),
     );
-    expect(blockedUpgrade.height, 240);
+    expect(blockedUpgrade.height, 360);
 
     nowMs += 30000;
     final oneStepUpgrade = selector.select(
@@ -112,10 +113,10 @@ void main() {
         watchActive: true,
       ),
     );
-    expect(oneStepUpgrade.height, 360);
+    expect(oneStepUpgrade.height, 720);
   });
 
-  test('audio underrun critical yapar ve recentlyReconnected upgrade engeller',
+  test('video timeout critical yapar, audio underrun sadece audio-first yapar',
       () {
     var nowMs = 1000;
     final selector = MediaQualitySelector(nowMs: () => nowMs);
@@ -125,7 +126,7 @@ void main() {
       networkTier: NetworkQualityTier.good,
       activeClientCount: 1,
     );
-    final critical = selector.select(
+    final audioFirst = selector.select(
       deviceTier: DeviceCapabilityTier.modern,
       networkTier: NetworkQualityTier.good,
       activeClientCount: 1,
@@ -137,10 +138,11 @@ void main() {
         watchActive: true,
       ),
     );
-    expect(critical.height, 240);
+    expect(audioFirst.height, 720);
+    expect(audioFirst.audioFirst, isTrue);
 
     nowMs += 60000;
-    final stillCritical = selector.select(
+    final critical = selector.select(
       deviceTier: DeviceCapabilityTier.modern,
       networkTier: NetworkQualityTier.good,
       activeClientCount: 1,
@@ -148,10 +150,11 @@ void main() {
         clientId: 'anne',
         networkTier: NetworkQualityTier.good,
         createdAtMs: 61000,
+        streamTimedOut: true,
         watchActive: true,
         recentlyReconnected: true,
       ),
     );
-    expect(stillCritical.height, 240);
+    expect(critical.height, 360);
   });
 }

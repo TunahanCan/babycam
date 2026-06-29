@@ -17,6 +17,15 @@ class AudioStreamLeveler {
           gain: 1,
         );
 
+  factory AudioStreamLeveler.liveMonitor() => AudioStreamLeveler(
+        targetRms: 5200,
+        minRmsForGain: 8,
+        maxGain: 24,
+        maxPeak: 28000,
+        attack: .52,
+        release: .12,
+      );
+
   final int targetRms;
   final int minRmsForGain;
   final double maxGain;

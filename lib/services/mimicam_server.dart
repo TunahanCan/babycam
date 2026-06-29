@@ -5,7 +5,6 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
-import 'package:record/record.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../analysis/alert/alert_config.dart';
@@ -30,11 +29,12 @@ import '../core/network/local_network_guard.dart';
 import '../core/protocol/mimicam_protocol.dart' as protocol_v2;
 import '../core/security/transport_config.dart';
 import '../features/server/pairing/pairing_token_service.dart';
+import '../features/server/media/microphone_capture_service.dart';
+import '../features/server/media/wav_audio_stream_service.dart';
 import '../l10n/app_strings.dart';
 import 'configuration_service.dart';
 import 'motion_analyzer.dart' show CameraImageJpegEncoder;
 import 'server/active_client_registry.dart';
-import 'server/audio_stream_leveler.dart';
 import 'server/alert_protocol_adapter.dart';
 import 'server/jpeg_byte_budget_controller.dart';
 import 'server/media_analysis_coordinator.dart';
@@ -43,9 +43,13 @@ import 'server/media_analysis_metrics.dart';
 import 'server/media_quality_selector.dart';
 import 'server/request_auth_guard.dart';
 import 'server/stream_backpressure_gate.dart';
+import 'server/test_dashboard_assets.dart';
+import 'server/wav_pcm16.dart';
 import 'platform/device_capability_probe.dart';
 import 'platform/foreground_service_controller.dart';
 import 'network_address_provider.dart';
+
+part 'server/mimicam_server_test_endpoints.dart';
 
 class MimiCamServer {
   MimiCamServer({
@@ -77,6 +81,12 @@ class MimiCamServer {
       maxActiveClients: maxActiveWatchClients,
     );
     _authGuard = RequestAuthGuard(tokenService: this.tokenService);
+    _audioStreamService = WavAudioStreamService(
+      sampleRate: _audioSampleRate,
+      channels: _audioChannels,
+      bitsPerSample: _audioBitsPerSample,
+      onClientDetached: _activeClientRegistry.detachStream,
+    );
   }
 
   final bool enableLegacyWebSocketMediaPackets;
@@ -100,23 +110,21 @@ class MimiCamServer {
   final int maxActiveWatchClients;
   final bool startMediaOnSessionStart;
   final int httpPort;
-  AudioRecorder? _audioRecorder;
   MediaAnalysisCoordinator? _analysisCoordinator;
   MediaAnalysisMetrics? _analysisMetrics;
   StreamSubscription<AlertEvent>? _alertSubscription;
   final _webSockets = <WebSocket>{};
   final _mjpegClients = <HttpResponse>{};
-  final _audioClients = <HttpResponse>{};
   final _mjpegClientIds = <HttpResponse, String>{};
-  final _audioClientIds = <HttpResponse, String>{};
-  final _audioBusyClientIds = <String>{};
   final _mjpegBackpressure =
       StreamBackpressureGate<HttpResponse>(kind: StreamBackpressureKind.video);
-  final _audioBackpressure =
-      StreamBackpressureGate<HttpResponse>(kind: StreamBackpressureKind.audio);
-  final _audioStreamLeveler = AudioStreamLeveler();
   late final ActiveClientRegistry _activeClientRegistry;
   late final RequestAuthGuard _authGuard;
+  final _microphoneCapture = MicrophoneCaptureService(
+    sampleRate: _audioSampleRate,
+    channels: _audioChannels,
+  );
+  late final WavAudioStreamService _audioStreamService;
 
   CameraController? cameraController;
   DeviceCapabilityTier get deviceTier => _deviceTier;
@@ -129,27 +137,18 @@ class MimiCamServer {
   bool _disposed = false;
   bool _wakelockEnabled = false;
   Future<void>? _mediaStart;
-  StreamSubscription<Uint8List>? _audioSubscription;
   Uint8List? _latestJpeg;
   int? _lastCameraFrameAtMs;
   int? _lastVideoFrameEncodedAtMs;
   int? _lastVideoClientWriteAtMs;
-  int? _lastAudioChunkAtMs;
-  int? _lastAudioClientWriteAtMs;
   int? _lastAlertBroadcastAtMs;
   int? _videoProbeEncodeUntilMs;
   int _videoFramesEncoded = 0;
   int _videoFramesStreamed = 0;
-  int _audioChunksCaptured = 0;
-  int _audioChunksStreamed = 0;
   int _alertsBroadcast = 0;
   int _alertWebSocketDeliveries = 0;
   int _lastJpegBytes = 0;
-  int _lastAudioChunkBytes = 0;
-  int _lastAudioClientWriteBytes = 0;
   int _lastAlertDeliveredWebSocketClients = 0;
-  bool? _lastMicrophonePermissionGranted;
-  String? _lastAudioStartError;
   int _lastAudioDebugLog = 0;
   final _frameBudget = MediaFrameBudget();
   final _frameBudgetManager = const FrameBudgetManager();
@@ -302,7 +301,7 @@ class MimiCamServer {
   }
 
   Future<void> reloadAnalysisConfig() async {
-    if (cameraController == null && _audioSubscription == null) return;
+    if (cameraController == null && !_microphoneCapture.isActive) return;
     await _alertSubscription?.cancel();
     _alertSubscription = null;
     await _analysisCoordinator?.dispose();
@@ -312,77 +311,38 @@ class MimiCamServer {
   }
 
   Future<void> _startAudioAnalysis() async {
-    final audioRecorder = _audioRecorder ??= AudioRecorder();
-    _lastAudioStartError = null;
-    final hasPermission = await audioRecorder.hasPermission();
-    _lastMicrophonePermissionGranted = hasPermission;
-    if (!hasPermission) {
-      onLog(strings.microphonePermissionMissing);
-      return;
-    }
-    final stream = await audioRecorder.startStream(const RecordConfig(
-      encoder: AudioEncoder.pcm16bits,
-      sampleRate: _audioSampleRate,
-      numChannels: _audioChannels,
-    ));
-    _audioSubscription = stream.listen((chunk) {
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      _lastAudioChunkAtMs = nowMs;
-      _lastAudioChunkBytes = chunk.length;
-      _audioChunksCaptured++;
-      _analysisCoordinator?.onAudioChunk(AudioChunk(
-        pcm16le: chunk,
-        sampleRate: _audioSampleRate,
-        channels: _audioChannels,
-        timestampMs: nowMs,
-      ));
-      final streamChunk = _audioStreamLeveler.processPcm16le(chunk);
-      if (enableLegacyWebSocketMediaPackets) {
-        _broadcastBinary([MimiCamProtocol.packetAudioPcm16Le, ...streamChunk]);
-      }
-      for (final client in _audioClients.toList()) {
-        final clientId = _audioClientIds[client];
-        // Busy clients skip the current chunk instead of growing a queue; live
-        // audio freshness is more important than delayed backlog playback.
-        if (!_audioBackpressure.tryMarkBusy(client)) continue;
-        if (clientId != null) _audioBusyClientIds.add(clientId);
-        final startedAt = DateTime.now();
-        try {
-          client.add(streamChunk);
-          client.flush().then<void>((_) {
-            _audioChunksStreamed++;
-            _lastAudioClientWriteAtMs = DateTime.now().millisecondsSinceEpoch;
-            _lastAudioClientWriteBytes = streamChunk.length;
-            _audioBackpressure.recordSuccess(
-              client,
-              duration: DateTime.now().difference(startedAt),
-            );
-          }).catchError((Object _) {
-            _audioBackpressure.recordFailure(client);
-            _removeAudioClient(client);
-          }).whenComplete(() {
-            _audioBackpressure.markIdle(client);
-            if (clientId != null) _audioBusyClientIds.remove(clientId);
-          });
-        } catch (_) {
-          _audioBackpressure.recordFailure(client);
-          _removeAudioClient(client);
-          if (clientId != null) _audioBusyClientIds.remove(clientId);
+    final started = await _microphoneCapture.start(
+      onChunk: (chunk) {
+        _analysisCoordinator?.onAudioChunk(AudioChunk(
+          pcm16le: chunk.rawPcm16le,
+          sampleRate: chunk.sampleRate,
+          channels: chunk.channels,
+          timestampMs: chunk.timestampMs,
+        ));
+        if (enableLegacyWebSocketMediaPackets) {
+          _broadcastBinary(
+              [MimiCamProtocol.packetAudioPcm16Le, ...chunk.streamPcm16le]);
         }
-      }
-      _logAudioDiagnostics();
-    });
+        _audioStreamService.broadcast(chunk.streamPcm16le);
+        _logAudioDiagnostics();
+      },
+      onError: (error, _) {
+        _analysisMetrics?.recordAudioError();
+        onLog('Ses akışında hata: $error');
+      },
+    );
+    if (!started) {
+      onLog(strings.microphonePermissionMissing);
+    }
   }
 
   Future<void> _startAudioAnalysisBestEffort() async {
-    if (_audioSubscription != null) return;
+    if (_microphoneCapture.isActive) return;
     try {
       await _startAudioAnalysis();
     } catch (error) {
       _analysisMetrics?.recordAudioError();
-      await _audioSubscription?.cancel();
-      _audioSubscription = null;
-      _lastAudioStartError = error.toString();
+      await _microphoneCapture.stop();
       onLog('Ses başlatılamadı: $error');
     }
   }
@@ -441,11 +401,6 @@ class MimiCamServer {
           _broadcastBinary([MimiCamProtocol.packetVideoMjpeg, ...jpeg]);
         }
         for (final client in _mjpegClients.toList()) {
-          final clientId = _mjpegClientIds[client];
-          if (clientId != null && _audioBusyClientIds.contains(clientId)) {
-            _mjpegBackpressure.recordSkippedVideoFrame(client);
-            continue;
-          }
           // The stream is latest-frame oriented: slow clients drop frames
           // rather than buffering old JPEGs and increasing memory pressure.
           if (!_mjpegBackpressure.tryMarkBusy(client)) continue;
@@ -548,7 +503,7 @@ class MimiCamServer {
     if ((request.uri.path == '/ws/stream' ||
             request.uri.path == protocol_v2.MimiCamProtocolV2.events) &&
         WebSocketTransformer.isUpgradeRequest(request)) {
-      if (!_isAuthorized(request)) {
+      if (!_isWebSocketAuthorized(request)) {
         request.response.statusCode = HttpStatus.unauthorized;
         await request.response.close();
         return;
@@ -623,6 +578,18 @@ class MimiCamServer {
           (request, _) => _handlePublicStatus(request),
         ),
         _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.testDashboard,
+          _AuthMode.none,
+          const {HttpMethod.get},
+          (request, _) => _writeTestDashboard(request),
+        ),
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.testDashboardScript,
+          _AuthMode.none,
+          const {HttpMethod.get},
+          (request, _) => _writeTestDashboardScript(request),
+        ),
+        _RouteSpec(
           '/video',
           _AuthMode.streamToken,
           const {HttpMethod.get},
@@ -651,6 +618,12 @@ class MimiCamServer {
           _AuthMode.bearer,
           const {HttpMethod.post},
           (request, _) => _handleTestStart(request),
+        ),
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.testReset,
+          _AuthMode.bearer,
+          const {HttpMethod.post},
+          (request, _) => _handleTestReset(request),
         ),
         _RouteSpec(
           protocol_v2.MimiCamProtocolV2.testProbe,
@@ -716,7 +689,7 @@ class MimiCamServer {
   Future<void> _handlePrivateStatus(HttpRequest request) async {
     await _writeJson(request.response, {
       'videoClients': _mjpegClients.length,
-      'audioClients': _audioClients.length,
+      'audioClients': _audioStreamService.clientCount,
       'webSocketClients': _webSockets.length,
       'activeStreamClients': _activeClientRegistry.activeClientCount,
       'qualityReportClients': _activeClientRegistry.qualityReportCount,
@@ -728,151 +701,6 @@ class MimiCamServer {
       ),
       if (_analysisCoordinator != null) ..._analysisCoordinator!.diagnostics(),
     });
-  }
-
-  Future<void> _handleTestStatus(HttpRequest request) async {
-    await _writeJson(request.response, _testDiagnostics());
-  }
-
-  Future<void> _handleTestStart(HttpRequest request) async {
-    final startedAtMs = DateTime.now().millisecondsSinceEpoch;
-    Object? error;
-    try {
-      await startMediaRuntime();
-    } catch (caught) {
-      error = caught;
-      request.response.statusCode = HttpStatus.serviceUnavailable;
-    }
-    await _writeJson(request.response, {
-      'ok': error == null,
-      'startedAtMs': startedAtMs,
-      'completedAtMs': DateTime.now().millisecondsSinceEpoch,
-      if (error != null) 'error': error.toString(),
-      'diagnostics': _testDiagnostics(),
-    });
-  }
-
-  Future<void> _handleTestProbe(HttpRequest request) async {
-    Map<Object?, Object?>? body;
-    try {
-      body = await _readJsonObjectBody(request);
-    } catch (_) {
-      request.response.statusCode = HttpStatus.badRequest;
-      await request.response.close();
-      return;
-    }
-
-    final waitMs =
-        _intFrom(body?['waitMs'], defaultValue: 1500).clamp(0, 5000).toInt();
-    final startRuntime = _boolFrom(body?['startRuntime'], defaultValue: true);
-    final requireVideo = _boolFrom(body?['requireVideo'], defaultValue: true);
-    final requireAudio = _boolFrom(body?['requireAudio'], defaultValue: true);
-    final emitAlert = _boolFrom(body?['emitAlert'], defaultValue: false);
-    final requireEvents =
-        _boolFrom(body?['requireEvents'], defaultValue: emitAlert);
-    final requireEventDelivery =
-        _boolFrom(body?['requireEventDelivery'], defaultValue: false);
-
-    final before = _probeCounters();
-    Object? startError;
-    if (requireVideo) {
-      _videoProbeEncodeUntilMs =
-          DateTime.now().millisecondsSinceEpoch + waitMs + 500;
-    }
-    if (startRuntime) {
-      try {
-        await startMediaRuntime();
-      } catch (error) {
-        startError = error;
-      }
-    }
-    if (emitAlert) _broadcastTestAlert(body);
-
-    final deadline = DateTime.now().millisecondsSinceEpoch + waitMs;
-    while (DateTime.now().millisecondsSinceEpoch < deadline &&
-        !_probeReady(
-          before,
-          requireVideo: requireVideo,
-          requireAudio: requireAudio,
-          requireEvents: requireEvents,
-          requireEventDelivery: requireEventDelivery,
-        )) {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    }
-    if (_videoProbeEncodeUntilMs != null &&
-        DateTime.now().millisecondsSinceEpoch >= _videoProbeEncodeUntilMs!) {
-      _videoProbeEncodeUntilMs = null;
-    }
-
-    final checks = _probeChecks(
-      before,
-      requireVideo: requireVideo,
-      requireAudio: requireAudio,
-      requireEvents: requireEvents,
-      requireEventDelivery: requireEventDelivery,
-    );
-    final ok = startError == null && checks.values.every((value) => value);
-    if (!ok) request.response.statusCode = HttpStatus.serviceUnavailable;
-    await _writeJson(request.response, {
-      'ok': ok,
-      'waitMs': waitMs,
-      if (startError != null) 'startError': startError.toString(),
-      'checks': checks,
-      'before': before.toJson(),
-      'after': _probeCounters().toJson(),
-      'diagnostics': _testDiagnostics(),
-    });
-  }
-
-  Future<void> _handleTestAlert(HttpRequest request) async {
-    Map<Object?, Object?>? body;
-    try {
-      body = await _readJsonObjectBody(request);
-    } catch (_) {
-      request.response.statusCode = HttpStatus.badRequest;
-      await request.response.close();
-      return;
-    }
-    final event = _broadcastTestAlert(body);
-    await _writeJson(request.response, {
-      'ok': true,
-      'alert': event.toJson(),
-      'deliveredWebSocketClients': _lastAlertDeliveredWebSocketClients,
-      'diagnostics': _testDiagnostics(),
-    });
-  }
-
-  Future<void> _handleTestAudioTone(HttpRequest request) async {
-    final query = request.uri.queryParameters;
-    final durationMs =
-        _intFrom(query['durationMs'], defaultValue: 1200).clamp(100, 5000);
-    final frequencyHz =
-        _intFrom(query['frequencyHz'], defaultValue: 440).clamp(80, 2000);
-    final amplitude = (double.tryParse(query['amplitude'] ?? '') ?? .35)
-        .clamp(.02, .80)
-        .toDouble();
-    final pcm = _sineTonePcm16le(
-      durationMs: durationMs.toInt(),
-      frequencyHz: frequencyHz.toInt(),
-      amplitude: amplitude,
-    );
-
-    request.response.headers
-      ..contentType = ContentType('audio', 'wav')
-      ..set(HttpHeaders.cacheControlHeader, 'no-store')
-      ..set('X-Audio-Test-Tone', 'true')
-      ..set('X-Audio-Sample-Rate', '$_audioSampleRate')
-      ..set('X-Audio-Channels', '$_audioChannels')
-      ..set('X-Audio-Bits-Per-Sample', '$_audioBitsPerSample');
-    request.response
-      ..add(_wavHeader(
-        sampleRate: _audioSampleRate,
-        channels: _audioChannels,
-        bitsPerSample: _audioBitsPerSample,
-        dataSize: pcm.length,
-      ))
-      ..add(pcm);
-    await request.response.close();
   }
 
   Future<void> _handleVideoRoute(
@@ -1041,7 +869,7 @@ class MimiCamServer {
       _activeClientRegistry.stopSession(clientId);
       if (_activeClientRegistry.activeClientCount == 0 &&
           _mjpegClients.isEmpty &&
-          _audioClients.isEmpty) {
+          !_audioStreamService.hasClients) {
         await stopMediaRuntime();
       } else {
         await _applyMediaProfileForCurrentDemand();
@@ -1092,12 +920,13 @@ class MimiCamServer {
   }
 
   Future<void> _applyMediaProfileForCurrentDemand() async {
+    final reports = _activeClientRegistry.activeQualityReports();
     final nextProfile = _mediaQualitySelector.select(
       deviceTier: _deviceTier,
-      networkTier: _activeClientRegistry.effectiveTier(),
+      networkTier: NetworkQualityTier.unknown,
       activeClientCount: _activeClientRegistry.activeClientCount,
       worstReport: _activeClientRegistry.worstQualityReport(),
-      qualityReports: _activeClientRegistry.activeQualityReports(),
+      qualityReports: reports,
       backpressureMetrics: _combinedBackpressureMetrics(),
     );
     await _setActiveMediaProfile(nextProfile);
@@ -1126,11 +955,11 @@ class MimiCamServer {
   StreamBackpressureMetrics _combinedBackpressureMetrics() =>
       combineBackpressureMetrics([
         _mjpegBackpressure.aggregateMetrics(),
-        _audioBackpressure.aggregateMetrics(),
+        _audioStreamService.backpressureMetrics,
       ]);
 
   bool _isAudioReliable() =>
-      _audioBackpressure.aggregateMetrics().skippedAudioChunks == 0;
+      _audioStreamService.backpressureMetrics.skippedAudioChunks == 0;
 
   bool _isVideoReliable() =>
       _mjpegBackpressure.aggregateMetrics().skippedVideoFrames < 3;
@@ -1214,6 +1043,13 @@ class MimiCamServer {
     return _authGuard.trusted(request) != null;
   }
 
+  bool _isWebSocketAuthorized(HttpRequest request) {
+    if (_isAuthorized(request)) return true;
+    final token = request.uri.queryParameters['token'];
+    return token != null &&
+        tokenService.validateTrustedClientToken(token) != null;
+  }
+
   String _clientIdForRequest(HttpRequest request, Object? json) {
     final auth = _authGuard.trusted(request);
     if (auth != null) return auth.clientId;
@@ -1282,183 +1118,13 @@ class MimiCamServer {
     return _activeClientRegistry.clientIdForStreamToken(streamToken);
   }
 
-  AlertEvent _broadcastTestAlert(Map<Object?, Object?>? body) {
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final message = body?['message']?.toString().trim();
-    final event = AlertEvent(
-      id: 'test-$nowMs',
-      type: AlertType.systemWarning,
-      severity: AlertSeverity.info,
-      message: message == null || message.isEmpty
-          ? 'MimiCam test bildirimi'
-          : message,
-      score: 0,
-      timestampMs: nowMs,
-      metadata: const {
-        'event': 'test_probe',
-        'source': '/test/alert',
-      },
-    );
-    _handleAlertEvent(event);
-    return event;
-  }
-
-  Map<String, Object?> _testDiagnostics() {
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final videoMetrics = _mjpegBackpressure.aggregateMetrics();
-    final audioMetrics = _audioBackpressure.aggregateMetrics();
-    return {
-      'ok': true,
-      'timestampMs': nowMs,
-      'runtime': {
-        'httpListening': _httpServerListening,
-        'pairingModeActive': _pairingModeActive,
-        'mediaStarting': _mediaStart != null,
-        'mediaActive': cameraController != null ||
-            _audioSubscription != null ||
-            _analysisCoordinator != null,
-        'cameraInitialized': cameraController?.value.isInitialized ?? false,
-        'microphoneActive': _audioSubscription != null,
-        'wakelockEnabled': _wakelockEnabled,
-      },
-      'clients': {
-        'activeStreamClients': _activeClientRegistry.activeClientCount,
-        'videoClients': _mjpegClients.length,
-        'audioClients': _audioClients.length,
-        'webSocketClients': _webSockets.length,
-      },
-      'video': {
-        'hasLatestJpeg': _latestJpeg != null,
-        'lastCameraFrameAtMs': _lastCameraFrameAtMs,
-        'lastCameraFrameAgeMs': _ageMs(nowMs, _lastCameraFrameAtMs),
-        'lastFrameEncodedAtMs': _lastVideoFrameEncodedAtMs,
-        'lastFrameEncodedAgeMs': _ageMs(nowMs, _lastVideoFrameEncodedAtMs),
-        'lastClientWriteAtMs': _lastVideoClientWriteAtMs,
-        'lastClientWriteAgeMs': _ageMs(nowMs, _lastVideoClientWriteAtMs),
-        'framesEncoded': _videoFramesEncoded,
-        'framesStreamed': _videoFramesStreamed,
-        'lastJpegBytes': _lastJpegBytes,
-        'probeEncodeActive': _isVideoProbeActive(nowMs),
-        'backpressure': _backpressureJson(videoMetrics),
-      },
-      'audio': {
-        'recorderCreated': _audioRecorder != null,
-        'permissionGranted': _lastMicrophonePermissionGranted,
-        'active': _audioSubscription != null,
-        'lastChunkAtMs': _lastAudioChunkAtMs,
-        'lastChunkAgeMs': _ageMs(nowMs, _lastAudioChunkAtMs),
-        'lastClientWriteAtMs': _lastAudioClientWriteAtMs,
-        'lastClientWriteAgeMs': _ageMs(nowMs, _lastAudioClientWriteAtMs),
-        'chunksCaptured': _audioChunksCaptured,
-        'chunksStreamed': _audioChunksStreamed,
-        'lastChunkBytes': _lastAudioChunkBytes,
-        'lastClientWriteBytes': _lastAudioClientWriteBytes,
-        'lastStartError': _lastAudioStartError,
-        'leveler': _audioStreamLeveler.lastSnapshot.toJson(),
-        'backpressure': _backpressureJson(audioMetrics),
-      },
-      'events': {
-        'alertsBroadcast': _alertsBroadcast,
-        'lastAlertAtMs': _lastAlertBroadcastAtMs,
-        'lastAlertAgeMs': _ageMs(nowMs, _lastAlertBroadcastAtMs),
-        'lastDeliveredWebSocketClients': _lastAlertDeliveredWebSocketClients,
-        'totalWebSocketDeliveries': _alertWebSocketDeliveries,
-      },
-      'analysis': _analysisMetrics?.toJson(),
-    };
-  }
-
-  _ProbeCounters _probeCounters() => _ProbeCounters(
-        cameraFramesAtMs: _lastCameraFrameAtMs,
-        videoFramesEncoded: _videoFramesEncoded,
-        videoFramesStreamed: _videoFramesStreamed,
-        audioChunksCaptured: _audioChunksCaptured,
-        audioChunksStreamed: _audioChunksStreamed,
-        alertsBroadcast: _alertsBroadcast,
-        lastDeliveredWebSocketClients: _lastAlertDeliveredWebSocketClients,
-        totalWebSocketDeliveries: _alertWebSocketDeliveries,
-      );
-
-  bool _probeReady(
-    _ProbeCounters before, {
-    required bool requireVideo,
-    required bool requireAudio,
-    required bool requireEvents,
-    required bool requireEventDelivery,
-  }) {
-    final checks = _probeChecks(
-      before,
-      requireVideo: requireVideo,
-      requireAudio: requireAudio,
-      requireEvents: requireEvents,
-      requireEventDelivery: requireEventDelivery,
-    );
-    return checks.values.every((value) => value);
-  }
-
-  Map<String, bool> _probeChecks(
-    _ProbeCounters before, {
-    required bool requireVideo,
-    required bool requireAudio,
-    required bool requireEvents,
-    required bool requireEventDelivery,
-  }) {
-    final after = _probeCounters();
-    return {
-      'video': !requireVideo ||
-          after.videoFramesEncoded > before.videoFramesEncoded ||
-          _latestJpeg != null,
-      'audio': !requireAudio ||
-          after.audioChunksCaptured > before.audioChunksCaptured ||
-          _lastAudioChunkAtMs != null,
-      'events':
-          !requireEvents || after.alertsBroadcast > before.alertsBroadcast,
-      'eventDelivery': !requireEventDelivery ||
-          after.totalWebSocketDeliveries > before.totalWebSocketDeliveries,
-    };
-  }
-
-  bool _isVideoProbeActive(int nowMs) =>
-      _videoProbeEncodeUntilMs != null && nowMs <= _videoProbeEncodeUntilMs!;
-
-  Map<String, Object?> _backpressureJson(StreamBackpressureMetrics metrics) => {
-        'skippedWrites': metrics.skippedWrites,
-        'skippedVideoFrames': metrics.skippedVideoFrames,
-        'skippedAudioChunks': metrics.skippedAudioChunks,
-        'consecutiveWriteFailures': metrics.consecutiveWriteFailures,
-        'lastSuccessfulVideoWriteAtMs': metrics.lastSuccessfulVideoWriteAtMs,
-        'lastSuccessfulAudioWriteAtMs': metrics.lastSuccessfulAudioWriteAtMs,
-        'lastWriteDurationMs': metrics.lastWriteDurationMs,
-        'averageWriteDurationMs': metrics.averageWriteDurationMs,
-      };
-
-  int? _ageMs(int nowMs, int? eventAtMs) =>
-      eventAtMs == null ? null : max(0, nowMs - eventAtMs);
-
-  int _intFrom(Object? value, {required int defaultValue}) {
-    if (value is int) return value;
-    if (value is num) return value.round();
-    return int.tryParse(value?.toString() ?? '') ?? defaultValue;
-  }
-
-  bool _boolFrom(Object? value, {required bool defaultValue}) {
-    if (value is bool) return value;
-    if (value is String) {
-      final normalized = value.trim().toLowerCase();
-      if (normalized == 'true') return true;
-      if (normalized == 'false') return false;
-    }
-    return defaultValue;
-  }
-
   Future<void> stopMediaRuntime() async {
     await ForegroundServiceController.stopServer();
     if (_wakelockEnabled) {
       await WakelockPlus.disable();
       _wakelockEnabled = false;
     }
-    await _audioSubscription?.cancel();
-    _audioSubscription = null;
+    await _microphoneCapture.stop();
     await _alertSubscription?.cancel();
     _alertSubscription = null;
     await _analysisCoordinator?.dispose();
@@ -1473,11 +1139,10 @@ class MimiCamServer {
     _lastCryActiveAtMs = null;
     _frameBudget.reset();
     _mjpegBackpressure.clear();
-    _audioBackpressure.clear();
-    _audioStreamLeveler.reset();
     _mjpegClientIds.clear();
-    _audioClientIds.clear();
-    _audioBusyClientIds.clear();
+    await _audioStreamService.closeAll();
+    _microphoneCapture.resetDiagnostics();
+    _audioStreamService.resetDiagnostics();
     _jpegByteBudgetController.reset();
     _mediaQualitySelector.reset();
   }
@@ -1502,38 +1167,13 @@ class MimiCamServer {
   }
 
   Future<void> _handleAudio(HttpResponse response, String clientId) async {
-    response.headers
-      ..contentType = ContentType('audio', 'wav')
-      ..chunkedTransferEncoding = true
-      ..set(HttpHeaders.cacheControlHeader, 'no-store')
-      ..set(HttpHeaders.acceptRangesHeader, 'none')
-      ..set('X-Audio-Sample-Rate', '$_audioSampleRate')
-      ..set('X-Audio-Channels', '$_audioChannels')
-      ..set('X-Audio-Bits-Per-Sample', '$_audioBitsPerSample');
-    response.add(_wavHeader(
-        sampleRate: _audioSampleRate,
-        channels: _audioChannels,
-        bitsPerSample: _audioBitsPerSample));
-    _audioClients.add(response);
-    _audioClientIds[response] = clientId;
-    response.done.catchError((Object _) {}).whenComplete(() {
-      _removeAudioClient(response);
-    });
-    await response.flush();
+    await _audioStreamService.attachClient(response, clientId);
   }
 
   void _removeMjpegClient(HttpResponse response) {
     final clientId = _mjpegClientIds.remove(response);
     _mjpegClients.remove(response);
     _mjpegBackpressure.remove(response);
-    if (clientId != null) _activeClientRegistry.detachStream(clientId);
-  }
-
-  void _removeAudioClient(HttpResponse response) {
-    final clientId = _audioClientIds.remove(response);
-    _audioClients.remove(response);
-    if (clientId != null) _audioBusyClientIds.remove(clientId);
-    _audioBackpressure.remove(response);
     if (clientId != null) _activeClientRegistry.detachStream(clientId);
   }
 
@@ -1566,64 +1206,27 @@ class MimiCamServer {
     response.write('''<!doctype html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>MimiCam</title></head>
 <body style="margin:0;background:#111;color:white;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
-  <main style="padding:16px"><h1>${strings.appTitle}</h1><img src="/video" style="width:100%;max-width:900px;border-radius:16px"><p>${strings.streamActiveHtml}</p><p><a style="color:#ff8ab3" href="/audio">${strings.audioOnlyHtml}</a></p></main>
+  <main style="padding:16px"><h1>${strings.appTitle}</h1><p>${strings.streamActiveHtml}</p><p><a style="color:#ff8ab3" href="${protocol_v2.MimiCamProtocolV2.testDashboard}">Canlı test panelini aç</a></p></main>
 </body></html>''');
     await response.close();
   }
 
-  Uint8List _wavHeader({
-    required int sampleRate,
-    required int channels,
-    required int bitsPerSample,
-    int dataSize = 0x7fffffff,
-  }) {
-    final byteRate = sampleRate * channels * bitsPerSample ~/ 8;
-    final blockAlign = channels * bitsPerSample ~/ 8;
-    final data = ByteData(44);
-    void writeAscii(int offset, String value) {
-      for (var i = 0; i < value.length; i++) {
-        data.setUint8(offset + i, value.codeUnitAt(i));
-      }
-    }
-
-    writeAscii(0, 'RIFF');
-    data.setUint32(4, 36 + dataSize, Endian.little);
-    writeAscii(8, 'WAVE');
-    writeAscii(12, 'fmt ');
-    data.setUint32(16, 16, Endian.little);
-    data.setUint16(20, 1, Endian.little);
-    data.setUint16(22, channels, Endian.little);
-    data.setUint32(24, sampleRate, Endian.little);
-    data.setUint32(28, byteRate, Endian.little);
-    data.setUint16(32, blockAlign, Endian.little);
-    data.setUint16(34, bitsPerSample, Endian.little);
-    writeAscii(36, 'data');
-    data.setUint32(40, dataSize, Endian.little);
-    return data.buffer.asUint8List();
+  Future<void> _writeTestDashboard(HttpRequest request) async {
+    request.response.headers.contentType = ContentType.html;
+    final html = await const MimiCamTestDashboardAssets().loadHtml(
+      title: '${strings.appTitle} Test',
+    );
+    request.response.write(html);
+    await request.response.close();
   }
 
-  Uint8List _sineTonePcm16le({
-    required int durationMs,
-    required int frequencyHz,
-    required double amplitude,
-  }) {
-    final sampleCount = (_audioSampleRate * durationMs / 1000).round();
-    final output = Uint8List(sampleCount * 2);
-    final view = ByteData.sublistView(output);
-    final amplitudeInt = (32767 * amplitude).round();
-    final fadeSamples =
-        min(sampleCount ~/ 2, (_audioSampleRate * .008).round());
-    for (var i = 0; i < sampleCount; i++) {
-      final fade = fadeSamples <= 0
-          ? 1.0
-          : min(1.0, min(i + 1, sampleCount - i) / fadeSamples);
-      final sample = (sin(2 * pi * frequencyHz * i / _audioSampleRate) *
-              amplitudeInt *
-              fade)
-          .round();
-      view.setInt16(i * 2, sample, Endian.little);
-    }
-    return output;
+  Future<void> _writeTestDashboardScript(HttpRequest request) async {
+    request.response.headers.contentType =
+        ContentType('application', 'javascript', charset: 'utf-8');
+    request.response.write(
+      await const MimiCamTestDashboardAssets().loadScript(),
+    );
+    await request.response.close();
   }
 
   int _broadcastBinary(List<int> data) {
@@ -1660,8 +1263,7 @@ class MimiCamServer {
       await WakelockPlus.disable();
       _wakelockEnabled = false;
     }
-    await _audioSubscription?.cancel();
-    _audioSubscription = null;
+    await _microphoneCapture.dispose();
     await _alertSubscription?.cancel();
     _alertSubscription = null;
     await _analysisCoordinator?.dispose();
@@ -1670,15 +1272,11 @@ class MimiCamServer {
     _frameBudget.reset();
     _activeClientRegistry.clear();
     _mjpegBackpressure.clear();
-    _audioBackpressure.clear();
-    _audioStreamLeveler.reset();
     _mjpegClientIds.clear();
-    _audioClientIds.clear();
-    _audioBusyClientIds.clear();
+    await _audioStreamService.closeAll();
+    _audioStreamService.resetDiagnostics();
     _jpegByteBudgetController.reset();
     tokenService.revokeAll();
-    await _audioRecorder?.dispose();
-    _audioRecorder = null;
     await cameraController?.dispose();
     cameraController = null;
     _videoProbeEncodeUntilMs = null;
@@ -1688,45 +1286,11 @@ class MimiCamServer {
     }
     _webSockets.clear();
     _mjpegClients.clear();
-    _audioClients.clear();
     _lastMotionSample = null;
     _lastMotionEnergy = 0;
     _cryActive = false;
     _lastCryActiveAtMs = null;
   }
-}
-
-class _ProbeCounters {
-  const _ProbeCounters({
-    required this.cameraFramesAtMs,
-    required this.videoFramesEncoded,
-    required this.videoFramesStreamed,
-    required this.audioChunksCaptured,
-    required this.audioChunksStreamed,
-    required this.alertsBroadcast,
-    required this.lastDeliveredWebSocketClients,
-    required this.totalWebSocketDeliveries,
-  });
-
-  final int? cameraFramesAtMs;
-  final int videoFramesEncoded;
-  final int videoFramesStreamed;
-  final int audioChunksCaptured;
-  final int audioChunksStreamed;
-  final int alertsBroadcast;
-  final int lastDeliveredWebSocketClients;
-  final int totalWebSocketDeliveries;
-
-  Map<String, Object?> toJson() => {
-        'cameraFramesAtMs': cameraFramesAtMs,
-        'videoFramesEncoded': videoFramesEncoded,
-        'videoFramesStreamed': videoFramesStreamed,
-        'audioChunksCaptured': audioChunksCaptured,
-        'audioChunksStreamed': audioChunksStreamed,
-        'alertsBroadcast': alertsBroadcast,
-        'lastDeliveredWebSocketClients': lastDeliveredWebSocketClients,
-        'totalWebSocketDeliveries': totalWebSocketDeliveries,
-      };
 }
 
 abstract interface class MediaPermissionGateway {

@@ -11,7 +11,11 @@ class NotificationService {
   Future<bool> initialize() async {
     await _plugin.initialize(const InitializationSettings(
       android: AndroidInitializationSettings('ic_launcher'),
-      iOS: DarwinInitializationSettings(),
+      iOS: DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      ),
     ));
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
@@ -42,8 +46,14 @@ class NotificationService {
             _strings.notificationChannelName,
             importance: Importance.high,
             priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
           ),
-          iOS: const DarwinNotificationDetails(),
+          iOS: const DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
         ),
       );
 }

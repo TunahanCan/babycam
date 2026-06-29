@@ -24,6 +24,17 @@ void main() {
     expect(leveler.lastSnapshot.gain, greaterThan(5));
   });
 
+  test('canli monitor profili cok dusuk ama gercek sinyali yukseltir', () {
+    final leveler = AudioStreamLeveler.liveMonitor();
+    final input = _pcm16le(List<int>.filled(1600, 20));
+
+    final output = leveler.processPcm16le(input);
+
+    expect(_rms(output), greaterThan(_rms(input) * 8));
+    expect(_peak(output), lessThanOrEqualTo(28000));
+    expect(leveler.lastSnapshot.gain, greaterThan(8));
+  });
+
   test('guclu transient varsa gain peak guvenligine gore sinirlanir', () {
     final leveler = AudioStreamLeveler(
       targetRms: 24000,

@@ -253,8 +253,9 @@ void main() {
     expect(response.body['effectiveNetworkTier'], 'critical');
     expect(
       (response.body['mediaProfile'] as Map)['height'],
-      240,
+      360,
     );
+    expect((response.body['mediaProfile'] as Map)['audioFirst'], isTrue);
   });
 
   test('quality/report eski payload kabul eder ve streamToken reddeder',

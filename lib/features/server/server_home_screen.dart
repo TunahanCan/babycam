@@ -128,6 +128,7 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
   }
 
   void _startLocalPreview() {
+    unawaited(widget.runtime.startPairingMode());
     unawaited(widget.runtime.startLocalPreview().catchError((_) {}));
   }
 

@@ -49,14 +49,15 @@ class FrameBudgetManager {
     required NetworkQualityTier networkTier,
     required int activeClients,
   }) {
-    if (activeClients >= 4) return cryActive ? 2 : 1;
+    if (activeClients <= 0) return motionEnergy < 0.04 && !cryActive ? 3 : 8;
+    if (activeClients >= 4) return 5;
     if (networkTier == NetworkQualityTier.critical ||
         networkTier == NetworkQualityTier.offline) {
-      return cryActive ? 2 : 1;
+      return cryActive || motionEnergy >= 0.04 ? 5 : 4;
     }
     if (networkTier == NetworkQualityTier.weak) {
-      return motionEnergy < 0.04 && !cryActive ? 2 : 5;
+      return cryActive || motionEnergy >= 0.04 ? 8 : 6;
     }
-    return motionEnergy < 0.04 && !cryActive ? 3 : 8;
+    return 12;
   }
 }

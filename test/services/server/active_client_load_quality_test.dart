@@ -17,7 +17,7 @@ void main() {
             activeClientCount: 1,
           )
           .height,
-      480,
+      720,
     );
     selector.reset();
     expect(
@@ -28,7 +28,7 @@ void main() {
             activeClientCount: 3,
           )
           .height,
-      360,
+      480,
     );
     selector.reset();
     expect(
@@ -39,7 +39,7 @@ void main() {
             activeClientCount: 5,
           )
           .height,
-      240,
+      360,
     );
   });
 
@@ -70,7 +70,7 @@ void main() {
         watchActive: true,
       ),
     );
-    expect(crowded.height, 240);
+    expect(crowded.height, 360);
 
     for (var index = 1; index < 5; index++) {
       registry.stopSession('client_$index');
@@ -86,7 +86,7 @@ void main() {
         watchActive: true,
       ),
     );
-    expect(blockedUpgrade.height, 240);
+    expect(blockedUpgrade.height, 360);
 
     nowMs += 30000;
     final oneStepUpgrade = selector.select(
@@ -100,6 +100,6 @@ void main() {
         watchActive: true,
       ),
     );
-    expect(oneStepUpgrade.height, 360);
+    expect(oneStepUpgrade.height, 720);
   });
 }

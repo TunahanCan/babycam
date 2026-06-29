@@ -82,7 +82,7 @@ void main() {
           networkTier: NetworkQualityTier.good,
           activeClients: 1,
         ),
-        3,
+        12,
       );
       expect(
         manager.targetFps(
@@ -91,7 +91,7 @@ void main() {
           networkTier: NetworkQualityTier.good,
           activeClients: 1,
         ),
-        8,
+        12,
       );
       expect(
         manager.targetFps(
@@ -100,7 +100,7 @@ void main() {
           networkTier: NetworkQualityTier.weak,
           activeClients: 1,
         ),
-        2,
+        6,
       );
       expect(
         manager.targetFps(
@@ -109,7 +109,7 @@ void main() {
           networkTier: NetworkQualityTier.weak,
           activeClients: 1,
         ),
-        5,
+        8,
       );
       expect(
         manager.targetFps(
@@ -118,7 +118,7 @@ void main() {
           networkTier: NetworkQualityTier.good,
           activeClients: 5,
         ),
-        2,
+        5,
       );
     });
   });

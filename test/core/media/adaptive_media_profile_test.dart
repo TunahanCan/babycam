@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mimicam/core/media/adaptive_media_profile.dart';
 
 void main() {
-  test('cihaz tier profilleri MVP HTTP/WS medya bütçesine uyar', () {
+  test('cihaz tier profilleri canlı izleme bütçesine uyar', () {
     final legacy =
         MediaQualityProfile.forDeviceTier(DeviceCapabilityTier.legacy);
     final balanced =
@@ -10,19 +10,20 @@ void main() {
     final modern =
         MediaQualityProfile.forDeviceTier(DeviceCapabilityTier.modern);
 
-    expect(legacy.height, 360);
-    expect(legacy.targetFps, 5);
-    expect(legacy.jpegQuality, 42);
-    expect(balanced.height, 480);
-    expect(balanced.targetFps, 8);
-    expect(balanced.jpegQuality, 52);
-    expect(modern.height, 480);
-    expect(modern.cameraPresetKey, 'medium');
+    expect(legacy.height, 480);
+    expect(legacy.targetFps, 8);
+    expect(legacy.jpegQuality, 56);
+    expect(balanced.height, 540);
+    expect(balanced.targetFps, 10);
+    expect(balanced.jpegQuality, 60);
+    expect(modern.height, 720);
+    expect(modern.targetFps, 12);
+    expect(modern.cameraPresetKey, 'high');
     expect(modern.preferredVideoCodec, 'h264-webrtc');
     expect(modern.preferredAudioCodec, 'opus');
   });
 
-  test('zayıf ağda 360p, kritik ağda 240p ses önceliği seçilir', () {
+  test('zayıf ve kritik ağda 360p ses önceliği seçilir', () {
     final base = MediaQualityProfile.forDeviceTier(DeviceCapabilityTier.modern);
     final weak = base.adaptForNetwork(NetworkQualityTier.weak);
     final critical = base.adaptForNetwork(NetworkQualityTier.critical);
@@ -30,28 +31,28 @@ void main() {
 
     expect(weak.audioFirst, isTrue);
     expect(weak.height, 360);
-    expect(weak.targetFps, 5);
-    expect(weak.jpegQuality, 42);
+    expect(weak.targetFps, 8);
+    expect(weak.jpegQuality, 54);
     expect(critical.audioFirst, isTrue);
-    expect(critical.height, 240);
-    expect(critical.targetFps, 2);
-    expect(critical.cameraPresetKey, 'low');
-    expect(survival.targetFps, 1);
+    expect(critical.height, 360);
+    expect(critical.targetFps, 5);
+    expect(critical.cameraPresetKey, 'medium');
+    expect(survival.targetFps, 2);
   });
 
-  test('aktif izleyici arttıkça kalite 360p ve 240p bütçesine iner', () {
+  test('aktif izleyici arttıkça kalite 480p ve 360p bütçesine iner', () {
     final base = MediaQualityProfile.forDeviceTier(DeviceCapabilityTier.modern);
     final shared = base.adaptForClientLoad(3);
     final crowded = base.adaptForClientLoad(5);
 
-    expect(shared.height, 360);
-    expect(shared.targetFps, 5);
-    expect(shared.jpegQuality, 42);
+    expect(shared.height, 480);
+    expect(shared.targetFps, 8);
+    expect(shared.jpegQuality, 56);
     expect(shared.audioFirst, isTrue);
-    expect(crowded.height, 240);
-    expect(crowded.targetFps, 4);
-    expect(crowded.jpegQuality, 40);
-    expect(crowded.cameraPresetKey, 'low');
+    expect(crowded.height, 360);
+    expect(crowded.targetFps, 5);
+    expect(crowded.jpegQuality, 50);
+    expect(crowded.cameraPresetKey, 'medium');
   });
 
   test('network classifier rtt ve hata sayısına göre tier üretir', () {

@@ -405,7 +405,7 @@ class _VideoPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     return AspectRatio(
-      aspectRatio: 16 / 12,
+      aspectRatio: 16 / 9,
       child: Container(
         decoration: BoxDecoration(
           color: const Color(0xFFA47465),
@@ -421,7 +421,7 @@ class _VideoPanel extends StatelessWidget {
               streamToken: streamToken,
               audioEnabled: audioEnabled,
               streamHealthState: streamHealthState,
-              fit: BoxFit.cover,
+              fit: BoxFit.contain,
               error: error,
             ),
             const Positioned(top: 10, left: 12, child: _LiveBadge()),

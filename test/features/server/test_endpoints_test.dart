@@ -12,6 +12,47 @@ import 'package:mimicam/services/mimicam_server.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('/test tarayici test panelini dondurur', () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    final html = await _getText(
+      client,
+      base.port,
+      MimiCamProtocolV2.testDashboard,
+    );
+
+    expect(html, contains('MimiCam Test'));
+    expect(html, contains('Tam sağlık testi'));
+    expect(html, contains('/test/dashboard.js'));
+  });
+
+  test('/test/dashboard.js tarayici test algoritmalarini dondurur', () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    final script = await _getText(
+      client,
+      base.port,
+      MimiCamProtocolV2.testDashboardScript,
+    );
+
+    expect(script, contains('/session/start'));
+    expect(script, contains('/test/audio-tone'));
+    expect(script, contains('/ws/events?token='));
+    expect(script, contains('measureVideoStream'));
+    expect(script, contains('/test/reset'));
+    expect(script, contains('/quality/report'));
+  });
+
   test('/test/status Bearer token ister ve runtime diagnostigi dondurur',
       () async {
     final tokenService = PairingTokenService();
@@ -85,6 +126,45 @@ void main() {
     expect(decoded['messageKey'], 'legacyAlert');
   });
 
+  test('/test browser websocket query token ile sentetik bildirimi alir',
+      () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Tarayici',
+      deviceId: 'browser',
+    );
+    final socket = await WebSocket.connect(
+      Uri(
+        scheme: 'ws',
+        host: InternetAddress.loopbackIPv4.address,
+        port: base.port,
+        path: MimiCamProtocolV2.events,
+        queryParameters: {'token': trusted.token},
+      ).toString(),
+    );
+    addTearDown(() => socket.close());
+    final firstMessage = socket.first.timeout(const Duration(seconds: 2));
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    final response = await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.testAlert,
+      trusted.token,
+      {'message': 'Browser event testi'},
+    );
+    final message = await firstMessage;
+
+    expect(response.statusCode, HttpStatus.ok);
+    expect(response.body['deliveredWebSocketClients'], 1);
+    expect((jsonDecode(message as String) as Map)['message'],
+        'Browser event testi');
+  });
+
   test('/test/probe start etmeden sentetik event kontrolu yapabilir', () async {
     final tokenService = PairingTokenService();
     final server = await _testServer(tokenService);
@@ -134,6 +214,37 @@ void main() {
       'eventDelivery': true,
     });
     expect(jsonDecode(message as String), isA<Map>());
+  });
+
+  test('/test/reset Bearer token ile test runtime temizligi dondurur',
+      () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    expect(
+      await _postStatusCode(client, base.port, MimiCamProtocolV2.testReset),
+      HttpStatus.unauthorized,
+    );
+
+    final response = await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.testReset,
+      trusted.token,
+      {},
+    );
+
+    expect(response.statusCode, HttpStatus.ok);
+    expect(response.body['ok'], isTrue);
+    expect(response.body['diagnostics'], isA<Map>());
   });
 
   test('/test/audio-tone Bearer token ile deterministik WAV tonu dondurur',
@@ -206,6 +317,24 @@ Future<int> _statusCode(
   return response.statusCode;
 }
 
+Future<int> _postStatusCode(
+  HttpClient client,
+  int port,
+  String path,
+) async {
+  final request = await client.postUrl(Uri(
+    scheme: 'http',
+    host: InternetAddress.loopbackIPv4.address,
+    port: port,
+    path: path,
+  ));
+  request.headers.contentType = ContentType.json;
+  request.write('{}');
+  final response = await request.close();
+  await response.drain<void>();
+  return response.statusCode;
+}
+
 Future<Map<String, Object?>> _getJson(
   HttpClient client,
   int port,
@@ -223,6 +352,23 @@ Future<Map<String, Object?>> _getJson(
   final body = await utf8.decoder.bind(response).join();
   expect(response.statusCode, HttpStatus.ok);
   return Map<String, Object?>.from(jsonDecode(body) as Map);
+}
+
+Future<String> _getText(
+  HttpClient client,
+  int port,
+  String path,
+) async {
+  final request = await client.getUrl(Uri(
+    scheme: 'http',
+    host: InternetAddress.loopbackIPv4.address,
+    port: port,
+    path: path,
+  ));
+  final response = await request.close();
+  final body = await utf8.decoder.bind(response).join();
+  expect(response.statusCode, HttpStatus.ok);
+  return body;
 }
 
 Future<Uint8List> _getBytes(

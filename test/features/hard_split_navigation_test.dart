@@ -88,9 +88,13 @@ void main() {
   testWidgets('Server bottom nav server alanına kilitlidir', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
+    var pairingStarts = 0;
     final runtime = ServerRuntime(
       mediaRuntime: MediaRuntimeController(),
-      onStartPairing: () async => 'mimicam://pair?payload=x',
+      onStartPairing: () async {
+        pairingStarts++;
+        return 'mimicam://pair?payload=x';
+      },
     );
 
     await tester.pumpWidget(
@@ -109,6 +113,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Yayın'), findsOneWidget);
+    expect(pairingStarts, greaterThanOrEqualTo(1));
     expect(find.text('QR/IP'), findsOneWidget);
     expect(find.text('Servis'), findsOneWidget);
     expect(find.text('Ayarlar'), findsOneWidget);

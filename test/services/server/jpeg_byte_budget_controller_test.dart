@@ -11,13 +11,23 @@ void main() {
 
     expect(controller.qualityFor(profile), profile.jpegQuality);
 
-    controller.recordEncodedFrame(profile, byteLength: 400 * 1024, atMs: nowMs);
+    controller.recordEncodedFrame(
+      profile,
+      byteLength: 1200 * 1024,
+      atMs: nowMs,
+    );
     nowMs += 1000;
-    controller.recordEncodedFrame(profile, byteLength: 400 * 1024, atMs: nowMs);
+    controller.recordEncodedFrame(
+      profile,
+      byteLength: 1200 * 1024,
+      atMs: nowMs,
+    );
 
     expect(controller.qualityFor(profile), lessThan(profile.jpegQuality));
-    expect(controller.qualityFor(profile), greaterThanOrEqualTo(32));
+    expect(controller.qualityFor(profile), greaterThanOrEqualTo(38));
     expect(
-        controller.lastActualBytesPerSecond(profile), greaterThan(275 * 1024));
+      controller.lastActualBytesPerSecond(profile),
+      greaterThan(950 * 1024),
+    );
   });
 }

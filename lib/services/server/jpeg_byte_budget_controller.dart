@@ -32,8 +32,8 @@ class JpegByteBudgetController {
     final errorRatio = (actualBytesPerSecond - target) / target;
     final delta = kp * errorRatio;
     final next = (state.currentQuality - delta).round();
-    final ceiling = min(58, profile.jpegQuality);
-    state.currentQuality = next.clamp(32, ceiling).toInt();
+    final ceiling = min(72, profile.jpegQuality);
+    state.currentQuality = next.clamp(38, ceiling).toInt();
     state.lastActualBytesPerSecond = actualBytesPerSecond.round();
     state.windowStartedAtMs = nowMs;
     state.bytesInWindow = 0;
@@ -41,17 +41,20 @@ class JpegByteBudgetController {
 
   int targetBytesPerSecond(MediaQualityProfile profile) {
     if (profile.id.contains('survival') ||
-        profile.targetFps <= 1 ||
-        profile.height <= 240 && profile.jpegQuality <= 36) {
-      return 18 * 1024;
-    }
-    if (profile.id.contains('critical') || profile.height <= 240) {
-      return 45 * 1024;
+        profile.targetFps <= 2 ||
+        profile.height <= 240) {
+      return 55 * 1024;
     }
     if (profile.id.contains('weak') || profile.height <= 360) {
-      return 120 * 1024;
+      return 320 * 1024;
     }
-    return 275 * 1024;
+    if (profile.height <= 480) {
+      return 540 * 1024;
+    }
+    if (profile.height <= 540) {
+      return 700 * 1024;
+    }
+    return 950 * 1024;
   }
 
   int? lastActualBytesPerSecond(MediaQualityProfile profile) =>
@@ -64,7 +67,7 @@ class JpegByteBudgetController {
   _JpegBudgetState _stateFor(MediaQualityProfile profile) =>
       _states.putIfAbsent(
         profile.id,
-        () => _JpegBudgetState(profile.jpegQuality.clamp(32, 58).toInt()),
+        () => _JpegBudgetState(profile.jpegQuality.clamp(38, 72).toInt()),
       );
 }
 
