@@ -142,6 +142,18 @@ void main() {
     expect(update.snapshot.tier, NetworkQualityTier.excellent);
     expect(captured, isEmpty);
   });
+
+  test('client olusturulamiyorsa stream hata yerine offline snapshot verir',
+      () async {
+    final monitor = NetworkQualityMonitor(
+      clientFactory: (_) => throw UnsupportedError('web HttpClient yok'),
+    );
+
+    final update = await monitor.watch(_session(8080)).first;
+
+    expect(update.snapshot.tier, NetworkQualityTier.unknown);
+    expect(update.snapshot.consecutiveFailures, 1);
+  });
 }
 
 Future<HttpServer> _qualityServer(List<Map<String, Object?>> captured) async {

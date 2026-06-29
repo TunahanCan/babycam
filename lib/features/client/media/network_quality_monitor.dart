@@ -24,7 +24,13 @@ class NetworkQualityMonitor {
 
   Stream<NetworkQualityUpdate> watch(PairingSession session) async* {
     var failures = 0;
-    final client = _createClient(session)..connectionTimeout = timeout;
+    late final HttpClient client;
+    try {
+      client = _createClient(session)..connectionTimeout = timeout;
+    } catch (_) {
+      yield _offlineUpdate(previousFailures: failures);
+      return;
+    }
     try {
       while (true) {
         final update = await _measure(client, session, failures);
@@ -35,6 +41,17 @@ class NetworkQualityMonitor {
     } finally {
       client.close(force: true);
     }
+  }
+
+  NetworkQualityUpdate _offlineUpdate({required int previousFailures}) {
+    final failures = previousFailures + 1;
+    return NetworkQualityUpdate(
+      snapshot: NetworkQualitySnapshot(
+        tier: _classifier.classify(consecutiveFailures: failures),
+        measuredAtMs: DateTime.now().millisecondsSinceEpoch,
+        consecutiveFailures: failures,
+      ),
+    );
   }
 
   Future<NetworkQualityUpdate> _measure(
