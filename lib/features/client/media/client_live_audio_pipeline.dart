@@ -13,6 +13,7 @@ class ClientLiveAudioPipeline {
     PcmAudioSink audioOutput = const PcmAudioOutput(),
     HttpClient Function()? clientFactory,
     this.connectTimeout = const Duration(seconds: 5),
+    this.readTimeout = const Duration(seconds: 8),
     this.retryDelay = const Duration(milliseconds: 500),
     this.maxRetryDelay = const Duration(seconds: 4),
     this.maxBufferedAudio = const Duration(milliseconds: 1200),
@@ -22,6 +23,7 @@ class ClientLiveAudioPipeline {
   final PcmAudioSink _audioOutput;
   final HttpClient Function()? _clientFactory;
   final Duration connectTimeout;
+  final Duration readTimeout;
   final Duration retryDelay;
   final Duration maxRetryDelay;
   final Duration maxBufferedAudio;
@@ -111,7 +113,7 @@ class ClientLiveAudioPipeline {
     _emitStatus(run, 'connecting');
 
     try {
-      final request = await client.getUrl(run.uri);
+      final request = await client.getUrl(run.uri).timeout(connectTimeout);
       request.headers.set(
         HttpHeaders.acceptHeader,
         'audio/wav, audio/x-wav, application/octet-stream',
@@ -123,7 +125,7 @@ class ClientLiveAudioPipeline {
           'Bearer $bearerToken',
         );
       }
-      final response = await request.close();
+      final response = await request.close().timeout(connectTimeout);
       if (response.statusCode != HttpStatus.ok) {
         await response.drain<void>();
         throw HttpException(
@@ -132,7 +134,7 @@ class ClientLiveAudioPipeline {
         );
       }
 
-      await for (final chunk in response) {
+      await for (final chunk in response.timeout(readTimeout)) {
         if (!_isCurrent(generation, run)) return;
         run.networkBytesReceived += chunk.length;
         final parsed = parser.add(chunk.asUint8ListView());

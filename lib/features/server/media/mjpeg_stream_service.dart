@@ -6,6 +6,9 @@ import 'dart:typed_data';
 import '../../../services/server/stream_backpressure_gate.dart';
 
 class MjpegStreamService {
+  static final _keepAlivePart =
+      utf8.encode('--frame\r\nContent-Length: 0\r\n\r\n\r\n');
+
   MjpegStreamService({
     void Function(String clientId)? onClientDetached,
   }) : _onClientDetached = onClientDetached;
@@ -44,7 +47,11 @@ class MjpegStreamService {
     response.done.catchError((Object _) {}).whenComplete(() {
       removeClient(response);
     });
-    if (firstFrame == null) return;
+    if (firstFrame == null) {
+      response.add(_keepAlivePart);
+      await response.flush();
+      return;
+    }
 
     final startedAt = DateTime.now();
     try {

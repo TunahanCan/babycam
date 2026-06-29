@@ -30,6 +30,19 @@ void main() {
     expect(frames, hasLength(1));
     expect(frames.single, [9, 8, 7]);
   });
+
+  test('zero-length keepalive parcasini frame saymadan atlar', () {
+    final parser = MjpegStreamParser();
+    final bytes = utf8.encode(
+          '--frame\r\nContent-Length: 0\r\n\r\n\r\n',
+        ) +
+        _frame([4, 5, 6]);
+
+    final frames = parser.add(Uint8List.fromList(bytes));
+
+    expect(frames, hasLength(1));
+    expect(frames.single, [4, 5, 6]);
+  });
 }
 
 List<int> _frame(List<int> jpeg) =>

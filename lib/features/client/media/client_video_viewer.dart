@@ -15,24 +15,35 @@ class ClientVideoViewer extends StatefulWidget {
     required this.url,
     this.authToken,
     this.fit = BoxFit.cover,
+    this.connectTimeout = const Duration(seconds: 5),
+    this.readTimeout = const Duration(seconds: 8),
+    this.retryDelay = const Duration(milliseconds: 700),
+    this.clientFactory,
     this.onFrameReceived,
+    this.onStreamTimeout,
+    this.onReconnectAttempt,
   });
   final String pairedServerHost;
   final int pairedServerPort;
   final String url;
   final String? authToken;
   final BoxFit fit;
+  final Duration connectTimeout;
+  final Duration readTimeout;
+  final Duration retryDelay;
+  final HttpClient Function()? clientFactory;
   final VoidCallback? onFrameReceived;
+  final VoidCallback? onStreamTimeout;
+  final VoidCallback? onReconnectAttempt;
 
   @override
   State<ClientVideoViewer> createState() => _ClientVideoViewerState();
 }
 
 class _ClientVideoViewerState extends State<ClientVideoViewer> {
-  static const _retryDelay = Duration(milliseconds: 700);
-  static const _connectTimeout = Duration(seconds: 5);
-
   HttpClient? _client;
+  Timer? _retryTimer;
+  Completer<void>? _retryWait;
   Uint8List? _latestFrame;
   Object? _error;
   var _loadGeneration = 0;
@@ -56,6 +67,7 @@ class _ClientVideoViewerState extends State<ClientVideoViewer> {
   @override
   void dispose() {
     _loadGeneration++;
+    _cancelRetry();
     _closeClient();
     super.dispose();
   }
@@ -87,15 +99,17 @@ class _ClientVideoViewerState extends State<ClientVideoViewer> {
 
   Future<void> _startVideo() async {
     final generation = ++_loadGeneration;
+    _cancelRetry();
     _closeClient();
-    final client = HttpClient()..connectionTimeout = _connectTimeout;
+    final client = (widget.clientFactory?.call() ?? HttpClient())
+      ..connectionTimeout = widget.connectTimeout;
     _client = client;
     final parser = MjpegStreamParser();
     final uri = Uri.parse(widget.url);
 
     try {
       _validateUri(uri);
-      final request = await client.getUrl(uri);
+      final request = await client.getUrl(uri).timeout(widget.connectTimeout);
       request.headers.set(
         HttpHeaders.acceptHeader,
         'multipart/x-mixed-replace, image/jpeg',
@@ -105,14 +119,15 @@ class _ClientVideoViewerState extends State<ClientVideoViewer> {
         request.headers
             .set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
       }
-      final response = await request.close();
+      final response = await request.close().timeout(widget.connectTimeout);
       if (response.statusCode != HttpStatus.ok) {
+        await response.drain<void>();
         throw HttpException(
           'Video stream failed with HTTP ${response.statusCode}',
           uri: uri,
         );
       }
-      await for (final chunk in response) {
+      await for (final chunk in response.timeout(widget.readTimeout)) {
         if (!mounted || generation != _loadGeneration) return;
         final frames = parser.add(chunk.asUint8ListView());
         if (frames.isEmpty) continue;
@@ -130,8 +145,12 @@ class _ClientVideoViewerState extends State<ClientVideoViewer> {
       throw HttpException('Video stream ended', uri: uri);
     } catch (error) {
       if (!mounted || generation != _loadGeneration) return;
+      widget.onReconnectAttempt?.call();
+      if (error is TimeoutException) {
+        widget.onStreamTimeout?.call();
+      }
       setState(() => _error = error);
-      await Future<void>.delayed(_retryDelay);
+      await _waitForRetryDelay();
       if (mounted && generation == _loadGeneration) {
         unawaited(_startVideo());
       }
@@ -153,5 +172,29 @@ class _ClientVideoViewerState extends State<ClientVideoViewer> {
   void _closeClient() {
     _client?.close(force: true);
     _client = null;
+  }
+
+  Future<void> _waitForRetryDelay() {
+    final wait = Completer<void>();
+    _retryWait = wait;
+    _retryTimer = Timer(widget.retryDelay, () {
+      if (!wait.isCompleted) wait.complete();
+    });
+    return wait.future.whenComplete(() {
+      if (identical(_retryWait, wait)) {
+        _retryWait = null;
+        _retryTimer = null;
+      }
+    });
+  }
+
+  void _cancelRetry() {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    final wait = _retryWait;
+    _retryWait = null;
+    if (wait != null && !wait.isCompleted) {
+      wait.complete();
+    }
   }
 }

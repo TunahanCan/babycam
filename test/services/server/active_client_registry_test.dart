@@ -19,14 +19,14 @@ void main() {
     expect(first.streamToken.token, isNot(second.streamToken.token));
   });
 
-  test('disconnect cleanup slotu boşaltır ve yeni client kabul edilir', () {
+  test('medya disconnect aktif watch session ve tokeni düşürmez', () {
     final tokenService = PairingTokenService();
     final registry = ActiveClientRegistry(
       tokenService: tokenService,
       maxActiveClients: 1,
     );
 
-    registry.startSession('anne');
+    final started = registry.startSession('anne');
     expect(
       () => registry.startSession('baba'),
       throwsA(isA<ActiveClientLimitException>()),
@@ -35,9 +35,13 @@ void main() {
     registry.attachStream('anne');
     registry.detachStream('anne');
 
+    expect(registry.activeClientCount, 1);
+    expect(
+        tokenService.validateStreamToken(started.streamToken.token), isNotNull);
+
+    registry.stopSession('anne');
     final accepted = registry.startSession('baba');
     expect(accepted.clientId, 'baba');
-    expect(registry.activeClientCount, 1);
   });
 
   test('stream token expiry aktif slotu prune eder', () {
@@ -61,14 +65,14 @@ void main() {
     expect(registry.startSession('baba').clientId, 'baba');
   });
 
-  test('aynı client video ve audio açıkken tek disconnect slotu düşürmez', () {
+  test('aynı client video ve audio reconnect için session açık kalır', () {
     final tokenService = PairingTokenService();
     final registry = ActiveClientRegistry(
       tokenService: tokenService,
       maxActiveClients: 1,
     );
 
-    registry.startSession('anne');
+    final started = registry.startSession('anne');
     registry
       ..attachStream('anne')
       ..attachStream('anne');
@@ -77,6 +81,11 @@ void main() {
     expect(registry.activeClientCount, 1);
 
     registry.detachStream('anne');
+    expect(registry.activeClientCount, 1);
+    expect(
+        tokenService.validateStreamToken(started.streamToken.token), isNotNull);
+
+    registry.stopSession('anne');
     expect(registry.activeClientCount, 0);
   });
 }

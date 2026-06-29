@@ -491,6 +491,8 @@ class _StreamSurface extends StatelessWidget {
           authToken: session.sessionToken,
           fit: fit,
           onFrameReceived: streamHealthState?.markVideoFrameReceived,
+          onStreamTimeout: streamHealthState?.markStreamTimeout,
+          onReconnectAttempt: streamHealthState?.markReconnectAttempt,
         ),
         if (audioUrl != null)
           Positioned(
@@ -508,6 +510,13 @@ class _StreamSurface extends StatelessWidget {
                   authToken: session.sessionToken,
                   onAudioChunkReceived:
                       streamHealthState?.markAudioChunkReceived,
+                  onAudioError: (_) {
+                    final health = streamHealthState;
+                    if (health == null) return;
+                    health
+                      ..markAudioUnderrun()
+                      ..markReconnectAttempt();
+                  },
                 ),
               ),
             ),

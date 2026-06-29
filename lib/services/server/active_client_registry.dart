@@ -47,6 +47,7 @@ class ActiveClientRegistry {
   final PairingTokenService tokenService;
   final int maxActiveClients;
   final ClientQualityTracker _qualityTracker;
+  final _sessionClients = <String>{};
   final _activeClients = <String>{};
   final _streamConnectionCounts = <String, int>{};
 
@@ -66,6 +67,7 @@ class ActiveClientRegistry {
     final normalizedClientId = _normalizeClientId(clientId);
     pruneExpiredStreamTokens();
     final createdActiveSlot = _activateClient(normalizedClientId);
+    _sessionClients.add(normalizedClientId);
     final streamToken =
         tokenService.issueStreamToken(clientId: normalizedClientId);
     return ActiveSessionStartResult(
@@ -101,7 +103,9 @@ class ActiveClientRegistry {
     if (count == null) return;
     if (count <= 1) {
       _streamConnectionCounts.remove(normalizedClientId);
-      cleanupClient(normalizedClientId);
+      if (!_sessionClients.contains(normalizedClientId)) {
+        cleanupClient(normalizedClientId);
+      }
       return;
     }
     _streamConnectionCounts[normalizedClientId] = count - 1;
@@ -151,6 +155,7 @@ class ActiveClientRegistry {
 
   void cleanupClient(String clientId) {
     final normalizedClientId = _normalizeClientId(clientId);
+    _sessionClients.remove(normalizedClientId);
     _activeClients.remove(normalizedClientId);
     _streamConnectionCounts.remove(normalizedClientId);
     _qualityTracker.remove(normalizedClientId);
@@ -162,6 +167,7 @@ class ActiveClientRegistry {
       cleanupClient(clientId);
     }
     _streamConnectionCounts.clear();
+    _sessionClients.clear();
     _qualityTracker.clear();
   }
 

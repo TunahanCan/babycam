@@ -88,6 +88,48 @@ void main() {
     expect(update.chunksWritten, 1);
   });
 
+  test('WAV stream veri kesilirse read timeout hata sinyali uretir', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final release = Completer<void>();
+    addTearDown(() {
+      if (!release.isCompleted) release.complete();
+    });
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType('audio', 'wav');
+      request.response.add(_wavHeader(pcmBytes: 0));
+      await request.response.flush();
+      await release.future;
+    });
+    final sink = _FakePcmAudioSink();
+    final pipeline = ClientLiveAudioPipeline(
+      audioOutput: sink,
+      readTimeout: const Duration(milliseconds: 40),
+      retryDelay: const Duration(seconds: 30),
+    );
+    addTearDown(pipeline.stop);
+    final error = Completer<Object>();
+
+    await pipeline.start(
+      uri: Uri(
+        scheme: 'http',
+        host: InternetAddress.loopbackIPv4.address,
+        port: server.port,
+        path: '/audio',
+      ),
+      pairedServerHost: InternetAddress.loopbackIPv4.address,
+      pairedServerPort: server.port,
+      onError: (caught) {
+        if (!error.isCompleted) error.complete(caught);
+      },
+    );
+
+    await expectLater(
+      error.future.timeout(const Duration(seconds: 2)),
+      completion(isA<TimeoutException>()),
+    );
+  });
+
   test('jitter buffer limit asildiginda eski chunklari dusurur', () {
     final buffer = ClientAudioJitterBuffer(bytesPerFrame: 2, maxBytes: 8);
 
