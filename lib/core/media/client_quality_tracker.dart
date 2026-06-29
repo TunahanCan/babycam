@@ -40,7 +40,7 @@ class ClientQualityReport {
 
   NetworkQualityTier get effectiveTier {
     final healthTier = _healthTier();
-    return _worseTier(networkTier, healthTier);
+    return networkTier.worse(healthTier);
   }
 
   Map<String, Object?> toJson() => {
@@ -166,21 +166,6 @@ class ClientQualityReport {
     if (value is String) return value.toLowerCase() == 'true';
     return false;
   }
-
-  static NetworkQualityTier _worseTier(
-    NetworkQualityTier current,
-    NetworkQualityTier next,
-  ) =>
-      _severity(next) > _severity(current) ? next : current;
-
-  static int _severity(NetworkQualityTier tier) => switch (tier) {
-        NetworkQualityTier.offline => 5,
-        NetworkQualityTier.critical => 4,
-        NetworkQualityTier.weak => 3,
-        NetworkQualityTier.good => 2,
-        NetworkQualityTier.excellent => 1,
-        NetworkQualityTier.unknown => 0,
-      };
 }
 
 class ClientQualityTracker {
@@ -230,7 +215,7 @@ class ClientQualityTracker {
     final reports = _reportsFor(clientIds);
     if (reports.isEmpty) return null;
     return reports.reduce((current, next) =>
-        _severity(next.effectiveTier) > _severity(current.effectiveTier)
+        next.effectiveTier.severity > current.effectiveTier.severity
             ? next
             : current);
   }
@@ -249,7 +234,7 @@ class ClientQualityTracker {
     if (reports.isEmpty) return NetworkQualityTier.unknown;
     return reports
         .map((report) => report.effectiveTier)
-        .reduce((current, next) => _worseTier(current, next));
+        .reduce((current, next) => current.worse(next));
   }
 
   void _pruneExpired() {
@@ -263,19 +248,4 @@ class ClientQualityTracker {
           : clientIds
               .map((clientId) => _reports[clientId.trim()])
               .whereType<ClientQualityReport>();
-
-  static NetworkQualityTier _worseTier(
-    NetworkQualityTier current,
-    NetworkQualityTier next,
-  ) =>
-      _severity(next) > _severity(current) ? next : current;
-
-  static int _severity(NetworkQualityTier tier) => switch (tier) {
-        NetworkQualityTier.offline => 5,
-        NetworkQualityTier.critical => 4,
-        NetworkQualityTier.weak => 3,
-        NetworkQualityTier.good => 2,
-        NetworkQualityTier.excellent => 1,
-        NetworkQualityTier.unknown => 0,
-      };
 }

@@ -43,7 +43,7 @@ class WavPcmStreamParser {
         return _empty;
       }
       _configured = true;
-      final payload = headerBytes.sublist(dataStart);
+      final payload = Uint8List.sublistView(headerBytes, dataStart);
       return _parsed(_align(payload));
     }
     return _parsed(_align(chunk));
@@ -71,14 +71,13 @@ class WavPcmStreamParser {
 
     var offset = 12;
     while (offset + 8 <= bytes.length) {
-      final chunkId = String.fromCharCodes(bytes.sublist(offset, offset + 4));
       final chunkSize = _uint32le(bytes, offset + 4);
       final chunkDataOffset = offset + 8;
       final nextOffset =
           chunkDataOffset + chunkSize + (chunkSize.isOdd ? 1 : 0);
       if (chunkDataOffset + chunkSize > bytes.length) return null;
 
-      if (chunkId == 'fmt ') {
+      if (_asciiAt(bytes, offset, 'fmt ')) {
         if (chunkSize >= 16) {
           final audioFormat = _uint16le(bytes, chunkDataOffset);
           final channels = _uint16le(bytes, chunkDataOffset + 2);
@@ -90,7 +89,7 @@ class WavPcmStreamParser {
             _bitsPerSample = bitsPerSample;
           }
         }
-      } else if (chunkId == 'data') {
+      } else if (_asciiAt(bytes, offset, 'data')) {
         return chunkDataOffset;
       }
       offset = nextOffset;
@@ -101,12 +100,17 @@ class WavPcmStreamParser {
   Uint8List _align(Uint8List bytes) {
     if (bytes.isEmpty) return bytes;
     final frameSize = (_channels * _bitsPerSample ~/ 8).clamp(2, 16).toInt();
-    final builder = BytesBuilder(copy: false);
     final pending = _pendingBytes;
-    if (pending.isNotEmpty) {
-      builder.add(pending);
-      _pendingBytes = Uint8List(0);
+    if (pending.isEmpty) {
+      final alignedLength = bytes.length - (bytes.length % frameSize);
+      if (alignedLength == bytes.length) return bytes;
+      _pendingBytes = Uint8List.sublistView(bytes, alignedLength);
+      return Uint8List.sublistView(bytes, 0, alignedLength);
     }
+
+    final builder = BytesBuilder(copy: false);
+    builder.add(pending);
+    _pendingBytes = Uint8List(0);
     builder.add(bytes);
     final all = builder.toBytes();
     final alignedLength = all.length - (all.length % frameSize);

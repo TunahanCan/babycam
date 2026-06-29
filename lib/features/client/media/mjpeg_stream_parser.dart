@@ -40,7 +40,7 @@ class MjpegStreamParser {
       final frameEnd = frameStart + contentLength;
       if (_buffer.length < frameEnd) break;
 
-      frames.add(Uint8List.fromList(_buffer.sublist(frameStart, frameEnd)));
+      frames.add(_buffer.sublist(frameStart, frameEnd));
       var consumed = frameEnd;
       if (_buffer.length >= consumed + 2 &&
           _buffer[consumed] == 13 &&
@@ -68,7 +68,7 @@ class MjpegStreamParser {
   }
 
   static Uint8List _append(Uint8List first, Uint8List second) {
-    if (first.isEmpty) return Uint8List.fromList(second);
+    if (first.isEmpty) return second;
     final combined = Uint8List(first.length + second.length);
     combined.setRange(0, first.length, first);
     combined.setRange(first.length, combined.length, second);

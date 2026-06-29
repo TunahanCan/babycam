@@ -29,6 +29,7 @@ import '../core/network/local_network_guard.dart';
 import '../core/protocol/mimicam_protocol.dart' as protocol_v2;
 import '../core/security/transport_config.dart';
 import '../features/server/pairing/pairing_token_service.dart';
+import '../features/server/media/mjpeg_stream_service.dart';
 import '../features/server/media/microphone_capture_service.dart';
 import '../features/server/media/wav_audio_stream_service.dart';
 import '../l10n/app_strings.dart';
@@ -81,6 +82,9 @@ class MimiCamServer {
       maxActiveClients: maxActiveWatchClients,
     );
     _authGuard = RequestAuthGuard(tokenService: this.tokenService);
+    _videoStreamService = MjpegStreamService(
+      onClientDetached: _activeClientRegistry.detachStream,
+    );
     _audioStreamService = WavAudioStreamService(
       sampleRate: _audioSampleRate,
       channels: _audioChannels,
@@ -114,16 +118,13 @@ class MimiCamServer {
   MediaAnalysisMetrics? _analysisMetrics;
   StreamSubscription<AlertEvent>? _alertSubscription;
   final _webSockets = <WebSocket>{};
-  final _mjpegClients = <HttpResponse>{};
-  final _mjpegClientIds = <HttpResponse, String>{};
-  final _mjpegBackpressure =
-      StreamBackpressureGate<HttpResponse>(kind: StreamBackpressureKind.video);
   late final ActiveClientRegistry _activeClientRegistry;
   late final RequestAuthGuard _authGuard;
   final _microphoneCapture = MicrophoneCaptureService(
     sampleRate: _audioSampleRate,
     channels: _audioChannels,
   );
+  late final MjpegStreamService _videoStreamService;
   late final WavAudioStreamService _audioStreamService;
 
   CameraController? cameraController;
@@ -140,11 +141,9 @@ class MimiCamServer {
   Uint8List? _latestJpeg;
   int? _lastCameraFrameAtMs;
   int? _lastVideoFrameEncodedAtMs;
-  int? _lastVideoClientWriteAtMs;
   int? _lastAlertBroadcastAtMs;
   int? _videoProbeEncodeUntilMs;
   int _videoFramesEncoded = 0;
-  int _videoFramesStreamed = 0;
   int _alertsBroadcast = 0;
   int _alertWebSocketDeliveries = 0;
   int _lastJpegBytes = 0;
@@ -377,7 +376,8 @@ class MimiCamServer {
 
     try {
       final shouldEncodeJpeg = _encodingPolicy.shouldEncodeJpeg(
-        hasMjpegClients: _mjpegClients.isNotEmpty || _isVideoProbeActive(nowMs),
+        hasMjpegClients:
+            _videoStreamService.hasClients || _isVideoProbeActive(nowMs),
         legacyWebSocketEnabled: enableLegacyWebSocketMediaPackets,
       );
       if (shouldEncodeJpeg) {
@@ -400,21 +400,7 @@ class MimiCamServer {
         if (enableLegacyWebSocketMediaPackets) {
           _broadcastBinary([MimiCamProtocol.packetVideoMjpeg, ...jpeg]);
         }
-        for (final client in _mjpegClients.toList()) {
-          // The stream is latest-frame oriented: slow clients drop frames
-          // rather than buffering old JPEGs and increasing memory pressure.
-          if (!_mjpegBackpressure.tryMarkBusy(client)) continue;
-          final startedAt = DateTime.now();
-          _writeMjpegFrame(client, jpeg).then<void>((_) {
-            _recordVideoClientWrite(
-              client,
-              duration: DateTime.now().difference(startedAt),
-            );
-          }).catchError((Object _) {
-            _mjpegBackpressure.recordFailure(client);
-            _removeMjpegClient(client);
-          }).whenComplete(() => _mjpegBackpressure.markIdle(client));
-        }
+        _videoStreamService.broadcast(jpeg);
       }
       _analysisCoordinator?.onCameraFrame(_toLumaFrame(frame, nowMs));
     } catch (error) {
@@ -688,7 +674,7 @@ class MimiCamServer {
 
   Future<void> _handlePrivateStatus(HttpRequest request) async {
     await _writeJson(request.response, {
-      'videoClients': _mjpegClients.length,
+      'videoClients': _videoStreamService.clientCount,
       'audioClients': _audioStreamService.clientCount,
       'webSocketClients': _webSockets.length,
       'activeStreamClients': _activeClientRegistry.activeClientCount,
@@ -868,7 +854,7 @@ class MimiCamServer {
     try {
       _activeClientRegistry.stopSession(clientId);
       if (_activeClientRegistry.activeClientCount == 0 &&
-          _mjpegClients.isEmpty &&
+          !_videoStreamService.hasClients &&
           !_audioStreamService.hasClients) {
         await stopMediaRuntime();
       } else {
@@ -954,7 +940,7 @@ class MimiCamServer {
 
   StreamBackpressureMetrics _combinedBackpressureMetrics() =>
       combineBackpressureMetrics([
-        _mjpegBackpressure.aggregateMetrics(),
+        _videoStreamService.backpressureMetrics,
         _audioStreamService.backpressureMetrics,
       ]);
 
@@ -962,7 +948,7 @@ class MimiCamServer {
       _audioStreamService.backpressureMetrics.skippedAudioChunks == 0;
 
   bool _isVideoReliable() =>
-      _mjpegBackpressure.aggregateMetrics().skippedVideoFrames < 3;
+      _videoStreamService.backpressureMetrics.skippedVideoFrames < 3;
 
   Future<void> _setActiveMediaProfile(MediaQualityProfile nextProfile) async {
     final previousProfile = _activeMediaProfile;
@@ -1138,8 +1124,8 @@ class MimiCamServer {
     _cryActive = false;
     _lastCryActiveAtMs = null;
     _frameBudget.reset();
-    _mjpegBackpressure.clear();
-    _mjpegClientIds.clear();
+    await _videoStreamService.closeAll();
+    _videoStreamService.resetDiagnostics();
     await _audioStreamService.closeAll();
     _microphoneCapture.resetDiagnostics();
     _audioStreamService.resetDiagnostics();
@@ -1148,50 +1134,15 @@ class MimiCamServer {
   }
 
   Future<void> _handleMjpeg(HttpResponse response, String clientId) async {
-    response.headers.set(HttpHeaders.contentTypeHeader,
-        'multipart/x-mixed-replace; boundary=frame');
-    _mjpegClients.add(response);
-    _mjpegClientIds[response] = clientId;
-    response.done.catchError((Object _) {}).whenComplete(() {
-      _removeMjpegClient(response);
-    });
-    final firstFrame = _latestJpeg;
-    if (firstFrame != null) {
-      final startedAt = DateTime.now();
-      await _writeMjpegFrame(response, firstFrame);
-      _recordVideoClientWrite(
-        response,
-        duration: DateTime.now().difference(startedAt),
-      );
-    }
+    await _videoStreamService.attachClient(
+      response,
+      clientId,
+      firstFrame: _latestJpeg,
+    );
   }
 
   Future<void> _handleAudio(HttpResponse response, String clientId) async {
     await _audioStreamService.attachClient(response, clientId);
-  }
-
-  void _removeMjpegClient(HttpResponse response) {
-    final clientId = _mjpegClientIds.remove(response);
-    _mjpegClients.remove(response);
-    _mjpegBackpressure.remove(response);
-    if (clientId != null) _activeClientRegistry.detachStream(clientId);
-  }
-
-  void _recordVideoClientWrite(
-    HttpResponse response, {
-    required Duration duration,
-  }) {
-    _videoFramesStreamed++;
-    _lastVideoClientWriteAtMs = DateTime.now().millisecondsSinceEpoch;
-    _mjpegBackpressure.recordSuccess(response, duration: duration);
-  }
-
-  Future<void> _writeMjpegFrame(HttpResponse response, Uint8List jpeg) async {
-    response.add(utf8.encode(
-        '--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.length}\r\n\r\n'));
-    response.add(jpeg);
-    response.add(utf8.encode('\r\n'));
-    await response.flush();
   }
 
   Future<void> _writeJson(
@@ -1271,8 +1222,8 @@ class MimiCamServer {
     _analysisMetrics?.reset();
     _frameBudget.reset();
     _activeClientRegistry.clear();
-    _mjpegBackpressure.clear();
-    _mjpegClientIds.clear();
+    await _videoStreamService.closeAll();
+    _videoStreamService.resetDiagnostics();
     await _audioStreamService.closeAll();
     _audioStreamService.resetDiagnostics();
     _jpegByteBudgetController.reset();
@@ -1285,7 +1236,6 @@ class MimiCamServer {
       await socket.close();
     }
     _webSockets.clear();
-    _mjpegClients.clear();
     _lastMotionSample = null;
     _lastMotionEnergy = 0;
     _cryActive = false;

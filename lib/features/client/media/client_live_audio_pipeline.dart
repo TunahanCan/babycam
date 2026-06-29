@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../core/bytes/byte_chunk.dart';
 import 'pcm_audio_output.dart';
 import 'wav_pcm_stream_parser.dart';
 
@@ -134,7 +135,7 @@ class ClientLiveAudioPipeline {
       await for (final chunk in response) {
         if (!_isCurrent(generation, run)) return;
         run.networkBytesReceived += chunk.length;
-        final parsed = parser.add(Uint8List.fromList(chunk));
+        final parsed = parser.add(chunk.asUint8ListView());
         if (!_outputStarted && parsed.isConfigured) {
           await _audioOutput.start(
             sampleRate: parsed.sampleRate,
@@ -217,7 +218,9 @@ class ClientLiveAudioPipeline {
       nativeStatus: nativeStatus,
     );
     run.onStatus?.call(status);
-    debugPrint('MimiCam live audio ${status.toJson()}');
+    if (kDebugMode) {
+      debugPrint('MimiCam live audio ${status.toJson()}');
+    }
   }
 
   bool _isCurrent(int generation, _PipelineRun run) =>

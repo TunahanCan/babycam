@@ -32,6 +32,18 @@ enum NetworkQualityTier {
       this == NetworkQualityTier.critical ||
       this == NetworkQualityTier.offline;
 
+  int get severity => switch (this) {
+        NetworkQualityTier.offline => 5,
+        NetworkQualityTier.critical => 4,
+        NetworkQualityTier.weak => 3,
+        NetworkQualityTier.good => 2,
+        NetworkQualityTier.excellent => 1,
+        NetworkQualityTier.unknown => 0,
+      };
+
+  NetworkQualityTier worse(NetworkQualityTier other) =>
+      other.severity > severity ? other : this;
+
   static NetworkQualityTier fromName(String? value) =>
       NetworkQualityTier.values.firstWhere(
         (tier) => tier.name == value,

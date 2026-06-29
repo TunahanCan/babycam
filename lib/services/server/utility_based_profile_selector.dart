@@ -14,19 +14,18 @@ class UtilityBasedProfileSelector {
     StreamBackpressureMetrics backpressureMetrics =
         const StreamBackpressureMetrics(),
   }) {
-    final reports = qualityReports.toList(growable: false);
     final base = MediaQualityProfile.forDeviceTier(deviceTier);
-    final effectiveTier = _effectiveNetworkTier(networkTier, reports);
-    final videoTrouble =
-        _videoTrouble(reports, backpressureMetrics: backpressureMetrics);
-    final audioTrouble =
-        _audioTrouble(reports, backpressureMetrics: backpressureMetrics);
+    final signals = _QualitySignals.from(
+      networkTier: networkTier,
+      reports: qualityReports,
+      backpressureMetrics: backpressureMetrics,
+    );
 
     final planned = switch (_plannedTier(
-      networkTier: effectiveTier,
+      networkTier: signals.effectiveTier,
       activeClientCount: activeClientCount,
-      videoTrouble: videoTrouble,
-      audioTrouble: audioTrouble,
+      videoTrouble: signals.videoTrouble,
+      audioTrouble: signals.audioTrouble,
       backpressureMetrics: backpressureMetrics,
     )) {
       _PlannedMediaTier.full => base,
@@ -42,7 +41,7 @@ class UtilityBasedProfileSelector {
           .adaptForClientLoad(activeClientCount),
     };
 
-    if (!audioTrouble) return planned;
+    if (!signals.audioTrouble) return planned;
     return planned.copyWith(
       id: '${planned.id}_audio_first',
       label: '${planned.label} / ses öncelikli',
@@ -75,18 +74,7 @@ class UtilityBasedProfileSelector {
     return _PlannedMediaTier.full;
   }
 
-  NetworkQualityTier _effectiveNetworkTier(
-    NetworkQualityTier networkTier,
-    List<ClientQualityReport> reports,
-  ) {
-    var effective = networkTier;
-    for (final report in reports) {
-      effective = _worseTier(effective, _transportTier(report));
-    }
-    return effective;
-  }
-
-  NetworkQualityTier _transportTier(ClientQualityReport report) {
+  static NetworkQualityTier transportTier(ClientQualityReport report) {
     if (report.consecutiveFailures >= 3) return NetworkQualityTier.offline;
     if (report.rttMs != null) {
       if (report.rttMs! >= 1000) return NetworkQualityTier.critical;
@@ -95,61 +83,26 @@ class UtilityBasedProfileSelector {
       return NetworkQualityTier.excellent;
     }
     final audioOnlyProblem =
-        _hasAudioProblem(report) && !_hasVideoProblem(report);
+        hasAudioProblem(report) && !hasVideoProblem(report);
     if (audioOnlyProblem &&
-        _severity(report.networkTier) >=
-            _severity(NetworkQualityTier.critical)) {
+        report.networkTier.severity >= NetworkQualityTier.critical.severity) {
       return NetworkQualityTier.unknown;
     }
     return report.networkTier;
   }
 
-  bool _videoTrouble(
-    List<ClientQualityReport> reports, {
-    required StreamBackpressureMetrics backpressureMetrics,
-  }) {
-    if (backpressureMetrics.consecutiveWriteFailures >= 2 ||
-        backpressureMetrics.skippedVideoFrames >= 12) {
-      return true;
-    }
-    return reports.any((report) => _hasVideoProblem(report));
-  }
-
-  bool _audioTrouble(
-    List<ClientQualityReport> reports, {
-    required StreamBackpressureMetrics backpressureMetrics,
-  }) {
-    if (backpressureMetrics.skippedAudioChunks > 0) return true;
-    return reports.any((report) => _hasAudioProblem(report));
-  }
-
-  bool _hasVideoProblem(ClientQualityReport report) =>
+  static bool hasVideoProblem(ClientQualityReport report) =>
       report.streamTimedOut ||
       _atLeast(report.videoFrameGapMs, 5000) ||
       report.skippedVideoFrames >= 8 ||
       report.consecutiveFailures >= 3;
 
-  bool _hasAudioProblem(ClientQualityReport report) =>
+  static bool hasAudioProblem(ClientQualityReport report) =>
       report.audioUnderrun ||
       report.skippedAudioChunks > 0 ||
       _atLeast(report.audioGapMs, 1800);
 
-  NetworkQualityTier _worseTier(
-    NetworkQualityTier current,
-    NetworkQualityTier next,
-  ) =>
-      _severity(next) > _severity(current) ? next : current;
-
-  int _severity(NetworkQualityTier tier) => switch (tier) {
-        NetworkQualityTier.offline => 5,
-        NetworkQualityTier.critical => 4,
-        NetworkQualityTier.weak => 3,
-        NetworkQualityTier.good => 2,
-        NetworkQualityTier.excellent => 1,
-        NetworkQualityTier.unknown => 0,
-      };
-
-  bool _atLeast(int? value, int threshold) =>
+  static bool _atLeast(int? value, int threshold) =>
       value != null && value >= threshold;
 }
 
@@ -159,4 +112,40 @@ enum _PlannedMediaTier {
   weak,
   critical,
   survival,
+}
+
+class _QualitySignals {
+  const _QualitySignals({
+    required this.effectiveTier,
+    required this.videoTrouble,
+    required this.audioTrouble,
+  });
+
+  factory _QualitySignals.from({
+    required NetworkQualityTier networkTier,
+    required Iterable<ClientQualityReport> reports,
+    required StreamBackpressureMetrics backpressureMetrics,
+  }) {
+    var effectiveTier = networkTier;
+    var videoTrouble = backpressureMetrics.consecutiveWriteFailures >= 2 ||
+        backpressureMetrics.skippedVideoFrames >= 12;
+    var audioTrouble = backpressureMetrics.skippedAudioChunks > 0;
+    for (final report in reports) {
+      effectiveTier = effectiveTier
+          .worse(UtilityBasedProfileSelector.transportTier(report));
+      videoTrouble =
+          videoTrouble || UtilityBasedProfileSelector.hasVideoProblem(report);
+      audioTrouble =
+          audioTrouble || UtilityBasedProfileSelector.hasAudioProblem(report);
+    }
+    return _QualitySignals(
+      effectiveTier: effectiveTier,
+      videoTrouble: videoTrouble,
+      audioTrouble: audioTrouble,
+    );
+  }
+
+  final NetworkQualityTier effectiveTier;
+  final bool videoTrouble;
+  final bool audioTrouble;
 }

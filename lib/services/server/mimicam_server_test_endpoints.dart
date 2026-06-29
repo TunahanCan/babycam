@@ -184,7 +184,8 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
 
   Map<String, Object?> _testDiagnostics() {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final videoMetrics = _mjpegBackpressure.aggregateMetrics();
+    final videoStream = _videoStreamService.snapshot;
+    final videoMetrics = videoStream.backpressure;
     final microphone = _microphoneCapture.snapshot;
     final audioStream = _audioStreamService.snapshot;
     final audioMetrics = audioStream.backpressure;
@@ -204,7 +205,7 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
       },
       'clients': {
         'activeStreamClients': _activeClientRegistry.activeClientCount,
-        'videoClients': _mjpegClients.length,
+        'videoClients': videoStream.clientCount,
         'audioClients': audioStream.clientCount,
         'webSocketClients': _webSockets.length,
       },
@@ -214,10 +215,10 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         'lastCameraFrameAgeMs': _ageMs(nowMs, _lastCameraFrameAtMs),
         'lastFrameEncodedAtMs': _lastVideoFrameEncodedAtMs,
         'lastFrameEncodedAgeMs': _ageMs(nowMs, _lastVideoFrameEncodedAtMs),
-        'lastClientWriteAtMs': _lastVideoClientWriteAtMs,
-        'lastClientWriteAgeMs': _ageMs(nowMs, _lastVideoClientWriteAtMs),
+        'lastClientWriteAtMs': videoStream.lastClientWriteAtMs,
+        'lastClientWriteAgeMs': _ageMs(nowMs, videoStream.lastClientWriteAtMs),
         'framesEncoded': _videoFramesEncoded,
-        'framesStreamed': _videoFramesStreamed,
+        'framesStreamed': videoStream.framesStreamed,
         'lastJpegBytes': _lastJpegBytes,
         'probeEncodeActive': _isVideoProbeActive(nowMs),
         'backpressure': _backpressureJson(videoMetrics),
@@ -254,7 +255,7 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
   _ProbeCounters _probeCounters() => _ProbeCounters(
         cameraFramesAtMs: _lastCameraFrameAtMs,
         videoFramesEncoded: _videoFramesEncoded,
-        videoFramesStreamed: _videoFramesStreamed,
+        videoFramesStreamed: _videoStreamService.snapshot.framesStreamed,
         audioChunksCaptured: _microphoneCapture.snapshot.chunksCaptured,
         audioChunksStreamed: _audioStreamService.snapshot.chunksStreamed,
         alertsBroadcast: _alertsBroadcast,
@@ -319,9 +320,7 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
       eventAtMs == null ? null : max(0, nowMs - eventAtMs);
 
   Future<void> _closeStreamingClients() async {
-    for (final response in _mjpegClients.toList()) {
-      await _closeHttpResponseBestEffort(response);
-    }
+    await _videoStreamService.closeAll();
     await _audioStreamService.closeAll();
     for (final socket in _webSockets.toList()) {
       try {
@@ -329,29 +328,20 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
       } catch (_) {}
     }
     _webSockets.clear();
-    _mjpegClients.clear();
-    _mjpegClientIds.clear();
-  }
-
-  Future<void> _closeHttpResponseBestEffort(HttpResponse response) async {
-    try {
-      await response.close().timeout(const Duration(milliseconds: 500));
-    } catch (_) {}
   }
 
   void _resetTestDiagnostics() {
     _latestJpeg = null;
     _lastCameraFrameAtMs = null;
     _lastVideoFrameEncodedAtMs = null;
-    _lastVideoClientWriteAtMs = null;
     _lastAlertBroadcastAtMs = null;
     _videoProbeEncodeUntilMs = null;
     _videoFramesEncoded = 0;
-    _videoFramesStreamed = 0;
     _alertsBroadcast = 0;
     _alertWebSocketDeliveries = 0;
     _lastJpegBytes = 0;
     _lastAlertDeliveredWebSocketClients = 0;
+    _videoStreamService.resetDiagnostics();
     _microphoneCapture.resetDiagnostics();
     _audioStreamService.resetDiagnostics();
     _analysisMetrics?.reset();

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/bytes/byte_chunk.dart';
 import 'mjpeg_stream_parser.dart';
 
 class ClientVideoViewer extends StatefulWidget {
@@ -113,7 +114,7 @@ class _ClientVideoViewerState extends State<ClientVideoViewer> {
       }
       await for (final chunk in response) {
         if (!mounted || generation != _loadGeneration) return;
-        final frames = parser.add(Uint8List.fromList(chunk));
+        final frames = parser.add(chunk.asUint8ListView());
         if (frames.isEmpty) continue;
         for (final _ in frames) {
           widget.onFrameReceived?.call();
