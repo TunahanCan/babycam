@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/media/adaptive_media_profile.dart';
+import '../../../core/protocol/alert_event_dto.dart';
 import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
@@ -257,33 +258,11 @@ class _WatchScreenState extends State<WatchScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          _Timeline('09:38', strings.cryingSound,
-              '18 dB · ${strings.ui('notificationCooldown')}', _pink),
-          const SizedBox(height: 10),
-          _Timeline(
-              '09:31', strings.ui('phaseClientPaired'), '192.168.1.42', _mint),
-          const SizedBox(height: 10),
-          _Timeline('09:12', strings.motionAlert(72),
-              strings.ui('motionMinimumDurationDescription'), _amber),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: _cardDecoration(dark: true),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(strings.ui('dailySummary'),
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900)),
-                const SizedBox(height: 7),
-                Text(
-                  strings.ui('todayEventSummary'),
-                  style: const TextStyle(
-                      color: Colors.white70, fontSize: 14.5, height: 1.25),
-                ),
-              ],
+          StreamBuilder<List<AlertEventDto>>(
+            stream: widget.runtime.alertUpdates,
+            initialData: widget.runtime.alerts,
+            builder: (context, snapshot) => _AlertTimeline(
+              alerts: snapshot.data ?? const [],
             ),
           ),
         ],
@@ -978,6 +957,102 @@ class _SwitchLine extends StatelessWidget {
       ),
     );
   }
+}
+
+class _AlertTimeline extends StatelessWidget {
+  const _AlertTimeline({required this.alerts});
+
+  final List<AlertEventDto> alerts;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final items = alerts.isEmpty ? <AlertEventDto>[] : alerts;
+    return Column(
+      children: [
+        if (items.isEmpty)
+          _Timeline(
+            '--:--',
+            strings.ui('waitingLatestStatus'),
+            strings.ui('pairedServerAlertAppears'),
+            _mint,
+          )
+        else
+          for (final alert in items) ...[
+            _Timeline(
+              _formatAlertTime(alert.timestampMs),
+              _alertTitle(strings, alert),
+              alert.localizedMessage(strings),
+              _alertColor(alert),
+            ),
+            if (alert != items.last) const SizedBox(height: 10),
+          ],
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: _cardDecoration(dark: true),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(strings.ui('dailySummary'),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900)),
+              const SizedBox(height: 7),
+              Text(
+                items.isEmpty
+                    ? strings.ui('parentEventsPriorityText')
+                    : '${items.length} ${strings.ui('navNotifications')}',
+                style: const TextStyle(
+                    color: Colors.white70, fontSize: 14.5, height: 1.25),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _alertTitle(AppStrings strings, AlertEventDto alert) {
+  final family = _alertFamily(alert);
+  return switch (family) {
+    _AlertFamily.motion => strings.ui('motionDetectedTitle'),
+    _AlertFamily.audio => strings.ui('cryDetectedTitle'),
+    _AlertFamily.system => strings.notificationTitle,
+  };
+}
+
+Color _alertColor(AlertEventDto alert) {
+  final family = _alertFamily(alert);
+  return switch (family) {
+    _AlertFamily.motion => _amber,
+    _AlertFamily.audio => _pink,
+    _AlertFamily.system => _mint,
+  };
+}
+
+enum _AlertFamily { audio, motion, system }
+
+_AlertFamily _alertFamily(AlertEventDto alert) {
+  final signature = '${alert.type} ${alert.messageKey}'.toLowerCase();
+  if (signature.contains('motion') || signature.contains('light')) {
+    return _AlertFamily.motion;
+  }
+  if (signature.contains('cry') ||
+      signature.contains('sound') ||
+      signature.contains('audio') ||
+      signature.contains('legacy')) {
+    return _AlertFamily.audio;
+  }
+  return _AlertFamily.system;
+}
+
+String _formatAlertTime(int timestampMs) {
+  final time = DateTime.fromMillisecondsSinceEpoch(timestampMs);
+  return '${time.hour.toString().padLeft(2, '0')}:'
+      '${time.minute.toString().padLeft(2, '0')}';
 }
 
 class _Timeline extends StatelessWidget {

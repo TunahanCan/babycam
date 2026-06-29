@@ -45,6 +45,18 @@ void main() {
                 'Bebek Odası'),
       ),
     );
+    await expectLater(
+      runtime.states.firstWhere((state) => state.alertsActive),
+      completion(
+        isA<ClientRuntimeState>()
+            .having((state) => state.alertsActive, 'alertsActive', isTrue)
+            .having(
+              (state) => state.phase,
+              'phase',
+              ClientRuntimePhase.alertOnly,
+            ),
+      ),
+    );
   });
 }
 

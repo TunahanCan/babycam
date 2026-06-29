@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_role.dart';
 import '../../core/protocol/mimicam_protocol.dart';
+import '../../core/protocol/alert_event_dto.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../l10n/app_strings.dart';
 import '../shared/presentation/mimicam_design_tokens.dart';
@@ -146,7 +147,13 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
             const SizedBox(height: 18),
             const _NotificationFilterBar(),
             const SizedBox(height: 14),
-            const _NotificationList(),
+            StreamBuilder<List<AlertEventDto>>(
+              stream: widget.runtime.alertUpdates,
+              initialData: widget.runtime.alerts,
+              builder: (context, snapshot) => _NotificationList(
+                alerts: snapshot.data ?? const [],
+              ),
+            ),
           ],
         ),
       _ => _ClientTabFrame(
@@ -1185,12 +1192,16 @@ class _NotificationFilterBar extends StatelessWidget {
 }
 
 class _NotificationList extends StatelessWidget {
-  const _NotificationList();
+  const _NotificationList({required this.alerts});
+
+  final List<AlertEventDto> alerts;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final items = _parentNotificationSpecs(strings);
+    final items = alerts.isEmpty
+        ? [_emptyNotificationSpec(strings)]
+        : alerts.map((alert) => _notificationSpecFromAlert(strings, alert));
 
     return Column(
       children: [
@@ -1203,51 +1214,77 @@ class _NotificationList extends StatelessWidget {
   }
 }
 
-List<_NotificationSpec> _parentNotificationSpecs(AppStrings strings) {
-  // Demo parent feed items stay data-only so the screen build tree does not
-  // need to change when real alert history replaces these fixtures.
-  return [
+_NotificationSpec _emptyNotificationSpec(AppStrings strings) =>
     _NotificationSpec(
-      Icons.notifications_active_outlined,
-      strings.ui('cryDetectedTitle'),
-      strings.ui('cryDetectedText'),
-      '12:32',
-      strings.ui('important'),
-      MimiCamDesignTokens.blushSoft,
-    ),
-    _NotificationSpec(
-      Icons.directions_run_rounded,
-      strings.ui('motionDetectedTitle'),
-      strings.ui('motionDetectedText'),
-      '12:28',
-      strings.ui('info'),
-      const Color(0xFFEFFAF5),
-    ),
-    _NotificationSpec(
-      Icons.nights_stay_rounded,
-      strings.ui('temperatureWarningTitle'),
-      strings.ui('temperatureWarningText'),
-      '11:45',
-      strings.ui('warning'),
-      const Color(0xFFFFF7E8),
-    ),
-    _NotificationSpec(
-      Icons.wifi_rounded,
-      strings.ui('connectionRenewedTitle'),
-      strings.ui('connectionRenewedText'),
-      '11:30',
+      Icons.notifications_none_rounded,
+      strings.ui('waitingLatestStatus'),
+      strings.ui('pairedServerAlertAppears'),
+      '--:--',
       strings.ui('system'),
       const Color(0xFFF1F5FB),
-    ),
-    _NotificationSpec(
-      Icons.water_drop_outlined,
-      strings.ui('humidityNormalTitle'),
-      strings.ui('humidityNormalText'),
-      '10:55',
-      strings.ui('info'),
-      const Color(0xFFF7EFFB),
-    ),
-  ];
+    );
+
+_NotificationSpec _notificationSpecFromAlert(
+  AppStrings strings,
+  AlertEventDto alert,
+) {
+  final family = _alertFamily(alert);
+  return _NotificationSpec(
+    switch (family) {
+      _AlertFamily.motion => Icons.directions_run_rounded,
+      _AlertFamily.audio => Icons.notifications_active_outlined,
+      _AlertFamily.system => Icons.wifi_rounded,
+    },
+    switch (family) {
+      _AlertFamily.motion => strings.ui('motionDetectedTitle'),
+      _AlertFamily.audio => strings.ui('cryDetectedTitle'),
+      _AlertFamily.system => strings.notificationTitle,
+    },
+    alert.localizedMessage(strings),
+    _formatAlertTime(alert.timestampMs),
+    _severityLabel(strings, alert.severity),
+    switch (family) {
+      _AlertFamily.motion => const Color(0xFFEFFAF5),
+      _AlertFamily.audio => MimiCamDesignTokens.blushSoft,
+      _AlertFamily.system => const Color(0xFFF1F5FB),
+    },
+  );
+}
+
+enum _AlertFamily { audio, motion, system }
+
+_AlertFamily _alertFamily(AlertEventDto alert) {
+  final signature = '${alert.type} ${alert.messageKey}'.toLowerCase();
+  if (signature.contains('motion') || signature.contains('light')) {
+    return _AlertFamily.motion;
+  }
+  if (signature.contains('cry') ||
+      signature.contains('sound') ||
+      signature.contains('audio') ||
+      signature.contains('legacy')) {
+    return _AlertFamily.audio;
+  }
+  return _AlertFamily.system;
+}
+
+String _severityLabel(AppStrings strings, String severity) {
+  final normalized = severity.toLowerCase();
+  if (normalized.contains('critical') || normalized.contains('high')) {
+    return strings.ui('important');
+  }
+  if (normalized.contains('warning') || normalized.contains('medium')) {
+    return strings.ui('warning');
+  }
+  if (normalized.contains('info') || normalized.contains('low')) {
+    return strings.ui('info');
+  }
+  return strings.ui('system');
+}
+
+String _formatAlertTime(int timestampMs) {
+  final time = DateTime.fromMillisecondsSinceEpoch(timestampMs);
+  return '${time.hour.toString().padLeft(2, '0')}:'
+      '${time.minute.toString().padLeft(2, '0')}';
 }
 
 class _NotificationSpec {

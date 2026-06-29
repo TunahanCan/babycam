@@ -98,6 +98,25 @@ void main() {
     expect(health.snapshot().reconnectCount, greaterThanOrEqualTo(1));
     expect(stopwatch.elapsedMilliseconds, lessThan(250));
   });
+
+  test('ilk websocket baglantisini beklemeden alert dinleme armlanir',
+      () async {
+    final listener = ClientAlertListener(
+      reconnectDelay: const Duration(seconds: 5),
+      maxReconnectDelay: const Duration(seconds: 5),
+    );
+    addTearDown(listener.stop);
+
+    final stopwatch = Stopwatch()..start();
+    await listener
+        .start(_session(9), waitForFirstConnection: false)
+        .timeout(const Duration(milliseconds: 100));
+    stopwatch.stop();
+
+    expect(listener.isListening, isTrue);
+    expect(stopwatch.elapsedMilliseconds, lessThan(100));
+    await listener.stop().timeout(const Duration(milliseconds: 250));
+  });
 }
 
 String _alertJson(String id) => jsonEncode({

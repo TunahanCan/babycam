@@ -37,13 +37,23 @@ class ClientAlertListener {
   var _generation = 0;
   var _intentionalStop = false;
 
-  Future<void> start(PairingSession session) async {
-    if (isListening) return _firstConnection?.future ?? Future<void>.value();
+  Future<void> start(
+    PairingSession session, {
+    bool waitForFirstConnection = true,
+  }) async {
+    if (isListening) {
+      if (!waitForFirstConnection) return;
+      return _firstConnection?.future ?? Future<void>.value();
+    }
     _intentionalStop = false;
     isListening = true;
     _firstConnection = Completer<void>();
     final generation = ++_generation;
     _loop = _listenLoop(generation, session);
+    if (!waitForFirstConnection) {
+      unawaited(_firstConnection!.future.catchError((_) {}));
+      return;
+    }
     return _firstConnection!.future;
   }
 

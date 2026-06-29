@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import '../../core/media/adaptive_media_profile.dart';
+import '../../core/protocol/alert_event_dto.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../core/protocol/pairing_session.dart';
+import 'alerts/client_alert_history.dart';
 import 'media/active_stream_session.dart';
 import 'media/client_stream_health_state.dart';
 
@@ -54,6 +56,7 @@ class ClientRuntime {
     Future<bool> Function(PairingSession session)? startAlerts,
     Future<void> Function()? stopAlerts,
     Future<void> Function()? clearStore,
+    ClientAlertHistory? alertHistory,
     this.streamHealthState,
   })  : _pair = pair,
         _renew = renew,
@@ -62,7 +65,8 @@ class ClientRuntime {
         _watchNetworkQuality = watchNetworkQuality,
         _startAlerts = startAlerts,
         _stopAlerts = stopAlerts,
-        _clearStore = clearStore;
+        _clearStore = clearStore,
+        alertHistory = alertHistory ?? ClientAlertHistory();
 
   final Future<PairingSession> Function(PairingPayload payload) _pair;
   final Future<PairingSession?> Function(PairingSession session)? _renew;
@@ -76,6 +80,7 @@ class ClientRuntime {
   final Future<bool> Function(PairingSession session)? _startAlerts;
   final Future<void> Function()? _stopAlerts;
   final Future<void> Function()? _clearStore;
+  final ClientAlertHistory alertHistory;
   final ClientStreamHealthState? streamHealthState;
   final _states = StreamController<ClientRuntimeState>.broadcast();
   ClientRuntimeState _state =
@@ -85,6 +90,12 @@ class ClientRuntime {
 
   ClientRuntimeState get currentState => _state;
   Stream<ClientRuntimeState> get states => _states.stream;
+  List<AlertEventDto> get alerts => alertHistory.alerts;
+  Stream<List<AlertEventDto>> get alertUpdates => alertHistory.changes;
+
+  Future<void> recordAlert(AlertEventDto alert) => alertHistory.add(alert);
+  Future<void> loadAlertHistory() => alertHistory.load();
+  Future<void> clearAlertHistory() => alertHistory.clear();
 
   Future<void> restoreSession(PairingSession session) async {
     if (_disposed) return;
@@ -283,6 +294,7 @@ class ClientRuntime {
     await _networkQualitySubscription?.cancel();
     _networkQualitySubscription = null;
     await _clearStore?.call();
+    await alertHistory.clear();
     _emit(const ClientRuntimeState(phase: ClientRuntimePhase.unpaired));
   }
 
@@ -317,6 +329,7 @@ class ClientRuntime {
       await _stopStream?.call(session);
     }
     await _stopAlerts?.call();
+    await alertHistory.dispose();
     await _states.close();
   }
 
