@@ -473,57 +473,66 @@ class MimiCamServer {
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
-    if (_disposed) {
-      await request.response.close();
-      return;
-    }
-    final remoteAddress = request.connectionInfo?.remoteAddress;
-    // This is not a firewall; it reduces accidental public exposure if the
-    // socket becomes reachable outside the local Wi-Fi network.
-    if (remoteAddress != null &&
-        !localNetworkGuard.isAllowedRemoteAddress(remoteAddress)) {
-      request.response.statusCode = HttpStatus.forbidden;
-      await request.response.close();
-      return;
-    }
-    if ((request.uri.path == '/ws/stream' ||
-            request.uri.path == protocol_v2.MimiCamProtocolV2.events) &&
-        WebSocketTransformer.isUpgradeRequest(request)) {
-      if (!_isWebSocketAuthorized(request)) {
-        request.response.statusCode = HttpStatus.unauthorized;
+    try {
+      if (_disposed) {
         await request.response.close();
         return;
       }
-      final socket = await WebSocketTransformer.upgrade(request);
-      _webSockets.add(socket);
-      socket.done.whenComplete(() => _webSockets.remove(socket));
-      onLog(strings.webSocketClientConnected(
-          request.connectionInfo?.remoteAddress.address ?? 'unknown'));
-      return;
-    }
-    if (request.uri.path == '/ws/stream' ||
-        request.uri.path == protocol_v2.MimiCamProtocolV2.events) {
-      request.response.statusCode = HttpStatus.upgradeRequired;
-      await request.response.close();
-      return;
-    }
+      final remoteAddress = request.connectionInfo?.remoteAddress;
+      // This is not a firewall; it reduces accidental public exposure if the
+      // socket becomes reachable outside the local Wi-Fi network.
+      if (remoteAddress != null &&
+          !localNetworkGuard.isAllowedRemoteAddress(remoteAddress)) {
+        request.response.statusCode = HttpStatus.forbidden;
+        await request.response.close();
+        return;
+      }
+      if ((request.uri.path == '/ws/stream' ||
+              request.uri.path == protocol_v2.MimiCamProtocolV2.events) &&
+          WebSocketTransformer.isUpgradeRequest(request)) {
+        if (!_isWebSocketAuthorized(request)) {
+          request.response.statusCode = HttpStatus.unauthorized;
+          await request.response.close();
+          return;
+        }
+        final socket = await WebSocketTransformer.upgrade(request);
+        _webSockets.add(socket);
+        socket.done.whenComplete(() => _webSockets.remove(socket));
+        onLog(strings.webSocketClientConnected(
+            request.connectionInfo?.remoteAddress.address ?? 'unknown'));
+        return;
+      }
+      if (request.uri.path == '/ws/stream' ||
+          request.uri.path == protocol_v2.MimiCamProtocolV2.events) {
+        request.response.statusCode = HttpStatus.upgradeRequired;
+        await request.response.close();
+        return;
+      }
 
-    final route = _routeFor(request.uri.path);
-    if (route == null) {
-      await _writeLandingPage(request.response);
-      return;
-    }
-    if (!route.allowsMethod(request.method)) {
-      request.response
-        ..statusCode = HttpStatus.methodNotAllowed
-        ..headers.set(HttpHeaders.allowHeader, route.allowedMethods.join(', '));
-      await request.response.close();
-      return;
-    }
+      final route = _routeFor(request.uri.path);
+      if (route == null) {
+        await _writeLandingPage(request.response);
+        return;
+      }
+      if (!route.allowsMethod(request.method)) {
+        request.response
+          ..statusCode = HttpStatus.methodNotAllowed
+          ..headers
+              .set(HttpHeaders.allowHeader, route.allowedMethods.join(', '));
+        await request.response.close();
+        return;
+      }
 
-    final auth = await _authorizeRoute(request, route.authMode);
-    if (!auth.ok) return;
-    await route.handle(request, auth.clientId);
+      final auth = await _authorizeRoute(request, route.authMode);
+      if (!auth.ok) return;
+      await route.handle(request, auth.clientId);
+    } catch (error) {
+      onLog('HTTP isteği tamamlanamadı: $error');
+      try {
+        request.response.statusCode = HttpStatus.internalServerError;
+        await request.response.close();
+      } catch (_) {}
+    }
   }
 
   List<_RouteSpec> get _routes => [
@@ -1009,7 +1018,7 @@ class MimiCamServer {
         'audioPreferred': _activeMediaProfile.preferredAudioCodec,
         'events': 'json',
         'maxClients': maxActiveWatchClients,
-        'transportPreferred': 'webrtc',
+        'transportPreferred': transportConfig.payloadTransport,
         'deviceTier': _deviceTier.name,
         'mediaProfile': _effectiveMediaProfile().toJson(),
       };

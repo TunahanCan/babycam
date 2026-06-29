@@ -19,8 +19,8 @@ void main() {
     expect(modern.height, 720);
     expect(modern.targetFps, 12);
     expect(modern.cameraPresetKey, 'high');
-    expect(modern.preferredVideoCodec, 'h264-webrtc');
-    expect(modern.preferredAudioCodec, 'opus');
+    expect(modern.preferredVideoCodec, 'mjpeg');
+    expect(modern.preferredAudioCodec, 'pcm16le');
   });
 
   test('zayıf ve kritik ağda 360p ses önceliği seçilir', () {

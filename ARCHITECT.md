@@ -92,6 +92,7 @@ Client media tarafındaki ana parçalar:
 | `NetworkQualityMonitor` | RTT/status probe ile health snapshot birleştirme ve `/quality/report` gönderimi |
 | `StreamSessionController` | Session start/stop, watch active state ve streamToken saklama |
 | `ClientAlertListener` | WS connect/disconnect/reconnect sinyallerini health state’e aktarma |
+| `PairingSessionStore` | Pairing metadata restore, trusted token secure storage ve legacy preferences migration |
 
 ---
 
@@ -136,9 +137,12 @@ Client URL kuralları:
   "transport": "http_ws",
   "capabilities": {
     "video": "mjpeg",
+    "videoPreferred": "mjpeg",
     "audio": "pcm16le",
+    "audioPreferred": "pcm16le",
     "events": "json",
-    "maxClients": 5
+    "maxClients": 5,
+    "transportPreferred": "http_ws"
   }
 }
 ```
@@ -183,6 +187,8 @@ revoked
 ```
 
 Ham trusted token yalnız Client’a döner. Server `sha256` hash saklar. Revoked client sayılmaz ve slot açar.
+
+Client tarafında trusted token secure storage içinde tutulur. Pairing payload, `clientId`, expiry ve paired timestamp local preferences içinde kalır; eski JSON formatındaki token ilk yüklemede secure storage’a taşınır. Bozuk veya eksik session kayıtları açılışta crash yerine temizlenir.
 
 Limit:
 

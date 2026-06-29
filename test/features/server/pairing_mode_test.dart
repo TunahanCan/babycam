@@ -49,6 +49,12 @@ void main() {
     expect(json['pairingNonce'], isNotEmpty);
     expect(json['transport'], 'http_ws');
     expect(json.containsKey('certificateFingerprintSha256'), isFalse);
+    final capabilities = Map<String, Object?>.from(json['capabilities'] as Map);
+    expect(capabilities['transportPreferred'], 'http_ws');
+    expect(capabilities['video'], 'mjpeg');
+    expect(capabilities['videoPreferred'], 'mjpeg');
+    expect(capabilities['audio'], 'pcm16le');
+    expect(capabilities['audioPreferred'], 'pcm16le');
 
     server.stopPairingMode();
     final inactiveRequest = await client.getUrl(Uri(

@@ -32,6 +32,8 @@ class ClientAlertListener {
   HttpClient? _client;
   Future<void>? _loop;
   Completer<void>? _firstConnection;
+  Completer<void>? _retryDelay;
+  Timer? _retryTimer;
   var _generation = 0;
   var _intentionalStop = false;
 
@@ -52,6 +54,7 @@ class ClientAlertListener {
     _generation++;
     final socket = _socket;
     _socket = null;
+    _cancelRetryDelay();
     await socket?.close();
     _client?.close(force: true);
     _client = null;
@@ -78,7 +81,7 @@ class ClientAlertListener {
       if (!_isCurrent(generation)) return;
       _markDisconnected();
       healthState?.markReconnectAttempt();
-      await Future<void>.delayed(delay);
+      await _waitBeforeReconnect(delay);
       delay = Duration(
         milliseconds: min(
           maxReconnectDelay.inMilliseconds,
@@ -130,6 +133,25 @@ class ClientAlertListener {
 
   bool _isCurrent(int generation) =>
       generation == _generation && isListening && !_intentionalStop;
+
+  Future<void> _waitBeforeReconnect(Duration delay) {
+    final completer = Completer<void>();
+    _retryDelay = completer;
+    _retryTimer = Timer(delay, () {
+      if (!completer.isCompleted) completer.complete();
+      if (identical(_retryDelay, completer)) _retryDelay = null;
+      _retryTimer = null;
+    });
+    return completer.future;
+  }
+
+  void _cancelRetryDelay() {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    final delay = _retryDelay;
+    _retryDelay = null;
+    if (delay != null && !delay.isCompleted) delay.complete();
+  }
 
   void _handleSocketMessage(dynamic data) {
     final alert = _parseAlert(data);

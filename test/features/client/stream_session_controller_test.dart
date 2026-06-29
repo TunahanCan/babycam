@@ -101,6 +101,34 @@ void main() {
       ),
     );
   });
+
+  test('session start streamToken donmezse aktif state acilmaz', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({'ok': true}));
+      await request.response.close();
+    });
+    final controller = StreamSessionController(
+      streamTimeout: const Duration(seconds: 1),
+    );
+    addTearDown(controller.dispose);
+
+    await expectLater(
+      controller.start(_session(server.port)),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('stream token'),
+        ),
+      ),
+    );
+
+    expect(controller.isActive, isFalse);
+    expect(controller.lastStreamToken, isNull);
+  });
 }
 
 PairingSession _session(int port) => PairingSession(

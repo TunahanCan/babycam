@@ -86,6 +86,22 @@ class ClientRuntime {
   ClientRuntimeState get currentState => _state;
   Stream<ClientRuntimeState> get states => _states.stream;
 
+  Future<void> restoreSession(PairingSession session) async {
+    if (_disposed) return;
+    final mediaProfile = MediaQualityProfile.fromJson(
+      session.payload.capabilities['mediaProfile'],
+    );
+    _emit(ClientRuntimeState(
+      phase: ClientRuntimePhase.pairedIdle,
+      session: session,
+      mediaProfile: mediaProfile,
+    ));
+    _startNetworkQuality(session);
+    if (session.shouldRenew(DateTime.now())) {
+      await renewTokenIfNeeded();
+    }
+  }
+
   Future<void> pairWithServer(PairingPayload payload) async {
     if (_disposed) return;
     final previousSession = _state.session;
@@ -117,22 +133,27 @@ class ClientRuntime {
 
   Future<void> renewTokenIfNeeded({DateTime? now}) async {
     if (_disposed) return;
+    final renew = _renew;
+    if (renew == null) return;
     final session = _state.session;
     if (session == null || !session.shouldRenew(now ?? DateTime.now())) return;
     _emit(ClientRuntimeState(
         phase: ClientRuntimePhase.renewingToken, session: session));
-    final renewed = await _renew?.call(session);
+    final renewed = await renew(session);
     if (_disposed) return;
-    final nextSession = renewed ?? session;
+    if (renewed == null) {
+      await _handleRevokedSession(session);
+      return;
+    }
     _emit(ClientRuntimeState(
       phase: ClientRuntimePhase.pairedIdle,
-      session: nextSession,
+      session: renewed,
       networkQuality: _state.networkQuality,
       mediaProfile: _state.mediaProfile,
       activeStream: _state.activeStream,
       alertsActive: _state.alertsActive,
     ));
-    _startNetworkQuality(nextSession);
+    _startNetworkQuality(renewed);
   }
 
   Future<void> startWatching({bool audioEnabled = false}) async {
@@ -173,7 +194,9 @@ class ClientRuntime {
 
   Future<void> stopWatching() async {
     final session = _state.session;
-    if (session != null) await _stopStream?.call(session);
+    if (session != null && _state.activeStream != null) {
+      await _stopStream?.call(session);
+    }
     if (_disposed) return;
     _emit(ClientRuntimeState(
       phase: _state.alertsActive
@@ -263,12 +286,36 @@ class ClientRuntime {
     _emit(const ClientRuntimeState(phase: ClientRuntimePhase.unpaired));
   }
 
+  Future<void> _handleRevokedSession(PairingSession session) async {
+    await _networkQualitySubscription?.cancel();
+    _networkQualitySubscription = null;
+    if (_state.activeStream != null) {
+      try {
+        await _stopStream?.call(session);
+      } catch (_) {}
+    }
+    try {
+      await _stopAlerts?.call();
+    } catch (_) {}
+    await _clearStore?.call();
+    if (_disposed) return;
+    _emit(ClientRuntimeState(
+      phase: ClientRuntimePhase.revoked,
+      session: session,
+      networkQuality: _state.networkQuality,
+      mediaProfile: _state.mediaProfile,
+      alertsActive: false,
+    ));
+  }
+
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
     await _networkQualitySubscription?.cancel();
     final session = _state.session;
-    if (session != null) await _stopStream?.call(session);
+    if (session != null && _state.activeStream != null) {
+      await _stopStream?.call(session);
+    }
     await _stopAlerts?.call();
     await _states.close();
   }

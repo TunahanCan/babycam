@@ -97,9 +97,9 @@ class MediaQualityProfile {
             jpegQuality: 56,
             cameraPresetKey: 'medium',
             audioCodec: 'pcm16le',
-            preferredAudioCodec: 'opus',
+            preferredAudioCodec: 'pcm16le',
             videoCodec: 'mjpeg',
-            preferredVideoCodec: 'h264-webrtc',
+            preferredVideoCodec: 'mjpeg',
           ),
         DeviceCapabilityTier.balanced => const MediaQualityProfile(
             id: 'balanced_540p',
@@ -110,9 +110,9 @@ class MediaQualityProfile {
             jpegQuality: 60,
             cameraPresetKey: 'medium',
             audioCodec: 'pcm16le',
-            preferredAudioCodec: 'opus',
+            preferredAudioCodec: 'pcm16le',
             videoCodec: 'mjpeg',
-            preferredVideoCodec: 'h264-webrtc',
+            preferredVideoCodec: 'mjpeg',
           ),
         DeviceCapabilityTier.modern => const MediaQualityProfile(
             id: 'modern_720p',
@@ -123,9 +123,9 @@ class MediaQualityProfile {
             jpegQuality: 66,
             cameraPresetKey: 'high',
             audioCodec: 'pcm16le',
-            preferredAudioCodec: 'opus',
+            preferredAudioCodec: 'pcm16le',
             videoCodec: 'mjpeg',
-            preferredVideoCodec: 'h264-webrtc',
+            preferredVideoCodec: 'mjpeg',
           ),
       };
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'alerts/client_alert_listener.dart';
@@ -16,11 +18,15 @@ class ClientCompositionRoot {
   static ClientRuntime create({
     required SharedPreferences preferences,
     required AppStrings strings,
+    SecureTokenStore? secureTokens,
   }) {
     createCount++;
     const pairingClient = QRPairingClient();
     final tokenRenewal = TrustedTokenRenewalClient();
-    final store = PairingSessionStore(preferences);
+    final store = PairingSessionStore(
+      preferences,
+      secureTokens: secureTokens,
+    );
     final streamHealth = ClientStreamHealthState();
     final streams = StreamSessionController(healthState: streamHealth);
     final networkQuality = NetworkQualityMonitor(healthState: streamHealth);
@@ -29,7 +35,7 @@ class ClientCompositionRoot {
       healthState: streamHealth,
       onAlert: (alert) => notifications.showAlert(alert),
     );
-    return ClientRuntime(
+    final runtime = ClientRuntime(
       pair: (payload) async {
         final session = await pairingClient.pair(payload);
         await store.save(session);
@@ -54,5 +60,16 @@ class ClientCompositionRoot {
       clearStore: store.clear,
       streamHealthState: streamHealth,
     );
+    unawaited(_restoreSavedSession(runtime, store));
+    return runtime;
+  }
+
+  static Future<void> _restoreSavedSession(
+    ClientRuntime runtime,
+    PairingSessionStore store,
+  ) async {
+    final session = await store.load();
+    if (session == null) return;
+    await runtime.restoreSession(session);
   }
 }

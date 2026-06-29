@@ -50,7 +50,7 @@ Client health monitor 4 sn aralıkla /quality/report gönderir
 Server hızlı düşürme / 30 sn stabil sonrası tek kademe yükseltme uygular
 ```
 
-Rol seçimi cihazda saklanır. Rol değişiminde eski runtime dispose edilir ve karşı role ait graph baştan kurulur.
+Rol seçimi cihazda saklanır. Client eşleşmesi açılışta geri yüklenir; trusted token secure storage içinde, payload/client metadata ise local preferences içinde tutulur. Rol değişiminde eski runtime dispose edilir ve karşı role ait graph baştan kurulur.
 
 ---
 
@@ -85,9 +85,10 @@ MimiCam’in MVP güvenliği local ağ için sade tutulur:
 3. Nonce yaklaşık 10 dakika geçerlidir ve tek kullanımda tüketilir.
 4. `/pair/confirm` başarılı olursa 256-bit random trusted token üretir.
 5. Server token’ın hash’ini saklar; ham token loglanmaz.
-6. Private endpointler `Authorization: Bearer <trustedToken>` ister.
-7. `/session/start` kısa ömürlü `streamToken` üretir; bu token sadece `/video` ve `/audio` için query’de kullanılabilir.
-8. Local network guard sadece private IPv4 blokları ve debug loopback adreslerine izin verir.
+6. Client trusted token’ı secure storage içinde saklar; eski preferences kaydı varsa ilk açılışta migrate edilir.
+7. Private endpointler `Authorization: Bearer <trustedToken>` ister.
+8. `/session/start` kısa ömürlü `streamToken` üretir; bu token sadece `/video` ve `/audio` için query’de kullanılabilir.
+9. Local network guard sadece private IPv4 blokları ve debug loopback adreslerine izin verir.
 
 Limitler:
 
@@ -116,9 +117,12 @@ QR payload kısa ve local HTTP/WS odaklıdır:
   "transport": "http_ws",
   "capabilities": {
     "video": "mjpeg",
+    "videoPreferred": "mjpeg",
     "audio": "pcm16le",
+    "audioPreferred": "pcm16le",
     "events": "json",
-    "maxClients": 5
+    "maxClients": 5,
+    "transportPreferred": "http_ws"
   }
 }
 ```
@@ -211,6 +215,7 @@ Client media tarafında:
 - `ClientStreamHealthState`: video/audio/event health snapshot ve quality payload üretimi.
 - `NetworkQualityMonitor`: RTT/status probe ile health snapshot birleştirip `/quality/report` gönderimi.
 - `StreamSessionController`: session lifecycle, watch active state ve streamToken saklama.
+- `PairingSessionStore`: eşleşme metadata’sını preferences içinde, trusted token’ı secure storage içinde saklama ve legacy migration.
 
 ---
 

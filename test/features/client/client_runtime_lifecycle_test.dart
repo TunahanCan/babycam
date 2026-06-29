@@ -209,4 +209,28 @@ void main() {
         NetworkQualityTier.excellent);
     expect(runtime.currentState.mediaProfile?.height, 480);
   });
+
+  test('renew null donerse runtime revoked olur ve store temizlenir', () async {
+    var cleared = 0;
+    var stopped = 0;
+    final expiring = PairingSession(
+      payload: payload(),
+      sessionToken: 'expired-token',
+      trustedClientTokenExpiresAtMs:
+          DateTime.now().add(const Duration(minutes: 1)).millisecondsSinceEpoch,
+    );
+    final runtime = ClientRuntime(
+      pair: (_) async => expiring,
+      renew: (_) async => null,
+      stopStream: (_) async => stopped++,
+      clearStore: () async => cleared++,
+    );
+
+    await runtime.restoreSession(expiring);
+
+    expect(runtime.currentState.phase, ClientRuntimePhase.revoked);
+    expect(runtime.currentState.session?.sessionToken, 'expired-token');
+    expect(cleared, 1);
+    expect(stopped, 0);
+  });
 }

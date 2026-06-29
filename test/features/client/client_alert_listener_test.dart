@@ -61,6 +61,43 @@ void main() {
     expect(health.snapshot().wsDisconnectCount, 1);
     expect(health.snapshot().reconnectCount, greaterThanOrEqualTo(1));
   });
+
+  test('stop reconnect gecikmesini beklemeden tamamlanir', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      if (request.uri.path != MimiCamProtocolV2.events ||
+          !WebSocketTransformer.isUpgradeRequest(request)) {
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+        return;
+      }
+      final socket = await WebSocketTransformer.upgrade(request);
+      await socket.close();
+    });
+    final health = ClientStreamHealthState(nowMs: () => 1000)
+      ..resetForNewWatchSession();
+    final listener = ClientAlertListener(
+      healthState: health,
+      reconnectDelay: const Duration(seconds: 5),
+      maxReconnectDelay: const Duration(seconds: 5),
+    );
+    addTearDown(listener.stop);
+
+    await listener.start(_session(server.port));
+    final deadline = DateTime.now().add(const Duration(seconds: 1));
+    while (health.snapshot().reconnectCount == 0 &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    final stopwatch = Stopwatch()..start();
+    await listener.stop().timeout(const Duration(milliseconds: 250));
+    stopwatch.stop();
+
+    expect(health.snapshot().reconnectCount, greaterThanOrEqualTo(1));
+    expect(stopwatch.elapsedMilliseconds, lessThan(250));
+  });
 }
 
 String _alertJson(String id) => jsonEncode({

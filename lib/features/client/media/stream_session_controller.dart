@@ -36,13 +36,18 @@ class StreamSessionController {
         'audio': audioEnabled,
       },
     );
-    lastStreamToken = json?['streamToken']?.toString();
+    final token = json?['streamToken']?.toString();
+    if (token == null || token.isEmpty) {
+      isActive = false;
+      lastStreamToken = null;
+      lastStreamTokenExpiresAtMs = null;
+      throw StateError('Session start did not return a stream token.');
+    }
+    lastStreamToken = token;
     final expiresAtMs = json?['streamTokenExpiresAtMs'];
     lastStreamTokenExpiresAtMs = expiresAtMs is int ? expiresAtMs : null;
     isActive = true;
     healthState?.resetForNewWatchSession();
-    final token = lastStreamToken;
-    if (token == null || token.isEmpty) return null;
     return ActiveStreamSession(
       streamToken: token,
       expiresAtMs: lastStreamTokenExpiresAtMs,
@@ -74,8 +79,10 @@ class StreamSessionController {
       ..contentType = ContentType.json
       ..set(HttpHeaders.authorizationHeader, 'Bearer ${session.sessionToken}');
     request.write(jsonEncode(requestBody ?? {'clientId': session.clientId}));
-    final response = await request.close();
-    final body = await utf8.decoder.bind(response).join();
+    final response = await request.close().timeout(streamTimeout);
+    final body = await utf8.decoder.bind(response).join().timeout(
+          streamTimeout,
+        );
     if (response.statusCode != HttpStatus.ok) {
       final detail = _errorDetail(body);
       throw StateError(

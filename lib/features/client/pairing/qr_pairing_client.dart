@@ -6,10 +6,14 @@ import '../../../core/protocol/pairing_payload.dart';
 import '../../../core/protocol/pairing_session.dart';
 
 class QRPairingClient {
-  const QRPairingClient();
+  const QRPairingClient({
+    this.timeout = const Duration(seconds: 5),
+  });
+
+  final Duration timeout;
 
   Future<PairingSession> pair(PairingPayload payload) async {
-    final client = HttpClient();
+    final client = HttpClient()..connectionTimeout = timeout;
     try {
       final request = await client.postUrl(
         Uri(
@@ -25,11 +29,11 @@ class QRPairingClient {
         'clientName': 'Ebeveyn Cihazı',
         'deviceId': 'client_local',
       }));
-      final response = await request.close();
+      final response = await request.close().timeout(timeout);
       if (response.statusCode != HttpStatus.ok) {
         throw StateError('Pairing failed: ${response.statusCode}');
       }
-      final body = await utf8.decoder.bind(response).join();
+      final body = await utf8.decoder.bind(response).join().timeout(timeout);
       final json = jsonDecode(body);
       if (json is! Map) throw StateError('Invalid pairing response');
       final token =

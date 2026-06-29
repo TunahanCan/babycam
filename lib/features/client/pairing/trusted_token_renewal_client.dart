@@ -7,9 +7,11 @@ import '../../../core/protocol/server_endpoint_builder.dart';
 
 class TrustedTokenRenewalClient {
   TrustedTokenRenewalClient({
+    this.timeout = const Duration(seconds: 5),
     HttpClient Function(PairingSession session)? clientFactory,
   }) : _clientFactory = clientFactory;
 
+  final Duration timeout;
   final HttpClient Function(PairingSession session)? _clientFactory;
 
   Future<PairingSession?> renew(PairingSession session) async {
@@ -22,12 +24,12 @@ class TrustedTokenRenewalClient {
         HttpHeaders.authorizationHeader,
         'Bearer ${session.sessionToken}',
       );
-      final response = await request.close();
+      final response = await request.close().timeout(timeout);
       if (response.statusCode == HttpStatus.unauthorized) return null;
       if (response.statusCode != HttpStatus.ok) {
         throw StateError('Token renew failed: ${response.statusCode}');
       }
-      final body = await utf8.decoder.bind(response).join();
+      final body = await utf8.decoder.bind(response).join().timeout(timeout);
       final json = jsonDecode(body);
       if (json is! Map) throw StateError('Invalid renew response');
       final token = json['trustedClientToken']?.toString();
@@ -49,6 +51,6 @@ class TrustedTokenRenewalClient {
   HttpClient _createClient(PairingSession session) {
     final factory = _clientFactory;
     if (factory != null) return factory(session);
-    return HttpClient();
+    return HttpClient()..connectionTimeout = timeout;
   }
 }
