@@ -89,7 +89,7 @@ class MjpegStreamService {
     for (final response in _clients.toList()) {
       removeClient(response);
       try {
-        await response.close();
+        await response.close().timeout(const Duration(milliseconds: 500));
       } catch (_) {}
     }
     _clients.clear();

@@ -31,6 +31,7 @@ import '../core/security/transport_config.dart';
 import '../features/server/pairing/pairing_token_service.dart';
 import '../features/server/media/mjpeg_stream_service.dart';
 import '../features/server/media/microphone_capture_service.dart';
+import '../features/server/media/server_media_source.dart';
 import '../features/server/media/wav_audio_stream_service.dart';
 import '../l10n/app_strings.dart';
 import 'configuration_service.dart';
@@ -69,6 +70,7 @@ class MimiCamServer {
     this.localNetworkGuard = const LocalNetworkGuard(),
     this.maxActiveWatchClients = 5,
     this.startMediaOnSessionStart = true,
+    this.mediaSource,
     MediaPermissionGateway? mediaPermissions,
     this.httpPort = MimiCamProtocol.httpPort,
   })  : tokenService = tokenService ?? PairingTokenService(),
@@ -113,6 +115,7 @@ class MimiCamServer {
   final LocalNetworkGuard localNetworkGuard;
   final int maxActiveWatchClients;
   final bool startMediaOnSessionStart;
+  final ServerMediaSource? mediaSource;
   final int httpPort;
   MediaAnalysisCoordinator? _analysisCoordinator;
   MediaAnalysisMetrics? _analysisMetrics;
@@ -204,6 +207,21 @@ class MimiCamServer {
 
   Future<void> startMediaRuntime() async {
     if (_disposed) throw StateError('MimiCamServer is disposed.');
+    final source = mediaSource;
+    if (source != null) {
+      if (source.isActive) return;
+      final existingStart = _mediaStart;
+      if (existingStart != null) return existingStart;
+
+      final start = _startInjectedMediaRuntime(source);
+      _mediaStart = start;
+      try {
+        await start;
+      } finally {
+        if (_mediaStart == start) _mediaStart = null;
+      }
+      return;
+    }
     final existingController = cameraController;
     if (existingController != null) {
       if (existingController.value.isInitialized) return;
@@ -219,6 +237,23 @@ class MimiCamServer {
       await start;
     } finally {
       if (_mediaStart == start) _mediaStart = null;
+    }
+  }
+
+  Future<void> _startInjectedMediaRuntime(ServerMediaSource source) async {
+    _initializeAnalysisPipeline();
+    try {
+      await source.start(
+        onVideoFrame: _handleInjectedVideoFrame,
+        onAudioChunk: _handleInjectedAudioChunk,
+        onError: (error, _) {
+          _analysisMetrics?.recordAudioError();
+          onLog('Test medya kaynağı hata verdi: $error');
+        },
+      );
+    } catch (_) {
+      await stopMediaRuntime();
+      rethrow;
     }
   }
 
@@ -406,6 +441,36 @@ class MimiCamServer {
     } catch (error) {
       onLog('Frame işlenemedi: $error');
     }
+  }
+
+  void _handleInjectedVideoFrame(Uint8List jpeg) {
+    if (jpeg.isEmpty) return;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    _lastCameraFrameAtMs = nowMs;
+    _latestJpeg = jpeg;
+    _lastVideoFrameEncodedAtMs = nowMs;
+    _lastJpegBytes = jpeg.length;
+    _videoFramesEncoded++;
+    if (enableLegacyWebSocketMediaPackets) {
+      _broadcastBinary([MimiCamProtocol.packetVideoMjpeg, ...jpeg]);
+    }
+    _videoStreamService.broadcast(jpeg);
+  }
+
+  void _handleInjectedAudioChunk(Uint8List pcm16le) {
+    if (pcm16le.isEmpty) return;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    _analysisCoordinator?.onAudioChunk(AudioChunk(
+      pcm16le: pcm16le,
+      sampleRate: _audioSampleRate,
+      channels: _audioChannels,
+      timestampMs: nowMs,
+    ));
+    if (enableLegacyWebSocketMediaPackets) {
+      _broadcastBinary([MimiCamProtocol.packetAudioPcm16Le, ...pcm16le]);
+    }
+    _audioStreamService.broadcast(pcm16le);
+    _logAudioDiagnostics();
   }
 
   double _estimateMotionEnergy(CameraImage frame) {
@@ -720,7 +785,7 @@ class MimiCamServer {
     if (clientId == null) return;
     try {
       await startMediaRuntime();
-      await _startAudioAnalysisBestEffort();
+      if (mediaSource == null) await _startAudioAnalysisBestEffort();
       await _handleAudio(request.response, clientId);
     } catch (_) {
       _activeClientRegistry.detachStream(clientId);
@@ -1119,6 +1184,7 @@ class MimiCamServer {
       await WakelockPlus.disable();
       _wakelockEnabled = false;
     }
+    await mediaSource?.stop();
     await _microphoneCapture.stop();
     await _alertSubscription?.cancel();
     _alertSubscription = null;
@@ -1138,6 +1204,7 @@ class MimiCamServer {
     await _audioStreamService.closeAll();
     _microphoneCapture.resetDiagnostics();
     _audioStreamService.resetDiagnostics();
+    mediaSource?.resetDiagnostics();
     _jpegByteBudgetController.reset();
     _mediaQualitySelector.reset();
   }
@@ -1223,6 +1290,7 @@ class MimiCamServer {
       await WakelockPlus.disable();
       _wakelockEnabled = false;
     }
+    await mediaSource?.stop();
     await _microphoneCapture.dispose();
     await _alertSubscription?.cancel();
     _alertSubscription = null;
@@ -1235,6 +1303,7 @@ class MimiCamServer {
     _videoStreamService.resetDiagnostics();
     await _audioStreamService.closeAll();
     _audioStreamService.resetDiagnostics();
+    mediaSource?.resetDiagnostics();
     _jpegByteBudgetController.reset();
     tokenService.revokeAll();
     await cameraController?.dispose();

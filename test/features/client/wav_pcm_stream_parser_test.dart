@@ -40,12 +40,30 @@ void main() {
     expect(second.pcm16le, [10, 0]);
     expect(third.pcm16le, [11, 0]);
   });
+
+  test('streaming WAV data chunk buyuk olsa bile PCM hemen akar', () {
+    final parser = WavPcmStreamParser();
+    final wav = _wavBytes(
+      sampleRate: 16000,
+      channels: 1,
+      dataSize: 0x7fffffff,
+      pcm: Uint8List.fromList([1, 0, 2, 0]),
+    );
+
+    final parsed = parser.add(wav);
+
+    expect(parsed.isConfigured, isTrue);
+    expect(parsed.sampleRate, 16000);
+    expect(parsed.channels, 1);
+    expect(parsed.pcm16le, [1, 0, 2, 0]);
+  });
 }
 
 Uint8List _wavBytes({
   required int sampleRate,
   required int channels,
   required Uint8List pcm,
+  int? dataSize,
 }) {
   const bitsPerSample = 16;
   final byteRate = sampleRate * channels * bitsPerSample ~/ 8;
@@ -70,7 +88,7 @@ Uint8List _wavBytes({
   header.setUint16(32, blockAlign, Endian.little);
   header.setUint16(34, bitsPerSample, Endian.little);
   writeAscii(36, 'data');
-  header.setUint32(40, pcm.length, Endian.little);
+  header.setUint32(40, dataSize ?? pcm.length, Endian.little);
   bytes
     ..add(header.buffer.asUint8List())
     ..add(pcm);

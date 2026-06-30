@@ -203,6 +203,32 @@ class ClientRuntime {
     ));
   }
 
+  Future<void> restartWatching({bool audioEnabled = false}) async {
+    if (_disposed || _state.session == null) return;
+    _emit(ClientRuntimeState(
+      phase: ClientRuntimePhase.reconnecting,
+      session: _state.session,
+      networkQuality: _state.networkQuality,
+      mediaProfile: _state.mediaProfile,
+      activeStream: _state.activeStream,
+      alertsActive: _state.alertsActive,
+    ));
+    await startWatching(audioEnabled: audioEnabled);
+  }
+
+  void reportStreamFailure(Object error) {
+    if (_disposed) return;
+    _emit(ClientRuntimeState(
+      phase: ClientRuntimePhase.error,
+      session: _state.session,
+      error: error,
+      networkQuality: _state.networkQuality,
+      mediaProfile: _state.mediaProfile,
+      activeStream: _state.activeStream,
+      alertsActive: _state.alertsActive,
+    ));
+  }
+
   Future<void> stopWatching() async {
     final session = _state.session;
     if (session != null && _state.activeStream != null) {

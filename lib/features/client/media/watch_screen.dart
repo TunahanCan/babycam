@@ -5,14 +5,13 @@ import 'package:flutter/services.dart';
 
 import '../../../core/media/adaptive_media_profile.dart';
 import '../../../core/protocol/alert_event_dto.dart';
-import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
-import '../../../core/protocol/server_endpoint_builder.dart';
 import '../../../l10n/app_strings.dart';
 import '../../shared/presentation/localized_measurement_text.dart';
 import '../../shared/presentation/media_profile_text.dart';
 import '../client_runtime.dart';
-import 'client_audio_stream_player.dart';
+import 'active_stream_session.dart';
+import 'client_media_stream_supervisor.dart';
 import 'client_stream_health_state.dart';
 import 'client_video_viewer.dart';
 
@@ -137,11 +136,13 @@ class _WatchScreenState extends State<WatchScreen> {
         children: [
           _StreamSurface(
             session: state.session,
-            streamToken: state.activeStream?.streamToken,
+            activeStream: state.activeStream,
             audioEnabled: _audioEnabled,
             streamHealthState: widget.runtime.streamHealthState,
             fit: BoxFit.contain,
             error: state.error,
+            onSessionRefreshRequired: _refreshStreamSession,
+            onFatalError: widget.runtime.reportStreamFailure,
           ),
           Positioned(
             top: 12,
@@ -188,12 +189,14 @@ class _WatchScreenState extends State<WatchScreen> {
           const SizedBox(height: 18),
           _VideoPanel(
             session: state.session,
-            streamToken: state.activeStream?.streamToken,
+            activeStream: state.activeStream,
             error: state.error,
             audioEnabled: _audioEnabled,
             streamHealthState: widget.runtime.streamHealthState,
             onToggleAudio: _toggleAudio,
             onEnterFullscreen: _enterFullscreen,
+            onSessionRefreshRequired: _refreshStreamSession,
+            onFatalError: widget.runtime.reportStreamFailure,
           ),
           const SizedBox(height: 16),
           _LiveMetricGrid(
@@ -359,26 +362,33 @@ class _WatchScreenState extends State<WatchScreen> {
       ),
     ];
   }
+
+  Future<void> _refreshStreamSession() =>
+      widget.runtime.restartWatching(audioEnabled: _audioEnabled);
 }
 
 class _VideoPanel extends StatelessWidget {
   const _VideoPanel({
     required this.session,
-    required this.streamToken,
+    required this.activeStream,
     required this.error,
     required this.audioEnabled,
     required this.streamHealthState,
     required this.onToggleAudio,
     required this.onEnterFullscreen,
+    required this.onSessionRefreshRequired,
+    required this.onFatalError,
   });
 
   final PairingSession? session;
-  final String? streamToken;
+  final ActiveStreamSession? activeStream;
   final Object? error;
   final bool audioEnabled;
   final ClientStreamHealthState? streamHealthState;
   final VoidCallback onToggleAudio;
   final VoidCallback onEnterFullscreen;
+  final Future<void> Function() onSessionRefreshRequired;
+  final ValueChanged<Object> onFatalError;
 
   @override
   Widget build(BuildContext context) {
@@ -397,11 +407,13 @@ class _VideoPanel extends StatelessWidget {
           children: [
             _StreamSurface(
               session: session,
-              streamToken: streamToken,
+              activeStream: activeStream,
               audioEnabled: audioEnabled,
               streamHealthState: streamHealthState,
               fit: BoxFit.contain,
               error: error,
+              onSessionRefreshRequired: onSessionRefreshRequired,
+              onFatalError: onFatalError,
             ),
             const Positioned(top: 10, left: 12, child: _LiveBadge()),
             Positioned(
@@ -444,85 +456,135 @@ class _VideoPanel extends StatelessWidget {
       };
 }
 
-class _StreamSurface extends StatelessWidget {
+class _StreamSurface extends StatefulWidget {
   const _StreamSurface({
     required this.session,
-    required this.streamToken,
+    required this.activeStream,
     required this.audioEnabled,
     required this.streamHealthState,
     required this.fit,
     required this.error,
+    required this.onSessionRefreshRequired,
+    required this.onFatalError,
   });
 
   final PairingSession? session;
-  final String? streamToken;
+  final ActiveStreamSession? activeStream;
   final bool audioEnabled;
   final ClientStreamHealthState? streamHealthState;
   final BoxFit fit;
   final Object? error;
+  final Future<void> Function() onSessionRefreshRequired;
+  final ValueChanged<Object> onFatalError;
+
+  @override
+  State<_StreamSurface> createState() => _StreamSurfaceState();
+}
+
+class _StreamSurfaceState extends State<_StreamSurface> {
+  ClientMediaStreamSupervisor? _supervisor;
+  Uint8List? _latestFrame;
+  Object? _streamError;
+  String? _streamKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncSupervisor();
+  }
+
+  @override
+  void didUpdateWidget(covariant _StreamSurface oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncSupervisor();
+  }
+
+  @override
+  void dispose() {
+    final supervisor = _supervisor;
+    _supervisor = null;
+    unawaited(supervisor?.stop());
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final session = this.session;
-    final streamToken = this.streamToken;
-    final streamUrl = session == null || streamToken == null
-        ? null
-        : ServerEndpointBuilder(session).http(
-            MimiCamProtocolV2.video,
-            query: {'streamToken': streamToken},
-          ).toString();
-    final audioUrl = session == null || streamToken == null || !audioEnabled
-        ? null
-        : ServerEndpointBuilder(session).http(
-            MimiCamProtocolV2.audio,
-            query: {'streamToken': streamToken},
-          ).toString();
-    if (streamUrl == null && error != null) {
-      return _StreamErrorPanel(message: error.toString());
+    if (widget.session == null || widget.activeStream == null) {
+      final error = widget.error;
+      if (error != null) return _StreamErrorPanel(message: error.toString());
+      return const _StreamPlaceholder();
     }
-    if (streamUrl == null) return const _StreamPlaceholder();
+    final streamError = _streamError;
+    if (_latestFrame == null && streamError != null) {
+      return _StreamErrorPanel(message: streamError.toString());
+    }
     return Stack(
       fit: StackFit.expand,
       children: [
         ClientVideoViewer(
-          pairedServerHost: session!.host,
-          pairedServerPort: session.port,
-          url: streamUrl,
-          authToken: session.sessionToken,
-          fit: fit,
-          onFrameReceived: streamHealthState?.markVideoFrameReceived,
-          onStreamTimeout: streamHealthState?.markStreamTimeout,
-          onReconnectAttempt: streamHealthState?.markReconnectAttempt,
+          frame: _latestFrame,
+          error: streamError ?? widget.error,
+          fit: widget.fit,
         ),
-        if (audioUrl != null)
-          Positioned(
-            left: 0,
-            bottom: 0,
-            width: 2,
-            height: 2,
-            child: IgnorePointer(
-              child: Opacity(
-                opacity: .01,
-                child: ClientAudioStreamPlayer(
-                  pairedServerHost: session.host,
-                  pairedServerPort: session.port,
-                  url: audioUrl,
-                  authToken: session.sessionToken,
-                  onAudioChunkReceived:
-                      streamHealthState?.markAudioChunkReceived,
-                  onAudioError: (_) {
-                    final health = streamHealthState;
-                    if (health == null) return;
-                    health
-                      ..markAudioUnderrun()
-                      ..markReconnectAttempt();
-                  },
-                ),
-              ),
-            ),
-          ),
       ],
     );
+  }
+
+  void _syncSupervisor() {
+    final session = widget.session;
+    final activeStream = widget.activeStream;
+    final nextKey = session == null || activeStream == null
+        ? null
+        : '${session.httpScheme}://${session.host}:${session.port}'
+            '|${session.sessionToken}|${activeStream.streamToken}'
+            '|${widget.audioEnabled}';
+    if (nextKey == _streamKey) return;
+    _streamKey = nextKey;
+    final previous = _supervisor;
+    _supervisor = null;
+    unawaited(previous?.stop());
+    _latestFrame = null;
+    _streamError = null;
+    if (session == null || activeStream == null) {
+      if (mounted) setState(() {});
+      return;
+    }
+    late final ClientMediaStreamSupervisor supervisor;
+    supervisor = ClientMediaStreamSupervisor(
+      session: session,
+      activeStream: activeStream,
+      audioEnabled: widget.audioEnabled,
+      healthState: widget.streamHealthState,
+      onVideoFrame: (frame) {
+        if (!mounted || !identical(_supervisor, supervisor)) return;
+        setState(() {
+          _latestFrame = frame;
+          _streamError = null;
+        });
+      },
+      onStatus: (update) {
+        if (!mounted || !identical(_supervisor, supervisor)) return;
+        final failure = update.failure;
+        if (failure != null && failure.isTerminal) {
+          setState(() => _streamError = failure);
+        }
+      },
+      onSessionRefreshRequired: (_) async {
+        await widget.onSessionRefreshRequired();
+      },
+      onFatalError: (failure) {
+        if (!mounted || !identical(_supervisor, supervisor)) return;
+        setState(() => _streamError = failure);
+        widget.onFatalError(failure);
+      },
+    );
+    _supervisor = supervisor;
+    unawaited(supervisor.start().catchError((Object error) {
+      if (!mounted || !identical(_supervisor, supervisor)) return;
+      setState(() => _streamError = error);
+      widget.onFatalError(error);
+    }));
+    if (mounted) setState(() {});
   }
 }
 

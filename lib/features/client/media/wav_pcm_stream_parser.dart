@@ -75,6 +75,9 @@ class WavPcmStreamParser {
       final chunkDataOffset = offset + 8;
       final nextOffset =
           chunkDataOffset + chunkSize + (chunkSize.isOdd ? 1 : 0);
+      if (_asciiAt(bytes, offset, 'data')) {
+        return chunkDataOffset;
+      }
       if (chunkDataOffset + chunkSize > bytes.length) return null;
 
       if (_asciiAt(bytes, offset, 'fmt ')) {
@@ -89,8 +92,6 @@ class WavPcmStreamParser {
             _bitsPerSample = bitsPerSample;
           }
         }
-      } else if (_asciiAt(bytes, offset, 'data')) {
-        return chunkDataOffset;
       }
       offset = nextOffset;
     }

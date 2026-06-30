@@ -1,5 +1,11 @@
 part of '../mimicam_server.dart';
 
+final _mjpegHeaderEnd = Uint8List.fromList([13, 10, 13, 10]);
+final _contentLengthPattern = RegExp(
+  r'content-length:\s*(\d+)',
+  caseSensitive: false,
+);
+
 extension MimiCamServerTestEndpoints on MimiCamServer {
   Future<void> _handleTestStatus(HttpRequest request) async {
     await _writeJson(request.response, _testDiagnostics());
@@ -54,8 +60,12 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         _boolFrom(body?['requireEvents'], defaultValue: emitAlert);
     final requireEventDelivery =
         _boolFrom(body?['requireEventDelivery'], defaultValue: false);
+    final loopbackMedia = _boolFrom(body?['loopbackMedia'], defaultValue: true);
 
     final before = _probeCounters();
+    final authClientId = _authGuard.trusted(request)?.clientId;
+    final wasActiveBefore = authClientId != null &&
+        _activeClientRegistry.activeClientIds.contains(authClientId);
     Object? startError;
     if (requireVideo) {
       _videoProbeEncodeUntilMs =
@@ -93,6 +103,24 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
       requireEvents: requireEvents,
       requireEventDelivery: requireEventDelivery,
     );
+    Map<String, Object?>? loopback;
+    if (loopbackMedia &&
+        startError == null &&
+        (requireVideo || requireAudio) &&
+        authClientId != null) {
+      loopback = await _runLoopbackMediaProbe(
+        request,
+        clientId: authClientId,
+        stopAfterProbe: !wasActiveBefore,
+        requireVideo: requireVideo,
+        requireAudio: requireAudio,
+        timeout: Duration(milliseconds: max(500, waitMs + 1500)),
+      );
+      checks.addAll({
+        if (requireVideo) 'videoClient': loopback['videoOk'] == true,
+        if (requireAudio) 'audioClient': loopback['audioOk'] == true,
+      });
+    }
     final ok = startError == null && checks.values.every((value) => value);
     if (!ok) request.response.statusCode = HttpStatus.serviceUnavailable;
     await _writeJson(request.response, {
@@ -100,10 +128,285 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
       'waitMs': waitMs,
       if (startError != null) 'startError': startError.toString(),
       'checks': checks,
+      if (loopback != null) 'loopback': loopback,
       'before': before.toJson(),
       'after': _probeCounters().toJson(),
       'diagnostics': _testDiagnostics(),
     });
+  }
+
+  Future<Map<String, Object?>> _runLoopbackMediaProbe(
+    HttpRequest sourceRequest, {
+    required String clientId,
+    required bool stopAfterProbe,
+    required bool requireVideo,
+    required bool requireAudio,
+    required Duration timeout,
+  }) async {
+    final server = _httpServer;
+    final bearer = sourceRequest.headers.value(HttpHeaders.authorizationHeader);
+    if (server == null || bearer == null || !bearer.startsWith('Bearer ')) {
+      return {
+        'ok': false,
+        'videoOk': !requireVideo,
+        'audioOk': !requireAudio,
+        'error': 'loopback probe is not authorized',
+      };
+    }
+    final client = HttpClient()..connectionTimeout = timeout;
+    String? streamToken;
+    Object? error;
+    var videoOk = !requireVideo;
+    var audioOk = !requireAudio;
+    var videoBytes = 0;
+    var audioBytes = 0;
+    try {
+      final started = await _loopbackSessionStart(
+        client,
+        server.port,
+        bearer,
+        clientId,
+        requireAudio: requireAudio,
+        timeout: timeout,
+      );
+      streamToken = started['streamToken']?.toString();
+      if (streamToken == null || streamToken.isEmpty) {
+        throw StateError('loopback session did not return streamToken');
+      }
+      if (requireVideo) {
+        videoBytes = await _readLoopbackMjpegFrame(
+          server.port,
+          streamToken,
+          timeout,
+        );
+        videoOk = videoBytes > 0;
+      }
+      if (requireAudio) {
+        audioBytes = await _readLoopbackAudioPayload(
+          server.port,
+          streamToken,
+          timeout,
+        );
+        audioOk = audioBytes > 0;
+      }
+    } catch (caught) {
+      error = caught;
+    } finally {
+      if (stopAfterProbe) {
+        try {
+          await _loopbackSessionStop(
+            client,
+            server.port,
+            bearer,
+            clientId,
+            timeout,
+          );
+        } catch (_) {}
+      }
+      client.close(force: true);
+    }
+    return {
+      'ok': error == null && videoOk && audioOk,
+      'videoOk': videoOk,
+      'audioOk': audioOk,
+      'videoBytes': videoBytes,
+      'audioBytes': audioBytes,
+      if (streamToken != null) 'streamTokenReceived': true,
+      if (error != null) 'error': error.toString(),
+    };
+  }
+
+  Future<Map<String, Object?>> _loopbackSessionStart(
+    HttpClient client,
+    int port,
+    String bearer,
+    String clientId, {
+    required bool requireAudio,
+    required Duration timeout,
+  }) async {
+    final request = await client
+        .postUrl(_loopbackUri(port, protocol_v2.MimiCamProtocolV2.sessionStart))
+        .timeout(timeout);
+    request.headers
+      ..contentType = ContentType.json
+      ..set(HttpHeaders.authorizationHeader, bearer);
+    request.write(jsonEncode({
+      'clientId': clientId,
+      'video': true,
+      'audio': requireAudio,
+    }));
+    final response = await request.close().timeout(timeout);
+    final body = await utf8.decoder.bind(response).join().timeout(timeout);
+    if (response.statusCode != HttpStatus.ok) {
+      throw StateError('loopback session/start failed: ${response.statusCode}');
+    }
+    final json = jsonDecode(body);
+    if (json is! Map) throw StateError('loopback session/start invalid JSON');
+    return Map<String, Object?>.from(json);
+  }
+
+  Future<void> _loopbackSessionStop(
+    HttpClient client,
+    int port,
+    String bearer,
+    String clientId,
+    Duration timeout,
+  ) async {
+    final request = await client
+        .postUrl(_loopbackUri(port, protocol_v2.MimiCamProtocolV2.sessionStop))
+        .timeout(timeout);
+    request.headers
+      ..contentType = ContentType.json
+      ..set(HttpHeaders.authorizationHeader, bearer);
+    request.write(jsonEncode({'clientId': clientId}));
+    final response = await request.close().timeout(timeout);
+    await response.drain<void>().timeout(timeout);
+  }
+
+  Future<int> _readLoopbackMjpegFrame(
+    int port,
+    String streamToken,
+    Duration timeout,
+  ) async {
+    final client = HttpClient()..connectionTimeout = timeout;
+    try {
+      final request = await client
+          .getUrl(_loopbackUri(
+            port,
+            protocol_v2.MimiCamProtocolV2.video,
+            query: {'streamToken': streamToken},
+          ))
+          .timeout(timeout);
+      final response = await request.close().timeout(timeout);
+      if (response.statusCode != HttpStatus.ok) {
+        await response.drain<void>();
+        throw StateError('loopback video failed: ${response.statusCode}');
+      }
+      final buffer = BytesBuilder(copy: false);
+      final completer = Completer<int>();
+      late final StreamSubscription<List<int>> subscription;
+      subscription = response.timeout(timeout).listen(
+        (chunk) {
+          if (completer.isCompleted) return;
+          buffer.add(chunk);
+          final frameBytes = _firstMjpegPayloadBytes(buffer.toBytes());
+          if (frameBytes <= 0) return;
+          completer.complete(frameBytes);
+          client.close(force: true);
+          unawaited(subscription.cancel());
+        },
+        onError: (Object error, StackTrace stack) {
+          if (!completer.isCompleted) completer.completeError(error, stack);
+        },
+        onDone: () {
+          if (!completer.isCompleted) completer.complete(0);
+        },
+        cancelOnError: true,
+      );
+      return await completer.future.timeout(timeout);
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<int> _readLoopbackAudioPayload(
+    int port,
+    String streamToken,
+    Duration timeout,
+  ) async {
+    final client = HttpClient()..connectionTimeout = timeout;
+    try {
+      final request = await client
+          .getUrl(_loopbackUri(
+            port,
+            protocol_v2.MimiCamProtocolV2.audio,
+            query: {'streamToken': streamToken},
+          ))
+          .timeout(timeout);
+      final response = await request.close().timeout(timeout);
+      if (response.statusCode != HttpStatus.ok) {
+        await response.drain<void>();
+        throw StateError('loopback audio failed: ${response.statusCode}');
+      }
+      final buffer = BytesBuilder(copy: false);
+      final completer = Completer<int>();
+      late final StreamSubscription<List<int>> subscription;
+      subscription = response.timeout(timeout).listen(
+        (chunk) {
+          if (completer.isCompleted) return;
+          buffer.add(chunk);
+          final bytes = buffer.toBytes();
+          if (bytes.length <= 44 ||
+              String.fromCharCodes(bytes.sublist(0, 4)) != 'RIFF' ||
+              String.fromCharCodes(bytes.sublist(8, 12)) != 'WAVE') {
+            return;
+          }
+          completer.complete(bytes.length - 44);
+          client.close(force: true);
+          unawaited(subscription.cancel());
+        },
+        onError: (Object error, StackTrace stack) {
+          if (!completer.isCompleted) completer.completeError(error, stack);
+        },
+        onDone: () {
+          if (!completer.isCompleted) completer.complete(0);
+        },
+        cancelOnError: true,
+      );
+      return await completer.future.timeout(timeout);
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Uri _loopbackUri(
+    int port,
+    String path, {
+    Map<String, String>? query,
+  }) =>
+      Uri(
+        scheme: 'http',
+        host: InternetAddress.loopbackIPv4.address,
+        port: port,
+        path: path,
+        queryParameters: query,
+      );
+
+  int _firstMjpegPayloadBytes(Uint8List bytes) {
+    var offset = 0;
+    while (offset < bytes.length) {
+      final headerEnd = _indexOfBytes(bytes, _mjpegHeaderEnd, start: offset);
+      if (headerEnd < 0) return 0;
+      final header = latin1.decode(
+        Uint8List.sublistView(bytes, offset, headerEnd),
+        allowInvalid: true,
+      );
+      final match = _contentLengthPattern.firstMatch(header);
+      final length = int.tryParse(match?.group(1) ?? '') ?? 0;
+      final payloadStart = headerEnd + _mjpegHeaderEnd.length;
+      if (length <= 0) {
+        offset = payloadStart;
+        continue;
+      }
+      if (bytes.length >= payloadStart + length) return length;
+      return 0;
+    }
+    return 0;
+  }
+
+  int _indexOfBytes(Uint8List bytes, Uint8List pattern, {required int start}) {
+    if (pattern.isEmpty || bytes.length < pattern.length) return -1;
+    for (var i = start; i <= bytes.length - pattern.length; i++) {
+      var matched = true;
+      for (var j = 0; j < pattern.length; j++) {
+        if (bytes[i + j] != pattern[j]) {
+          matched = false;
+          break;
+        }
+      }
+      if (matched) return i;
+    }
+    return -1;
   }
 
   Future<void> _handleTestAlert(HttpRequest request) async {
@@ -189,6 +492,7 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
     final microphone = _microphoneCapture.snapshot;
     final audioStream = _audioStreamService.snapshot;
     final audioMetrics = audioStream.backpressure;
+    final injectedSource = mediaSource?.snapshot;
     return {
       'ok': true,
       'timestampMs': nowMs,
@@ -198,11 +502,14 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         'mediaStarting': _mediaStart != null,
         'mediaActive': cameraController != null ||
             microphone.active ||
+            (injectedSource?.active ?? false) ||
             _analysisCoordinator != null,
         'cameraInitialized': cameraController?.value.isInitialized ?? false,
         'microphoneActive': microphone.active,
+        'injectedMediaSourceActive': injectedSource?.active ?? false,
         'wakelockEnabled': _wakelockEnabled,
       },
+      if (injectedSource != null) 'mediaSource': injectedSource.toJson(),
       'clients': {
         'activeStreamClients': _activeClientRegistry.activeClientCount,
         'videoClients': videoStream.clientCount,
@@ -219,6 +526,11 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         'lastClientWriteAgeMs': _ageMs(nowMs, videoStream.lastClientWriteAtMs),
         'framesEncoded': _videoFramesEncoded,
         'framesStreamed': videoStream.framesStreamed,
+        'sourceFrames': injectedSource?.videoFrames ?? 0,
+        'lastSourceFrameAtMs': injectedSource?.lastVideoFrameAtMs,
+        'lastSourceFrameAgeMs':
+            _ageMs(nowMs, injectedSource?.lastVideoFrameAtMs),
+        'lastSourceFrameBytes': injectedSource?.lastVideoFrameBytes ?? 0,
         'lastJpegBytes': _lastJpegBytes,
         'probeEncodeActive': _isVideoProbeActive(nowMs),
         'backpressure': _backpressureJson(videoMetrics),
@@ -233,9 +545,15 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         'lastClientWriteAgeMs': _ageMs(nowMs, audioStream.lastClientWriteAtMs),
         'chunksCaptured': microphone.chunksCaptured,
         'chunksStreamed': audioStream.chunksStreamed,
+        'sourceChunksCaptured': injectedSource?.audioChunks ?? 0,
+        'lastSourceChunkAtMs': injectedSource?.lastAudioChunkAtMs,
+        'lastSourceChunkAgeMs':
+            _ageMs(nowMs, injectedSource?.lastAudioChunkAtMs),
+        'lastSourceChunkBytes': injectedSource?.lastAudioChunkBytes ?? 0,
         'lastChunkBytes': microphone.lastChunkBytes,
         'lastClientWriteBytes': audioStream.lastClientWriteBytes,
-        'lastStartError': microphone.lastStartError,
+        'lastStartError':
+            microphone.lastStartError ?? injectedSource?.lastError,
         'leveler': microphone.leveler.toJson(),
         'clientIds': audioStream.clientIds,
         'busyClientIds': audioStream.busyClientIds,
@@ -256,7 +574,8 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         cameraFramesAtMs: _lastCameraFrameAtMs,
         videoFramesEncoded: _videoFramesEncoded,
         videoFramesStreamed: _videoStreamService.snapshot.framesStreamed,
-        audioChunksCaptured: _microphoneCapture.snapshot.chunksCaptured,
+        audioChunksCaptured: _microphoneCapture.snapshot.chunksCaptured +
+            (mediaSource?.snapshot.audioChunks ?? 0),
         audioChunksStreamed: _audioStreamService.snapshot.chunksStreamed,
         alertsBroadcast: _alertsBroadcast,
         lastDeliveredWebSocketClients: _lastAlertDeliveredWebSocketClients,
@@ -344,6 +663,7 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
     _videoStreamService.resetDiagnostics();
     _microphoneCapture.resetDiagnostics();
     _audioStreamService.resetDiagnostics();
+    mediaSource?.resetDiagnostics();
     _analysisMetrics?.reset();
   }
 

@@ -41,6 +41,7 @@ class ClientLiveAudioPipeline {
     required String pairedServerHost,
     required int pairedServerPort,
     String? bearerToken,
+    bool Function(Object error)? shouldRetry,
     VoidCallback? onAudioChunkWritten,
     ValueChanged<ClientLiveAudioStatus>? onStatus,
     ValueChanged<Object>? onError,
@@ -52,6 +53,7 @@ class ClientLiveAudioPipeline {
       pairedServerHost: pairedServerHost,
       pairedServerPort: pairedServerPort,
       bearerToken: bearerToken,
+      shouldRetry: shouldRetry,
       onAudioChunkWritten: onAudioChunkWritten,
       onStatus: onStatus,
       onError: onError,
@@ -75,23 +77,30 @@ class ClientLiveAudioPipeline {
 
   Future<void> _runLoop(int generation, _PipelineRun run) async {
     var nextRetry = retryDelay;
-    while (_isCurrent(generation, run)) {
-      try {
-        await _connectAndPump(generation, run);
-        nextRetry = retryDelay;
-      } catch (error) {
-        if (!_isCurrent(generation, run)) return;
-        run.lastError = error;
-        run.reconnects++;
-        run.onError?.call(error);
-        _emitStatus(run, 'error');
-        await Future<void>.delayed(nextRetry);
-        nextRetry = Duration(
-          milliseconds: min(
-            maxRetryDelay.inMilliseconds,
-            (nextRetry.inMilliseconds * 1.7).round(),
-          ),
-        );
+    try {
+      while (_isCurrent(generation, run)) {
+        try {
+          await _connectAndPump(generation, run);
+          nextRetry = retryDelay;
+        } catch (error) {
+          if (!_isCurrent(generation, run)) return;
+          run.lastError = error;
+          run.reconnects++;
+          run.onError?.call(error);
+          _emitStatus(run, 'error');
+          if (run.shouldRetry?.call(error) == false) return;
+          await Future<void>.delayed(nextRetry);
+          nextRetry = Duration(
+            milliseconds: min(
+              maxRetryDelay.inMilliseconds,
+              (nextRetry.inMilliseconds * 1.7).round(),
+            ),
+          );
+        }
+      }
+    } finally {
+      if (_isCurrent(generation, run)) {
+        _run = null;
       }
     }
   }
@@ -128,8 +137,8 @@ class ClientLiveAudioPipeline {
       final response = await request.close().timeout(connectTimeout);
       if (response.statusCode != HttpStatus.ok) {
         await response.drain<void>();
-        throw HttpException(
-          'Audio stream failed with HTTP ${response.statusCode}',
+        throw ClientLiveAudioHttpException(
+          statusCode: response.statusCode,
           uri: run.uri,
         );
       }
@@ -377,6 +386,7 @@ class _PipelineRun {
     required this.pairedServerHost,
     required this.pairedServerPort,
     required this.bearerToken,
+    required this.shouldRetry,
     required this.onAudioChunkWritten,
     required this.onStatus,
     required this.onError,
@@ -386,6 +396,7 @@ class _PipelineRun {
   final String pairedServerHost;
   final int pairedServerPort;
   final String? bearerToken;
+  final bool Function(Object error)? shouldRetry;
   final VoidCallback? onAudioChunkWritten;
   final ValueChanged<ClientLiveAudioStatus>? onStatus;
   final ValueChanged<Object>? onError;
@@ -408,4 +419,17 @@ class _PipelineRun {
     final safeChannels = channels ?? 1;
     return max(1024, safeSampleRate * safeChannels * 2 ~/ 8);
   }
+}
+
+class ClientLiveAudioHttpException implements Exception {
+  const ClientLiveAudioHttpException({
+    required this.statusCode,
+    required this.uri,
+  });
+
+  final int statusCode;
+  final Uri uri;
+
+  @override
+  String toString() => 'Audio stream failed with HTTP $statusCode ($uri)';
 }
