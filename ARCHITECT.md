@@ -1,139 +1,116 @@
 # MimiCam Architecture
 
-Bu doküman MimiCam Flutter uygulamasının güncel mimarisini anlatır. Kaynak gerçekliği `lib/` ağacıdır; eski Kotlin yaklaşımı, UDP discovery, cloud/relay fikirleri ve pinned TLS denemesi MVP kapsamı dışındadır.
+This document describes the current Flutter implementation. The source of truth is the `lib/` tree and the tests under `test/`. Older Kotlin architecture, UDP discovery, internet relay, and pinned TLS ideas are not active runtime pieces.
 
----
+## Architecture Principles
 
-## 1. Karar Özeti
+1. **One app, one active role:** Server and Client share one Flutter app, but only one runtime graph is mounted at a time.
+2. **Local-first transport:** MVP transport is `http` plus `ws` on the local network.
+3. **Pair before private access:** Private routes require trusted tokens, media routes can use short-lived stream tokens.
+4. **Audio/events before video:** Video can degrade or skip frames; audio and alerts should stay responsive.
+5. **No unbounded backlog:** Slow video/audio clients skip data instead of accumulating queues.
+6. **Runtime diagnostics are first-class:** `/test/status`, `/test/probe`, `/test/alert`, and `/test/audio-tone` exist to verify real delivery.
+7. **Docs must describe actual code:** Unsupported transports and codecs are marked out of scope, not presented as future-present features.
 
-MimiCam MVP, aynı local Wi‑Fi ağı içinde HTTP/WS + pairing token modeliyle çalışır. HTTPS/WSS ve certificate pinning MVP kapsamından çıkarılmıştır. Ürün hedefi iki telefon veya en fazla 5 local cihaz arasında düşük gecikmeli ve zayıf Wi-Fi’da stabil medya aktarımıdır. Güvenlik; pairing mode, tek kullanımlık nonce, trusted token, max device limit ve local network guard ile sağlanır.
-
-Ana kararlar:
-
-1. Tek uygulama iki rol taşır; Server ve Client graph’ları aynı anda kurulmaz.
-2. Default ve tek MVP transport `http` + `ws` modelidir.
-3. Pairing QR birincil, manuel IP:port kontrollü fallback’tir.
-4. Pairing token QR içinde taşınmaz; nonce tek kullanımlıdır.
-5. En fazla 5 trusted Client ve 5 aktif watch Client desteklenir.
-6. Medya pipeline audio/event öncelikli, video ise adaptif ve düşürülebilirdir.
-7. Server tek latest JPEG üretir; client başına encode veya backlog yoktur.
-8. `MimiCamServer` public facade olarak kalır; client lifecycle, auth, kalite seçimi ve backpressure küçük server policy sınıflarına ayrılır.
-
----
-
-## 2. Runtime Topolojisi
+## Runtime Topology
 
 ```text
 main.dart
-  ↓
-MimiCamApp
-  ↓
-AppBootstrap
-  ↓
-SharedPreferencesRoleRepository
-  ↓
-RoleResolver
-  ↓
-┌──────────────────────────────┬──────────────────────────────┐
-│ AppRole.server               │ AppRole.client               │
-│ ServerCompositionRoot        │ ClientCompositionRoot        │
-│ ServerRuntime                │ ClientRuntime                │
-│ MimiCamServer                │ Pairing / Watch / Alerts     │
-└──────────────────────────────┴──────────────────────────────┘
+  -> MimiCamApp
+  -> AppBootstrap
+  -> SharedPreferencesRoleRepository
+  -> RoleResolver
+  -> ServerCompositionRoot OR ClientCompositionRoot
 ```
 
-`AppBootstrap` yalnız seçili rolün shell’ini mount eder. Rol değişiminde eski runtime dispose edilir, rol repository güncellenir ve yeni graph kurulur.
+Server graph:
 
----
+```text
+ServerCompositionRoot
+  -> ServerRuntime
+  -> MimiCamServer
+  -> PairingTokenService
+  -> ActiveClientRegistry
+  -> MjpegStreamService
+  -> WavAudioStreamService
+  -> MicrophoneCaptureService
+  -> MediaAnalysisCoordinator
+```
 
-## 3. Dizin Haritası
+Client graph:
+
+```text
+ClientCompositionRoot
+  -> ClientRuntime
+  -> PairingSessionStore
+  -> QRPairingClient
+  -> TrustedTokenRenewalClient
+  -> StreamSessionController
+  -> NetworkQualityMonitor
+  -> ClientAlertListener
+  -> ClientAlertHistory
+  -> ClientNotificationService
+```
+
+Role switching disposes the old runtime, updates the role repository, clears client pairing state where appropriate, and mounts the new shell.
+
+## Package Map
 
 ```text
 lib/
-├── app/                    # bootstrap, role resolver, permission coordinator
+├── app/
+│   ├── app_bootstrap.dart
+│   ├── app_role.dart
+│   ├── role_permission_coordinator.dart
+│   ├── role_repository.dart
+│   └── role_resolver.dart
 ├── core/
-│   ├── media/              # MediaQualityProfile, NetworkQualityTier, tracker
-│   ├── network/            # LocalNetworkGuard
-│   ├── protocol/           # PairingPayload, PairingSession, endpoint builder
-│   └── security/           # TransportConfig, token primitives
+│   ├── media/
+│   ├── network/
+│   ├── protocol/
+│   └── security/
 ├── analysis/
-│   ├── alert/              # AlertEngine, cooldown policy, event model
-│   ├── audio/              # PCM reader, ring buffer, Goertzel, cry analyzer
-│   └── video/              # luma frame, downsampler, motion analyzer
+│   ├── alert/
+│   ├── audio/
+│   └── video/
 ├── features/
-│   ├── client/             # Client UI/runtime, pairing, stream/session clients
-│   ├── server/             # Server UI/runtime, pairing token service
-│   └── shared/             # design tokens and shell widgets
+│   ├── client/
+│   ├── server/
+│   └── shared/
+├── l10n/
 └── services/
-    ├── mimicam_server.dart # local HTTP server and media pipeline
-    ├── server/             # client registry, auth guard, quality/backpressure policies
-    └── platform/           # device capability and foreground service adapters
+    ├── mimicam_server.dart
+    ├── server/
+    └── platform/
 ```
 
-`services/server/` altındaki ana parçalar:
+## Transport
 
-| Sınıf | Sorumluluk |
-| --- | --- |
-| `ActiveClientRegistry` | Aktif watch slotları, stream attach/detach, streamToken prune ve kalite tracker lifecycle’ı |
-| `RequestAuthGuard` | Bearer trusted token doğrulama ve `clientId` çözümleme |
-| `MediaQualitySelector` | Device tier + network tier + client load zincirinden medya profili seçimi |
-| `UtilityBasedProfileSelector` | BOLA türevi fayda hesabı ile profil adayı seçimi |
-| `FrameBudgetManager` | Motion/cry/network/client yüküne göre hedef FPS |
-| `JpegByteBudgetController` | Profil başına byte/s hedefi ve JPEG kalite P-denetimi |
-| `StreamBackpressureGate` | MJPEG/audio stream için busy-skip ve cleanup |
-| `MediaFrameBudget` | Encode/analyze frame aralığı |
-| `MediaEncodingPolicy` | MJPEG encode gerekip gerekmediği |
-
-Client media tarafındaki ana parçalar:
-
-| Sınıf | Sorumluluk |
-| --- | --- |
-| `ClientStreamHealthState` | Video/audio/event health snapshot ve quality payload sinyalleri |
-| `NetworkQualityMonitor` | RTT/status probe ile health snapshot birleştirme ve `/quality/report` gönderimi |
-| `StreamSessionController` | Session start/stop, watch active state ve streamToken saklama |
-| `ClientAlertListener` | WS connect/disconnect/reconnect sinyallerini health state’e aktarma |
-| `PairingSessionStore` | Pairing metadata restore, trusted token secure storage ve legacy preferences migration |
-
----
-
-## 4. Transport Model
-
-MVP transport tek moddur:
+The transport config is intentionally narrow:
 
 ```dart
 enum TransportMode { localHttpWs }
-
-class TransportConfig {
-  const TransportConfig();
-  String get httpScheme => 'http';
-  String get wsScheme => 'ws';
-}
 ```
 
-Server her zaman `HttpServer.bind(...)` kullanır. `HttpServer.bindSecure`, `SecurityContext`, runtime certificate manager ve pinned HTTP client yoktur.
+The active schemes are:
 
-Client URL kuralları:
+- HTTP: `http`
+- WebSocket: `ws`
+- QR payload transport id: `http_ws`
 
-- HTTP endpointler: `http://host:port/path`
-- Event socket: `ws://host:port/ws/events`
-- Manuel IP fallback: `http://host:port/status/public`
+There is no runtime `HttpServer.bindSecure`, TLS context, certificate manager, certificate fingerprint, HTTPS fallback, WSS fallback, WebRTC, H.264, Opus, or relay transport.
 
----
+## Pairing Payload and Capabilities
 
-## 5. Pairing Payload
-
-`PairingPayload` QR içinde base64url JSON olarak taşınır:
+Pairing starts from Server QR/IP screen. Public status returns:
 
 ```json
 {
-  "schemaVersion": 1,
-  "scheme": "mimicam",
-  "host": "192.168.1.20",
-  "port": 8080,
-  "deviceId": "server_local",
-  "deviceName": "Bebek Odası",
-  "pairingNonce": "one_time_nonce",
-  "expiresAtMs": 1710000000000,
+  "service": "mimicam",
+  "pairing": true,
+  "serverDeviceId": "server_local",
+  "serverName": "Bebek Odası",
+  "pairingNonce": "nonce",
   "transport": "http_ws",
   "capabilities": {
     "video": "mjpeg",
@@ -147,342 +124,325 @@ Client URL kuralları:
 }
 ```
 
-Alan kararları:
+Capabilities must reflect the MVP transport truth. Unsupported `h264-webrtc` and `opus` claims should not appear unless real support is implemented.
 
-- `certificateFingerprintSha256` yoktur.
-- `tlsMode`, `https`, `wss`, `httpScheme`, `wsScheme` yoktur.
-- `transport` string değeri `http_ws` olur.
-- Token QR içinde asla taşınmaz.
+## Token Model
 
----
+### Pairing Nonce
 
-## 6. Pairing ve Token Modeli
+- Created by `PairingTokenService.createPairingNonce()`.
+- Carried in QR/public status.
+- Consumed by `/pair/confirm`.
+- One-time use.
+- Time limited.
 
-### Pairing Mode
+### Trusted Client Token
 
-Server pairing mode’a QR/IP ekranı açıldığında girer. Bu mod:
+- Issued by `/pair/confirm`.
+- Renewed by `/auth/renew`.
+- Required as Bearer auth for private routes.
+- Stored on Client through `PairingSessionStore`.
+- Stored securely in `flutter_secure_storage`.
+- Stored on Server as token hash.
 
-- Local HTTP server’ı başlatır.
-- `/status/public` ve `/pair/confirm` için nonce üretimini mümkün kılar.
-- Kamera/mikrofonu otomatik başlatmaz.
-
-### Nonce
-
-- `PairingTokenService.createPairingNonce()` 256-bit random nonce üretir.
-- Nonce TTL varsayılan 10 dakikadır.
-- `validateAndConsumeNonce()` nonce’u tek kullanımda tüketir.
-
-### Trusted Client
-
-Trusted client modeli:
+Trusted client limit:
 
 ```text
-clientId
-clientName
-tokenHash
-pairedAt / createdAtMs
-lastSeenAt / lastSeenAtMs
-expiresAtMs
-revoked
+maxTrustedClients = 5
 ```
 
-Ham trusted token yalnız Client’a döner. Server `sha256` hash saklar. Revoked client sayılmaz ve slot açar.
-
-Client tarafında trusted token secure storage içinde tutulur. Pairing payload, `clientId`, expiry ve paired timestamp local preferences içinde kalır; eski JSON formatındaki token ilk yüklemede secure storage’a taşınır. Bozuk veya eksik session kayıtları açılışta crash yerine temizlenir.
-
-Limit:
-
-- `maxTrustedClients = 5`
-- 6. pairing: `409`, `MAX_TRUSTED_CLIENTS_REACHED`
-- Kullanıcı mesajı: “En fazla 5 cihaz eşleştirilebilir. Önce eski bir cihazı kaldırın.”
+The sixth trusted pairing fails with `MAX_TRUSTED_CLIENTS_REACHED`.
 
 ### Stream Token
 
-`/session/start` Bearer trusted token ile çağrılır ve 60–120 saniye aralığında kısa ömürlü stream token üretir. Mevcut uygulama varsayılanı 90 saniyedir.
+- Issued by `/session/start`.
+- Default TTL is 90 seconds.
+- Valid only for `/video` and `/audio`.
+- Associated with a normalized `clientId`.
+- Rejected on control endpoints.
 
-Stream token:
+Stream token lifecycle is managed by `ActiveClientRegistry` and `PairingTokenService`.
 
-- Sadece `/video` ve `/audio` için query parametresi olarak kabul edilir.
-- `/status`, `/quality/report`, `/auth/renew`, `/ws/events` için geçerli değildir.
-- Trusted token’ın query parametresi olarak kullanılmasına izin verilmez.
-- `ActiveClientRegistry` tarafından `clientId` ile ilişkilendirilir.
-- Expire olduğunda prune edilir; aktif stream bağlantısı yoksa client slotu da temizlenir.
+## Endpoint Routing
 
----
+`MimiCamServer` owns route selection. Each request passes through local-network filtering, method validation, auth mode validation, and route handler execution.
 
-## 7. Endpoint Matrisi
-
-| Endpoint | Amaç | Auth | Not |
+| Route | Method | Auth mode | Handler responsibility |
 | --- | --- | --- | --- |
-| `GET /status/public` | Pairing public bilgisi | Local ağ | Pairing mode aktifken nonce döner |
-| `POST /pair/confirm` | Trusted token üretimi | Nonce | Nonce tek kullanımlıdır |
-| `POST /auth/renew` | Trusted token yenileme | Bearer token | Revoked/expired token reddedilir |
-| `POST /session/start` | Watch slot açma | Bearer token | Aynı client için idempotent, streamToken döner |
-| `POST /session/stop` | Watch slot kapatma | Bearer token | Registry cleanup yapar |
-| `POST /quality/report` | Client kalite raporu | Bearer token | TTL 15 saniye |
-| `GET /status` | Private server durumu | Bearer token | Medya profili ve sayaçlar |
-| `GET /video` | MJPEG stream | Bearer veya streamToken | Query trusted token kabul edilmez |
-| `GET /audio` | PCM16LE/WAV stream | Bearer veya streamToken | Audio öncelikli |
-| `GET /ws/events` | Alert/event WebSocket | Bearer token | Normal `WebSocketTransformer.upgrade` |
+| `/status/public` | GET | none/local guard | Public pairing status |
+| `/pair/confirm` | POST | nonce | Trusted token issue |
+| `/auth/renew` | POST | Bearer | Trusted token renewal |
+| `/session/start` | POST | Bearer | Active watch slot and stream token |
+| `/session/stop` | POST | Bearer | Watch cleanup |
+| `/quality/report` | POST | Bearer | Client health ingestion |
+| `/status` | GET | Bearer | Private runtime status |
+| `/video` | GET | Bearer or stream token | MJPEG attach |
+| `/audio` | GET | Bearer or stream token | WAV attach |
+| `/ws/events` | WebSocket GET | Bearer or query trusted token | Alert event socket |
+| `/test/*` | mixed | mostly Bearer | Diagnostic tooling |
 
-Tüm endpointlerden önce `LocalNetworkGuard` çalışır. Guard private IPv4 bloklarını ve debug loopback’i kabul eder; public IP’leri reddeder. Bu firewall değildir, yanlışlıkla dış ağa açılma riskini azaltır.
+Route exceptions are caught at the top-level request handler so responses are not left open.
 
----
+## Active Client Registry
 
-## 8. Client Limitleri
+`ActiveClientRegistry` separates three concerns:
 
-### Trusted Client
+- Active watch sessions.
+- Attached media stream connections.
+- Quality report lifecycle.
 
-`PairingTokenService` revoked olmayan trusted kayıtları sayar. Yeni bir cihaz 5 slot doluyken eşleşemez.
-
-### Active Watch Client
-
-`MimiCamServer` aktif watch client yönetimini `ActiveClientRegistry` üzerinden yapar. Server facade endpointleri ve media runtime’ı taşır; slot, streamToken ve kalite report lifecycle’ı registry’de toplanır.
-
-- `maxActiveWatchClients = 5`
-- 6. aktif watch isteği: `429`, `MAX_ACTIVE_CLIENTS_REACHED`
-- `/session/start` aynı client için idempotenttir; slot sayısı artmaz, yeni `streamToken` döner.
-- `/video` ve `/audio` auth sonucu sadece boolean değildir; trusted token veya streamToken’dan `clientId` çözülür ve stream attach edilir.
-- Aynı client video ve audio stream açarsa tek aktif slot kullanır; connection count ikisi de kapanana kadar client’ı canlı tutar.
-- `/session/stop`, stream response disconnect ve streamToken expiry aynı cleanup yolunu kullanır.
-- Cleanup slotu, stream connection sayacını, kalite raporunu ve client’a ait stream tokenları temizler.
-
----
-
-## 9. Medya Pipeline
+Important internal state:
 
 ```text
-CameraImage
-  ↓
-MediaFrameBudget
-  ↓
-CameraImageJpegEncoder
-  ↓
-_latestJpeg
-  ↓
-MJPEG clients
+_sessionClients
+_activeClients
+_streamConnectionCounts
+ClientQualityTracker
+PairingTokenService stream tokens
 ```
 
-Kurallar:
+Lifecycle rules:
 
-- Client başına kamera frame encode edilmez.
-- Server yalnız tek latest JPEG’i tutar.
-- MJPEG client response busy ise yeni frame atlanır.
-- Audio client flush busy ise yeni PCM chunk atlanır.
-- Frame queue/backlog yoktur.
-- Response kapanınca MJPEG/audio client listelerinden temizlenir.
-- Response kapanınca `ActiveClientRegistry.detachStream()` çağrılır; slot orphan kalmaz.
-- Audio ve event akışı video düşse bile önceliklidir.
+- `/session/start` activates the client and adds it to `_sessionClients`.
+- Starting the same client again does not consume another active slot.
+- `/video` or `/audio` attach increments stream connection count.
+- Media stream disconnect decrements connection count.
+- A disconnect does not remove an active watch session while `_sessionClients` contains the client.
+- `/session/stop` runs full cleanup for that client.
+- Expired stream tokens are pruned; if no stream connection and no valid stream token remain, the client is cleaned up.
+- Explicit cleanup removes active slot, session marker, stream counters, quality report, and stream tokens.
 
-Backpressure davranışı `StreamBackpressureGate` ile ortaktır:
+This is the core guard against media reconnect loops.
+
+## Media Runtime
+
+`MimiCamServer.startMediaRuntime()` initializes camera, analysis pipeline, microphone capture, wakelock, and foreground service. Tests can construct the server with `startMediaOnSessionStart: false` to avoid camera dependencies in protocol tests.
+
+Media runtime pieces:
+
+| Component | Responsibility |
+| --- | --- |
+| `CameraController` | Camera image stream |
+| `CameraImageJpegEncoder` | Camera frame to JPEG |
+| `MjpegStreamService` | MJPEG response lifecycle |
+| `MicrophoneCaptureService` | PCM capture |
+| `WavAudioStreamService` | WAV response lifecycle |
+| `MediaAnalysisCoordinator` | Audio/video analysis fan-in |
+| `AlertEngine` | Alert decision and event emission |
+| `EpisodeBasedNotificationAggregator` | Parent-facing episode messages |
+
+## MJPEG Service
+
+`MjpegStreamService` owns:
+
+- Attached MJPEG responses.
+- Response to `clientId` map.
+- Per-stream diagnostics.
+- Backpressure metrics.
+- Client detach callback.
+
+Attach behavior:
 
 ```text
-stream response idle
-  ↓
-chunk/frame yazılır
-  ↓
-flush future tamamlanana kadar busy
-  ↓
-busy iken gelen frame/chunk skip
-  ↓
-flush tamamlanınca idle veya hata varsa cleanup
+set multipart content type
+add response to clients
+register response.done cleanup
+if latest frame exists: write it
+else: write zero-length keepalive and flush
 ```
 
----
-
-## 10. Adaptif Kalite
-
-Temel profiller:
-
-| Profil | Çözünürlük | FPS | JPEG | Kullanım |
-| --- | ---: | ---: | ---: | --- |
-| Normal | 854×480 | 8 | 52 | Tek/iyi ağ |
-| Weak | 640×360 | 5 | 42 | Zayıf ağ |
-| Critical | 426×240 | 2 | 36 | Kritik ağ |
-| Survival | 426×240 | 1 | 36 | Snapshot/audio-first |
-
-Client yükü:
-
-- 1 aktif: ağ kalitesi normal/weak/critical seçer.
-- 2–3 aktif: en fazla 640×360, 5fps, JPEG 42.
-- 4–5 aktif: 426×240 critical/survival, content-aware 1–2fps, JPEG 32–40.
-
-Kalite seçimi `MediaQualitySelector` facade’ında tutulur; aday profil seçimi `UtilityBasedProfileSelector` içinde BOLA türevi fayda fonksiyonuyla yapılır:
+Broadcast behavior:
 
 ```text
-utility(profile) =
-  visualQuality(profile)
-  - stallPenalty(videoFrameGap)
-  - audioPenalty(audioGap, audioUnderrun)
-  - backpressurePenalty(skippedFrames)
-  - clientLoadPenalty(activeClients)
-  - switchPenalty(profileChange)
+for each client:
+  if busy, skip frame
+  else write multipart frame and flush
+  record success/failure metrics
 ```
 
-Server kalite seçimi şu sinyallerle ilerler:
+The zero-length keepalive is intentionally not a video frame. Client parser skips it and waits for a real JPEG part.
 
-- Aktif watch client sayısı.
-- Aktif clientların kalite raporları ve en kötü effective tier’i.
-- `NetworkQualityTier`, WS reconnect/failure, video/audio gap ve audio underrun.
-- MJPEG/audio backpressure skip ve write duration metrikleri.
-- Reconnect/failure davranışı.
+## WAV Audio Service
 
-`ClientQualityTracker` raporları TTL ile tutar; süresi geçen rapor bilinmeyen sayılır. Tracker lifecycle’ı registry içinde olduğu için stop/disconnect/expiry sonrası kalite raporu aktif talebi düşürmez. Selector kötü sinyalde hızlı degrade eder; upgrade için en az 30 saniye stabil metrik ve tek kademelik yükseliş gerekir. 2–3 client varken normal profil seçilmez; 4–5 client varken profil critical/survival sınırına iner.
+`WavAudioStreamService` owns:
 
-Kamera encode bütçesi iki ek policy ile korunur:
+- WAV stream response headers.
+- Initial WAV header write.
+- PCM chunk broadcast.
+- Busy client tracking.
+- Backpressure metrics.
+- Client detach callback.
 
-- `FrameBudgetManager`, her kamera frame’inde ucuz luma örneklemesiyle `motionEnergy` üretir; audio analizinden gelen `cryActive`, ağ tier’i ve aktif client sayısıyla hedef FPS döndürür.
-- `JpegByteBudgetController`, encode sonrası JPEG byte uzunluğunu ölçer ve profil hedeflerine göre kaliteyi 32–58 aralığında ayarlar: normal 250–300 kB/s, weak 90–150 kB/s, critical 25–60 kB/s, survival 10–25 kB/s.
-- Bu iki policy profil değiştirmeden önce FPS/quality bütçesini aşağı çeker; yetmezse hysteresis’li profile selector kaliteyi düşürür.
+Audio does not queue unlimited chunks. If a response is busy, new audio chunks for that client are skipped and counted.
 
----
+## Client Video Pipeline
 
-## 11. Client Kalite Raporu
+`ClientVideoViewer`:
 
-Client tarafı kalite raporu artık şu sinyalleri birlikte taşır:
+- Validates the URL host and port against the paired server.
+- Uses HTTP `Accept: multipart/x-mixed-replace, image/jpeg`.
+- Supports Bearer auth but normally uses stream token in URL.
+- Applies connect timeout.
+- Applies response timeout.
+- Applies read timeout.
+- Parses MJPEG chunks with `MjpegStreamParser`.
+- Reports frame receipt to `ClientStreamHealthState`.
+- Reports stream timeout and reconnect attempts.
+- Cancels retry timer on dispose or restart.
 
-- RTT ve ardışık failure sayısı.
-- Video frame gap ve stream timeout.
-- Audio gap ve audio underrun.
-- WebSocket disconnect/reconnect sayısı.
-- Reconnect sonrası ilk 10 saniyede düşük kalite tercihi.
-- Watch ekranının aktif olup olmadığı.
+## Client Audio Pipeline
 
-Client kalite sinyalleri ayrı medya bağlantısı açmadan, mevcut video/audio/event pipeline callback’lerinden toplanır. Video frame geldiğinde lastVideoFrameAt, audio chunk geldiğinde lastAudioChunkAt, WS kopunca disconnect sayaçları güncellenir. Bu state sadece /quality/report payload’ını besler; bandwidth, stream slotu veya ek bağlantı tüketmez.
+`ClientLiveAudioPipeline`:
 
-Data flow:
+- Validates paired host and port.
+- Requests `audio/wav, audio/x-wav, application/octet-stream`.
+- Applies connect timeout.
+- Applies response timeout.
+- Applies read timeout.
+- Parses WAV with `WavPcmStreamParser`.
+- Starts native PCM sink after format detection.
+- Uses `ClientAudioJitterBuffer` for recent aligned PCM frames.
+- Emits write/error/status updates.
+
+Native sink:
 
 ```text
-WatchScreen / ClientRuntime.startWatching
-  ↓
-StreamSessionController.start
-  ↓
-/session/start → streamToken
-  ↓
-Existing video/audio/event pipeline callbacks
-  ↓
+PcmAudioOutput
+  -> MethodChannel("mimicam/pcm_audio")
+  -> Android AudioTrack
+  -> iOS AVAudioEngine + AVAudioPlayerNode
+```
+
+## Quality Reporting
+
+Client health state is produced from existing live streams, not from extra media probes.
+
+Inputs:
+
+- Video frame callbacks.
+- Audio chunk write callbacks.
+- Audio error callbacks.
+- WebSocket connect/disconnect/reconnect callbacks.
+- RTT/status probe from `NetworkQualityMonitor`.
+
+Quality report path:
+
+```text
 ClientStreamHealthState.snapshot
-  ↓
-NetworkQualityMonitor + RTT/status probe
-  ↓
-POST /quality/report with Bearer trusted token
-  ↓
-ActiveClientRegistry + ClientQualityTracker
-  ↓
-MediaQualitySelector hysteresis
+  -> NetworkQualityMonitor
+  -> POST /quality/report
+  -> ActiveClientRegistry.updateQualityReport
+  -> MediaQualitySelector.select
+  -> _setActiveMediaProfile
 ```
 
-Raporlama kuralları:
+Quality selector constraints:
 
-- Watch aktifken yaklaşık 4 saniyede bir `/quality/report` gönderilir.
-- Watch aktif değilken iyi ağda agresif raporlama yapılmaz.
-- Video frame gap 2 saniyeye çıkarsa en az weak, 5 saniyeye çıkarsa critical sinyal oluşur.
-- Audio underrun veya `audioGapMs >= 1500` critical sinyal üretir.
-- `skippedFrames`, `skippedVideoFrames` ve `skippedAudioChunks` geriye uyumlu şekilde parse edilir; eksik alanlar `0` sayılır.
-- WS disconnect/reconnect en az weak sinyal üretir; ardışık kopmalar critical’a kadar düşebilir.
-- Server body’deki `clientId` yerine Bearer token’dan çözülen clientId’yi kullanır.
-- Stream token bu endpointte geçerli değildir.
+- Fast degrade on critical stream health.
+- Slow upgrade after stable period.
+- Single-step upgrade.
+- Client load caps profile.
+- Backpressure can force lower utility.
 
-Backpressure metrikleri queue üretmeden tutulur:
-
-- MJPEG busy ise yeni frame skip edilir ve `skippedVideoFrames` artar.
-- Audio flush busy ise yeni chunk skip edilir ve `skippedAudioChunks` artar.
-- Audio flush devam ederken aynı client için video frame yazımı atlanır; audio/event önceliği korunur.
-- Başarılı write timestamp/duration ve ardışık write failure sayısı sayaç olarak tutulur.
-- Bu metrikler frame/chunk saklamaz; latest-frame modeli korunur.
-
----
-
-## 12. Episode Bazlı Bildirimler
-
-`EpisodeBasedNotificationAggregator`, tek tek kısa uyarılar yerine ağlama episode’u üretir:
+## Alert Flow
 
 ```text
-quiet → suspectedCry → confirmedCry → ongoingCry
-  ↘ 10 sn sessizlik → resolved
+Camera/microphone analysis
+  -> MediaAnalysisCoordinator
+  -> AlertEngine
+  -> AlertEvent
+  -> MimiCamServer event broadcast
+  -> /ws/events clients
+  -> ClientAlertListener
+  -> ClientAlertHistory
+  -> ClientNotificationService
 ```
 
-- `LowCostCryScorer`, enerji, voiced ratio, harmonic ratio, consecutive F0 proxy ve süre skorunu birleştirir.
-- 2 saniye üstü sinyal suspected, 5 saniye üstü confirmed sayılır.
-- 10 saniye sessizlik episode’u kapatır; kısa yükselmeler sakin “devam ederse tekrar bildirilecek” mesajına döner.
-- WS `baby_event` metadata’sı `cryScore`, `durationMs`, `motionDetected`, `lastMotionAgoMs`, `audioReliable`, `videoReliable` ve `networkTier` alanlarını taşır.
-- Mobil TFLite/LSTM attention dedektörü bu MVP kapsamına eklenmedi; ileride `CryDetector` adapter’ı olarak takılabilir.
+The Client stores alert history separately from OS notifications. Local notification permission affects system notification display, not in-app event history.
 
----
+## Test Diagnostics
 
-## 13. UI ve Rol İzolasyonu
+`services/server/mimicam_server_test_endpoints.dart` adds runtime probe endpoints:
 
-Server UI:
+- `/test`
+- `/test/dashboard.js`
+- `/test/status`
+- `/test/start`
+- `/test/reset`
+- `/test/probe`
+- `/test/alert`
+- `/test/audio-tone`
 
-- QR/IP tabı pairing mode başlatır.
-- Pairing mode medya başlatmaz.
-- Yayın ve analiz kartları runtime state’ten beslenir.
-- QR panel kompakt ekranlarda taşmayacak şekilde responsive ölçülür.
+`/test/status` reports runtime state, active clients, video counters, audio counters, event counters, backpressure, and analysis diagnostics.
 
-Client UI:
+## Test Strategy
 
-- QR scan ve manuel IP aynı `PairingPayload` modeline iner.
-- Manuel IP yalnız HTTP `/status/public` çağırır.
-- Eşleşme sonrası alert listener `ws://.../ws/events` ile açılır.
-- Watch ekranı session lifecycle ve network quality state’ini izler.
+High-value test groups:
 
----
+- Role isolation and role switching.
+- Pairing payload parsing.
+- Secure session storage migration.
+- Trusted token and stream token auth.
+- Active client limits and reconnect lifecycle.
+- MJPEG parser and stream service behavior.
+- WAV parser and live audio pipeline behavior.
+- Client runtime lifecycle.
+- Alert listener, alert history, notification screens.
+- Adaptive media selector and backpressure gates.
+- Test endpoint behavior.
+- Localization fallback and supported locales.
+- Compact UI overflow/render budget.
 
-## 14. Test Stratejisi
-
-Ana test kümeleri:
-
-- Role isolation ve lifecycle testleri.
-- Pairing payload ve token service testleri.
-- Local network guard testleri.
-- Trusted/active client limit testleri.
-- Token auth ve stream token testleri.
-- Adaptive media ve backpressure testleri.
-- Utility selector, frame budget, JPEG byte budget ve episode aggregator testleri.
-- QR/UI overflow ve render budget testleri.
-
-Refactor sonrası özellikle korunan senaryolar:
-
-- `ActiveClientRegistry` idempotent start, disconnect cleanup, expiry prune ve çoklu stream count.
-- `MediaQualitySelector` 1, 2–3, 4–5 client ve weak/critical ağ kombinasyonları.
-- `MediaQualitySelector` hızlı degrade, 30 saniye stabil olmadan upgrade etmeme ve tek kademe upgrade hysteresis’i.
-- `ClientStreamHealthState` video/audio gap, WS disconnect/reconnect ve watchActive sinyalleri.
-- `StreamBackpressureGate` busy-skip ve cleanup davranışı.
-- `FrameBudgetManager`, `JpegByteBudgetController`, `UtilityBasedProfileSelector` ve `EpisodeBasedNotificationAggregator` kararları.
-- HTTP auth guard: private endpointlerde query trusted token reddi, streamToken’ın yalnız media endpointlerinde kabulü.
-
-Önerilen doğrulama:
+Recommended full gate:
 
 ```bash
 dart format .
 flutter analyze
 flutter test
+flutter build apk --debug
 ```
 
-Manuel cihaz performans kontrolü:
+Media-focused gate:
 
 ```bash
-flutter install -d <device-id> --uninstall-only
-flutter run -d <device-id> --profile --trace-startup
+flutter test \
+  test/services/server/active_client_registry_test.dart \
+  test/features/server/mjpeg_stream_service_test.dart \
+  test/features/client/client_video_viewer_test.dart \
+  test/features/client/client_live_audio_pipeline_test.dart \
+  test/features/client/stream_session_controller_test.dart \
+  test/features/client/mjpeg_stream_parser_test.dart \
+  test/features/client/wav_pcm_stream_parser_test.dart \
+  test/features/server/token_auth_test.dart \
+  test/features/server/endpoint_worst_case_test.dart \
+  test/features/server/test_endpoints_test.dart
 ```
 
-LG G6 (`LG H870`, Android 9) üzerinde son profile startup trace sonucu: first frame `465ms`, rasterized first frame `861ms`, framework init `447ms`. Startup sırasında `Skipped 38 frames` ve Impeller/Kotlin Gradle Plugin uyarıları görüldü; testleri fail etmedi ama performans/teknik borç olarak takip edilmelidir.
+## Platform Architecture
 
----
+Android:
 
-## 14. Kapsam Dışı ve Gelecek
+- `MainActivity.kt` implements PCM audio method channel.
+- `MimiCamForegroundService.kt` handles foreground service behavior.
+- `AudioTrack` is used for low-latency PCM output.
+- Gradle is Kotlin DSL and Java 17 targeted.
 
-MVP kapsamı dışında:
+iOS:
 
-- HTTPS/WSS ve certificate pinning.
-- Keystore/Keychain certificate rotation.
-- Cloud relay, hesap sistemi, OAuth.
-- UDP discovery.
-- Client başına ayrı encode pipeline’ı.
+- `AppDelegate.swift` implements PCM audio method channel.
+- `AVAudioEngine` and `AVAudioPlayerNode` play PCM.
+- `Info.plist` contains camera, microphone, local network, and Bonjour usage strings.
+- Local iOS build is not expected from Linux.
 
-Gelecek araştırma alanları:
+## Current Non-Goals
 
-- WebRTC/H.264 transport.
-- Daha zengin client kalite raporları.
-- Pairing mode otomatik kapanma UX’i.
-- Trusted device yönetim ekranı.
+- Internet relay.
+- Account system.
+- Push notification backend.
+- UDP broadcast discovery.
+- Telegram automation.
+- HTTPS/WSS.
+- Certificate pinning.
+- WebRTC/H.264.
+- Opus.
+- Per-client video encoding.
