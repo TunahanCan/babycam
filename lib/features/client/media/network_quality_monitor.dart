@@ -6,6 +6,7 @@ import '../../../core/media/adaptive_media_profile.dart';
 import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
+import '../../../services/platform/battery_snapshot_provider.dart';
 import 'client_stream_health_state.dart';
 
 class NetworkQualityMonitor {
@@ -13,12 +14,15 @@ class NetworkQualityMonitor {
     this.pollInterval = const Duration(seconds: 4),
     this.timeout = const Duration(seconds: 2),
     this.healthState,
+    BatterySnapshotProvider? batteryProvider,
     HttpClient Function(PairingSession session)? clientFactory,
-  }) : _clientFactory = clientFactory;
+  })  : _batteryProvider = batteryProvider ?? BatteryPlusSnapshotProvider(),
+        _clientFactory = clientFactory;
 
   final Duration pollInterval;
   final Duration timeout;
   final ClientStreamHealthState? healthState;
+  final BatterySnapshotProvider _batteryProvider;
   final HttpClient Function(PairingSession session)? _clientFactory;
   final _classifier = const NetworkQualityClassifier();
 
@@ -113,12 +117,8 @@ class NetworkQualityMonitor {
     required int consecutiveFailures,
     ClientQualitySnapshot? healthSnapshot,
   }) async {
-    final request = await client.postUrl(
-        ServerEndpointBuilder(session).http(MimiCamProtocolV2.qualityReport));
-    request.headers
-      ..contentType = ContentType.json
-      ..set(HttpHeaders.authorizationHeader, 'Bearer ${session.sessionToken}');
-    request.write(jsonEncode(
+    final battery = await _batteryProvider.snapshot();
+    final reportBody = Map<String, Object?>.from(
       healthSnapshot?.toQualityReportJson(
             clientId: session.clientId,
             networkTier: tier,
@@ -137,7 +137,14 @@ class NetworkQualityMonitor {
             'watchActive': false,
             'createdAtMs': DateTime.now().millisecondsSinceEpoch,
           },
-    ));
+    );
+    reportBody['battery'] = battery.toJson();
+    final request = await client.postUrl(
+        ServerEndpointBuilder(session).http(MimiCamProtocolV2.qualityReport));
+    request.headers
+      ..contentType = ContentType.json
+      ..set(HttpHeaders.authorizationHeader, 'Bearer ${session.sessionToken}');
+    request.write(jsonEncode(reportBody));
     final response = await request.close();
     if (response.statusCode != HttpStatus.ok) {
       throw StateError('Quality report failed: ${response.statusCode}');

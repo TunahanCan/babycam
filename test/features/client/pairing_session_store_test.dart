@@ -51,6 +51,57 @@ void main() {
     final migrated = jsonDecode(preferences.getString('pairing_session')!)
         as Map<String, Object?>;
     expect(migrated.containsKey('token'), isFalse);
+    final children = await store.loadChildren();
+    expect(children, hasLength(1));
+    expect(children.single.selected, isTrue);
+  });
+
+  test('coklu child profilleri tokenlari secure storage icinde saklar',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final secure = _FakeSecureTokenStore();
+    final store = PairingSessionStore(preferences, secureTokens: secure);
+
+    await store.save(_session('token-a', serverId: 'server-a'));
+    await store.saveChild(_session('token-b', serverId: 'server-b'));
+
+    final children = await store.loadChildren();
+    final selected = await store.loadSelected();
+
+    expect(children.map((child) => child.id),
+        containsAll(['server-a', 'server-b']));
+    expect(selected?.payload.deviceId, 'server-b');
+    expect(selected?.sessionToken, 'token-b');
+    expect(secure.values['pairing_child_token.server-a'], 'token-a');
+    expect(secure.values['pairing_child_token.server-b'], 'token-b');
+
+    await store.selectChild('server-a');
+    final reselected = await store.loadSelected();
+
+    expect(reselected?.payload.deviceId, 'server-a');
+    expect(reselected?.sessionToken, 'token-a');
+  });
+
+  test('child profile sayisi dort ile sinirlanir', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final store = PairingSessionStore(
+      preferences,
+      secureTokens: _FakeSecureTokenStore(),
+    );
+
+    for (var index = 0; index < 4; index++) {
+      await store.saveChild(
+        _session('token-$index', serverId: 'server-$index'),
+        selected: index == 0,
+      );
+    }
+
+    expect(
+      () => store.saveChild(_session('token-4', serverId: 'server-4')),
+      throwsA(isA<ChildProfileLimitException>()),
+    );
   });
 
   test('bozuk session kaydi crash yerine temizlenir', () async {
@@ -70,19 +121,20 @@ void main() {
   });
 }
 
-PairingSession _session(String token) => PairingSession(
-      payload: _payload(),
+PairingSession _session(String token, {String serverId = 'server'}) =>
+    PairingSession(
+      payload: _payload(deviceId: serverId),
       sessionToken: token,
       clientId: 'client-1',
       trustedClientTokenExpiresAtMs: 12345,
       pairedAtMs: 67890,
     );
 
-PairingPayload _payload() => PairingPayload(
+PairingPayload _payload({String deviceId = 'server'}) => PairingPayload(
       schemaVersion: MimiCamProtocolV2.schemaVersion,
       host: '127.0.0.1',
       port: 8080,
-      deviceId: 'server',
+      deviceId: deviceId,
       deviceName: 'Bebek Odası',
       pairingNonce: 'nonce',
       expiresAtMs:

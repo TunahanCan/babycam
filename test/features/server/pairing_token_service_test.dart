@@ -18,6 +18,47 @@ void main() {
     expect(service.validateAndConsumeNonce(nonce), isFalse);
   });
 
+  test('nonce havuzu expired kayıtları temizler ve üst limiti korur', () {
+    var now = DateTime(2026);
+    final service = PairingTokenService(
+      now: () => now,
+      nonceTtl: const Duration(seconds: 1),
+      maxActiveNonces: 2,
+    );
+
+    final first = service.createPairingNonce();
+    final second = service.createPairingNonce();
+    final third = service.createPairingNonce();
+
+    expect(service.activeNonceCount, 2);
+    expect(service.validateAndConsumeNonce(first), isFalse);
+    expect(service.validateAndConsumeNonce(second), isTrue);
+    expect(service.validateAndConsumeNonce(third), isTrue);
+
+    service.createPairingNonce();
+    now = now.add(const Duration(seconds: 2));
+
+    expect(service.activeNonceCount, 0);
+  });
+
+  test('pair confirm denemeleri pencere içinde rate-limit edilir', () {
+    var now = DateTime(2026);
+    final service = PairingTokenService(
+      now: () => now,
+      pairConfirmRateLimitWindow: const Duration(seconds: 10),
+      maxPairConfirmAttemptsPerWindow: 2,
+    );
+
+    expect(service.consumePairConfirmAttempt('192.168.1.5'), isTrue);
+    expect(service.consumePairConfirmAttempt('192.168.1.5'), isTrue);
+    expect(service.consumePairConfirmAttempt('192.168.1.5'), isFalse);
+    expect(service.consumePairConfirmAttempt('192.168.1.6'), isTrue);
+
+    now = now.add(const Duration(seconds: 11));
+
+    expect(service.consumePairConfirmAttempt('192.168.1.5'), isTrue);
+  });
+
   test('pairing başarılı olunca session token üretilir', () {
     final service = PairingTokenService();
     final token =

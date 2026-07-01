@@ -4,7 +4,7 @@ class PairingSession {
   const PairingSession({
     required this.payload,
     required this.sessionToken,
-    this.clientId = 'client_local',
+    this.clientId = 'client_unknown',
     int? trustedClientTokenExpiresAtMs,
     int? pairedAtMs,
   })  : trustedClientTokenExpiresAtMs = trustedClientTokenExpiresAtMs ?? 0,

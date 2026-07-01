@@ -21,6 +21,14 @@ class AlertProtocolAdapter {
         score: event.score,
         timestampMs: event.timestampMs,
         sourceDeviceId: 'server',
+        snapshotAvailable: event.metadata['snapshotAvailable'] is bool
+            ? event.metadata['snapshotAvailable'] as bool
+            : null,
+        battery: event.metadata['battery'] is Map
+            ? Map<String, Object?>.from(event.metadata['battery'] as Map)
+            : null,
+        transport: event.metadata['transport']?.toString(),
+        childId: event.metadata['childId']?.toString(),
         metadata: event.metadata,
       );
 

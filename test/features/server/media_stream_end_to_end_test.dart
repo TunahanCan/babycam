@@ -94,6 +94,66 @@ void main() {
     expect(status['activeStreamClients'], 1);
   });
 
+  test('iki parent client ayni anda video ve audio endpointlerinden medya alir',
+      () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final anne = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final baba = tokenService.issueTrustedClientToken(
+      clientName: 'Baba',
+      deviceId: 'baba',
+    );
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    final starts = await Future.wait([
+      _postSessionStart(
+        client,
+        base.port,
+        anne.token,
+        anne.clientId,
+        audio: true,
+      ),
+      _postSessionStart(
+        client,
+        base.port,
+        baba.token,
+        baba.clientId,
+        audio: true,
+      ),
+    ]);
+    final anneStreamToken = starts[0]['streamToken'] as String;
+    final babaStreamToken = starts[1]['streamToken'] as String;
+
+    final media = await Future.wait<Object>([
+      _readFirstMjpegFrame(base.port, anneStreamToken),
+      _readFirstMjpegFrame(base.port, babaStreamToken),
+      _readFirstPcmChunk(base.port, anneStreamToken),
+      _readFirstPcmChunk(base.port, babaStreamToken),
+    ]);
+    final status = await _getJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.testStatus,
+      anne.token,
+    );
+    final video = status['video'] as Map;
+    final audio = status['audio'] as Map;
+
+    expect((media[0] as Uint8List).length, greaterThan(100));
+    expect((media[1] as Uint8List).length, greaterThan(100));
+    expect((media[2] as ParsedPcmAudio).pcm16le.length, greaterThan(0));
+    expect((media[3] as ParsedPcmAudio).pcm16le.length, greaterThan(0));
+    expect((status['clients'] as Map)['activeStreamClients'], 2);
+    expect(video['framesStreamed'], greaterThanOrEqualTo(2));
+    expect(audio['chunksStreamed'], greaterThanOrEqualTo(2));
+  });
+
   test('/test/probe loopback video ve audio client tüketimini kanıtlar',
       () async {
     final tokenService = PairingTokenService();

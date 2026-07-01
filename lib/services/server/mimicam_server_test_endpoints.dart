@@ -566,6 +566,12 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         'lastDeliveredWebSocketClients': _lastAlertDeliveredWebSocketClients,
         'totalWebSocketDeliveries': _alertWebSocketDeliveries,
       },
+      'battery': _serverBattery.toJson(),
+      'transport': _transportStatus(),
+      'streamHealth': _streamHealthStatus(nowMs),
+      'comfort': _comfortAudio.state.toJson(),
+      'nightLight': _nightLight.state.toJson(),
+      'talk': _talkStatus(),
       'analysis': _analysisMetrics?.toJson(),
     };
   }

@@ -61,6 +61,56 @@ void main() {
     expect(message, isNot(contains('Motion detected')));
   });
 
+  test('opsiyonel alert alanlari geriye uyumlu round-trip edilir', () {
+    const dto = AlertEventDto(
+      id: 'alert-optional',
+      type: 'batteryLow',
+      severity: 'warning',
+      messageKey: 'legacyAlert',
+      message: 'Battery low',
+      score: 1,
+      timestampMs: 42,
+      sourceDeviceId: 'server',
+      snapshotAvailable: true,
+      battery: {'levelPercent': 12, 'isLow': true},
+      transport: 'wifi_lan',
+      childId: 'server-a',
+      metadata: {'event': 'battery'},
+    );
+
+    final parsed = AlertEventDto.fromJson(dto.toJson());
+
+    expect(parsed?.snapshotAvailable, isTrue);
+    expect(parsed?.battery?['levelPercent'], 12);
+    expect(parsed?.transport, 'wifi_lan');
+    expect(parsed?.childId, 'server-a');
+  });
+
+  test('AlertProtocolAdapter optional metadata alanlarini DTOya tasir', () {
+    const event = AlertEvent(
+      id: 'alert-optional-adapter',
+      type: AlertType.systemWarning,
+      severity: AlertSeverity.warning,
+      message: 'Battery low',
+      score: 1,
+      timestampMs: 42,
+      metadata: {
+        'snapshotAvailable': true,
+        'battery': {'levelPercent': 9, 'isCritical': true},
+        'transport': 'hotspot_lan',
+        'childId': 'server-b',
+      },
+    );
+
+    final json = jsonDecode(AlertProtocolAdapter.toJsonText(event))
+        as Map<String, Object?>;
+
+    expect(json['snapshotAvailable'], isTrue);
+    expect((json['battery'] as Map)['levelPercent'], 9);
+    expect(json['transport'], 'hotspot_lan');
+    expect(json['childId'], 'server-b');
+  });
+
   test('AlertProtocolAdapter JSON transportu messageKey ve metadata taşır', () {
     const event = AlertEvent(
       id: 'alert-3',

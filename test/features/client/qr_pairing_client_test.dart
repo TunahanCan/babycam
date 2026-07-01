@@ -19,6 +19,8 @@ void main() {
       final json = jsonDecode(body);
       expect(json, isA<Map>());
       expect((json as Map)['pairingNonce'], 'nonce');
+      expect(json['deviceId'], 'client_unique');
+      expect(json['deviceId'], isNot('client_local'));
 
       request.response.headers.contentType = ContentType.json;
       request.response.write(jsonEncode({
@@ -46,7 +48,9 @@ void main() {
       },
     );
 
-    final session = await (const QRPairingClient()).pair(payload);
+    final session = await QRPairingClient(
+      clientIdProvider: () async => 'client_unique',
+    ).pair(payload);
 
     expect(session.clientId, 'client_1');
     expect(session.sessionToken, 'trusted-token');

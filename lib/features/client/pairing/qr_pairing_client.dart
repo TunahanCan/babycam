@@ -8,13 +8,19 @@ import '../../../core/protocol/pairing_session.dart';
 class QRPairingClient {
   const QRPairingClient({
     this.timeout = const Duration(seconds: 5),
-  });
+    Future<String> Function()? clientIdProvider,
+    String? clientName,
+  })  : _clientIdProvider = clientIdProvider,
+        _clientName = clientName ?? 'Ebeveyn Cihazı';
 
   final Duration timeout;
+  final Future<String> Function()? _clientIdProvider;
+  final String _clientName;
 
   Future<PairingSession> pair(PairingPayload payload) async {
     final client = HttpClient()..connectionTimeout = timeout;
     try {
+      final deviceId = await _clientId();
       final request = await client.postUrl(
         Uri(
           scheme: payload.httpScheme,
@@ -26,8 +32,8 @@ class QRPairingClient {
       request.headers.contentType = ContentType.json;
       request.write(jsonEncode({
         'pairingNonce': payload.pairingNonce,
-        'clientName': 'Ebeveyn Cihazı',
-        'deviceId': 'client_local',
+        'clientName': _clientName,
+        'deviceId': deviceId,
       }));
       final response = await request.close().timeout(timeout);
       if (response.statusCode != HttpStatus.ok) {
@@ -42,7 +48,7 @@ class QRPairingClient {
       return PairingSession(
         payload: payload,
         sessionToken: token,
-        clientId: json['clientId']?.toString() ?? 'client_local',
+        clientId: json['clientId']?.toString() ?? deviceId,
         trustedClientTokenExpiresAtMs:
             json['trustedClientTokenExpiresAtMs'] is int
                 ? json['trustedClientTokenExpiresAtMs'] as int
@@ -52,5 +58,15 @@ class QRPairingClient {
     } finally {
       client.close(force: true);
     }
+  }
+
+  Future<String> _clientId() async {
+    final provider = _clientIdProvider;
+    final id = provider == null
+        ? 'client_${DateTime.now().microsecondsSinceEpoch}'
+        : await provider();
+    final normalized = id.trim();
+    if (normalized.isNotEmpty) return normalized;
+    return 'client_${DateTime.now().microsecondsSinceEpoch}';
   }
 }

@@ -9,6 +9,7 @@ import 'client_runtime.dart';
 import 'media/client_stream_health_state.dart';
 import 'media/network_quality_monitor.dart';
 import 'media/stream_session_controller.dart';
+import 'pairing/client_identity_store.dart';
 import 'pairing/pairing_session_store.dart';
 import 'pairing/qr_pairing_client.dart';
 import 'pairing/trusted_token_renewal_client.dart';
@@ -22,7 +23,8 @@ class ClientCompositionRoot {
     SecureTokenStore? secureTokens,
   }) {
     createCount++;
-    const pairingClient = QRPairingClient();
+    final identity = ClientIdentityStore(secureTokens: secureTokens);
+    final pairingClient = QRPairingClient(clientIdProvider: identity.clientId);
     final tokenRenewal = TrustedTokenRenewalClient();
     final store = PairingSessionStore(
       preferences,

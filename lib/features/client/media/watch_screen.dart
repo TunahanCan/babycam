@@ -29,6 +29,9 @@ class _WatchScreenState extends State<WatchScreen> {
   late int _tab;
   bool _audioEnabled = true;
   bool _fullscreen = false;
+  bool _nightClock = false;
+  DateTime _clockNow = DateTime.now();
+  Timer? _clockTimer;
 
   @override
   void initState() {
@@ -42,6 +45,7 @@ class _WatchScreenState extends State<WatchScreen> {
     if (_fullscreen) {
       unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     }
+    _clockTimer?.cancel();
     widget.runtime.stopWatching().catchError((Object _) {});
     super.dispose();
   }
@@ -93,6 +97,32 @@ class _WatchScreenState extends State<WatchScreen> {
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
   }
 
+  void _enterNightClock() {
+    _clockTimer?.cancel();
+    setState(() {
+      _nightClock = true;
+      _fullscreen = false;
+      _clockNow = DateTime.now();
+    });
+    if (!widget.runtime.currentState.alertsActive) {
+      unawaited(
+        widget.runtime.startAlertListening().catchError((Object _) => false),
+      );
+    }
+    unawaited(widget.runtime.stopWatching().catchError((Object _) {}));
+    _clockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted || !_nightClock) return;
+      setState(() => _clockNow = DateTime.now());
+    });
+  }
+
+  void _exitNightClock() {
+    _clockTimer?.cancel();
+    _clockTimer = null;
+    setState(() => _nightClock = false);
+    _startLiveWatch();
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<ClientRuntimeState>(
@@ -100,6 +130,18 @@ class _WatchScreenState extends State<WatchScreen> {
       initialData: widget.runtime.currentState,
       builder: (context, snapshot) {
         final state = snapshot.data ?? widget.runtime.currentState;
+        if (_nightClock) {
+          return PopScope<void>(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) _exitNightClock();
+            },
+            child: Scaffold(
+              backgroundColor: Colors.black,
+              body: _nightClockView(context, state),
+            ),
+          );
+        }
         if (_fullscreen) {
           return PopScope<void>(
             canPop: false,
@@ -167,6 +209,93 @@ class _WatchScreenState extends State<WatchScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _nightClockView(BuildContext context, ClientRuntimeState state) {
+    final strings = AppStrings.of(context);
+    final quality = state.networkQuality?.tier ?? NetworkQualityTier.unknown;
+    final alert =
+        widget.runtime.alerts.isEmpty ? null : widget.runtime.alerts.last;
+    final time = '${_clockNow.hour.toString().padLeft(2, '0')}:'
+        '${_clockNow.minute.toString().padLeft(2, '0')}';
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                _RoundIconButton(
+                  icon: Icons.close_rounded,
+                  tooltip: strings.ui('exitNightClock'),
+                  onTap: _exitNightClock,
+                ),
+                const Spacer(),
+                _ConnectedBadge(
+                  text: _VideoPanel._networkLabel(strings, quality),
+                  dark: true,
+                ),
+              ],
+            ),
+            const Spacer(),
+            Text(
+              time,
+              maxLines: 1,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 72,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              strings.ui('nightClockAudioAlertsOn'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Spacer(),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.notifications_active_rounded,
+                    color: _mint,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      alert == null
+                          ? strings.ui('waitingLatestStatus')
+                          : '${_formatAlertTime(alert.timestampMs)} · '
+                              '${_alertTitle(strings, alert)}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -356,9 +485,9 @@ class _WatchScreenState extends State<WatchScreen> {
       ),
       _ActionSpec(
         Icons.nights_stay_rounded,
-        strings.ui('openHistory'),
+        strings.ui('nightClock'),
         const Color(0xFFF8FFF9),
-        () => setState(() => _tab = 1),
+        _enterNightClock,
       ),
     ];
   }
@@ -1396,18 +1525,21 @@ class _Top extends StatelessWidget {
 }
 
 class _ConnectedBadge extends StatelessWidget {
-  const _ConnectedBadge({required this.text});
+  const _ConnectedBadge({required this.text, this.dark = false});
 
   final String text;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: ShapeDecoration(
-        color: _mintSoft,
+        color: dark ? Colors.white.withValues(alpha: .10) : _mintSoft,
         shape: StadiumBorder(
-          side: BorderSide(color: _mint.withValues(alpha: .45)),
+          side: BorderSide(
+            color: dark ? Colors.white24 : _mint.withValues(alpha: .45),
+          ),
         ),
       ),
       child: Row(
@@ -1417,8 +1549,8 @@ class _ConnectedBadge extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             text,
-            style: const TextStyle(
-              color: Color(0xFF2A9474),
+            style: TextStyle(
+              color: dark ? Colors.white : const Color(0xFF2A9474),
               fontWeight: FontWeight.w900,
               fontSize: 12,
             ),

@@ -83,6 +83,10 @@ class PairingTokenService {
       {DateTime Function()? now,
       Duration nonceTtl = const Duration(minutes: 10),
       Duration streamTokenTtl = const Duration(seconds: 90),
+      this.maxActiveNonces = defaultMaxActiveNonces,
+      this.pairConfirmRateLimitWindow = const Duration(minutes: 1),
+      this.maxPairConfirmAttemptsPerWindow =
+          defaultMaxPairConfirmAttemptsPerWindow,
       this.maxTrustedClients = defaultMaxTrustedClients,
       SecureRandomTokenGenerator? tokenGenerator})
       : _now = now ?? DateTime.now,
@@ -91,26 +95,60 @@ class PairingTokenService {
         _tokenGenerator = tokenGenerator ?? SecureRandomTokenGenerator();
 
   static const defaultMaxTrustedClients = 5;
+  static const defaultMaxActiveNonces = 64;
+  static const defaultMaxPairConfirmAttemptsPerWindow = 12;
 
   final DateTime Function() _now;
   final Duration _nonceTtl;
   final Duration _streamTokenTtl;
+  final int maxActiveNonces;
+  final Duration pairConfirmRateLimitWindow;
+  final int maxPairConfirmAttemptsPerWindow;
   final int maxTrustedClients;
   final SecureRandomTokenGenerator _tokenGenerator;
   final _nonces = <String, int>{};
+  final _pairConfirmAttempts = <String, List<int>>{};
   final _clients = <String, TrustedClientRecord>{};
   final _streamTokens = <String, StreamTokenRecord>{};
 
   String createPairingNonce() {
+    pruneExpiredNonces();
+    _pruneNonceCapacity();
     final nonce = _tokenGenerator.generateHex(byteCount: 32);
     _nonces[nonce] = _now().add(_nonceTtl).millisecondsSinceEpoch;
     return nonce;
   }
 
   bool validateAndConsumeNonce(String nonce) {
+    pruneExpiredNonces();
     final expiry = _nonces.remove(nonce);
     if (expiry == null) return false;
     return _now().millisecondsSinceEpoch <= expiry;
+  }
+
+  void pruneExpiredNonces() {
+    final nowMs = _now().millisecondsSinceEpoch;
+    _nonces.removeWhere((_, expiresAtMs) => expiresAtMs <= nowMs);
+  }
+
+  int get activeNonceCount {
+    pruneExpiredNonces();
+    return _nonces.length;
+  }
+
+  bool consumePairConfirmAttempt(String key) {
+    final normalizedKey = key.trim().isEmpty ? 'unknown' : key.trim();
+    final nowMs = _now().millisecondsSinceEpoch;
+    final windowStart = nowMs - pairConfirmRateLimitWindow.inMilliseconds;
+    final attempts = _pairConfirmAttempts.putIfAbsent(
+      normalizedKey,
+      () => <int>[],
+    );
+    attempts.removeWhere((attemptAtMs) => attemptAtMs < windowStart);
+    if (attempts.length >= maxPairConfirmAttemptsPerWindow) return false;
+    attempts.add(nowMs);
+    _pairConfirmAttempts.removeWhere((_, values) => values.isEmpty);
+    return true;
   }
 
   TrustedClientToken issueTrustedClientToken(
@@ -249,5 +287,16 @@ class PairingTokenService {
       _clients[entry.key] = entry.value.copyWith(revokedAtMs: nowMs);
     }
     _streamTokens.clear();
+  }
+
+  void _pruneNonceCapacity() {
+    if (_nonces.length < maxActiveNonces) return;
+    final overflow = _nonces.length - maxActiveNonces + 1;
+    if (overflow <= 0) return;
+    final oldest = _nonces.entries.toList()
+      ..sort((a, b) => a.value.compareTo(b.value));
+    for (final entry in oldest.take(overflow)) {
+      _nonces.remove(entry.key);
+    }
   }
 }

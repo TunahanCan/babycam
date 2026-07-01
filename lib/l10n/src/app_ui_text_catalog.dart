@@ -1060,6 +1060,30 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'Salir de pantalla completa',
     'fr': 'Quitter le plein écran'
   },
+  'nightClock': {
+    'tr': 'Gece saati',
+    'en': 'Night clock',
+    'zh': '夜间时钟',
+    'hi': 'नाइट क्लॉक',
+    'es': 'Reloj nocturno',
+    'fr': 'Horloge de nuit'
+  },
+  'exitNightClock': {
+    'tr': 'Gece saatinden çık',
+    'en': 'Exit night clock',
+    'zh': '退出夜间时钟',
+    'hi': 'नाइट क्लॉक से बाहर निकलें',
+    'es': 'Salir del reloj nocturno',
+    'fr': 'Quitter l’horloge de nuit'
+  },
+  'nightClockAudioAlertsOn': {
+    'tr': 'Video kapalı; ses ve uyarılar açık.',
+    'en': 'Video is off; audio and alerts stay on.',
+    'zh': '视频已关闭；声音和提醒保持开启。',
+    'hi': 'वीडियो बंद है; ऑडियो और अलर्ट चालू हैं।',
+    'es': 'El video está apagado; audio y alertas siguen activos.',
+    'fr': 'La vidéo est coupée ; audio et alertes restent actifs.'
+  },
   'notificationsOn': {
     'tr': 'Bildirim açık',
     'en': 'Alerts on',

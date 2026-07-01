@@ -5,6 +5,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../analysis/alert/alert_config.dart';
@@ -26,6 +27,7 @@ import '../core/media/adaptive_media_profile.dart';
 import '../core/media/client_quality_tracker.dart';
 import '../core/mimicam_protocol.dart';
 import '../core/network/local_network_guard.dart';
+import '../core/protocol/device_feature_models.dart';
 import '../core/protocol/mimicam_protocol.dart' as protocol_v2;
 import '../core/security/transport_config.dart';
 import '../features/server/pairing/pairing_token_service.dart';
@@ -38,6 +40,7 @@ import 'configuration_service.dart';
 import 'motion_analyzer.dart' show CameraImageJpegEncoder;
 import 'server/active_client_registry.dart';
 import 'server/alert_protocol_adapter.dart';
+import 'server/baby_monitor_feature_services.dart';
 import 'server/jpeg_byte_budget_controller.dart';
 import 'server/media_analysis_coordinator.dart';
 import 'server/media_frame_policy.dart';
@@ -48,6 +51,7 @@ import 'server/stream_backpressure_gate.dart';
 import 'server/test_dashboard_assets.dart';
 import 'server/wav_pcm16.dart';
 import 'platform/device_capability_probe.dart';
+import 'platform/battery_snapshot_provider.dart';
 import 'platform/foreground_service_controller.dart';
 import 'network_address_provider.dart';
 
@@ -73,9 +77,17 @@ class MimiCamServer {
     this.mediaSource,
     MediaPermissionGateway? mediaPermissions,
     this.httpPort = MimiCamProtocol.httpPort,
+    ComfortAudioService? comfortAudioService,
+    NightLightController? nightLightController,
+    TalkSessionRegistry? talkSessions,
+    BatterySnapshotProvider? batteryProvider,
   })  : tokenService = tokenService ?? PairingTokenService(),
         mediaPermissions =
             mediaPermissions ?? const CameraMediaPermissionGateway(),
+        _comfortAudio = comfortAudioService ?? ComfortAudioService(),
+        _nightLight = nightLightController ?? NightLightController(),
+        _talkSessions = talkSessions ?? TalkSessionRegistry(),
+        _batteryProvider = batteryProvider ?? BatteryPlusSnapshotProvider(),
         _deviceTier = deviceTier ?? DeviceCapabilityProbe.detectTier() {
     _activeMediaProfile = MediaQualityProfile.forDeviceTier(_deviceTier);
     _frameBudget.updateMinInterval(_activeMediaProfile.frameInterval);
@@ -127,6 +139,12 @@ class MimiCamServer {
     sampleRate: _audioSampleRate,
     channels: _audioChannels,
   );
+  final ComfortAudioService _comfortAudio;
+  final NightLightController _nightLight;
+  final TalkSessionRegistry _talkSessions;
+  final BatterySnapshotProvider _batteryProvider;
+  BatterySnapshot _serverBattery = BatterySnapshot.unknown();
+  final _clientBatterySnapshots = <String, BatterySnapshot>{};
   late final MjpegStreamService _videoStreamService;
   late final WavAudioStreamService _audioStreamService;
 
@@ -632,6 +650,54 @@ class MimiCamServer {
           (request, _) => _handleQualityReport(request),
         ),
         _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.comfortState,
+          _AuthMode.bearer,
+          const {HttpMethod.get},
+          (request, _) => _handleComfortState(request),
+        ),
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.comfortCommand,
+          _AuthMode.bearer,
+          const {HttpMethod.post},
+          (request, _) => _handleComfortCommand(request),
+        ),
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.nightLightState,
+          _AuthMode.bearer,
+          const {HttpMethod.get},
+          (request, _) => _handleNightLightState(request),
+        ),
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.nightLightCommand,
+          _AuthMode.bearer,
+          const {HttpMethod.post},
+          (request, _) => _handleNightLightCommand(request),
+        ),
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.talkStart,
+          _AuthMode.bearer,
+          const {HttpMethod.post},
+          _handleTalkStart,
+        ),
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.talkStop,
+          _AuthMode.bearer,
+          const {HttpMethod.post},
+          _handleTalkStop,
+        ),
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.talkAudio,
+          _AuthMode.none,
+          const {HttpMethod.post},
+          (request, _) => _handleTalkAudio(request),
+        ),
+        _RouteSpec(
+          protocol_v2.MimiCamProtocolV2.talkVideo,
+          _AuthMode.none,
+          const {HttpMethod.post},
+          (request, _) => _handleTalkVideo(request),
+        ),
+        _RouteSpec(
           protocol_v2.MimiCamProtocolV2.statusPublic,
           _AuthMode.none,
           const {HttpMethod.get},
@@ -639,13 +705,13 @@ class MimiCamServer {
         ),
         _RouteSpec(
           protocol_v2.MimiCamProtocolV2.testDashboard,
-          _AuthMode.none,
+          _AuthMode.testAccess,
           const {HttpMethod.get},
           (request, _) => _writeTestDashboard(request),
         ),
         _RouteSpec(
           protocol_v2.MimiCamProtocolV2.testDashboardScript,
-          _AuthMode.none,
+          _AuthMode.testAccess,
           const {HttpMethod.get},
           (request, _) => _writeTestDashboardScript(request),
         ),
@@ -720,7 +786,12 @@ class MimiCamServer {
       case _AuthMode.none:
         return (ok: true, clientId: null);
       case _AuthMode.bearer:
-        return (ok: await _requireAuth(request), clientId: null);
+        final auth = await _requireTrustedAuth(request);
+        return (ok: auth != null, clientId: auth?.clientId);
+      case _AuthMode.testAccess:
+        if (kDebugMode) return (ok: true, clientId: null);
+        final auth = await _requireTrustedAuth(request);
+        return (ok: auth != null, clientId: auth?.clientId);
       case _AuthMode.streamToken:
         // Stream tokens intentionally stop at media endpoints; state-changing
         // endpoints must still prove identity with the trusted Bearer token.
@@ -735,18 +806,28 @@ class MimiCamServer {
       await request.response.close();
       return;
     }
+    final pairingNonce = tokenService.createPairingNonce();
+    final descriptorHost = request.headers.host?.split(':').first ??
+        _httpServer?.address.address ??
+        InternetAddress.loopbackIPv4.address;
     await _writeJson(request.response, {
       'service': 'mimicam',
       'pairing': true,
       'serverDeviceId': 'server_local',
       'serverName': 'Bebek Odası',
-      'pairingNonce': tokenService.createPairingNonce(),
+      'pairingNonce': pairingNonce,
       'transport': transportConfig.payloadTransport,
       'capabilities': _mediaCapabilities(),
+      'ble': _bleDescriptor(
+        host: descriptorHost,
+        pairingNonce: pairingNonce,
+      ).toJson(),
     });
   }
 
   Future<void> _handlePrivateStatus(HttpRequest request) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final battery = await _refreshServerBattery();
     await _writeJson(request.response, {
       'videoClients': _videoStreamService.clientCount,
       'audioClients': _audioStreamService.clientCount,
@@ -759,7 +840,170 @@ class MimiCamServer {
       'jpegBytesPerSecond': _jpegByteBudgetController.lastActualBytesPerSecond(
         _activeMediaProfile,
       ),
+      'battery': battery.toJson(),
+      'clientBatteries': {
+        for (final entry in _clientBatterySnapshots.entries)
+          entry.key: entry.value.toJson(),
+      },
+      'transport': _transportStatus(),
+      'streamHealth': _streamHealthStatus(nowMs),
+      'comfort': _comfortAudio.state.toJson(),
+      'nightLight': _nightLight.state.toJson(),
+      'talk': _talkStatus(),
       if (_analysisCoordinator != null) ..._analysisCoordinator!.diagnostics(),
+    });
+  }
+
+  Future<void> _handleComfortState(HttpRequest request) async {
+    await _writeJson(request.response, {
+      'ok': true,
+      'state': _comfortAudio.state.toJson(),
+      'tracks': _comfortAudio.trackCatalog,
+    });
+  }
+
+  Future<void> _handleComfortCommand(HttpRequest request) async {
+    Map<Object?, Object?>? body;
+    try {
+      body = await _readJsonObjectBody(request);
+    } catch (_) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+    final state = _comfortAudio.applyCommand(body);
+    await _writeJson(request.response, {
+      'ok': state.lastError == null,
+      'state': state.toJson(),
+      'tracks': _comfortAudio.trackCatalog,
+    });
+  }
+
+  Future<void> _handleNightLightState(HttpRequest request) async {
+    await _writeJson(request.response, {
+      'ok': true,
+      'state': _nightLight.state.toJson(),
+    });
+  }
+
+  Future<void> _handleNightLightCommand(HttpRequest request) async {
+    Map<Object?, Object?>? body;
+    try {
+      body = await _readJsonObjectBody(request);
+    } catch (_) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+    final state = await _nightLight.applyCommand(
+      body,
+      torchSetter: _setTorchEnabled,
+    );
+    await _writeJson(request.response, {
+      'ok': state.lastError == null ||
+          state.lastError == 'TORCH_UNAVAILABLE_SCREEN_GLOW_FALLBACK',
+      'state': state.toJson(),
+    });
+  }
+
+  Future<void> _handleTalkStart(
+    HttpRequest request,
+    String? clientId,
+  ) async {
+    if (clientId == null) {
+      request.response.statusCode = HttpStatus.unauthorized;
+      await request.response.close();
+      return;
+    }
+    try {
+      final session = _talkSessions.start(clientId: clientId);
+      await _writeJson(request.response, {
+        'ok': true,
+        'session': session.toJson(includeToken: true),
+      });
+    } on TalkSessionBusyException catch (error) {
+      request.response.statusCode = HttpStatus.conflict;
+      await _writeJson(request.response, {
+        'ok': false,
+        'code': 'TALK_SESSION_BUSY',
+        'activeSession': error.activeSession.toJson(),
+      });
+    }
+  }
+
+  Future<void> _handleTalkStop(
+    HttpRequest request,
+    String? clientId,
+  ) async {
+    if (clientId == null) {
+      request.response.statusCode = HttpStatus.unauthorized;
+      await request.response.close();
+      return;
+    }
+    Map<Object?, Object?>? body;
+    try {
+      body = await _readJsonObjectBody(request);
+    } catch (_) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+    final stopped = _talkSessions.stop(
+      clientId: clientId,
+      token: body?['talkToken']?.toString(),
+    );
+    await _writeJson(request.response, {
+      'ok': stopped,
+      'talk': _talkStatus(),
+    });
+  }
+
+  Future<void> _handleTalkAudio(HttpRequest request) async {
+    await _handleTalkBytes(
+      request,
+      recorder: _talkSessions.recordAudio,
+      mediaKey: 'audioBytesReceived',
+    );
+  }
+
+  Future<void> _handleTalkVideo(HttpRequest request) async {
+    await _handleTalkBytes(
+      request,
+      recorder: _talkSessions.recordVideo,
+      mediaKey: 'videoBytesReceived',
+    );
+  }
+
+  Future<void> _handleTalkBytes(
+    HttpRequest request, {
+    required TalkSession? Function(String token, Uint8List bytes) recorder,
+    required String mediaKey,
+  }) async {
+    final token = _talkTokenFromRequest(request);
+    if (token == null || !_talkSessions.isTokenActive(token)) {
+      request.response.statusCode = HttpStatus.unauthorized;
+      await request.response.close();
+      return;
+    }
+    var totalBytes = 0;
+    TalkSession? session;
+    await for (final chunk in request) {
+      if (chunk.isEmpty) continue;
+      final bytes = Uint8List.fromList(chunk);
+      totalBytes += bytes.length;
+      session = recorder(token, bytes);
+      if (session == null) break;
+    }
+    if (session == null && totalBytes > 0) {
+      request.response.statusCode = HttpStatus.unauthorized;
+      await request.response.close();
+      return;
+    }
+    session ??= _talkSessions.activeSession;
+    await _writeJson(request.response, {
+      'ok': session != null,
+      mediaKey: totalBytes,
+      'talk': session?.toJson(),
     });
   }
 
@@ -799,6 +1043,17 @@ class MimiCamServer {
       if (!_pairingModeActive) {
         request.response.statusCode = HttpStatus.notFound;
         await request.response.close();
+        return;
+      }
+      if (!tokenService.consumePairConfirmAttempt(
+        _pairConfirmAttemptKey(request),
+      )) {
+        request.response.statusCode = HttpStatus.tooManyRequests;
+        await _writeJson(request.response, {
+          'ok': false,
+          'code': 'PAIR_CONFIRM_RATE_LIMITED',
+          'message': 'Pairing attempts are temporarily rate limited.',
+        });
         return;
       }
       final body = await utf8.decoder.bind(request).join();
@@ -964,6 +1219,9 @@ class MimiCamServer {
         clientId: auth.clientId,
         nowMs: DateTime.now().millisecondsSinceEpoch,
       );
+      final battery = BatterySnapshot.fromJson(json['battery']);
+      if (battery != null) _clientBatterySnapshots[auth.clientId] = battery;
+      final serverBattery = await _refreshServerBattery();
       _activeClientRegistry.updateQualityReport(report);
       await _applyMediaProfileForCurrentDemand();
       await _writeJson(request.response, {
@@ -972,6 +1230,12 @@ class MimiCamServer {
         'activeStreamClients': _activeClientRegistry.activeClientCount,
         'effectiveNetworkTier': _activeClientRegistry.effectiveTier().name,
         'mediaProfile': _effectiveMediaProfile().toJson(),
+        'battery': serverBattery.toJson(),
+        'clientBattery': battery?.toJson(),
+        'transport': _transportStatus(),
+        'streamHealth': _streamHealthStatus(
+          DateTime.now().millisecondsSinceEpoch,
+        ),
       });
     } catch (_) {
       request.response.statusCode = HttpStatus.badRequest;
@@ -1083,10 +1347,81 @@ class MimiCamServer {
         'audioPreferred': _activeMediaProfile.preferredAudioCodec,
         'events': 'json',
         'maxClients': maxActiveWatchClients,
+        'maxChildren': 4,
+        'comfortAudio': true,
+        'nightLight': true,
+        'twoWayTalk': true,
+        'battery': true,
+        'bleDiscovery': true,
         'transportPreferred': transportConfig.payloadTransport,
+        'transportModes': const ['wifi_lan', 'hotspot_lan', 'ble_discovery'],
         'deviceTier': _deviceTier.name,
         'mediaProfile': _effectiveMediaProfile().toJson(),
       };
+
+  Map<String, Object?> _transportStatus() => {
+        'mode': transportConfig.payloadTransport,
+        'active': 'wifi_lan',
+        'bleDiscovery': true,
+        'hotspotAutomation': false,
+        'mediaOverBle': false,
+      };
+
+  Future<BatterySnapshot> _refreshServerBattery() async {
+    _serverBattery = await _batteryProvider.snapshot();
+    return _serverBattery;
+  }
+
+  Map<String, Object?> _streamHealthStatus(int nowMs) {
+    final video = _videoStreamService.snapshot;
+    final audio = _audioStreamService.snapshot;
+    final audioGapMs = _ageMs(nowMs, audio.lastClientWriteAtMs);
+    final frameGapMs = _ageMs(nowMs, video.lastClientWriteAtMs);
+    final tier = _activeClientRegistry.effectiveTier();
+    return {
+      'signal': tier.name,
+      'rttMs': _activeClientRegistry.worstQualityReport()?.rttMs,
+      'fps': _activeMediaProfile.targetFps,
+      'bitrateBytesPerSecond':
+          _jpegByteBudgetController.lastActualBytesPerSecond(
+        _activeMediaProfile,
+      ),
+      'audioGapMs': audioGapMs,
+      'videoFrameGapMs': frameGapMs,
+      'audioHealth':
+          audioGapMs == null || audioGapMs < 1500 ? 'healthy' : 'underrun',
+      'reconnects': 0,
+      'videoClients': video.clientCount,
+      'audioClients': audio.clientCount,
+    };
+  }
+
+  Map<String, Object?> _talkStatus() {
+    final active = _talkSessions.activeSession;
+    return {
+      'active': active != null,
+      if (active != null) 'session': active.toJson(),
+    };
+  }
+
+  BleConnectionDescriptor _bleDescriptor({
+    required String host,
+    required String pairingNonce,
+  }) =>
+      BleConnectionDescriptor(
+        serviceUuid: '7b52f4a2-7680-42a0-9e08-2ddf6b5d2a11',
+        deviceName: 'Bebek Odası',
+        host: host,
+        port: _httpServer?.port ?? httpPort,
+        transport: 'ble_discovery_http_ws_media',
+        pairingNonce: pairingNonce,
+        capabilities: _mediaCapabilities(),
+        expiresAtMs: DateTime.now()
+            .add(const Duration(minutes: 10))
+            .millisecondsSinceEpoch,
+        instructions:
+            'BLE carries discovery and pairing data only; media uses local HTTP/WS.',
+      );
 
   MediaQualityProfile _effectiveMediaProfile() => _activeMediaProfile.copyWith(
         jpegQuality: _jpegByteBudgetController.qualityFor(_activeMediaProfile),
@@ -1108,6 +1443,28 @@ class MimiCamServer {
     final token = request.uri.queryParameters['token'];
     return token != null &&
         tokenService.validateTrustedClientToken(token) != null;
+  }
+
+  String _pairConfirmAttemptKey(HttpRequest request) =>
+      request.connectionInfo?.remoteAddress.address ?? 'unknown';
+
+  String? _talkTokenFromRequest(HttpRequest request) {
+    final queryToken = request.uri.queryParameters['talkToken'];
+    if (queryToken != null && queryToken.isNotEmpty) return queryToken;
+    final headerToken = request.headers.value('X-MimiCam-Talk-Token');
+    if (headerToken != null && headerToken.isNotEmpty) return headerToken;
+    final bearer = request.headers.value(HttpHeaders.authorizationHeader);
+    if (bearer != null && bearer.startsWith('Talk ')) {
+      return bearer.substring(5);
+    }
+    return null;
+  }
+
+  Future<bool> _setTorchEnabled(bool enabled) async {
+    final controller = cameraController;
+    if (controller == null || !controller.value.isInitialized) return false;
+    await controller.setFlashMode(enabled ? FlashMode.torch : FlashMode.off);
+    return true;
   }
 
   String _clientIdForRequest(HttpRequest request, Object? json) {
@@ -1144,11 +1501,12 @@ class MimiCamServer {
     return Map<Object?, Object?>.from(json);
   }
 
-  Future<bool> _requireAuth(HttpRequest request) async {
-    if (_isAuthorized(request)) return true;
+  Future<RequestAuthResult?> _requireTrustedAuth(HttpRequest request) async {
+    final auth = _authGuard.trusted(request);
+    if (auth != null) return auth;
     request.response.statusCode = HttpStatus.unauthorized;
     await request.response.close();
-    return false;
+    return null;
   }
 
   Future<String?> _requireStreamAuth(HttpRequest request) async {
@@ -1344,7 +1702,7 @@ class PermissionHandlerMediaPermissionGateway
 
 typedef CameraMediaPermissionGateway = PermissionHandlerMediaPermissionGateway;
 
-enum _AuthMode { none, bearer, streamToken }
+enum _AuthMode { none, bearer, streamToken, testAccess }
 
 class _RouteSpec {
   const _RouteSpec(this.path, this.authMode, this.allowedMethods, this.handle);

@@ -11,6 +11,10 @@ class AlertEventDto {
       required this.score,
       required this.timestampMs,
       required this.sourceDeviceId,
+      this.snapshotAvailable,
+      this.battery,
+      this.transport,
+      this.childId,
       this.metadata = const {}});
   final String id;
   final String type;
@@ -20,6 +24,10 @@ class AlertEventDto {
   final double score;
   final int timestampMs;
   final String sourceDeviceId;
+  final bool? snapshotAvailable;
+  final Map<String, Object?>? battery;
+  final String? transport;
+  final String? childId;
   final Map<String, Object?> metadata;
   Map<String, Object?> toJson() => {
         'schemaVersion': 1,
@@ -31,6 +39,10 @@ class AlertEventDto {
         'score': score,
         'timestampMs': timestampMs,
         'sourceDeviceId': sourceDeviceId,
+        if (snapshotAvailable != null) 'snapshotAvailable': snapshotAvailable,
+        if (battery != null) 'battery': battery,
+        if (transport != null) 'transport': transport,
+        if (childId != null) 'childId': childId,
         'metadata': metadata
       };
 
@@ -44,6 +56,7 @@ class AlertEventDto {
     final score = json['score'];
     final timestampMs = json['timestampMs'];
     final sourceDeviceId = json['sourceDeviceId'];
+    final battery = json['battery'];
     final metadata = json['metadata'];
     if (schemaVersion != 1 ||
         id is! String ||
@@ -66,6 +79,12 @@ class AlertEventDto {
       score: score.toDouble(),
       timestampMs: timestampMs,
       sourceDeviceId: sourceDeviceId,
+      snapshotAvailable: json['snapshotAvailable'] is bool
+          ? json['snapshotAvailable'] as bool
+          : null,
+      battery: battery is Map ? Map<String, Object?>.from(battery) : null,
+      transport: json['transport']?.toString(),
+      childId: json['childId']?.toString(),
       metadata: Map<String, Object?>.from(metadata),
     );
   }
