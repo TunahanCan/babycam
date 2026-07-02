@@ -6,6 +6,8 @@ import 'package:mimicam/core/protocol/pairing_payload.dart';
 import 'package:mimicam/core/protocol/pairing_session.dart';
 import 'package:mimicam/features/client/client_runtime.dart';
 import 'package:mimicam/features/client/media/active_stream_session.dart';
+import 'package:mimicam/services/monetization/broadcast_access_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   PairingPayload payload() => PairingPayload(
@@ -66,6 +68,37 @@ void main() {
 
     expect(streamStarted, 0);
     expect(runtime.currentState.phase, ClientRuntimePhase.unpaired);
+  });
+
+  test('ücretsiz süre dolduysa canlı izleme stream başlatmadan kilitlenir',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'broadcast_access.used_ms': const Duration(hours: 2).inMilliseconds,
+    });
+    final preferences = await SharedPreferences.getInstance();
+    var streamStarted = 0;
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      startStream: (_, {bool audioEnabled = false}) async {
+        streamStarted++;
+        return const ActiveStreamSession(streamToken: 'stream');
+      },
+      broadcastAccess: BroadcastAccessService(
+        preferences,
+        purchaseGateway: _FakePurchaseGateway(),
+      ),
+    );
+
+    await runtime.pairWithServer(payload());
+
+    await expectLater(
+      runtime.startWatching(audioEnabled: true),
+      throwsA(isA<BroadcastAccessLockedException>()),
+    );
+
+    expect(streamStarted, 0);
+    expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
+    expect(runtime.currentState.broadcastAccess?.isLocked, isTrue);
   });
 
   test('canlı izleme başlatma hatası runtime state içinde görünür', () async {
@@ -233,4 +266,20 @@ void main() {
     expect(cleared, 1);
     expect(stopped, 0);
   });
+}
+
+class _FakePurchaseGateway implements BroadcastPurchaseGateway {
+  @override
+  Future<BroadcastPurchaseResult> purchase({
+    required String productId,
+    required String priceLabel,
+  }) async =>
+      const BroadcastPurchaseResult(status: BroadcastPurchaseStatus.purchased);
+
+  @override
+  Future<BroadcastPurchaseResult> restore({required String productId}) async =>
+      const BroadcastPurchaseResult(status: BroadcastPurchaseStatus.restored);
+
+  @override
+  Future<void> dispose() async {}
 }

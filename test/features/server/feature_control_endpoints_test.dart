@@ -9,6 +9,7 @@ import 'package:mimicam/features/server/pairing/pairing_token_service.dart';
 import 'package:mimicam/l10n/app_strings.dart';
 import 'package:mimicam/services/configuration_service.dart';
 import 'package:mimicam/services/mimicam_server.dart';
+import 'package:mimicam/services/monetization/broadcast_access_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -162,10 +163,46 @@ void main() {
     expect(accepted.body['audioBytesReceived'], 4);
     expect(stop.body['ok'], isTrue);
   });
+
+  test('ücretsiz yayın süresi dolduğunda session start 402 döner', () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(
+      tokenService,
+      initialPreferences: {
+        'broadcast_access.used_ms': const Duration(hours: 2).inMilliseconds,
+      },
+      enableBroadcastAccess: true,
+    );
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    final start = await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.sessionStart,
+      {'clientId': trusted.clientId},
+      bearerToken: trusted.token,
+    );
+
+    expect(start.statusCode, HttpStatus.paymentRequired);
+    expect(start.body['code'], 'BROADCAST_ACCESS_LOCKED');
+    expect(start.body.containsKey('streamToken'), isFalse);
+    expect((start.body['broadcastAccess'] as Map)['locked'], isTrue);
+  });
 }
 
-Future<MimiCamServer> _testServer(PairingTokenService tokenService) async {
-  SharedPreferences.setMockInitialValues({});
+Future<MimiCamServer> _testServer(
+  PairingTokenService tokenService, {
+  Map<String, Object> initialPreferences = const {},
+  bool enableBroadcastAccess = false,
+}) async {
+  SharedPreferences.setMockInitialValues(initialPreferences);
   final preferences = await SharedPreferences.getInstance();
   return MimiCamServer(
     config: ConfigurationService(preferences),
@@ -175,7 +212,29 @@ Future<MimiCamServer> _testServer(PairingTokenService tokenService) async {
     tokenService: tokenService,
     httpPort: 0,
     startMediaOnSessionStart: false,
+    broadcastAccess: enableBroadcastAccess
+        ? BroadcastAccessService(
+            preferences,
+            purchaseGateway: _FakePurchaseGateway(),
+          )
+        : null,
   );
+}
+
+class _FakePurchaseGateway implements BroadcastPurchaseGateway {
+  @override
+  Future<BroadcastPurchaseResult> purchase({
+    required String productId,
+    required String priceLabel,
+  }) async =>
+      const BroadcastPurchaseResult(status: BroadcastPurchaseStatus.purchased);
+
+  @override
+  Future<BroadcastPurchaseResult> restore({required String productId}) async =>
+      const BroadcastPurchaseResult(status: BroadcastPurchaseStatus.restored);
+
+  @override
+  Future<void> dispose() async {}
 }
 
 Future<int> _getStatusCode(

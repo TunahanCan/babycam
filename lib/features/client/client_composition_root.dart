@@ -14,6 +14,7 @@ import 'pairing/pairing_session_store.dart';
 import 'pairing/qr_pairing_client.dart';
 import 'pairing/trusted_token_renewal_client.dart';
 import '../../l10n/app_strings.dart';
+import '../../services/monetization/broadcast_access_service.dart';
 
 class ClientCompositionRoot {
   static int createCount = 0;
@@ -34,6 +35,7 @@ class ClientCompositionRoot {
     final streams = StreamSessionController(healthState: streamHealth);
     final networkQuality = NetworkQualityMonitor(healthState: streamHealth);
     final alertHistory = ClientAlertHistory(preferences: preferences);
+    final broadcastAccess = BroadcastAccessService(preferences);
     final notifications = ClientNotificationService();
     final alerts = ClientAlertListener(
       healthState: streamHealth,
@@ -67,8 +69,10 @@ class ClientCompositionRoot {
       clearStore: store.clear,
       alertHistory: alertHistory,
       streamHealthState: streamHealth,
+      broadcastAccess: broadcastAccess,
     );
     unawaited(runtime.loadAlertHistory());
+    unawaited(runtime.refreshBroadcastAccess());
     unawaited(_restoreSavedSession(runtime, store));
     return runtime;
   }

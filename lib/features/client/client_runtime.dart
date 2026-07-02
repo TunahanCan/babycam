@@ -4,6 +4,7 @@ import '../../core/media/adaptive_media_profile.dart';
 import '../../core/protocol/alert_event_dto.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../core/protocol/pairing_session.dart';
+import '../../services/monetization/broadcast_access_service.dart';
 import 'alerts/client_alert_history.dart';
 import 'media/active_stream_session.dart';
 import 'media/client_stream_health_state.dart';
@@ -17,6 +18,7 @@ class ClientRuntimeState {
     this.mediaProfile,
     this.activeStream,
     this.alertsActive = false,
+    this.broadcastAccess,
   });
 
   final ClientRuntimePhase phase;
@@ -26,6 +28,7 @@ class ClientRuntimeState {
   final MediaQualityProfile? mediaProfile;
   final ActiveStreamSession? activeStream;
   final bool alertsActive;
+  final BroadcastAccessSnapshot? broadcastAccess;
 }
 
 enum ClientRuntimePhase {
@@ -58,6 +61,7 @@ class ClientRuntime {
     Future<void> Function()? clearStore,
     ClientAlertHistory? alertHistory,
     this.streamHealthState,
+    BroadcastAccessService? broadcastAccess,
   })  : _pair = pair,
         _renew = renew,
         _startStream = startStream,
@@ -66,6 +70,7 @@ class ClientRuntime {
         _startAlerts = startAlerts,
         _stopAlerts = stopAlerts,
         _clearStore = clearStore,
+        _broadcastAccess = broadcastAccess,
         alertHistory = alertHistory ?? ClientAlertHistory();
 
   final Future<PairingSession> Function(PairingPayload payload) _pair;
@@ -80,12 +85,14 @@ class ClientRuntime {
   final Future<bool> Function(PairingSession session)? _startAlerts;
   final Future<void> Function()? _stopAlerts;
   final Future<void> Function()? _clearStore;
+  final BroadcastAccessService? _broadcastAccess;
   final ClientAlertHistory alertHistory;
   final ClientStreamHealthState? streamHealthState;
   final _states = StreamController<ClientRuntimeState>.broadcast();
   ClientRuntimeState _state =
       const ClientRuntimeState(phase: ClientRuntimePhase.unpaired);
   StreamSubscription<NetworkQualityUpdate>? _networkQualitySubscription;
+  Timer? _broadcastAccessTimer;
   bool _disposed = false;
 
   ClientRuntimeState get currentState => _state;
@@ -97,6 +104,26 @@ class ClientRuntime {
   Future<void> loadAlertHistory() => alertHistory.load();
   Future<void> clearAlertHistory() => alertHistory.clear();
 
+  Future<void> refreshBroadcastAccess() async {
+    final access = _broadcastAccess;
+    if (access == null || _disposed) return;
+    _emit(_copyState(broadcastAccess: await access.snapshot()));
+  }
+
+  Future<void> unlockBroadcastAccess() async {
+    final access = _broadcastAccess;
+    if (access == null || _disposed) return;
+    final snapshot = await access.unlockWithOneTimePurchase();
+    _emit(_copyState(broadcastAccess: snapshot, clearError: true));
+  }
+
+  Future<void> restoreBroadcastAccessPurchase() async {
+    final access = _broadcastAccess;
+    if (access == null || _disposed) return;
+    final snapshot = await access.restorePurchase();
+    _emit(_copyState(broadcastAccess: snapshot, clearError: true));
+  }
+
   Future<void> restoreSession(PairingSession session) async {
     if (_disposed) return;
     final mediaProfile = MediaQualityProfile.fromJson(
@@ -106,6 +133,7 @@ class ClientRuntime {
       phase: ClientRuntimePhase.pairedIdle,
       session: session,
       mediaProfile: mediaProfile,
+      broadcastAccess: _state.broadcastAccess,
     ));
     _startNetworkQuality(session);
     if (session.shouldRenew(DateTime.now())) {
@@ -116,8 +144,11 @@ class ClientRuntime {
   Future<void> pairWithServer(PairingPayload payload) async {
     if (_disposed) return;
     final previousSession = _state.session;
-    _emit(ClientRuntimeState(
-        phase: ClientRuntimePhase.pairing, session: previousSession));
+    _emit(_copyState(
+      phase: ClientRuntimePhase.pairing,
+      session: previousSession,
+      clearActiveStream: true,
+    ));
     late final PairingSession session;
     try {
       session = await _pair(payload);
@@ -127,6 +158,7 @@ class ClientRuntime {
           phase: ClientRuntimePhase.error,
           session: previousSession,
           error: error,
+          broadcastAccess: _state.broadcastAccess,
         ));
       }
       rethrow;
@@ -138,6 +170,7 @@ class ClientRuntime {
       phase: ClientRuntimePhase.pairedIdle,
       session: session,
       mediaProfile: mediaProfile,
+      broadcastAccess: _state.broadcastAccess,
     ));
     _startNetworkQuality(session);
   }
@@ -148,8 +181,7 @@ class ClientRuntime {
     if (renew == null) return;
     final session = _state.session;
     if (session == null || !session.shouldRenew(now ?? DateTime.now())) return;
-    _emit(ClientRuntimeState(
-        phase: ClientRuntimePhase.renewingToken, session: session));
+    _emit(_copyState(phase: ClientRuntimePhase.renewingToken));
     final renewed = await renew(session);
     if (_disposed) return;
     if (renewed == null) {
@@ -163,6 +195,7 @@ class ClientRuntime {
       mediaProfile: _state.mediaProfile,
       activeStream: _state.activeStream,
       alertsActive: _state.alertsActive,
+      broadcastAccess: _state.broadcastAccess,
     ));
     _startNetworkQuality(renewed);
   }
@@ -170,6 +203,27 @@ class ClientRuntime {
   Future<void> startWatching({bool audioEnabled = false}) async {
     if (_disposed || _state.session == null) return;
     final session = _state.session!;
+    final access = _broadcastAccess;
+    BroadcastAccessSnapshot? accessSnapshot;
+    const accessSessionId = 'client.watch';
+    if (access != null) {
+      try {
+        accessSnapshot = await access.beginSession(accessSessionId);
+      } on BroadcastAccessLockedException catch (error) {
+        if (!_disposed) {
+          _emit(ClientRuntimeState(
+            phase: ClientRuntimePhase.pairedIdle,
+            session: session,
+            error: error,
+            networkQuality: _state.networkQuality,
+            mediaProfile: _state.mediaProfile,
+            alertsActive: _state.alertsActive,
+            broadcastAccess: error.snapshot,
+          ));
+        }
+        rethrow;
+      }
+    }
     late final ActiveStreamSession? activeStream;
     try {
       activeStream = await _startStream?.call(
@@ -177,6 +231,9 @@ class ClientRuntime {
         audioEnabled: audioEnabled,
       );
     } catch (error) {
+      if (access != null) {
+        accessSnapshot = await access.endSession(accessSessionId);
+      }
       if (!_disposed) {
         _emit(ClientRuntimeState(
           phase: ClientRuntimePhase.error,
@@ -185,12 +242,14 @@ class ClientRuntime {
           networkQuality: _state.networkQuality,
           mediaProfile: _state.mediaProfile,
           alertsActive: _state.alertsActive,
+          broadcastAccess: accessSnapshot ?? _state.broadcastAccess,
         ));
       }
       rethrow;
     }
     if (_disposed) {
       await _stopStream?.call(session);
+      await access?.endSession(accessSessionId);
       return;
     }
     _emit(ClientRuntimeState(
@@ -200,7 +259,9 @@ class ClientRuntime {
       mediaProfile: _state.mediaProfile,
       activeStream: activeStream?.copyWith(audioEnabled: audioEnabled),
       alertsActive: _state.alertsActive,
+      broadcastAccess: accessSnapshot ?? _state.broadcastAccess,
     ));
+    _scheduleBroadcastAccessTimer(accessSnapshot);
   }
 
   Future<void> restartWatching({bool audioEnabled = false}) async {
@@ -212,6 +273,7 @@ class ClientRuntime {
       mediaProfile: _state.mediaProfile,
       activeStream: _state.activeStream,
       alertsActive: _state.alertsActive,
+      broadcastAccess: _state.broadcastAccess,
     ));
     await startWatching(audioEnabled: audioEnabled);
   }
@@ -226,6 +288,7 @@ class ClientRuntime {
       mediaProfile: _state.mediaProfile,
       activeStream: _state.activeStream,
       alertsActive: _state.alertsActive,
+      broadcastAccess: _state.broadcastAccess,
     ));
   }
 
@@ -234,6 +297,8 @@ class ClientRuntime {
     if (session != null && _state.activeStream != null) {
       await _stopStream?.call(session);
     }
+    final accessSnapshot = await _broadcastAccess?.endSession('client.watch');
+    _broadcastAccessTimer?.cancel();
     if (_disposed) return;
     _emit(ClientRuntimeState(
       phase: _state.alertsActive
@@ -244,6 +309,7 @@ class ClientRuntime {
       mediaProfile: _state.mediaProfile,
       activeStream: null,
       alertsActive: _state.alertsActive,
+      broadcastAccess: accessSnapshot ?? _state.broadcastAccess,
     ));
   }
 
@@ -263,6 +329,7 @@ class ClientRuntime {
             mediaProfile: _state.mediaProfile,
             activeStream: _state.activeStream,
             alertsActive: false,
+            broadcastAccess: _state.broadcastAccess,
           ));
         }
         return false;
@@ -277,6 +344,7 @@ class ClientRuntime {
           mediaProfile: _state.mediaProfile,
           activeStream: _state.activeStream,
           alertsActive: false,
+          broadcastAccess: _state.broadcastAccess,
         ));
       }
       rethrow;
@@ -294,6 +362,7 @@ class ClientRuntime {
       mediaProfile: _state.mediaProfile,
       activeStream: _state.activeStream,
       alertsActive: true,
+      broadcastAccess: _state.broadcastAccess,
     ));
     return true;
   }
@@ -310,6 +379,7 @@ class ClientRuntime {
       mediaProfile: _state.mediaProfile,
       activeStream: _state.activeStream,
       alertsActive: false,
+      broadcastAccess: _state.broadcastAccess,
     ));
   }
 
@@ -321,7 +391,10 @@ class ClientRuntime {
     _networkQualitySubscription = null;
     await _clearStore?.call();
     await alertHistory.clear();
-    _emit(const ClientRuntimeState(phase: ClientRuntimePhase.unpaired));
+    _emit(ClientRuntimeState(
+      phase: ClientRuntimePhase.unpaired,
+      broadcastAccess: _state.broadcastAccess,
+    ));
   }
 
   Future<void> _handleRevokedSession(PairingSession session) async {
@@ -343,6 +416,7 @@ class ClientRuntime {
       networkQuality: _state.networkQuality,
       mediaProfile: _state.mediaProfile,
       alertsActive: false,
+      broadcastAccess: _state.broadcastAccess,
     ));
   }
 
@@ -354,8 +428,11 @@ class ClientRuntime {
     if (session != null && _state.activeStream != null) {
       await _stopStream?.call(session);
     }
+    await _broadcastAccess?.endAllSessions();
+    _broadcastAccessTimer?.cancel();
     await _stopAlerts?.call();
     await alertHistory.dispose();
+    await _broadcastAccess?.dispose();
     await _states.close();
   }
 
@@ -373,9 +450,57 @@ class ClientRuntime {
         mediaProfile: update.serverProfile ?? _state.mediaProfile,
         activeStream: _state.activeStream,
         alertsActive: _state.alertsActive,
+        broadcastAccess: _state.broadcastAccess,
       ));
     });
   }
+
+  void _scheduleBroadcastAccessTimer(BroadcastAccessSnapshot? snapshot) {
+    _broadcastAccessTimer?.cancel();
+    if (snapshot == null || snapshot.unlocked || snapshot.remainingMs <= 0) {
+      return;
+    }
+    _broadcastAccessTimer = Timer(snapshot.remaining, () {
+      unawaited(_handleBroadcastAccessExpired());
+    });
+  }
+
+  Future<void> _handleBroadcastAccessExpired() async {
+    if (_disposed || _state.activeStream == null) return;
+    await stopWatching();
+    final snapshot = await _broadcastAccess?.snapshot();
+    if (_disposed || snapshot == null || !snapshot.isLocked) return;
+    _emit(_copyState(
+      phase: ClientRuntimePhase.pairedIdle,
+      error: BroadcastAccessLockedException(snapshot),
+      broadcastAccess: snapshot,
+      clearActiveStream: true,
+    ));
+  }
+
+  ClientRuntimeState _copyState({
+    ClientRuntimePhase? phase,
+    PairingSession? session,
+    Object? error,
+    NetworkQualitySnapshot? networkQuality,
+    MediaQualityProfile? mediaProfile,
+    ActiveStreamSession? activeStream,
+    bool? alertsActive,
+    BroadcastAccessSnapshot? broadcastAccess,
+    bool clearError = false,
+    bool clearActiveStream = false,
+  }) =>
+      ClientRuntimeState(
+        phase: phase ?? _state.phase,
+        session: session ?? _state.session,
+        error: clearError ? null : error ?? _state.error,
+        networkQuality: networkQuality ?? _state.networkQuality,
+        mediaProfile: mediaProfile ?? _state.mediaProfile,
+        activeStream:
+            clearActiveStream ? null : activeStream ?? _state.activeStream,
+        alertsActive: alertsActive ?? _state.alertsActive,
+        broadcastAccess: broadcastAccess ?? _state.broadcastAccess,
+      );
 
   void _emit(ClientRuntimeState state) {
     _state = state;

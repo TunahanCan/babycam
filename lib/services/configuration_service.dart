@@ -6,6 +6,7 @@ class ConfigurationService {
   static const _generalPrefix = 'config.';
 
   final SharedPreferences _prefs;
+  SharedPreferences get preferences => _prefs;
 
   static Future<ConfigurationService> load() async =>
       ConfigurationService(await SharedPreferences.getInstance());

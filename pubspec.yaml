@@ -26,6 +26,7 @@ dependencies:
   battery_plus: ^7.1.0
   just_audio: ^0.10.6
   bluetooth_low_energy: ^6.2.1
+  in_app_purchase: ^3.3.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

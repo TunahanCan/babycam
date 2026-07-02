@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import '../../core/protocol/pairing_payload.dart';
 import '../../core/security/transport_config.dart';
 import '../../l10n/app_strings.dart';
 import '../../services/mimicam_server.dart';
 import '../../services/configuration_service.dart';
+import '../../services/monetization/broadcast_access_service.dart';
 import 'media/media_runtime_controller.dart';
 import 'pairing/pairing_token_service.dart';
 import 'pairing/server_qr_payload_builder.dart';
@@ -20,7 +23,9 @@ class ServerCompositionRoot {
       TransportConfig transportConfig = TransportConfig.local}) {
     createCount++;
     final tokenService = PairingTokenService();
+    final broadcastAccess = BroadcastAccessService(config.preferences);
     void Function()? notifyMediaProfileChanged;
+    void Function()? notifyBroadcastAccessChanged;
     late final ServerRuntime runtime;
     final server = MimiCamServer(
         config: config,
@@ -28,6 +33,7 @@ class ServerCompositionRoot {
         onLog: onLog ?? (_) {},
         onAlert: (_) {},
         onMediaProfileChanged: (_) => notifyMediaProfileChanged?.call(),
+        onBroadcastAccessChanged: (_) => notifyBroadcastAccessChanged?.call(),
         onStreamSessionStarted: (
           clientId, {
           required bool video,
@@ -39,7 +45,8 @@ class ServerCompositionRoot {
             ),
         onStreamSessionStopped: (clientId) => runtime.endSession(clientId),
         tokenService: tokenService,
-        transportConfig: transportConfig);
+        transportConfig: transportConfig,
+        broadcastAccess: broadcastAccess);
     final qrBuilder = ServerQrPayloadBuilder(
       tokenService: tokenService,
       transportConfig: transportConfig,
@@ -53,6 +60,7 @@ class ServerCompositionRoot {
       previewSource: () => server.cameraController,
       mediaProfile: () => server.activeMediaProfile,
       onSettingsChanged: server.reloadAnalysisConfig,
+      broadcastAccess: broadcastAccess,
       onStartPairing: startPairingOverride ??
           () async {
             final url = await server.startPairingMode();
@@ -72,6 +80,9 @@ class ServerCompositionRoot {
       onStop: stopOverride ?? server.dispose,
     );
     notifyMediaProfileChanged = runtime.refreshMediaProfile;
+    notifyBroadcastAccessChanged =
+        () => unawaited(runtime.refreshBroadcastAccess());
+    unawaited(runtime.refreshBroadcastAccess());
     return runtime;
   }
 

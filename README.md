@@ -1,31 +1,42 @@
 # MimiCam
 
-MimiCam is a local-first Flutter baby monitor. One phone runs as the **Server** in the baby room, another phone runs as the **Client** for the parent. The current MVP is intentionally simple and honest:
+MimiCam is a local-first Flutter baby monitor. One phone runs in **Server**
+mode in the baby room; another phone runs in **Client** mode for the parent.
+The app is designed around local Wi-Fi, explicit pairing, real audio/video
+delivery, and runtime diagnostics that can prove whether media actually moves.
 
-- Local Wi-Fi only.
-- HTTP/WS transport only.
-- MJPEG video.
-- PCM16LE/WAV audio.
-- JSON WebSocket events.
-- QR/manual-IP pairing.
-- Trusted token plus short-lived stream token auth.
+The current product intentionally does not include cloud relay, accounts,
+internet-wide access, Apple Watch, WebRTC, H.264, Opus, HTTPS/WSS, or mobile
+data relay.
 
-There is no cloud relay, account system, OAuth, UDP discovery, Telegram automation, WebRTC, H.264, Opus, HTTPS/WSS, or certificate pinning in the current runtime.
+## Current Status
 
-## What Works Today
-
-| Area | Current implementation |
+| Area | Implementation |
 | --- | --- |
-| App roles | Server and Client are isolated runtime graphs |
-| Pairing | QR payload or manual `IP:port` fallback |
-| Auth | Trusted Bearer token, stream token for media endpoints |
+| Roles | One active role at a time: Server or Client |
+| Pairing | QR payload plus manual `IP:port` fallback |
+| Transport | Local HTTP and WebSocket |
 | Video | MJPEG over `GET /video` |
 | Audio | PCM16LE/WAV over `GET /audio` |
-| Events | JSON alerts over `GET /ws/events` WebSocket |
-| Notifications | In-app alert history plus local OS notifications |
-| Storage | Secure trusted token, preferences metadata |
-| Quality | Client health reports drive adaptive media profiles |
+| Events | JSON alert events over `GET /ws/events` WebSocket |
+| Auth | Trusted Bearer token plus short-lived stream token |
+| Monitoring | Client live watch with audio, alerts, night clock, and full screen controls |
+| Publishing | Server live preview with full screen controls |
+| Monetization | 2 hours free live broadcast/watch time, then one-time 300 TL unlock |
 | Diagnostics | Browser `/test` panel and JSON `/test/*` endpoints |
+| Battery | Server/client battery snapshots in status and quality reporting |
+| Feature controls | Comfort audio, night light, and talk control endpoints exist |
+| Out of scope | Cloud relay, accounts, push backend, Apple Watch, direct Bluetooth media |
+
+## Product Rules
+
+- Media is local network only.
+- Bluetooth must not be treated as a video/audio transport.
+- Stream tokens are for media endpoints only.
+- Control endpoints require trusted Bearer auth.
+- Slow video/audio clients skip data instead of building unbounded queues.
+- Audio and alerts have priority over video quality.
+- Runtime docs must describe shipped code, not planned marketing copy.
 
 ## Quick Start
 
@@ -43,129 +54,135 @@ flutter test
 flutter build apk --debug
 ```
 
-Android debug output:
+Android debug APK output:
 
 ```text
 build/app/outputs/flutter-apk/app-debug.apk
 ```
 
-Linux can run Flutter analysis, tests, and Android builds. iOS builds require a macOS runner or a local Mac.
+Linux can run analysis, tests, and Android debug builds. iOS builds require a
+Mac or a macOS CI runner.
 
-## Product Flow
+## User Flow
 
 ```text
-Open app
+Open MimiCam
   -> choose Server or Client
-  -> Server opens QR/IP pairing screen
-  -> Client scans QR or enters IP:port
-  -> Server validates one-time nonce
-  -> Client stores trusted token securely
-  -> Client restores session on next app launch
-  -> Client starts watch session
+  -> Server shows QR/IP pairing details
+  -> Client scans QR or enters IP:port manually
+  -> Client confirms pairing with one-time nonce
+  -> Server issues trusted token
+  -> Client stores token securely
+  -> Client starts live watch
   -> Server issues short-lived stream token
   -> Client opens video/audio streams and event socket
-  -> Client sends quality reports
-  -> Server adapts video quality and keeps audio/events prioritized
+  -> Client posts quality reports
+  -> Server adapts media quality
 ```
 
-Changing role disposes the old runtime and builds the new role graph. The app does not run Server and Client graphs at the same time.
+Changing role disposes the active runtime graph and mounts the new role. The app
+does not run Server and Client graphs at the same time.
+
+## Pricing Model
+
+MimiCam now has a local one-time unlock model:
+
+- First 2 hours of live broadcast/watch time are free.
+- After the free limit is exhausted, live streaming is locked.
+- Unlock is a one-time purchase shown as `300 TL`.
+- Store product id: `mimicam_lifetime_unlock_try_300`.
+- The unlock is stored locally on the device.
+
+The code uses `in_app_purchase` and expects the App Store / Play Console product
+to be configured as a non-consumable item with the product id above. The code
+cannot create the store product or price by itself.
+
+Enforcement happens in runtime code, not only in UI:
+
+- Client `startWatching` refuses to start after the free limit.
+- Server `/session/start` returns `402 Payment Required` without issuing a
+  stream token after the free limit.
+- Server status/capabilities expose free limit, unlock price, and product id.
 
 ## Server Role
 
 Server responsibilities:
 
-- Expose local HTTP routes.
-- Generate QR pairing payloads.
-- Validate pairing nonce and issue trusted tokens.
-- Start camera and microphone runtime when needed.
-- Encode camera frames into MJPEG.
-- Stream PCM16LE/WAV audio.
-- Run audio/video analysis and alert aggregation.
-- Track active watch clients and stream attachments.
-- Select adaptive media profile from client quality reports.
-- Expose `/test` diagnostics for runtime validation.
+- Bind the local HTTP server.
+- Generate QR payloads and public pairing status.
+- Validate pairing nonce and issue trusted client tokens.
+- Start camera, microphone, analysis, wakelock, and foreground service when
+  media is needed.
+- Encode camera frames to JPEG and broadcast them as MJPEG.
+- Capture PCM audio and broadcast it as a WAV stream.
+- Run motion/audio analysis and emit alerts.
+- Track active watch clients and attached stream sockets.
+- Apply adaptive media quality based on client health reports.
+- Expose diagnostics under `/test`.
+- Enforce the free broadcast limit for incoming watch sessions.
 
-Important Server files:
+Important files:
 
 - `lib/services/mimicam_server.dart`
 - `lib/features/server/server_runtime.dart`
 - `lib/features/server/server_composition_root.dart`
-- `lib/features/server/pairing/pairing_token_service.dart`
 - `lib/features/server/media/mjpeg_stream_service.dart`
 - `lib/features/server/media/wav_audio_stream_service.dart`
 - `lib/features/server/media/microphone_capture_service.dart`
+- `lib/features/server/pairing/pairing_token_service.dart`
 - `lib/services/server/active_client_registry.dart`
 - `lib/services/server/media_quality_selector.dart`
-- `lib/services/server/utility_based_profile_selector.dart`
+- `lib/services/monetization/broadcast_access_service.dart`
 
 ## Client Role
 
 Client responsibilities:
 
-- Scan QR payloads with `mobile_scanner`.
-- Pair with the Server using `/pair/confirm`.
+- Scan QR with `mobile_scanner`.
+- Pair through `/pair/confirm`.
 - Store trusted token in secure storage.
 - Restore saved sessions on launch.
-- Renew trusted token when needed.
-- Start and stop watch sessions.
-- Read MJPEG video stream.
-- Read WAV audio stream and push PCM to native output.
+- Renew trusted tokens when needed.
+- Start and stop live watch sessions.
+- Read MJPEG video.
+- Read WAV audio and write PCM to native playback.
 - Listen to alert WebSocket events.
-- Persist in-app alert history.
-- Show local OS notifications where permission allows.
-- Send quality reports without opening extra media streams.
+- Store in-app alert history.
+- Show local notifications when permission is granted.
+- Report network, stream, and battery health.
+- Enforce the free watch limit before opening streams.
 
-Important Client files:
+Important files:
 
 - `lib/features/client/client_runtime.dart`
 - `lib/features/client/client_composition_root.dart`
-- `lib/features/client/pairing/pairing_session_store.dart`
-- `lib/features/client/pairing/qr_pairing_client.dart`
+- `lib/features/client/media/watch_screen.dart`
 - `lib/features/client/media/stream_session_controller.dart`
+- `lib/features/client/media/client_media_stream_supervisor.dart`
 - `lib/features/client/media/client_video_viewer.dart`
 - `lib/features/client/media/client_live_audio_pipeline.dart`
 - `lib/features/client/media/network_quality_monitor.dart`
-- `lib/features/client/media/client_stream_health_state.dart`
 - `lib/features/client/alerts/client_alert_listener.dart`
-- `lib/features/client/alerts/client_alert_history.dart`
+- `lib/features/client/pairing/pairing_session_store.dart`
 
 ## Pairing and Storage
 
-The QR payload carries address, nonce, expiry, transport, and capability metadata. It does not carry a trusted token.
-
-Example public status/capability shape:
-
-```json
-{
-  "service": "mimicam",
-  "pairing": true,
-  "serverDeviceId": "server_local",
-  "serverName": "Bebek Odası",
-  "pairingNonce": "one-time-nonce",
-  "transport": "http_ws",
-  "capabilities": {
-    "video": "mjpeg",
-    "videoPreferred": "mjpeg",
-    "audio": "pcm16le",
-    "audioPreferred": "pcm16le",
-    "events": "json",
-    "maxClients": 5,
-    "transportPreferred": "http_ws"
-  }
-}
-```
+The QR payload carries address, nonce, expiry, transport, and capability
+metadata. It does not carry the trusted token.
 
 Client storage split:
 
-| Data | Location |
+| Data | Storage |
 | --- | --- |
 | Trusted token | `flutter_secure_storage` |
-| Pairing payload | `SharedPreferences` |
-| Client id | `SharedPreferences` |
-| Token expiry metadata | `SharedPreferences` |
+| Pairing metadata | `SharedPreferences` |
+| Child profiles | `SharedPreferences` plus secure per-child token keys |
+| Client identity | Secure storage |
 | Alert history | `SharedPreferences` |
+| Broadcast unlock and free-time usage | `SharedPreferences` |
 
-Legacy `pairing_session` JSON records are migrated on load. Corrupt or incomplete session records are cleared instead of crashing startup.
+Legacy `pairing_session` records are migrated on load. Corrupt records are
+cleared instead of crashing startup.
 
 ## Auth Model
 
@@ -174,79 +191,74 @@ Trusted token:
 - Issued by `/pair/confirm`.
 - Renewed by `/auth/renew`.
 - Sent as `Authorization: Bearer <token>`.
-- Stored on Server as a hash, not as raw token.
+- Stored on the server as a hash.
 - Required for private state-changing endpoints.
 
 Stream token:
 
 - Issued by `/session/start`.
-- Short lived, currently 90 seconds by default.
+- Short lived.
 - Accepted only by `/video` and `/audio`.
 - Passed as `?streamToken=...`.
-- Not accepted by `/status`, `/quality/report`, `/auth/renew`, or other private control routes.
+- Not accepted by status, quality, auth, comfort, night-light, or talk control
+  routes.
 
-The WebSocket event route accepts trusted auth either through Bearer headers or the `token` query parameter, matching the current client connection path.
+The WebSocket event route accepts trusted auth through Bearer headers or the
+`token` query parameter, matching the current client path.
 
-## Media Session Lifecycle
+## Media Lifecycle
 
 ```text
 ClientRuntime.startWatching
+  -> BroadcastAccessService.beginSession
   -> StreamSessionController.start
-  -> POST /session/start with Bearer token
-  -> Server creates/refreshes active watch slot
+  -> POST /session/start
+  -> MimiCamServer checks BroadcastAccessService
+  -> ActiveClientRegistry creates active watch slot
   -> Server returns streamToken
-  -> ClientVideoViewer opens /video?streamToken=...
-  -> ClientAudioStreamPlayer opens /audio?streamToken=...
+  -> ClientMediaStreamSupervisor opens /video and /audio
 ```
 
-The latest hardening keeps watch sessions separate from transient stream socket state:
+Watch sessions are separate from transient media sockets:
 
-- `/session/start` marks a client as an active watch session.
-- `/video` and `/audio` attach stream connections to that client.
+- `/session/start` marks the active watch session.
+- `/video` and `/audio` attach stream sockets.
 - A media socket disconnect does not immediately delete the watch session.
-- Reconnects can reuse the same still-valid stream token.
-- `/session/stop`, token expiry without live stream connections, or explicit cleanup clears the active slot.
+- Reconnect can reuse the same valid stream token.
+- `/session/stop`, token expiry, or explicit cleanup clears the active slot.
 
-This prevents a short Wi-Fi stall or widget rebuild from revoking the media token and trapping the client in a reconnect loop.
+## Video
 
-## Video Stream
+Video is MJPEG over HTTP.
 
-Video is MJPEG over HTTP. The Server keeps a single latest JPEG frame and broadcasts frames to active MJPEG responses.
-
-Video behavior:
-
-- No per-client camera encode.
-- No per-client frame queue.
-- Slow clients skip frames instead of building backlog.
-- Ready latest frame is written immediately on attach.
-- If no frame exists yet, a zero-length multipart keepalive is flushed so the HTTP response opens.
-- Client parser ignores zero-length keepalive parts.
+- Server keeps the latest JPEG frame.
+- Server broadcasts frames to attached MJPEG responses.
+- There is no per-client camera encode.
+- There is no per-client frame queue.
+- Slow clients skip frames.
+- If no frame exists, a zero-length multipart keepalive opens the response.
+- Client parser ignores keepalive parts.
 - Client validates host and port against the paired server.
-- Client applies connect, response, and read timeouts.
-- Client retry timer is cancelled on dispose.
+- Client supports full screen and `cover` / `contain` fit modes.
 
 Key tests:
 
 - `test/features/server/mjpeg_stream_service_test.dart`
 - `test/features/client/client_video_viewer_test.dart`
 - `test/features/client/mjpeg_stream_parser_test.dart`
+- `test/features/server/media_stream_end_to_end_test.dart`
 
-## Audio Stream
+## Audio
 
-Audio is PCM16LE wrapped in a WAV stream. The client parses the WAV header in Dart and writes PCM chunks to native low-latency output.
+Audio is PCM16LE wrapped in a live WAV stream.
 
-Native output:
-
-- Android: `AudioTrack`
-- iOS: `AVAudioEngine` and `AVAudioPlayerNode`
-
-Audio behavior:
-
-- Audio stream sends WAV header first.
-- Client jitter buffer keeps recent aligned PCM frames.
-- Slow native writes are counted and reported.
-- Connect, response, and read timeout guards are applied.
-- Audio underrun and reconnect attempts feed quality reporting.
+- Server writes a WAV header first.
+- Server broadcasts PCM chunks to attached audio responses.
+- Client parses WAV in Dart.
+- Client writes PCM to native output.
+- Android output uses `AudioTrack`.
+- iOS output uses `AVAudioEngine` and `AVAudioPlayerNode`.
+- Client health tracks underruns, reconnects, and native write failures.
 
 Key tests:
 
@@ -257,204 +269,96 @@ Key tests:
 
 ## Alerts and Notifications
 
-Server analysis emits alert events for audio, motion, and system conditions. Client alert handling has two surfaces:
+Server analysis emits alert events for audio, motion, battery, and system
+conditions. Client alert handling has two surfaces:
 
 - In-app alert history.
-- Local OS notification.
+- Local OS notifications where permission allows.
 
-The in-app history is intentionally independent from OS notification permission. If notification permission is denied, incoming WebSocket alerts should still appear in the app's notification/history surfaces.
-
-Main files:
-
-- `lib/analysis/alert/alert_engine.dart`
-- `lib/analysis/alert/episode_notification_aggregator.dart`
-- `lib/features/client/alerts/client_alert_listener.dart`
-- `lib/features/client/alerts/client_alert_history.dart`
-- `lib/features/client/alerts/client_notification_service.dart`
-- `lib/services/notification_service.dart`
-
-Key tests:
-
-- `test/analysis/alert/alert_engine_test.dart`
-- `test/analysis/alert/episode_notification_aggregator_test.dart`
-- `test/features/client/client_alert_listener_test.dart`
-- `test/features/client/client_alert_history_test.dart`
-- `test/features/client/client_notification_screen_test.dart`
+Alerts are transported as JSON DTOs. Optional fields such as `battery`,
+`transport`, `childId`, and `snapshotAvailable` are backward-compatible.
 
 ## Adaptive Quality
 
-Client quality reports combine network and stream-health signals:
+The client sends `/quality/report` updates that combine:
 
 - RTT.
-- Consecutive failures.
-- Video frame gap.
-- Video stream timeout.
-- Audio gap.
-- Audio underrun.
-- WebSocket disconnect count.
-- Reconnect count.
-- Watch active state.
+- Network tier.
+- Video frame health.
+- Audio chunk health.
+- Reconnect state.
+- Battery snapshot.
+- Active watch state.
 
-The Server combines these signals with client load and stream backpressure. Degradation is fast; upgrade is conservative and requires stable metrics.
+The server uses those reports and backpressure metrics to choose an effective
+media profile. Audio and alerts remain preferred when the connection gets weak.
 
-Profile targets:
+## Diagnostics
 
-| Tier | Resolution | FPS | JPEG quality | Priority |
-| --- | ---: | ---: | ---: | --- |
-| Normal | 854x480 | 8 | 52 | Video + audio |
-| Weak | 640x360 | 5 | 42 | Audio/events first |
-| Critical | 426x240 | 2 | 36 | Audio/events first |
-| Survival | 426x240 | 1 | 36 | Snapshot + audio/events |
+Diagnostic surfaces are part of the runtime, not only tests:
 
-Client load also caps quality:
-
-- 1 active client can use normal profile on good health.
-- 2-3 active clients are capped around weak profile.
-- 4-5 active clients are pushed toward critical/survival behavior.
-
-Key tests:
-
-- `test/services/server/media_quality_selector_test.dart`
-- `test/services/server/utility_based_profile_selector_test.dart`
-- `test/services/server/active_client_load_quality_test.dart`
-- `test/core/media/client_quality_tracker_test.dart`
-- `test/core/media/adaptive_media_weak_wifi_test.dart`
-
-## Endpoint Matrix
-
-| Endpoint | Method | Auth | Purpose |
-| --- | --- | --- | --- |
-| `/status/public` | GET | Local network + pairing mode | Public pairing data |
-| `/pair/confirm` | POST | Nonce | Trusted token issue |
-| `/auth/renew` | POST | Bearer trusted token | Trusted token renewal |
-| `/session/start` | POST | Bearer trusted token | Watch slot and stream token |
-| `/session/stop` | POST | Bearer trusted token | Watch slot cleanup |
-| `/quality/report` | POST | Bearer trusted token | Client quality report |
-| `/status` | GET | Bearer trusted token | Private server status |
-| `/video` | GET | Bearer or stream token | MJPEG stream |
-| `/audio` | GET | Bearer or stream token | WAV/PCM stream |
-| `/ws/events` | WebSocket GET | Bearer or trusted query token | Alert events |
-
-All HTTP requests pass through `LocalNetworkGuard`. It accepts private IPv4 ranges and debug loopback; it is a safety guard, not an internet-grade firewall.
-
-## Test and Diagnostic Endpoints
-
-| Endpoint | Purpose |
+| Route | Purpose |
 | --- | --- |
-| `/test` | Browser diagnostic dashboard |
-| `/test/dashboard.js` | Dashboard script |
-| `/test/status` | JSON runtime diagnostics |
-| `/test/start` | Start media runtime attempt |
-| `/test/reset` | Stop and clear test runtime state |
-| `/test/probe` | Probe video/audio/event movement |
-| `/test/alert` | Emit synthetic alert |
-| `/test/audio-tone` | Deterministic WAV tone |
+| `/test` | Browser dashboard |
+| `/test/status` | Runtime diagnostics JSON |
+| `/test/probe` | Loopback media probe |
+| `/test/alert` | Test alert emission |
+| `/test/audio-tone` | Test audio response |
 
-For media regressions, start with:
+The high-value media proof is:
 
 ```text
 /session/start
-/video
-/audio
-/ws/events
-/quality/report
-/test/status
-/test/probe
+  -> /video first MJPEG payload
+  -> /audio first PCM payload
+  -> /test/probe loopback status
 ```
 
-Important `/test/status` fields:
+## Feature Controls
 
-- `runtime.mediaActive`
-- `runtime.cameraInitialized`
-- `runtime.microphoneActive`
-- `clients.activeStreamClients`
-- `clients.videoClients`
-- `clients.audioClients`
-- `video.framesStreamed`
-- `video.lastClientWriteAtMs`
-- `audio.chunksStreamed`
-- `audio.lastStartError`
-- `events.totalWebSocketDeliveries`
+These local control surfaces exist:
 
-## Repository Map
+- `/comfort/state`
+- `/comfort/command`
+- `/night-light/state`
+- `/night-light/command`
+- `/talk/start`
+- `/talk/stop`
+- `/talk/audio`
+- `/talk/video`
 
-```text
-lib/
-├── app/                    # app bootstrap, role resolver, permissions
-├── core/                   # protocol, security, media profile, network guard
-├── analysis/               # audio/video analysis and alert engine
-├── features/
-│   ├── client/             # Client runtime, pairing, media, alerts, UI
-│   ├── server/             # Server runtime, pairing, media services, UI
-│   └── shared/             # shared presentation primitives
-├── l10n/                   # localized text catalogs
-└── services/               # MimiCamServer, config, platform/server policies
-```
+Important honesty note: these routes currently model protocol state and receive
+payloads. Full comfort-audio playback, native talk playback, and parent-video
+overlay should be verified as separate platform-media work before being
+marketed as complete.
 
-Documentation:
+## Bluetooth and Hotspot
 
-- `README.md`: operator and contributor entry point.
-- `ARCHITECT.md`: detailed runtime architecture.
-- `docs/kotlin_to_flutter_porting_matrix.md`: old Kotlin responsibility map.
-- `ios/Runner/Assets.xcassets/LaunchImage.imageset/README.md`: iOS launch image asset notes.
+Media does not travel over Bluetooth. The current media runtime is HTTP/WS over
+a local IP network. Hotspot support is therefore OS/user-managed: if both phones
+are on the same local network or hotspot network, the HTTP/WS transport can
+work. Direct Bluetooth video/audio is out of scope.
 
-## Localization
+The dependency set includes `bluetooth_low_energy`, but docs and product copy
+must not claim production Bluetooth media streaming.
 
-Supported locales:
+## Known Gaps
 
-- `en`
-- `tr`
-- `zh`
-- `hi`
-- `es`
-- `fr`
-- `de`
-- `ar_SA`
-- `ar_QA`
+- No cloud relay or mobile-data relay.
+- No account system.
+- No Apple Watch companion.
+- No HTTPS/WSS transport.
+- No WebRTC/H.264/Opus transport.
+- No direct Bluetooth media.
+- Comfort audio playback needs a real player/asset sink before release claims.
+- Two-way talk needs real native playback and video overlay before release
+  claims.
+- Multi-child storage exists, but default server identity still needs careful
+  real-device validation.
 
-Unknown locales fall back to English.
+## Test Checklist
 
-## Platform Notes
-
-Android:
-
-- Native PCM sink uses `AudioTrack`.
-- Server mode uses wakelock and foreground service integration.
-- Gradle uses Java 17 target.
-- Current Flutter builds may warn about Kotlin Gradle Plugin migration.
-
-iOS:
-
-- Native PCM sink uses `AVAudioEngine` and `AVAudioPlayerNode`.
-- `Info.plist` includes camera, microphone, local network, and Bonjour usage strings.
-- Build verification requires macOS.
-- Launch image assets live under `ios/Runner/Assets.xcassets/LaunchImage.imageset/`.
-
-## Focused Verification Commands
-
-Media and lifecycle:
-
-```bash
-flutter test \
-  test/services/server/active_client_registry_test.dart \
-  test/features/server/mjpeg_stream_service_test.dart \
-  test/features/client/client_video_viewer_test.dart \
-  test/features/client/client_live_audio_pipeline_test.dart \
-  test/features/client/stream_session_controller_test.dart \
-  test/features/client/mjpeg_stream_parser_test.dart \
-  test/features/client/wav_pcm_stream_parser_test.dart \
-  test/features/server/token_auth_test.dart \
-  test/features/server/endpoint_worst_case_test.dart \
-  test/features/server/test_endpoints_test.dart
-```
-
-UI and compact screens:
-
-```bash
-flutter test test/features/performance/screen_render_budget_test.dart
-```
-
-Full gate:
+Recommended local gate:
 
 ```bash
 flutter analyze
@@ -462,48 +366,42 @@ flutter test
 flutter build apk --debug
 ```
 
-## Troubleshooting
+Focused media gate:
 
-### Video does not start
+```bash
+flutter test test/features/server/media_stream_end_to_end_test.dart
+flutter test test/features/client/client_live_audio_pipeline_test.dart
+flutter test test/features/client/client_media_stream_supervisor_test.dart
+```
 
-1. Check `/test/status`.
-2. Confirm `clients.activeStreamClients` is non-zero after `/session/start`.
-3. Confirm `clients.videoClients` increments after `/video`.
-4. Check `video.framesStreamed` and `video.lastClientWriteAtMs`.
-5. Check Client logs for video timeout/reconnect events.
+Focused monetization gate:
 
-### Audio does not play
+```bash
+flutter test test/services/monetization/broadcast_access_service_test.dart
+flutter test test/features/client/client_runtime_lifecycle_test.dart
+flutter test test/features/server/feature_control_endpoints_test.dart
+```
 
-1. Try `/test/audio-tone`.
-2. Check `audio.lastStartError`.
-3. Check `audio.chunksStreamed`.
-4. Check native `AudioTrack` or `AVAudioEngine` status.
-5. Check Client audio read timeout and underrun status.
+UI regression gate:
 
-### Alerts arrive but OS notifications do not show
+```bash
+flutter test test/features/performance/screen_render_budget_test.dart
+```
 
-1. Check Client in-app alert history first.
-2. Check OS notification permission.
-3. Trigger `/test/alert`.
-4. Check `/test/status` event delivery counters.
+## Release Notes for Stores
 
-### Pairing fails
+Before shipping paid unlock:
 
-1. Make sure Server QR/IP screen is open.
-2. Make sure both devices are on the same local network.
-3. Open `http://<server-ip>:<port>/status/public` from the Client network.
-4. Refresh the QR if nonce or expiry is stale.
+1. Create non-consumable product `mimicam_lifetime_unlock_try_300`.
+2. Set price to 300 TL or the matching local tier.
+3. Test purchase and restore on Android and iOS sandbox accounts.
+4. Confirm the app handles unavailable store state.
+5. Confirm unlock survives app restart on the same device.
 
-## Out of Scope
+Before shipping iOS:
 
-Current MVP does not include:
-
-- Internet access outside local Wi-Fi.
-- Cloud relay.
-- User accounts.
-- Push backend.
-- UDP discovery.
-- Telegram automation.
-- HTTPS/WSS and certificate pinning.
-- WebRTC, H.264, Opus.
-- Per-client video encode pipelines.
+1. Build on macOS.
+2. Check camera, microphone, local network, and notification permissions.
+3. Check native PCM playback.
+4. Check QR scan permission fallback.
+5. Check purchase/restore on sandbox.

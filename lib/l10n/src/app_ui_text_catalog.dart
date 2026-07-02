@@ -2339,4 +2339,143 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'Estado de detección',
     'fr': 'État de détection',
   },
+  'videoFitContain': {
+    'tr': 'Tüm görüntüyü göster',
+    'en': 'Show full frame',
+    'zh': '显示完整画面',
+    'hi': 'पूरा फ़्रेम दिखाएँ',
+    'es': 'Mostrar cuadro completo',
+    'fr': 'Afficher toute l’image',
+  },
+  'videoFitCover': {
+    'tr': 'Ekranı doldur',
+    'en': 'Fill screen',
+    'zh': '填满屏幕',
+    'hi': 'स्क्रीन भरें',
+    'es': 'Llenar pantalla',
+    'fr': 'Remplir l’écran',
+  },
+  'serverPreviewFullScreen': {
+    'tr': 'Yayın önizlemesini tam ekran aç',
+    'en': 'Open broadcast preview full screen',
+    'zh': '全屏打开直播预览',
+    'hi': 'प्रसारण पूर्वावलोकन पूर्ण स्क्रीन खोलें',
+    'es': 'Abrir vista previa en pantalla completa',
+    'fr': 'Ouvrir l’aperçu en plein écran',
+  },
+  'broadcastAccessUnlocked': {
+    'tr': 'Sınırsız yayın kilidi açıldı.',
+    'en': 'Unlimited broadcast access unlocked.',
+    'zh': '无限直播权限已解锁。',
+    'hi': 'असीमित प्रसारण पहुँच खुल गई।',
+    'es': 'Acceso ilimitado desbloqueado.',
+    'fr': 'Accès illimité déverrouillé.',
+  },
+  'broadcastAccessUnlockedTitle': {
+    'tr': 'Sınırsız yayın açık',
+    'en': 'Unlimited access active',
+    'zh': '无限权限已启用',
+    'hi': 'असीमित पहुँच सक्रिय',
+    'es': 'Acceso ilimitado activo',
+    'fr': 'Accès illimité actif',
+  },
+  'broadcastAccessUnlockedBody': {
+    'tr': 'Bu cihazda canlı yayın ve izleme süresi sınırsız.',
+    'en': 'Live broadcasting and watching are unlimited on this device.',
+    'zh': '此设备上的直播和观看时间不受限制。',
+    'hi': 'इस डिवाइस पर लाइव प्रसारण और देखना असीमित है।',
+    'es':
+        'La transmisión y la vista en vivo no tienen límite en este dispositivo.',
+    'fr': 'Le direct et le visionnage sont illimités sur cet appareil.',
+  },
+  'broadcastAccessTrialTitle': {
+    'tr': '2 saat ücretsiz yayın',
+    'en': '2-hour free broadcast',
+    'zh': '2 小时免费直播',
+    'hi': '2 घंटे मुफ़्त प्रसारण',
+    'es': '2 horas gratis de transmisión',
+    'fr': '2 heures de direct gratuites',
+  },
+  'broadcastAccessTrialBody': {
+    'tr':
+        'Kalan ücretsiz süre: {remaining}. Sonrasında tek seferlik {price} ile sınırsız açılır.',
+    'en':
+        'Free time left: {remaining}. After that, unlock unlimited access once for {price}.',
+    'zh': '剩余免费时间：{remaining}。之后一次性支付 {price} 可解锁无限使用。',
+    'hi':
+        'बचा मुफ़्त समय: {remaining}. इसके बाद {price} में एक बार असीमित पहुँच खोलें।',
+    'es':
+        'Tiempo gratis restante: {remaining}. Después, desbloquea acceso ilimitado por {price}.',
+    'fr':
+        'Temps gratuit restant : {remaining}. Ensuite, débloquez l’accès illimité pour {price}.',
+  },
+  'broadcastAccessLockedTitle': {
+    'tr': 'Ücretsiz süre doldu',
+    'en': 'Free time ended',
+    'zh': '免费时间已结束',
+    'hi': 'मुफ़्त समय समाप्त',
+    'es': 'Terminó el tiempo gratis',
+    'fr': 'Temps gratuit terminé',
+  },
+  'broadcastAccessLockedBody': {
+    'tr':
+        'Canlı yayın için tek seferlik 300 TL ödeme gerekir. Satın alma bu cihazda kalıcı açılır.',
+    'en':
+        'Live broadcast now requires a one-time 300 TL purchase. The unlock stays on this device.',
+    'zh': '继续直播需要一次性支付 300 TL。解锁会保留在此设备上。',
+    'hi':
+        'लाइव प्रसारण के लिए अब एक बार 300 TL भुगतान चाहिए। अनलॉक इसी डिवाइस पर रहेगा।',
+    'es':
+        'La transmisión en vivo requiere un pago único de 300 TL. El desbloqueo queda en este dispositivo.',
+    'fr':
+        'Le direct nécessite maintenant un achat unique de 300 TL. Le déverrouillage reste sur cet appareil.',
+  },
+  'unlockLifetimePrice': {
+    'tr': '{price} ile sınırsız aç',
+    'en': 'Unlock unlimited for {price}',
+    'zh': '支付 {price} 解锁无限使用',
+    'hi': '{price} में असीमित खोलें',
+    'es': 'Desbloquear ilimitado por {price}',
+    'fr': 'Débloquer illimité pour {price}',
+  },
+  'restorePurchase': {
+    'tr': 'Satın almayı geri yükle',
+    'en': 'Restore purchase',
+    'zh': '恢复购买',
+    'hi': 'खरीदारी बहाल करें',
+    'es': 'Restaurar compra',
+    'fr': 'Restaurer l’achat',
+  },
+  'purchasePending': {
+    'tr': 'Satın alma beklemede.',
+    'en': 'Purchase is pending.',
+    'zh': '购买正在等待处理。',
+    'hi': 'खरीदारी लंबित है।',
+    'es': 'La compra está pendiente.',
+    'fr': 'L’achat est en attente.',
+  },
+  'purchaseCanceled': {
+    'tr': 'Satın alma iptal edildi.',
+    'en': 'Purchase was canceled.',
+    'zh': '购买已取消。',
+    'hi': 'खरीदारी रद्द हुई।',
+    'es': 'La compra fue cancelada.',
+    'fr': 'L’achat a été annulé.',
+  },
+  'purchaseUnavailable': {
+    'tr': 'Satın alma mağazada hazır değil.',
+    'en': 'Purchase is not ready in the store.',
+    'zh': '商店中的购买项目尚未准备好。',
+    'hi': 'स्टोर में खरीदारी अभी तैयार नहीं है।',
+    'es': 'La compra no está lista en la tienda.',
+    'fr': 'L’achat n’est pas prêt dans la boutique.',
+  },
+  'purchaseFailed': {
+    'tr': 'Satın alma tamamlanamadı.',
+    'en': 'Purchase could not be completed.',
+    'zh': '购买无法完成。',
+    'hi': 'खरीदारी पूरी नहीं हो सकी।',
+    'es': 'No se pudo completar la compra.',
+    'fr': 'L’achat n’a pas pu être terminé.',
+  },
 };

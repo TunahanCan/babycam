@@ -8,6 +8,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../app/app_role.dart';
 import '../../l10n/app_strings.dart';
 import '../../services/configuration_service.dart';
+import '../../services/monetization/broadcast_access_service.dart';
 import '../shared/presentation/localized_measurement_text.dart';
 import '../shared/presentation/media_profile_text.dart';
 import '../shared/presentation/mimicam_design_tokens.dart';
@@ -43,6 +44,9 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
   late double _motionDurationSeconds;
   late double _cryDurationSeconds;
   bool _savingSettings = false;
+  bool _fullscreenPreview = false;
+  bool _purchaseBusy = false;
+  BoxFit _previewFit = BoxFit.cover;
   late int _tab;
 
   @override
@@ -55,6 +59,14 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
     } else if (_tab == 0) {
       _startLocalPreview();
     }
+  }
+
+  @override
+  void dispose() {
+    if (_fullscreenPreview) {
+      unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
+    }
+    super.dispose();
   }
 
   void _loadSettings() {
@@ -84,6 +96,79 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
     if (mounted) setState(() => _savingSettings = false);
   }
 
+  void _enterFullscreenPreview() {
+    setState(() => _fullscreenPreview = true);
+    unawaited(
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky));
+  }
+
+  void _exitFullscreenPreview() {
+    setState(() => _fullscreenPreview = false);
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
+  }
+
+  void _togglePreviewFit() {
+    setState(() {
+      _previewFit = _previewFit == BoxFit.cover ? BoxFit.contain : BoxFit.cover;
+    });
+  }
+
+  Future<void> _unlockBroadcastAccess() async {
+    if (_purchaseBusy) return;
+    final strings = AppStrings.of(context);
+    setState(() => _purchaseBusy = true);
+    try {
+      await widget.runtime.unlockBroadcastAccess();
+      if (!mounted) return;
+      _showMessage(strings.ui('broadcastAccessUnlocked'));
+      _startLocalPreview();
+    } catch (error) {
+      if (!mounted) return;
+      _showMessage(_purchaseMessage(strings, error));
+    } finally {
+      if (mounted) setState(() => _purchaseBusy = false);
+    }
+  }
+
+  Future<void> _restoreBroadcastAccess() async {
+    if (_purchaseBusy) return;
+    final strings = AppStrings.of(context);
+    setState(() => _purchaseBusy = true);
+    try {
+      await widget.runtime.restoreBroadcastAccessPurchase();
+      if (!mounted) return;
+      _showMessage(strings.ui('broadcastAccessUnlocked'));
+      _startLocalPreview();
+    } catch (error) {
+      if (!mounted) return;
+      _showMessage(_purchaseMessage(strings, error));
+    } finally {
+      if (mounted) setState(() => _purchaseBusy = false);
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _purchaseMessage(AppStrings strings, Object error) {
+    if (error is BroadcastPurchaseException) {
+      return switch (error.result.status) {
+        BroadcastPurchaseStatus.pending => strings.ui('purchasePending'),
+        BroadcastPurchaseStatus.canceled => strings.ui('purchaseCanceled'),
+        BroadcastPurchaseStatus.unavailable =>
+          strings.ui('purchaseUnavailable'),
+        _ => error.result.message ?? strings.ui('purchaseFailed'),
+      };
+    }
+    if (error is BroadcastAccessLockedException) {
+      return strings.ui('broadcastAccessLockedBody');
+    }
+    return strings.ui('purchaseFailed');
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<ServerRuntimeState>(
@@ -91,6 +176,24 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
       initialData: widget.runtime.currentState,
       builder: (context, snapshot) {
         final state = snapshot.data!;
+        if (_fullscreenPreview) {
+          return PopScope<void>(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) _exitFullscreenPreview();
+            },
+            child: Scaffold(
+              backgroundColor: Colors.black,
+              body: _FullscreenPreview(
+                state: state,
+                previewSource: widget.runtime.previewSource,
+                fit: _previewFit,
+                onExit: _exitFullscreenPreview,
+                onToggleFit: _togglePreviewFit,
+              ),
+            ),
+          );
+        }
         return Scaffold(
           body: MimiCamGradientShell(
             variant: MimiCamShellVariant.server,
@@ -146,10 +249,22 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
               phaseLabel: _phaseLabel(strings, state.phase),
               onStop: widget.runtime.stop,
             ),
+            if (state.broadcastAccess != null) ...[
+              const SizedBox(height: 16),
+              _ServerBroadcastAccessCard(
+                snapshot: state.broadcastAccess!,
+                busy: _purchaseBusy,
+                onUnlock: _unlockBroadcastAccess,
+                onRestore: _restoreBroadcastAccess,
+              ),
+            ],
             const SizedBox(height: 16),
             _LivePreviewCard(
               state: state,
               previewSource: widget.runtime.previewSource,
+              fit: _previewFit,
+              onEnterFullscreen: _enterFullscreenPreview,
+              onToggleFit: _togglePreviewFit,
             ),
             const SizedBox(height: 16),
             _RuntimeStats(state: state),
@@ -961,10 +1076,19 @@ class _DetectionCard extends StatelessWidget {
 }
 
 class _LivePreviewCard extends StatelessWidget {
-  const _LivePreviewCard({required this.state, required this.previewSource});
+  const _LivePreviewCard({
+    required this.state,
+    required this.previewSource,
+    required this.fit,
+    required this.onEnterFullscreen,
+    required this.onToggleFit,
+  });
 
   final ServerRuntimeState state;
   final Object? previewSource;
+  final BoxFit fit;
+  final VoidCallback onEnterFullscreen;
+  final VoidCallback onToggleFit;
 
   @override
   Widget build(BuildContext context) {
@@ -1005,6 +1129,20 @@ class _LivePreviewCard extends StatelessWidget {
                         ? MimiCamDesignTokens.serverCyan
                         : MimiCamDesignTokens.serverViolet,
                   ),
+                  _PreviewIconButton(
+                    icon: fit == BoxFit.cover
+                        ? Icons.fit_screen_rounded
+                        : Icons.crop_free_rounded,
+                    tooltip: fit == BoxFit.cover
+                        ? strings.ui('videoFitContain')
+                        : strings.ui('videoFitCover'),
+                    onTap: onToggleFit,
+                  ),
+                  _PreviewIconButton(
+                    icon: Icons.fullscreen_rounded,
+                    tooltip: strings.ui('serverPreviewFullScreen'),
+                    onTap: onEnterFullscreen,
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -1014,23 +1152,11 @@ class _LivePreviewCard extends StatelessWidget {
                   aspectRatio:
                       showCamera ? controller.value.aspectRatio : 16 / 9,
                   child: RepaintBoundary(
-                    child: ClipRRect(
+                    child: _CameraPreviewSurface(
+                      controller: controller,
+                      showCamera: showCamera,
+                      fit: fit,
                       borderRadius: BorderRadius.circular(20),
-                      child: ColoredBox(
-                        color: Colors.black,
-                        child: showCamera
-                            ? FittedBox(
-                                fit: BoxFit.cover,
-                                child: SizedBox(
-                                  width: controller.value.previewSize?.height ??
-                                      constraints.maxWidth,
-                                  height: controller.value.previewSize?.width ??
-                                      constraints.maxWidth / 1.6,
-                                  child: CameraPreview(controller),
-                                ),
-                              )
-                            : const _PreviewWaitingContent(),
-                      ),
                     ),
                   ),
                 ),
@@ -1047,6 +1173,147 @@ class _LivePreviewCard extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+class _ServerBroadcastAccessCard extends StatelessWidget {
+  const _ServerBroadcastAccessCard({
+    required this.snapshot,
+    required this.busy,
+    required this.onUnlock,
+    required this.onRestore,
+  });
+
+  final BroadcastAccessSnapshot snapshot;
+  final bool busy;
+  final VoidCallback onUnlock;
+  final VoidCallback onRestore;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final locked = snapshot.isLocked;
+    final unlocked = snapshot.unlocked;
+    final title = unlocked
+        ? strings.ui('broadcastAccessUnlockedTitle')
+        : locked
+            ? strings.ui('broadcastAccessLockedTitle')
+            : strings.ui('broadcastAccessTrialTitle');
+    final body = unlocked
+        ? strings.ui('broadcastAccessUnlockedBody')
+        : locked
+            ? strings.ui('broadcastAccessLockedBody')
+            : strings.uiFormat('broadcastAccessTrialBody', {
+                'remaining': _remainingText(snapshot.remaining),
+                'price': snapshot.priceLabel,
+              });
+    return MimiCamCard(
+      dark: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: unlocked
+                    ? MimiCamDesignTokens.serverCyan
+                    : locked
+                        ? MimiCamDesignTokens.amber
+                        : MimiCamDesignTokens.serverBlue,
+                child: Icon(
+                  unlocked
+                      ? Icons.verified_rounded
+                      : locked
+                          ? Icons.lock_rounded
+                          : Icons.hourglass_bottom_rounded,
+                  color: MimiCamDesignTokens.serverInk,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            body,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              height: 1.25,
+            ),
+          ),
+          if (!unlocked) ...[
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                minHeight: 8,
+                value: snapshot.usedRatio,
+                backgroundColor: Colors.white.withValues(alpha: .18),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  locked
+                      ? MimiCamDesignTokens.amber
+                      : MimiCamDesignTokens.serverCyan,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                FilledButton.icon(
+                  onPressed: busy ? null : onUnlock,
+                  icon: busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.lock_open_rounded),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: MimiCamDesignTokens.serverCyan,
+                    foregroundColor: MimiCamDesignTokens.serverInk,
+                  ),
+                  label: Text(
+                    strings.uiFormat('unlockLifetimePrice', {
+                      'price': snapshot.priceLabel,
+                    }),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: busy ? null : onRestore,
+                  icon: const Icon(Icons.restore_rounded),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white38),
+                  ),
+                  label: Text(strings.ui('restorePurchase')),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _remainingText(Duration duration) {
+    final totalMinutes = duration.inMinutes.clamp(0, 24 * 60);
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (hours == 0) return '$minutes dk';
+    if (minutes == 0) return '$hours sa';
+    return '$hours sa $minutes dk';
   }
 }
 
@@ -1071,6 +1338,153 @@ class _PreviewStatusChip extends StatelessWidget {
           fontWeight: FontWeight.w900,
           fontSize: 12.5,
         ),
+      ),
+    );
+  }
+}
+
+class _PreviewIconButton extends StatelessWidget {
+  const _PreviewIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.white.withValues(alpha: .12),
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Icon(icon, color: Colors.white, size: 21),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CameraPreviewSurface extends StatelessWidget {
+  const _CameraPreviewSurface({
+    required this.controller,
+    required this.showCamera,
+    required this.fit,
+    this.borderRadius = BorderRadius.zero,
+  });
+
+  final CameraController? controller;
+  final bool showCamera;
+  final BoxFit fit;
+  final BorderRadius borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: ColoredBox(
+        color: Colors.black,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final activeController = controller;
+            if (!showCamera || activeController == null) {
+              return const _PreviewWaitingContent();
+            }
+            return FittedBox(
+              fit: fit,
+              child: SizedBox(
+                width: activeController.value.previewSize?.height ??
+                    constraints.maxWidth,
+                height: activeController.value.previewSize?.width ??
+                    constraints.maxHeight,
+                child: CameraPreview(activeController),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _FullscreenPreview extends StatelessWidget {
+  const _FullscreenPreview({
+    required this.state,
+    required this.previewSource,
+    required this.fit,
+    required this.onExit,
+    required this.onToggleFit,
+  });
+
+  final ServerRuntimeState state;
+  final Object? previewSource;
+  final BoxFit fit;
+  final VoidCallback onExit;
+  final VoidCallback onToggleFit;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final controller = previewSource is CameraController
+        ? previewSource as CameraController
+        : null;
+    final showCamera = state.cameraActive &&
+        controller != null &&
+        controller.value.isInitialized;
+    return SafeArea(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _CameraPreviewSurface(
+            controller: controller,
+            showCamera: showCamera,
+            fit: fit,
+          ),
+          Positioned(
+            top: 12,
+            left: 12,
+            child: _PreviewIconButton(
+              icon: Icons.close_rounded,
+              tooltip: strings.ui('exitFullScreen'),
+              onTap: onExit,
+            ),
+          ),
+          Positioned(
+            top: 12,
+            right: 12,
+            child: _PreviewIconButton(
+              icon: fit == BoxFit.cover
+                  ? Icons.fit_screen_rounded
+                  : Icons.crop_free_rounded,
+              tooltip: fit == BoxFit.cover
+                  ? strings.ui('videoFitContain')
+                  : strings.ui('videoFitCover'),
+              onTap: onToggleFit,
+            ),
+          ),
+          Positioned(
+            left: 12,
+            bottom: 12,
+            child: _PreviewStatusChip(
+              label: showCamera
+                  ? strings.ui('livePreview')
+                  : strings.ui('cameraStarting'),
+              color: showCamera
+                  ? MimiCamDesignTokens.serverCyan
+                  : MimiCamDesignTokens.serverViolet,
+            ),
+          ),
+        ],
       ),
     );
   }

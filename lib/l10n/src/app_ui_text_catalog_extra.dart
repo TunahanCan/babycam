@@ -345,6 +345,25 @@ const _deUiText = <String, String>{
   'connection': 'Verbindung',
   'resolution': 'Auflösung',
   'detectionStatus': 'Erkennungsstatus',
+  'videoFitContain': 'Ganzes Bild zeigen',
+  'videoFitCover': 'Bildschirm füllen',
+  'serverPreviewFullScreen': 'Übertragungs-Vorschau im Vollbild öffnen',
+  'broadcastAccessUnlocked': 'Unbegrenzter Zugriff freigeschaltet.',
+  'broadcastAccessUnlockedTitle': 'Unbegrenzter Zugriff aktiv',
+  'broadcastAccessUnlockedBody':
+      'Live-Übertragung und Ansicht sind auf diesem Gerät unbegrenzt.',
+  'broadcastAccessTrialTitle': '2 Stunden kostenlose Übertragung',
+  'broadcastAccessTrialBody':
+      'Kostenlose Zeit übrig: {remaining}. Danach einmalig für {price} unbegrenzt freischalten.',
+  'broadcastAccessLockedTitle': 'Kostenlose Zeit beendet',
+  'broadcastAccessLockedBody':
+      'Für Live-Übertragung ist jetzt ein einmaliger Kauf von 300 TL nötig. Die Freischaltung bleibt auf diesem Gerät.',
+  'unlockLifetimePrice': 'Unbegrenzt für {price} freischalten',
+  'restorePurchase': 'Kauf wiederherstellen',
+  'purchasePending': 'Kauf ist ausstehend.',
+  'purchaseCanceled': 'Kauf wurde abgebrochen.',
+  'purchaseUnavailable': 'Kauf ist im Store noch nicht bereit.',
+  'purchaseFailed': 'Kauf konnte nicht abgeschlossen werden.',
 };
 
 const _arUiText = <String, String>{
@@ -645,4 +664,23 @@ const _arUiText = <String, String>{
   'connection': 'الاتصال',
   'resolution': 'الدقة',
   'detectionStatus': 'حالة الكشف',
+  'videoFitContain': 'إظهار الإطار كاملاً',
+  'videoFitCover': 'ملء الشاشة',
+  'serverPreviewFullScreen': 'فتح معاينة البث بملء الشاشة',
+  'broadcastAccessUnlocked': 'تم فتح البث غير المحدود.',
+  'broadcastAccessUnlockedTitle': 'الوصول غير المحدود نشط',
+  'broadcastAccessUnlockedBody':
+      'البث والمشاهدة المباشرة غير محدودين على هذا الجهاز.',
+  'broadcastAccessTrialTitle': 'ساعتان مجانيتان للبث',
+  'broadcastAccessTrialBody':
+      'الوقت المجاني المتبقي: {remaining}. بعد ذلك افتح الوصول غير المحدود مرة واحدة مقابل {price}.',
+  'broadcastAccessLockedTitle': 'انتهى الوقت المجاني',
+  'broadcastAccessLockedBody':
+      'يتطلب البث المباشر الآن شراءً لمرة واحدة بقيمة 300 TL. يبقى الفتح على هذا الجهاز.',
+  'unlockLifetimePrice': 'فتح غير محدود مقابل {price}',
+  'restorePurchase': 'استعادة الشراء',
+  'purchasePending': 'الشراء قيد الانتظار.',
+  'purchaseCanceled': 'تم إلغاء الشراء.',
+  'purchaseUnavailable': 'الشراء غير جاهز في المتجر.',
+  'purchaseFailed': 'تعذر إكمال الشراء.',
 };

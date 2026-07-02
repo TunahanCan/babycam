@@ -7,6 +7,7 @@ import '../../../core/media/adaptive_media_profile.dart';
 import '../../../core/protocol/alert_event_dto.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../l10n/app_strings.dart';
+import '../../../services/monetization/broadcast_access_service.dart';
 import '../../shared/presentation/localized_measurement_text.dart';
 import '../../shared/presentation/media_profile_text.dart';
 import '../client_runtime.dart';
@@ -30,6 +31,8 @@ class _WatchScreenState extends State<WatchScreen> {
   bool _audioEnabled = true;
   bool _fullscreen = false;
   bool _nightClock = false;
+  bool _purchaseBusy = false;
+  BoxFit _videoFit = BoxFit.cover;
   DateTime _clockNow = DateTime.now();
   Timer? _clockTimer;
 
@@ -68,6 +71,68 @@ class _WatchScreenState extends State<WatchScreen> {
     if (_audioEnabled && widget.runtime.currentState.activeStream == null) {
       _startLiveWatch();
     }
+  }
+
+  void _toggleVideoFit() {
+    setState(() {
+      _videoFit = _videoFit == BoxFit.cover ? BoxFit.contain : BoxFit.cover;
+    });
+  }
+
+  Future<void> _unlockBroadcastAccess() async {
+    if (_purchaseBusy) return;
+    final strings = AppStrings.of(context);
+    setState(() => _purchaseBusy = true);
+    try {
+      await widget.runtime.unlockBroadcastAccess();
+      if (!mounted) return;
+      _showSnack(strings.ui('broadcastAccessUnlocked'));
+      _startLiveWatch();
+    } catch (error) {
+      if (!mounted) return;
+      _showSnack(_purchaseMessage(strings, error));
+    } finally {
+      if (mounted) setState(() => _purchaseBusy = false);
+    }
+  }
+
+  Future<void> _restoreBroadcastAccess() async {
+    if (_purchaseBusy) return;
+    final strings = AppStrings.of(context);
+    setState(() => _purchaseBusy = true);
+    try {
+      await widget.runtime.restoreBroadcastAccessPurchase();
+      if (!mounted) return;
+      _showSnack(strings.ui('broadcastAccessUnlocked'));
+      _startLiveWatch();
+    } catch (error) {
+      if (!mounted) return;
+      _showSnack(_purchaseMessage(strings, error));
+    } finally {
+      if (mounted) setState(() => _purchaseBusy = false);
+    }
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _purchaseMessage(AppStrings strings, Object error) {
+    if (error is BroadcastPurchaseException) {
+      return switch (error.result.status) {
+        BroadcastPurchaseStatus.pending => strings.ui('purchasePending'),
+        BroadcastPurchaseStatus.canceled => strings.ui('purchaseCanceled'),
+        BroadcastPurchaseStatus.unavailable =>
+          strings.ui('purchaseUnavailable'),
+        _ => error.result.message ?? strings.ui('purchaseFailed'),
+      };
+    }
+    if (error is BroadcastAccessLockedException) {
+      return strings.ui('broadcastAccessLockedBody');
+    }
+    return strings.ui('purchaseFailed');
   }
 
   Future<void> _toggleNotifications(ClientRuntimeState state) async {
@@ -181,7 +246,7 @@ class _WatchScreenState extends State<WatchScreen> {
             activeStream: state.activeStream,
             audioEnabled: _audioEnabled,
             streamHealthState: widget.runtime.streamHealthState,
-            fit: BoxFit.contain,
+            fit: _videoFit,
             error: state.error,
             onSessionRefreshRequired: _refreshStreamSession,
             onFatalError: widget.runtime.reportStreamFailure,
@@ -198,14 +263,28 @@ class _WatchScreenState extends State<WatchScreen> {
           Positioned(
             top: 12,
             right: 12,
-            child: _RoundIconButton(
-              icon: _audioEnabled
-                  ? Icons.volume_up_rounded
-                  : Icons.volume_off_rounded,
-              tooltip: _audioEnabled
-                  ? strings.ui('muteAudio')
-                  : strings.ui('unmuteAudio'),
-              onTap: _toggleAudio,
+            child: Row(
+              children: [
+                _RoundIconButton(
+                  icon: _videoFit == BoxFit.cover
+                      ? Icons.fit_screen_rounded
+                      : Icons.crop_free_rounded,
+                  tooltip: _videoFit == BoxFit.cover
+                      ? strings.ui('videoFitContain')
+                      : strings.ui('videoFitCover'),
+                  onTap: _toggleVideoFit,
+                ),
+                const SizedBox(width: 8),
+                _RoundIconButton(
+                  icon: _audioEnabled
+                      ? Icons.volume_up_rounded
+                      : Icons.volume_off_rounded,
+                  tooltip: _audioEnabled
+                      ? strings.ui('muteAudio')
+                      : strings.ui('unmuteAudio'),
+                  onTap: _toggleAudio,
+                ),
+              ],
             ),
           ),
         ],
@@ -315,14 +394,25 @@ class _WatchScreenState extends State<WatchScreen> {
           Text(strings.ui('liveWatching'), style: _title),
           const SizedBox(height: 8),
           Text(strings.ui('liveStreamConnectedSubtitle'), style: _subtitle),
+          if (state.broadcastAccess != null) ...[
+            const SizedBox(height: 14),
+            _BroadcastAccessCard(
+              snapshot: state.broadcastAccess!,
+              busy: _purchaseBusy,
+              onUnlock: _unlockBroadcastAccess,
+              onRestore: _restoreBroadcastAccess,
+            ),
+          ],
           const SizedBox(height: 18),
           _VideoPanel(
             session: state.session,
             activeStream: state.activeStream,
             error: state.error,
             audioEnabled: _audioEnabled,
+            fit: _videoFit,
             streamHealthState: widget.runtime.streamHealthState,
             onToggleAudio: _toggleAudio,
+            onToggleFit: _toggleVideoFit,
             onEnterFullscreen: _enterFullscreen,
             onSessionRefreshRequired: _refreshStreamSession,
             onFatalError: widget.runtime.reportStreamFailure,
@@ -496,14 +586,150 @@ class _WatchScreenState extends State<WatchScreen> {
       widget.runtime.restartWatching(audioEnabled: _audioEnabled);
 }
 
+class _BroadcastAccessCard extends StatelessWidget {
+  const _BroadcastAccessCard({
+    required this.snapshot,
+    required this.busy,
+    required this.onUnlock,
+    required this.onRestore,
+  });
+
+  final BroadcastAccessSnapshot snapshot;
+  final bool busy;
+  final VoidCallback onUnlock;
+  final VoidCallback onRestore;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final locked = snapshot.isLocked;
+    final unlocked = snapshot.unlocked;
+    final title = unlocked
+        ? strings.ui('broadcastAccessUnlockedTitle')
+        : locked
+            ? strings.ui('broadcastAccessLockedTitle')
+            : strings.ui('broadcastAccessTrialTitle');
+    final body = unlocked
+        ? strings.ui('broadcastAccessUnlockedBody')
+        : locked
+            ? strings.ui('broadcastAccessLockedBody')
+            : strings.uiFormat('broadcastAccessTrialBody', {
+                'remaining': _remainingText(snapshot.remaining),
+                'price': snapshot.priceLabel,
+              });
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDecoration().copyWith(
+        color: locked ? const Color(0xFFFFEEF2) : Colors.white,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: unlocked
+                    ? _mintSoft
+                    : locked
+                        ? const Color(0xFFFFD4DF)
+                        : const Color(0xFFF2EEFA),
+                child: Icon(
+                  unlocked
+                      ? Icons.verified_rounded
+                      : locked
+                          ? Icons.lock_rounded
+                          : Icons.hourglass_bottom_rounded,
+                  color: _navy,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: _navy,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            body,
+            style: const TextStyle(
+              color: _slate,
+              fontSize: 13.5,
+              height: 1.25,
+            ),
+          ),
+          if (!unlocked) ...[
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                minHeight: 8,
+                value: snapshot.usedRatio,
+                backgroundColor: const Color(0xFFECEFF5),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  locked ? _pink : _mint,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                FilledButton.icon(
+                  onPressed: busy ? null : onUnlock,
+                  icon: busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.lock_open_rounded),
+                  label: Text(
+                    strings.uiFormat('unlockLifetimePrice', {
+                      'price': snapshot.priceLabel,
+                    }),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: busy ? null : onRestore,
+                  icon: const Icon(Icons.restore_rounded),
+                  label: Text(strings.ui('restorePurchase')),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _remainingText(Duration duration) {
+    final totalMinutes = duration.inMinutes.clamp(0, 24 * 60);
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (hours == 0) return '$minutes dk';
+    if (minutes == 0) return '$hours sa';
+    return '$hours sa $minutes dk';
+  }
+}
+
 class _VideoPanel extends StatelessWidget {
   const _VideoPanel({
     required this.session,
     required this.activeStream,
     required this.error,
     required this.audioEnabled,
+    required this.fit,
     required this.streamHealthState,
     required this.onToggleAudio,
+    required this.onToggleFit,
     required this.onEnterFullscreen,
     required this.onSessionRefreshRequired,
     required this.onFatalError,
@@ -513,8 +739,10 @@ class _VideoPanel extends StatelessWidget {
   final ActiveStreamSession? activeStream;
   final Object? error;
   final bool audioEnabled;
+  final BoxFit fit;
   final ClientStreamHealthState? streamHealthState;
   final VoidCallback onToggleAudio;
+  final VoidCallback onToggleFit;
   final VoidCallback onEnterFullscreen;
   final Future<void> Function() onSessionRefreshRequired;
   final ValueChanged<Object> onFatalError;
@@ -539,7 +767,7 @@ class _VideoPanel extends StatelessWidget {
               activeStream: activeStream,
               audioEnabled: audioEnabled,
               streamHealthState: streamHealthState,
-              fit: BoxFit.contain,
+              fit: fit,
               error: error,
               onSessionRefreshRequired: onSessionRefreshRequired,
               onFatalError: onFatalError,
@@ -550,6 +778,16 @@ class _VideoPanel extends StatelessWidget {
               bottom: 10,
               child: Row(
                 children: [
+                  _RoundIconButton(
+                    icon: fit == BoxFit.cover
+                        ? Icons.fit_screen_rounded
+                        : Icons.crop_free_rounded,
+                    tooltip: fit == BoxFit.cover
+                        ? strings.ui('videoFitContain')
+                        : strings.ui('videoFitCover'),
+                    onTap: onToggleFit,
+                  ),
+                  const SizedBox(width: 8),
                   _RoundIconButton(
                     icon: audioEnabled
                         ? Icons.volume_up_rounded

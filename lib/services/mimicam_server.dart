@@ -37,6 +37,7 @@ import '../features/server/media/server_media_source.dart';
 import '../features/server/media/wav_audio_stream_service.dart';
 import '../l10n/app_strings.dart';
 import 'configuration_service.dart';
+import 'monetization/broadcast_access_service.dart';
 import 'motion_analyzer.dart' show CameraImageJpegEncoder;
 import 'server/active_client_registry.dart';
 import 'server/alert_protocol_adapter.dart';
@@ -81,6 +82,8 @@ class MimiCamServer {
     NightLightController? nightLightController,
     TalkSessionRegistry? talkSessions,
     BatterySnapshotProvider? batteryProvider,
+    BroadcastAccessService? broadcastAccess,
+    this.onBroadcastAccessChanged,
   })  : tokenService = tokenService ?? PairingTokenService(),
         mediaPermissions =
             mediaPermissions ?? const CameraMediaPermissionGateway(),
@@ -88,6 +91,7 @@ class MimiCamServer {
         _nightLight = nightLightController ?? NightLightController(),
         _talkSessions = talkSessions ?? TalkSessionRegistry(),
         _batteryProvider = batteryProvider ?? BatteryPlusSnapshotProvider(),
+        _broadcastAccess = broadcastAccess,
         _deviceTier = deviceTier ?? DeviceCapabilityProbe.detectTier() {
     _activeMediaProfile = MediaQualityProfile.forDeviceTier(_deviceTier);
     _frameBudget.updateMinInterval(_activeMediaProfile.frameInterval);
@@ -115,6 +119,8 @@ class MimiCamServer {
   final void Function(String message) onLog;
   final void Function(String message) onAlert;
   final void Function(MediaQualityProfile profile)? onMediaProfileChanged;
+  final void Function(BroadcastAccessSnapshot snapshot)?
+      onBroadcastAccessChanged;
   final FutureOr<void> Function(
     String clientId, {
     required bool video,
@@ -143,6 +149,8 @@ class MimiCamServer {
   final NightLightController _nightLight;
   final TalkSessionRegistry _talkSessions;
   final BatterySnapshotProvider _batteryProvider;
+  final BroadcastAccessService? _broadcastAccess;
+  Timer? _broadcastAccessTimer;
   BatterySnapshot _serverBattery = BatterySnapshot.unknown();
   final _clientBatterySnapshots = <String, BatterySnapshot>{};
   late final MjpegStreamService _videoStreamService;
@@ -850,6 +858,7 @@ class MimiCamServer {
       'comfort': _comfortAudio.state.toJson(),
       'nightLight': _nightLight.state.toJson(),
       'talk': _talkStatus(),
+      'broadcastAccess': (await _broadcastAccess?.snapshot())?.toJson(),
       if (_analysisCoordinator != null) ..._analysisCoordinator!.diagnostics(),
     });
   }
@@ -1126,10 +1135,26 @@ class MimiCamServer {
 
     final clientId = _clientIdForRequest(request, json);
     final demand = _streamDemandForRequest(json);
+    BroadcastAccessSnapshot? accessSnapshot;
+    try {
+      accessSnapshot = await _broadcastAccess?.beginSession(
+        _broadcastAccessSessionId(clientId),
+      );
+      _notifyBroadcastAccessChanged(accessSnapshot);
+      _scheduleBroadcastAccessTimer(accessSnapshot);
+    } on BroadcastAccessLockedException catch (error) {
+      request.response.statusCode = HttpStatus.paymentRequired;
+      await _writeBroadcastAccessLocked(request, error.snapshot);
+      return;
+    }
     late final ActiveSessionStartResult startResult;
     try {
       startResult = _activeClientRegistry.startSession(clientId);
     } on ActiveClientLimitException {
+      accessSnapshot = await _broadcastAccess?.endSession(
+        _broadcastAccessSessionId(clientId),
+      );
+      _notifyBroadcastAccessChanged(accessSnapshot);
       request.response.statusCode = HttpStatus.tooManyRequests;
       await _writeJson(request.response, {
         'ok': false,
@@ -1156,6 +1181,10 @@ class MimiCamServer {
         audio: demand.audio,
       );
     } catch (error) {
+      accessSnapshot = await _broadcastAccess?.endSession(
+        _broadcastAccessSessionId(clientId),
+      );
+      _notifyBroadcastAccessChanged(accessSnapshot);
       if (startResult.createdActiveSlot) {
         _activeClientRegistry.stopSession(startResult.clientId);
       }
@@ -1194,6 +1223,10 @@ class MimiCamServer {
         'activeStreamClients': _activeClientRegistry.activeClientCount,
         'mediaProfile': _effectiveMediaProfile().toJson(),
       });
+      final accessSnapshot = await _broadcastAccess?.endSession(
+        _broadcastAccessSessionId(clientId),
+      );
+      _notifyBroadcastAccessChanged(accessSnapshot);
       _notifyStreamSessionStopped(clientId);
     } catch (_) {
       request.response.statusCode = HttpStatus.internalServerError;
@@ -1276,6 +1309,52 @@ class MimiCamServer {
     unawaited(Future<void>.sync(() => callback(clientId)).catchError((_) {}));
   }
 
+  String _broadcastAccessSessionId(String clientId) =>
+      'server.stream.${clientId.trim().isEmpty ? 'unknown_client' : clientId.trim()}';
+
+  Future<void> _writeBroadcastAccessLocked(
+    HttpRequest request,
+    BroadcastAccessSnapshot snapshot,
+  ) =>
+      _writeJson(request.response, {
+        'ok': false,
+        'code': 'BROADCAST_ACCESS_LOCKED',
+        'message':
+            'Free broadcast time ended. One-time ${snapshot.priceLabel} unlock required.',
+        'broadcastAccess': snapshot.toJson(),
+      });
+
+  void _notifyBroadcastAccessChanged(BroadcastAccessSnapshot? snapshot) {
+    if (snapshot == null) return;
+    onBroadcastAccessChanged?.call(snapshot);
+  }
+
+  void _scheduleBroadcastAccessTimer(BroadcastAccessSnapshot? snapshot) {
+    _broadcastAccessTimer?.cancel();
+    if (snapshot == null || snapshot.unlocked || snapshot.remainingMs <= 0) {
+      return;
+    }
+    _broadcastAccessTimer = Timer(snapshot.remaining, () {
+      unawaited(_expireBroadcastAccessIfNeeded());
+    });
+  }
+
+  Future<void> _expireBroadcastAccessIfNeeded() async {
+    final access = _broadcastAccess;
+    if (access == null || _disposed) return;
+    final snapshot = await access.snapshot();
+    if (!snapshot.isLocked) {
+      _scheduleBroadcastAccessTimer(snapshot);
+      return;
+    }
+    _activeClientRegistry.clear();
+    await access.endAllSessions();
+    _broadcastAccessTimer?.cancel();
+    onLog('Ücretsiz yayın süresi doldu; canlı stream kilitlendi.');
+    await stopMediaRuntime();
+    _notifyBroadcastAccessChanged(await access.snapshot());
+  }
+
   StreamBackpressureMetrics _combinedBackpressureMetrics() =>
       combineBackpressureMetrics([
         _videoStreamService.backpressureMetrics,
@@ -1353,6 +1432,9 @@ class MimiCamServer {
         'twoWayTalk': true,
         'battery': true,
         'bleDiscovery': true,
+        'freeBroadcastLimitMs': BroadcastAccessConfig.freeLimit.inMilliseconds,
+        'oneTimeUnlockPrice': BroadcastAccessConfig.oneTimePriceLabel,
+        'oneTimeUnlockProductId': BroadcastAccessConfig.productId,
         'transportPreferred': transportConfig.payloadTransport,
         'transportModes': const ['wifi_lan', 'hotspot_lan', 'ble_discovery'],
         'deviceTier': _deviceTier.name,
@@ -1537,6 +1619,7 @@ class MimiCamServer {
   }
 
   Future<void> stopMediaRuntime() async {
+    _broadcastAccessTimer?.cancel();
     await ForegroundServiceController.stopServer();
     if (_wakelockEnabled) {
       await WakelockPlus.disable();
@@ -1643,6 +1726,8 @@ class MimiCamServer {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _broadcastAccessTimer?.cancel();
+    await _broadcastAccess?.endAllSessions();
     await ForegroundServiceController.stopServer();
     if (_wakelockEnabled) {
       await WakelockPlus.disable();
