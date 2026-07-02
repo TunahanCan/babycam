@@ -27,6 +27,7 @@ void main() {
     );
     addTearDown(pipeline.stop);
     final wrote = Completer<void>();
+    final status = Completer<ClientLiveAudioStatus>();
 
     await pipeline.start(
       uri: Uri(
@@ -41,12 +42,24 @@ void main() {
       onAudioChunkWritten: () {
         if (!wrote.isCompleted) wrote.complete();
       },
+      onStatus: (update) {
+        if (update.event == 'write' && !status.isCompleted) {
+          status.complete(update);
+        }
+      },
     );
 
     await wrote.future.timeout(const Duration(seconds: 2));
+    final update = await status.future.timeout(const Duration(seconds: 2));
     expect(authHeaders.first, 'Bearer trusted-token');
     expect(sink.starts, [(sampleRate: 16000, channels: 1)]);
     expect(sink.writes.single, [1, 0, 2, 0, 3, 0, 4, 0]);
+    expect(update.wavHeaderParsed, isTrue);
+    expect(update.networkBytesReceived, greaterThan(44));
+    expect(update.pcmChunksParsed, greaterThan(0));
+    expect(update.pcmBytesParsed, 8);
+    expect(update.nativeBytesWritten, 8);
+    expect(update.toJson()['nativeBytesWritten'], 8);
   });
 
   test('native write reddedilirse status droppedNativeWrites sayar', () async {

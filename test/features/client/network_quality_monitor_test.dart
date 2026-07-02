@@ -90,7 +90,12 @@ void main() {
     var nowMs = 1000;
     final health = ClientStreamHealthState(nowMs: () => nowMs)
       ..resetForNewWatchSession()
-      ..markAudioChunkReceived();
+      ..markAudioChunkReceived()
+      ..updateAudioPipelineStatus({
+        'networkBytesReceived': 128,
+        'pcmChunksParsed': 2,
+        'nativeBytesWritten': 64,
+      });
     nowMs += 1500;
     final captured = <Map<String, Object?>>[];
     final server = await _qualityServer(captured);
@@ -105,6 +110,11 @@ void main() {
 
     expect(update.snapshot.tier, NetworkQualityTier.critical);
     expect(captured.single['audioUnderrun'], isTrue);
+    expect(captured.single['audioPipeline'], {
+      'networkBytesReceived': 128,
+      'pcmChunksParsed': 2,
+      'nativeBytesWritten': 64,
+    });
   });
 
   test('ws disconnect en az weak rapor gönderir', () async {

@@ -13,6 +13,7 @@ class ClientQualitySnapshot {
     this.audioUnderrun = false,
     this.watchActive = false,
     this.recentlyReconnected = false,
+    this.audioPipeline = const {},
   });
 
   final int createdAtMs;
@@ -26,6 +27,7 @@ class ClientQualitySnapshot {
   final bool audioUnderrun;
   final bool watchActive;
   final bool recentlyReconnected;
+  final Map<String, Object?> audioPipeline;
 
   NetworkQualityTier get healthTier {
     if (streamTimedOut ||
@@ -72,6 +74,7 @@ class ClientQualitySnapshot {
         'audioUnderrun': audioUnderrun,
         'watchActive': watchActive,
         'recentlyReconnected': recentlyReconnected,
+        'audioPipeline': audioPipeline,
         'createdAtMs': createdAtMs,
       };
 
@@ -105,6 +108,7 @@ class ClientStreamHealthState {
   var _streamTimedOut = false;
   var _audioUnderrun = false;
   var _watchActive = false;
+  Map<String, Object?> _audioPipeline = const {};
 
   bool get watchActive => _watchActive;
 
@@ -116,6 +120,7 @@ class ClientStreamHealthState {
       _watchStartedAtMs = null;
       _streamTimedOut = false;
       _audioUnderrun = false;
+      _audioPipeline = const {};
     }
   }
 
@@ -148,6 +153,10 @@ class ClientStreamHealthState {
     _audioUnderrun = true;
   }
 
+  void updateAudioPipelineStatus(Map<String, Object?> status) {
+    _audioPipeline = Map<String, Object?>.unmodifiable(status);
+  }
+
   ClientQualitySnapshot snapshot() {
     final nowMs = _nowMs();
     final videoGapMs = _gapMs(
@@ -173,6 +182,7 @@ class ClientStreamHealthState {
       audioUnderrun: audioUnderrun,
       watchActive: _watchActive,
       recentlyReconnected: _recentlyReconnected(nowMs),
+      audioPipeline: _audioPipeline,
     );
   }
 
@@ -185,6 +195,7 @@ class ClientStreamHealthState {
     _reconnectCount = 0;
     _streamTimedOut = false;
     _audioUnderrun = false;
+    _audioPipeline = const {};
     _watchActive = true;
   }
 

@@ -17,6 +17,7 @@ class ClientQualityReport {
     this.audioUnderrun = false,
     this.watchActive = false,
     this.recentlyReconnected = false,
+    this.audioPipeline = const {},
   });
 
   final String clientId;
@@ -34,6 +35,7 @@ class ClientQualityReport {
   final bool audioUnderrun;
   final bool watchActive;
   final bool recentlyReconnected;
+  final Map<String, Object?> audioPipeline;
 
   NetworkQualityTier get tier => networkTier;
   int get reportedAtMs => createdAtMs;
@@ -60,6 +62,7 @@ class ClientQualityReport {
         'audioUnderrun': audioUnderrun,
         'watchActive': watchActive,
         'recentlyReconnected': recentlyReconnected,
+        'audioPipeline': audioPipeline,
         'createdAtMs': createdAtMs,
       };
 
@@ -87,6 +90,9 @@ class ClientQualityReport {
       audioUnderrun: _boolValue(json['audioUnderrun']),
       watchActive: _boolValue(json['watchActive']),
       recentlyReconnected: _boolValue(json['recentlyReconnected']),
+      audioPipeline: _mapValue(
+        json['audioPipeline'] ?? json['clientAudioPipeline'],
+      ),
       createdAtMs: _intValue(json['createdAtMs']) ??
           _intValue(json['reportedAtMs']) ??
           nowMs,
@@ -109,6 +115,7 @@ class ClientQualityReport {
     bool? audioUnderrun,
     bool? watchActive,
     bool? recentlyReconnected,
+    Map<String, Object?>? audioPipeline,
   }) =>
       ClientQualityReport(
         clientId: clientId ?? this.clientId,
@@ -126,6 +133,7 @@ class ClientQualityReport {
         audioUnderrun: audioUnderrun ?? this.audioUnderrun,
         watchActive: watchActive ?? this.watchActive,
         recentlyReconnected: recentlyReconnected ?? this.recentlyReconnected,
+        audioPipeline: audioPipeline ?? this.audioPipeline,
       );
 
   NetworkQualityTier _healthTier() {
@@ -165,6 +173,11 @@ class ClientQualityReport {
     if (value is bool) return value;
     if (value is String) return value.toLowerCase() == 'true';
     return false;
+  }
+
+  static Map<String, Object?> _mapValue(Object? value) {
+    if (value is Map) return Map<String, Object?>.from(value);
+    return const {};
   }
 }
 

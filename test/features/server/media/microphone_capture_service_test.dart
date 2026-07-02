@@ -29,8 +29,10 @@ void main() {
     expect(chunks.single.leveler.outputRms, greaterThan(150));
     expect(service.snapshot.active, isTrue);
     expect(service.snapshot.chunksCaptured, 1);
+    expect(service.snapshot.bytesCaptured, raw.length);
     expect(service.snapshot.lastChunkAtMs, nowMs);
     expect(service.snapshot.lastChunkBytes, raw.length);
+    expect(service.snapshot.failureReason, isNull);
 
     nowMs += 20;
     await service.stop();
@@ -51,6 +53,8 @@ void main() {
     expect(service.snapshot.recorderCreated, isTrue);
     expect(service.snapshot.permissionGranted, isFalse);
     expect(service.snapshot.active, isFalse);
+    expect(service.snapshot.failureReason, 'permissionDenied');
+    expect(service.snapshot.lastStartError, contains('permission denied'));
   });
 }
 

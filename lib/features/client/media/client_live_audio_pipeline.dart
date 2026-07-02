@@ -148,6 +148,7 @@ class ClientLiveAudioPipeline {
         run.networkBytesReceived += chunk.length;
         final parsed = parser.add(chunk.asUint8ListView());
         if (!_outputStarted && parsed.isConfigured) {
+          run.wavHeaderParsed = true;
           await _audioOutput.start(
             sampleRate: parsed.sampleRate,
             channels: parsed.channels,
@@ -165,6 +166,8 @@ class ClientLiveAudioPipeline {
           _emitStatus(run, 'started');
         }
         if (parsed.pcm16le.isEmpty || !_outputStarted) continue;
+        run.pcmChunksParsed++;
+        run.pcmBytesParsed += parsed.pcm16le.length;
         final buffer = _buffer;
         if (buffer == null) continue;
         final beforeDropped = buffer.droppedBytes;
@@ -188,12 +191,16 @@ class ClientLiveAudioPipeline {
         final frame = buffer.takeNext(maxBytes: run.preferredWriteBytes);
         if (frame.isEmpty) return;
         final accepted = await _audioOutput.write(frame);
+        run.nativeWriteAttempts++;
         run.chunksWritten++;
         run.bytesWritten += frame.length;
         if (accepted) {
+          run.nativeWriteCallsAccepted++;
+          run.nativeBytesWritten += frame.length;
           run.lastWriteAtMs = _nowMs();
           run.onAudioChunkWritten?.call();
         } else {
+          run.nativeWriteCallsDropped++;
           run.droppedNativeWrites++;
         }
         if (run.chunksWritten == 1 || run.chunksWritten % 25 == 0) {
@@ -217,11 +224,19 @@ class ClientLiveAudioPipeline {
       connectedAtMs: run.connectedAtMs,
       sampleRate: run.sampleRate,
       channels: run.channels,
+      wavHeaderParsed: run.wavHeaderParsed,
       networkBytesReceived: run.networkBytesReceived,
+      pcmChunksParsed: run.pcmChunksParsed,
+      pcmBytesParsed: run.pcmBytesParsed,
       bytesWritten: run.bytesWritten,
       chunksWritten: run.chunksWritten,
       bufferedBytes: _buffer?.bufferedBytes ?? 0,
       droppedBufferBytes: run.droppedBufferBytes,
+      nativeWriteAttempts: run.nativeWriteAttempts,
+      nativeWriteCallsAccepted: run.nativeWriteCallsAccepted,
+      nativeWriteCallsDropped: run.nativeWriteCallsDropped,
+      nativeBytesWritten: run.nativeBytesWritten,
+      nativeStatusBytesWritten: _intFrom(nativeStatus['bytesWritten']),
       droppedNativeWrites: run.droppedNativeWrites,
       reconnects: run.reconnects,
       lastWriteAtMs: run.lastWriteAtMs,
@@ -257,6 +272,13 @@ class ClientLiveAudioPipeline {
   }
 
   int _nowMs() => DateTime.now().millisecondsSinceEpoch;
+
+  int? _intFrom(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.round();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
 }
 
 class ClientAudioJitterBuffer {
@@ -335,11 +357,19 @@ class ClientLiveAudioStatus {
     required this.connectedAtMs,
     required this.sampleRate,
     required this.channels,
+    required this.wavHeaderParsed,
     required this.networkBytesReceived,
+    required this.pcmChunksParsed,
+    required this.pcmBytesParsed,
     required this.bytesWritten,
     required this.chunksWritten,
     required this.bufferedBytes,
     required this.droppedBufferBytes,
+    required this.nativeWriteAttempts,
+    required this.nativeWriteCallsAccepted,
+    required this.nativeWriteCallsDropped,
+    required this.nativeBytesWritten,
+    required this.nativeStatusBytesWritten,
     required this.droppedNativeWrites,
     required this.reconnects,
     required this.lastWriteAtMs,
@@ -351,11 +381,19 @@ class ClientLiveAudioStatus {
   final int? connectedAtMs;
   final int? sampleRate;
   final int? channels;
+  final bool wavHeaderParsed;
   final int networkBytesReceived;
+  final int pcmChunksParsed;
+  final int pcmBytesParsed;
   final int bytesWritten;
   final int chunksWritten;
   final int bufferedBytes;
   final int droppedBufferBytes;
+  final int nativeWriteAttempts;
+  final int nativeWriteCallsAccepted;
+  final int nativeWriteCallsDropped;
+  final int nativeBytesWritten;
+  final int? nativeStatusBytesWritten;
   final int droppedNativeWrites;
   final int reconnects;
   final int? lastWriteAtMs;
@@ -367,11 +405,21 @@ class ClientLiveAudioStatus {
         'connectedAtMs': connectedAtMs,
         'sampleRate': sampleRate,
         'channels': channels,
+        'wavHeaderParsed': wavHeaderParsed,
         'networkBytesReceived': networkBytesReceived,
+        'pcmChunksParsed': pcmChunksParsed,
+        'pcmBytesParsed': pcmBytesParsed,
         'bytesWritten': bytesWritten,
         'chunksWritten': chunksWritten,
         'bufferedBytes': bufferedBytes,
+        'jitterBufferedBytes': bufferedBytes,
         'droppedBufferBytes': droppedBufferBytes,
+        'jitterDroppedBytes': droppedBufferBytes,
+        'nativeWriteAttempts': nativeWriteAttempts,
+        'nativeWriteCallsAccepted': nativeWriteCallsAccepted,
+        'nativeWriteCallsDropped': nativeWriteCallsDropped,
+        'nativeBytesWritten': nativeBytesWritten,
+        'nativeStatusBytesWritten': nativeStatusBytesWritten,
         'droppedNativeWrites': droppedNativeWrites,
         'reconnects': reconnects,
         'lastWriteAtMs': lastWriteAtMs,
@@ -404,10 +452,17 @@ class _PipelineRun {
   int? connectedAtMs;
   int? sampleRate;
   int? channels;
+  bool wavHeaderParsed = false;
   int networkBytesReceived = 0;
+  int pcmChunksParsed = 0;
+  int pcmBytesParsed = 0;
   int bytesWritten = 0;
   int chunksWritten = 0;
   int droppedBufferBytes = 0;
+  int nativeWriteAttempts = 0;
+  int nativeWriteCallsAccepted = 0;
+  int nativeWriteCallsDropped = 0;
+  int nativeBytesWritten = 0;
   int droppedNativeWrites = 0;
   int reconnects = 0;
   int? lastWriteAtMs;

@@ -196,6 +196,52 @@ void main() {
     expect(loopback['videoBytes'], greaterThan(0));
     expect(loopback['audioBytes'], greaterThan(0));
   });
+
+  test('/test/probe audio-tone modu mikrofon olmadan audio streami kanıtlar',
+      () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(
+      tokenService,
+      startMediaOnSessionStart: false,
+    );
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    final response = await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.testProbe,
+      trusted.token,
+      {
+        'startRuntime': false,
+        'waitMs': 0,
+        'requireVideo': false,
+        'requireAudio': true,
+        'loopbackMedia': true,
+        'useAudioTone': true,
+      },
+    );
+    final audio = response.body['audio'] as Map;
+    final loopback = response.body['loopback'] as Map;
+
+    expect(response.statusCode, HttpStatus.ok);
+    expect(response.body['ok'], isTrue);
+    expect(audio['ok'], isTrue);
+    expect(audio['mode'], 'tone');
+    expect(audio['wavHeaderValid'], isTrue);
+    expect(audio['pcmBytesReceived'], greaterThan(0));
+    expect(audio['chunksReceived'], greaterThan(0));
+    expect((response.body['checks'] as Map)['audio'], isTrue);
+    expect((response.body['checks'] as Map)['audioClient'], isTrue);
+    expect(loopback['audioWavHeaderValid'], isTrue);
+    expect(loopback['audioBytes'], greaterThan(0));
+  });
 }
 
 Future<MimiCamServer> _testServer(

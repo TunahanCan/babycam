@@ -5,6 +5,9 @@ final _contentLengthPattern = RegExp(
   r'content-length:\s*(\d+)',
   caseSensitive: false,
 );
+const _defaultAudioToneDurationMs = 1200;
+const _defaultAudioToneFrequencyHz = 440;
+const _defaultAudioToneAmplitude = .35;
 
 extension MimiCamServerTestEndpoints on MimiCamServer {
   Future<void> _handleTestStatus(HttpRequest request) async {
@@ -61,6 +64,9 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
     final requireEventDelivery =
         _boolFrom(body?['requireEventDelivery'], defaultValue: false);
     final loopbackMedia = _boolFrom(body?['loopbackMedia'], defaultValue: true);
+    final useAudioTone =
+        _boolFrom(body?['useAudioTone'], defaultValue: false) ||
+            body?['audioMode']?.toString().trim().toLowerCase() == 'tone';
 
     final before = _probeCounters();
     final authClientId = _authGuard.trusted(request)?.clientId;
@@ -114,8 +120,16 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         stopAfterProbe: !wasActiveBefore,
         requireVideo: requireVideo,
         requireAudio: requireAudio,
+        useAudioTone: useAudioTone,
         timeout: Duration(milliseconds: max(500, waitMs + 1500)),
       );
+      checks.addAll(_probeChecks(
+        before,
+        requireVideo: requireVideo,
+        requireAudio: requireAudio,
+        requireEvents: requireEvents,
+        requireEventDelivery: requireEventDelivery,
+      ));
       checks.addAll({
         if (requireVideo) 'videoClient': loopback['videoOk'] == true,
         if (requireAudio) 'audioClient': loopback['audioOk'] == true,
@@ -126,8 +140,30 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
     await _writeJson(request.response, {
       'ok': ok,
       'waitMs': waitMs,
+      'audioMode': useAudioTone ? 'tone' : 'microphone',
       if (startError != null) 'startError': startError.toString(),
       'checks': checks,
+      'video': _probeVideoResult(
+        checks,
+        loopback,
+        requireVideo: requireVideo,
+      ),
+      'audio': _probeAudioResult(
+        before,
+        checks,
+        loopback,
+        requireAudio: requireAudio,
+        useAudioTone: useAudioTone,
+      ),
+      'alerts': _probeAlertResult(
+        checks,
+        requireEvents: requireEvents,
+        requireEventDelivery: requireEventDelivery,
+      ),
+      'profile': {
+        'current': _activeMediaProfile.id,
+        'reason': _activeClientRegistry.effectiveTier().name,
+      },
       if (loopback != null) 'loopback': loopback,
       'before': before.toJson(),
       'after': _probeCounters().toJson(),
@@ -141,6 +177,7 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
     required bool stopAfterProbe,
     required bool requireVideo,
     required bool requireAudio,
+    required bool useAudioTone,
     required Duration timeout,
   }) async {
     final server = _httpServer;
@@ -159,7 +196,12 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
     var videoOk = !requireVideo;
     var audioOk = !requireAudio;
     var videoBytes = 0;
-    var audioBytes = 0;
+    var audio = const _LoopbackAudioProbeResult(
+      wavHeaderValid: false,
+      pcmBytesReceived: 0,
+      chunksReceived: 0,
+      reason: 'notRequested',
+    );
     try {
       final started = await _loopbackSessionStart(
         client,
@@ -182,12 +224,13 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         videoOk = videoBytes > 0;
       }
       if (requireAudio) {
-        audioBytes = await _readLoopbackAudioPayload(
+        audio = await _readLoopbackAudioPayload(
           server.port,
           streamToken,
           timeout,
+          emitTone: useAudioTone ? _emitLoopbackAudioTone : null,
         );
-        audioOk = audioBytes > 0;
+        audioOk = audio.ok;
       }
     } catch (caught) {
       error = caught;
@@ -210,7 +253,11 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
       'videoOk': videoOk,
       'audioOk': audioOk,
       'videoBytes': videoBytes,
-      'audioBytes': audioBytes,
+      'audioBytes': audio.pcmBytesReceived,
+      'audioWavHeaderValid': audio.wavHeaderValid,
+      'audioChunksReceived': audio.chunksReceived,
+      if (audio.reason != null) 'audioReason': audio.reason,
+      'audio': audio.toJson(),
       if (streamToken != null) 'streamTokenReceived': true,
       if (error != null) 'error': error.toString(),
     };
@@ -309,11 +356,12 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
     }
   }
 
-  Future<int> _readLoopbackAudioPayload(
+  Future<_LoopbackAudioProbeResult> _readLoopbackAudioPayload(
     int port,
     String streamToken,
-    Duration timeout,
-  ) async {
+    Duration timeout, {
+    void Function()? emitTone,
+  }) async {
     final client = HttpClient()..connectionTimeout = timeout;
     try {
       final request = await client
@@ -328,20 +376,41 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         await response.drain<void>();
         throw StateError('loopback audio failed: ${response.statusCode}');
       }
+      emitTone?.call();
       final buffer = BytesBuilder(copy: false);
-      final completer = Completer<int>();
+      final completer = Completer<_LoopbackAudioProbeResult>();
       late final StreamSubscription<List<int>> subscription;
+      var wavHeaderValid = false;
+      var pcmBytesReceived = 0;
+      var chunksReceived = 0;
       subscription = response.timeout(timeout).listen(
         (chunk) {
           if (completer.isCompleted) return;
           buffer.add(chunk);
           final bytes = buffer.toBytes();
-          if (bytes.length <= 44 ||
-              String.fromCharCodes(bytes.sublist(0, 4)) != 'RIFF' ||
-              String.fromCharCodes(bytes.sublist(8, 12)) != 'WAVE') {
+          if (bytes.length >= 12 && !_hasWavSignature(bytes)) {
+            completer.complete(const _LoopbackAudioProbeResult(
+              wavHeaderValid: false,
+              pcmBytesReceived: 0,
+              chunksReceived: 0,
+              reason: 'invalidWavHeader',
+            ));
+            client.close(force: true);
+            unawaited(subscription.cancel());
             return;
           }
-          completer.complete(bytes.length - 44);
+          if (bytes.length <= 44) {
+            return;
+          }
+          wavHeaderValid = true;
+          final nextPcmBytes = bytes.length - 44;
+          if (nextPcmBytes > pcmBytesReceived) chunksReceived++;
+          pcmBytesReceived = nextPcmBytes;
+          completer.complete(_LoopbackAudioProbeResult(
+            wavHeaderValid: wavHeaderValid,
+            pcmBytesReceived: pcmBytesReceived,
+            chunksReceived: chunksReceived,
+          ));
           client.close(force: true);
           unawaited(subscription.cancel());
         },
@@ -349,15 +418,38 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
           if (!completer.isCompleted) completer.completeError(error, stack);
         },
         onDone: () {
-          if (!completer.isCompleted) completer.complete(0);
+          if (!completer.isCompleted) {
+            completer.complete(_LoopbackAudioProbeResult(
+              wavHeaderValid: wavHeaderValid,
+              pcmBytesReceived: pcmBytesReceived,
+              chunksReceived: chunksReceived,
+              reason: wavHeaderValid
+                  ? 'noPcmBytesAfterWavHeader'
+                  : 'wavHeaderNotReceived',
+            ));
+          }
         },
         cancelOnError: true,
       );
-      return await completer.future.timeout(timeout);
+      return await completer.future.timeout(
+        timeout,
+        onTimeout: () => _LoopbackAudioProbeResult(
+          wavHeaderValid: wavHeaderValid,
+          pcmBytesReceived: pcmBytesReceived,
+          chunksReceived: chunksReceived,
+          reason:
+              wavHeaderValid ? 'noPcmBytesAfterWavHeader' : 'wavHeaderTimeout',
+        ),
+      );
     } finally {
       client.close(force: true);
     }
   }
+
+  bool _hasWavSignature(Uint8List bytes) =>
+      bytes.length >= 12 &&
+      String.fromCharCodes(bytes.sublist(0, 4)) == 'RIFF' &&
+      String.fromCharCodes(bytes.sublist(8, 12)) == 'WAVE';
 
   Uri _loopbackUri(
     int port,
@@ -429,18 +521,17 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
 
   Future<void> _handleTestAudioTone(HttpRequest request) async {
     final query = request.uri.queryParameters;
-    final durationMs =
-        _intFrom(query['durationMs'], defaultValue: 1200).clamp(100, 5000);
-    final frequencyHz =
-        _intFrom(query['frequencyHz'], defaultValue: 440).clamp(80, 2000);
-    final amplitude = (double.tryParse(query['amplitude'] ?? '') ?? .35)
-        .clamp(.02, .80)
-        .toDouble();
-    final pcm = WavPcm16.sineTone(
-      sampleRate: MimiCamServer._audioSampleRate,
-      durationMs: durationMs.toInt(),
-      frequencyHz: frequencyHz.toInt(),
-      amplitude: amplitude,
+    final pcm = _testTonePcm(
+      durationMs: _intFrom(
+        query['durationMs'],
+        defaultValue: _defaultAudioToneDurationMs,
+      ),
+      frequencyHz: _intFrom(
+        query['frequencyHz'],
+        defaultValue: _defaultAudioToneFrequencyHz,
+      ),
+      amplitude: double.tryParse(query['amplitude'] ?? '') ??
+          _defaultAudioToneAmplitude,
     );
 
     request.response.headers
@@ -462,6 +553,22 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
       ))
       ..add(pcm);
     await request.response.close();
+  }
+
+  Uint8List _testTonePcm({
+    int durationMs = _defaultAudioToneDurationMs,
+    int frequencyHz = _defaultAudioToneFrequencyHz,
+    double amplitude = _defaultAudioToneAmplitude,
+  }) =>
+      WavPcm16.sineTone(
+        sampleRate: MimiCamServer._audioSampleRate,
+        durationMs: durationMs.clamp(100, 5000).toInt(),
+        frequencyHz: frequencyHz.clamp(80, 2000).toInt(),
+        amplitude: amplitude.clamp(.02, .80).toDouble(),
+      );
+
+  void _emitLoopbackAudioTone() {
+    _audioStreamService.broadcast(_testTonePcm(durationMs: 300));
   }
 
   AlertEvent _broadcastTestAlert(Map<Object?, Object?>? body) {
@@ -493,9 +600,20 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
     final audioStream = _audioStreamService.snapshot;
     final audioMetrics = audioStream.backpressure;
     final injectedSource = mediaSource?.snapshot;
+    final qualityReports = _activeClientRegistry.activeQualityReports();
+    final audioFailureReason = _audioFailureReason(nowMs);
     return {
       'ok': true,
       'timestampMs': nowMs,
+      'server': {
+        'running': _httpServerListening,
+        'mediaRuntimeStarted': cameraController != null ||
+            microphone.active ||
+            (injectedSource?.active ?? false) ||
+            _analysisCoordinator != null,
+        'currentProfile': _activeMediaProfile.id,
+        'activeClients': _activeClientRegistry.activeClientCount,
+      },
       'runtime': {
         'httpListening': _httpServerListening,
         'pairingModeActive': _pairingModeActive,
@@ -515,6 +633,9 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         'videoClients': videoStream.clientCount,
         'audioClients': audioStream.clientCount,
         'webSocketClients': _webSockets.length,
+        'qualityReports':
+            qualityReports.map((report) => report.toJson()).toList(),
+        'audioPipelines': _clientAudioPipelineReports(qualityReports),
       },
       'video': {
         'hasLatestJpeg': _latestJpeg != null,
@@ -536,27 +657,48 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         'backpressure': _backpressureJson(videoMetrics),
       },
       'audio': {
+        'enabled': true,
         'recorderCreated': microphone.recorderCreated,
+        'microphoneStarted': microphone.active,
         'permissionGranted': microphone.permissionGranted,
         'active': microphone.active,
+        'lastStartAttemptAtMs': microphone.lastStartAttemptAtMs,
+        'lastStartAttemptAgeMs': _ageMs(nowMs, microphone.lastStartAttemptAtMs),
         'lastChunkAtMs': microphone.lastChunkAtMs,
         'lastChunkAgeMs': _ageMs(nowMs, microphone.lastChunkAtMs),
         'lastClientWriteAtMs': audioStream.lastClientWriteAtMs,
         'lastClientWriteAgeMs': _ageMs(nowMs, audioStream.lastClientWriteAtMs),
         'chunksCaptured': microphone.chunksCaptured,
+        'bytesCaptured': microphone.bytesCaptured,
         'chunksStreamed': audioStream.chunksStreamed,
+        'chunksSent': audioStream.chunksStreamed,
+        'bytesStreamed': audioStream.bytesStreamed,
+        'bytesSent': audioStream.bytesStreamed,
+        'sourceChunksAccepted': audioStream.sourceChunksAccepted,
+        'sourceBytesAccepted': audioStream.sourceBytesAccepted,
         'sourceChunksCaptured': injectedSource?.audioChunks ?? 0,
-        'lastSourceChunkAtMs': injectedSource?.lastAudioChunkAtMs,
-        'lastSourceChunkAgeMs':
-            _ageMs(nowMs, injectedSource?.lastAudioChunkAtMs),
-        'lastSourceChunkBytes': injectedSource?.lastAudioChunkBytes ?? 0,
+        'lastSequence': audioStream.lastSequence,
+        'lastSourceChunkAtMs': audioStream.lastSourceChunkAtMs ??
+            injectedSource?.lastAudioChunkAtMs,
+        'lastSourceChunkAgeMs': _ageMs(
+          nowMs,
+          audioStream.lastSourceChunkAtMs ?? injectedSource?.lastAudioChunkAtMs,
+        ),
+        'lastSourceChunkBytes': audioStream.lastSourceChunkBytes > 0
+            ? audioStream.lastSourceChunkBytes
+            : injectedSource?.lastAudioChunkBytes ?? 0,
         'lastChunkBytes': microphone.lastChunkBytes,
         'lastClientWriteBytes': audioStream.lastClientWriteBytes,
+        'failureReason': audioFailureReason,
+        'captureFailureReason': microphone.failureReason,
+        'lastError': microphone.lastStartError ?? injectedSource?.lastError,
         'lastStartError':
             microphone.lastStartError ?? injectedSource?.lastError,
+        'underruns': audioMetrics.skippedAudioChunks,
         'leveler': microphone.leveler.toJson(),
         'clientIds': audioStream.clientIds,
         'busyClientIds': audioStream.busyClientIds,
+        'clientPipelines': _clientAudioPipelineReports(qualityReports),
         'backpressure': _backpressureJson(audioMetrics),
       },
       'events': {
@@ -580,8 +722,11 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         cameraFramesAtMs: _lastCameraFrameAtMs,
         videoFramesEncoded: _videoFramesEncoded,
         videoFramesStreamed: _videoStreamService.snapshot.framesStreamed,
-        audioChunksCaptured: _microphoneCapture.snapshot.chunksCaptured +
-            (mediaSource?.snapshot.audioChunks ?? 0),
+        audioChunksCaptured: max(
+          _microphoneCapture.snapshot.chunksCaptured +
+              (mediaSource?.snapshot.audioChunks ?? 0),
+          _audioStreamService.snapshot.sourceChunksAccepted,
+        ),
         audioChunksStreamed: _audioStreamService.snapshot.chunksStreamed,
         alertsBroadcast: _alertsBroadcast,
         lastDeliveredWebSocketClients: _lastAlertDeliveredWebSocketClients,
@@ -626,6 +771,127 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
           after.totalWebSocketDeliveries > before.totalWebSocketDeliveries,
     };
   }
+
+  Map<String, Object?> _probeVideoResult(
+    Map<String, bool> checks,
+    Map<String, Object?>? loopback, {
+    required bool requireVideo,
+  }) {
+    final loopbackOk = loopback?['videoOk'] != false;
+    final ok = !requireVideo || (checks['video'] == true && loopbackOk);
+    return {
+      'ok': ok,
+      'required': requireVideo,
+      'framesReceived': loopback?['videoFrames'] ?? (loopbackOk ? 1 : 0),
+      'firstFrameBytes': loopback?['videoBytes'] ?? 0,
+      if (!ok) 'reason': loopback?['error'] ?? 'noVideoFrame',
+    };
+  }
+
+  Map<String, Object?> _probeAudioResult(
+    _ProbeCounters before,
+    Map<String, bool> checks,
+    Map<String, Object?>? loopback, {
+    required bool requireAudio,
+    required bool useAudioTone,
+  }) {
+    final microphone = _microphoneCapture.snapshot;
+    final loopbackAudio = loopback?['audio'];
+    final audioLoopback = loopbackAudio is Map
+        ? Map<String, Object?>.from(loopbackAudio)
+        : const <String, Object?>{};
+    final loopbackOk = loopback?['audioOk'] != false;
+    final ok = !requireAudio || (checks['audio'] == true && loopbackOk);
+    final reason = ok
+        ? null
+        : audioLoopback['reason'] ??
+            loopback?['audioReason'] ??
+            _audioFailureReason(
+              DateTime.now().millisecondsSinceEpoch,
+              before: before,
+              requirePcm: requireAudio && !useAudioTone,
+            ) ??
+            loopback?['error'] ??
+            'audioProbeFailed';
+    return {
+      'ok': ok,
+      'required': requireAudio,
+      'mode': useAudioTone ? 'tone' : 'microphone',
+      'wavHeaderValid': audioLoopback['wavHeaderValid'] ?? false,
+      'pcmBytesReceived': audioLoopback['pcmBytesReceived'] ?? 0,
+      'chunksReceived': audioLoopback['chunksReceived'] ?? 0,
+      'microphoneStarted': microphone.active,
+      'permissionGranted': microphone.permissionGranted,
+      'chunksCaptured': microphone.chunksCaptured,
+      'bytesCaptured': microphone.bytesCaptured,
+      'chunksStreamed': _audioStreamService.snapshot.chunksStreamed,
+      if (reason != null) 'reason': reason,
+      if (microphone.lastStartError != null)
+        'lastError': microphone.lastStartError,
+    };
+  }
+
+  Map<String, Object?> _probeAlertResult(
+    Map<String, bool> checks, {
+    required bool requireEvents,
+    required bool requireEventDelivery,
+  }) {
+    final ok = (!requireEvents || checks['events'] == true) &&
+        (!requireEventDelivery || checks['eventDelivery'] == true);
+    return {
+      'ok': ok,
+      'required': requireEvents || requireEventDelivery,
+      'eventReceived': checks['events'] == true,
+      'eventDelivery': checks['eventDelivery'] == true,
+      'eventsSent': _alertsBroadcast,
+      'deliveredWebSocketClients': _lastAlertDeliveredWebSocketClients,
+      if (!ok) 'reason': 'eventNotDelivered',
+    };
+  }
+
+  String? _audioFailureReason(
+    int nowMs, {
+    _ProbeCounters? before,
+    bool requirePcm = false,
+  }) {
+    final microphone = _microphoneCapture.snapshot;
+    final audioStream = _audioStreamService.snapshot;
+    final injectedSource = mediaSource?.snapshot;
+    final sourceChunks =
+        audioStream.sourceChunksAccepted + (injectedSource?.audioChunks ?? 0);
+    final beforeChunks = before?.audioChunksCaptured ?? 0;
+    if (sourceChunks > 0 &&
+        (!requirePcm ||
+            _probeCounters().audioChunksCaptured > beforeChunks ||
+            audioStream.sourceChunksAccepted > 0)) {
+      return null;
+    }
+    if (microphone.permissionGranted == false) return 'permissionDenied';
+    if (microphone.failureReason != null) return microphone.failureReason;
+    if (microphone.lastStartError != null) return 'captureStartFailed';
+    if (microphone.recorderCreated && !microphone.active) {
+      return 'captureNotActive';
+    }
+    final startAgeMs = _ageMs(nowMs, microphone.lastStartAttemptAtMs);
+    if (microphone.active &&
+        microphone.chunksCaptured == 0 &&
+        (startAgeMs ?? 0) >= 1000) {
+      return 'noPcmCaptured';
+    }
+    if (requirePcm) return 'noPcmBytesAfterWavHeader';
+    return null;
+  }
+
+  List<Map<String, Object?>> _clientAudioPipelineReports(
+    Iterable<ClientQualityReport> reports,
+  ) =>
+      reports
+          .where((report) => report.audioPipeline.isNotEmpty)
+          .map((report) => {
+                'clientId': report.clientId,
+                ...report.audioPipeline,
+              })
+          .toList(growable: false);
 
   bool _isVideoProbeActive(int nowMs) =>
       _videoProbeEncodeUntilMs != null && nowMs <= _videoProbeEncodeUntilMs!;
@@ -720,5 +986,29 @@ class _ProbeCounters {
         'alertsBroadcast': alertsBroadcast,
         'lastDeliveredWebSocketClients': lastDeliveredWebSocketClients,
         'totalWebSocketDeliveries': totalWebSocketDeliveries,
+      };
+}
+
+class _LoopbackAudioProbeResult {
+  const _LoopbackAudioProbeResult({
+    required this.wavHeaderValid,
+    required this.pcmBytesReceived,
+    required this.chunksReceived,
+    this.reason,
+  });
+
+  final bool wavHeaderValid;
+  final int pcmBytesReceived;
+  final int chunksReceived;
+  final String? reason;
+
+  bool get ok => wavHeaderValid && pcmBytesReceived > 0;
+
+  Map<String, Object?> toJson() => {
+        'ok': ok,
+        'wavHeaderValid': wavHeaderValid,
+        'pcmBytesReceived': pcmBytesReceived,
+        'chunksReceived': chunksReceived,
+        if (reason != null) 'reason': reason,
       };
 }

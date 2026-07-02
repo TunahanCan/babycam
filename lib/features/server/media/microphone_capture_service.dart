@@ -60,8 +60,11 @@ class MicrophoneCaptureService {
   StreamSubscription<Uint8List>? _subscription;
   bool _recorderCreated = false;
   bool? _permissionGranted;
+  String? _lastFailureReason;
   String? _lastStartError;
   int _chunksCaptured = 0;
+  int _bytesCaptured = 0;
+  int? _lastStartAttemptAtMs;
   int? _lastChunkAtMs;
   int _lastChunkBytes = 0;
 
@@ -70,9 +73,12 @@ class MicrophoneCaptureService {
         recorderCreated: _recorderCreated,
         permissionGranted: _permissionGranted,
         active: isActive,
+        lastStartAttemptAtMs: _lastStartAttemptAtMs,
         lastChunkAtMs: _lastChunkAtMs,
         chunksCaptured: _chunksCaptured,
+        bytesCaptured: _bytesCaptured,
         lastChunkBytes: _lastChunkBytes,
+        failureReason: _lastFailureReason,
         lastStartError: _lastStartError,
         leveler: _streamLeveler.lastSnapshot,
       );
@@ -84,12 +90,18 @@ class MicrophoneCaptureService {
     if (_subscription != null) return true;
     final recorder = _recorder ??= _recorderFactory();
     _recorderCreated = true;
+    _lastStartAttemptAtMs = _nowMs();
+    _lastFailureReason = null;
     _lastStartError = null;
 
     try {
       final hasPermission = await recorder.hasPermission();
       _permissionGranted = hasPermission;
-      if (!hasPermission) return false;
+      if (!hasPermission) {
+        _lastFailureReason = 'permissionDenied';
+        _lastStartError = 'Microphone permission denied';
+        return false;
+      }
 
       final stream = await recorder.startStream(RecordConfig(
         encoder: AudioEncoder.pcm16bits,
@@ -99,12 +111,14 @@ class MicrophoneCaptureService {
       _subscription = stream.listen(
         (pcm16le) => _handleChunk(pcm16le, onChunk),
         onError: (Object error, StackTrace stackTrace) {
+          _lastFailureReason = 'captureStreamError';
           _lastStartError = error.toString();
           onError?.call(error, stackTrace);
         },
       );
       return true;
     } catch (error) {
+      _lastFailureReason = 'captureStartFailed';
       _lastStartError = error.toString();
       rethrow;
     }
@@ -129,8 +143,11 @@ class MicrophoneCaptureService {
 
   void resetDiagnostics() {
     _chunksCaptured = 0;
+    _bytesCaptured = 0;
+    _lastStartAttemptAtMs = null;
     _lastChunkAtMs = null;
     _lastChunkBytes = 0;
+    _lastFailureReason = null;
     _lastStartError = null;
     _streamLeveler.reset();
   }
@@ -140,6 +157,9 @@ class MicrophoneCaptureService {
     _lastChunkAtMs = now;
     _lastChunkBytes = pcm16le.length;
     _chunksCaptured++;
+    _bytesCaptured += pcm16le.length;
+    _lastFailureReason = null;
+    _lastStartError = null;
     onChunk(MicrophonePcmChunk(
       rawPcm16le: pcm16le,
       streamPcm16le: _streamLeveler.processPcm16le(pcm16le),
@@ -174,9 +194,12 @@ class MicrophoneCaptureSnapshot {
     required this.recorderCreated,
     required this.permissionGranted,
     required this.active,
+    required this.lastStartAttemptAtMs,
     required this.lastChunkAtMs,
     required this.chunksCaptured,
+    required this.bytesCaptured,
     required this.lastChunkBytes,
+    required this.failureReason,
     required this.lastStartError,
     required this.leveler,
   });
@@ -184,9 +207,12 @@ class MicrophoneCaptureSnapshot {
   final bool recorderCreated;
   final bool? permissionGranted;
   final bool active;
+  final int? lastStartAttemptAtMs;
   final int? lastChunkAtMs;
   final int chunksCaptured;
+  final int bytesCaptured;
   final int lastChunkBytes;
+  final String? failureReason;
   final String? lastStartError;
   final AudioStreamLevelerSnapshot leveler;
 }

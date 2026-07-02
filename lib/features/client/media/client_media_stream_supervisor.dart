@@ -135,6 +135,7 @@ class ClientMediaStreamSupervisor {
         shouldRetry: _shouldRetryAudio,
         onAudioChunkWritten: _markAudioChunkWritten,
         onStatus: (status) {
+          healthState?.updateAudioPipelineStatus(status.toJson());
           if (status.event == 'error') _audioReconnects = status.reconnects;
           _emit('audio_${status.event}');
         },

@@ -81,8 +81,68 @@ void main() {
     expect(status['ok'], isTrue);
     expect(status['runtime'], isA<Map>());
     expect(status['video'], isA<Map>());
-    expect(status['audio'], isA<Map>());
+    expect(status['server'], isA<Map>());
+    final audio = status['audio'] as Map;
+    expect(audio['microphoneStarted'], isA<bool>());
+    expect(audio['bytesCaptured'], isA<int>());
+    expect(audio['chunksSent'], isA<int>());
+    expect(audio['failureReason'], isNull);
     expect(status['events'], isA<Map>());
+  });
+
+  test(
+      '/test/status client audio pipeline metriklerini kalite raporundan gosterir',
+      () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.sessionStart,
+      trusted.token,
+      {'clientId': trusted.clientId, 'video': true, 'audio': true},
+    );
+    await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.qualityReport,
+      trusted.token,
+      {
+        'networkTier': 'excellent',
+        'watchActive': true,
+        'audioPipeline': {
+          'networkBytesReceived': 512,
+          'pcmChunksParsed': 4,
+          'nativeBytesWritten': 256,
+        },
+      },
+    );
+
+    final status = await _getJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.testStatus,
+      trusted.token,
+    );
+    final clients = status['clients'] as Map;
+    final pipelines = clients['audioPipelines'] as List;
+    final audio = status['audio'] as Map;
+
+    expect(pipelines, hasLength(1));
+    expect(pipelines.single, containsPair('clientId', trusted.clientId));
+    expect(pipelines.single, containsPair('networkBytesReceived', 512));
+    expect(pipelines.single, containsPair('pcmChunksParsed', 4));
+    expect(pipelines.single, containsPair('nativeBytesWritten', 256));
+    expect(audio['clientPipelines'], pipelines);
   });
 
   test('/test/alert websocket event kanalina sentetik bildirim yollar',

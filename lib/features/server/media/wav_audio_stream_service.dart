@@ -25,6 +25,12 @@ class WavAudioStreamService {
       StreamBackpressureGate<HttpResponse>(kind: StreamBackpressureKind.audio);
 
   int _chunksStreamed = 0;
+  int _bytesStreamed = 0;
+  int _sourceChunksAccepted = 0;
+  int _sourceBytesAccepted = 0;
+  int _lastSequence = 0;
+  int? _lastSourceChunkAtMs;
+  int _lastSourceChunkBytes = 0;
   int? _lastClientWriteAtMs;
   int _lastClientWriteBytes = 0;
 
@@ -37,6 +43,12 @@ class WavAudioStreamService {
         clientIds: List.unmodifiable(_clientIds.values),
         busyClientIds: List.unmodifiable(_busyClientIds),
         chunksStreamed: _chunksStreamed,
+        bytesStreamed: _bytesStreamed,
+        sourceChunksAccepted: _sourceChunksAccepted,
+        sourceBytesAccepted: _sourceBytesAccepted,
+        lastSequence: _lastSequence,
+        lastSourceChunkAtMs: _lastSourceChunkAtMs,
+        lastSourceChunkBytes: _lastSourceChunkBytes,
         lastClientWriteAtMs: _lastClientWriteAtMs,
         lastClientWriteBytes: _lastClientWriteBytes,
         backpressure: _backpressure.aggregateMetrics(),
@@ -70,7 +82,13 @@ class WavAudioStreamService {
   }
 
   void broadcast(Uint8List pcm16le) {
-    if (pcm16le.isEmpty || _clients.isEmpty) return;
+    if (pcm16le.isEmpty) return;
+    _sourceChunksAccepted++;
+    _sourceBytesAccepted += pcm16le.length;
+    _lastSequence++;
+    _lastSourceChunkAtMs = DateTime.now().millisecondsSinceEpoch;
+    _lastSourceChunkBytes = pcm16le.length;
+    if (_clients.isEmpty) return;
     for (final client in _clients.toList()) {
       final clientId = _clientIds[client];
       if (!_backpressure.tryMarkBusy(client)) continue;
@@ -80,6 +98,7 @@ class WavAudioStreamService {
         client.add(pcm16le);
         unawaited(client.flush().then<void>((_) {
           _chunksStreamed++;
+          _bytesStreamed += pcm16le.length;
           _lastClientWriteAtMs = DateTime.now().millisecondsSinceEpoch;
           _lastClientWriteBytes = pcm16le.length;
           _backpressure.recordSuccess(
@@ -124,6 +143,12 @@ class WavAudioStreamService {
 
   void resetDiagnostics() {
     _chunksStreamed = 0;
+    _bytesStreamed = 0;
+    _sourceChunksAccepted = 0;
+    _sourceBytesAccepted = 0;
+    _lastSequence = 0;
+    _lastSourceChunkAtMs = null;
+    _lastSourceChunkBytes = 0;
     _lastClientWriteAtMs = null;
     _lastClientWriteBytes = 0;
     _backpressure.clear();
@@ -137,6 +162,12 @@ class WavAudioStreamSnapshot {
     required this.clientIds,
     required this.busyClientIds,
     required this.chunksStreamed,
+    required this.bytesStreamed,
+    required this.sourceChunksAccepted,
+    required this.sourceBytesAccepted,
+    required this.lastSequence,
+    required this.lastSourceChunkAtMs,
+    required this.lastSourceChunkBytes,
     required this.lastClientWriteAtMs,
     required this.lastClientWriteBytes,
     required this.backpressure,
@@ -146,6 +177,12 @@ class WavAudioStreamSnapshot {
   final List<String> clientIds;
   final List<String> busyClientIds;
   final int chunksStreamed;
+  final int bytesStreamed;
+  final int sourceChunksAccepted;
+  final int sourceBytesAccepted;
+  final int lastSequence;
+  final int? lastSourceChunkAtMs;
+  final int lastSourceChunkBytes;
   final int? lastClientWriteAtMs;
   final int lastClientWriteBytes;
   final StreamBackpressureMetrics backpressure;
