@@ -25,6 +25,9 @@ class ConfigurationService {
       _prefs.getInt('${_generalPrefix}cry_window_ms') ?? 5000;
   int get notifyCooldownMs =>
       _prefs.getInt('${_generalPrefix}notify_cooldown_ms') ?? 60000;
+  bool get webRtcPilotEnabled =>
+      _prefs.getBool('${_generalPrefix}webrtc_pilot_enabled') ??
+      const bool.fromEnvironment('MIMICAM_WEBRTC_PILOT');
 
   Future<void> setMotionThreshold(double threshold) =>
       _prefs.setDouble('${_generalPrefix}motion_threshold', threshold);
@@ -40,6 +43,8 @@ class ConfigurationService {
       _prefs.setInt('${_generalPrefix}cry_window_ms', windowMs);
   Future<void> setNotifyCooldownMs(int cooldownMs) =>
       _prefs.setInt('${_generalPrefix}notify_cooldown_ms', cooldownMs);
+  Future<void> setWebRtcPilotEnabled(bool enabled) =>
+      _prefs.setBool('${_generalPrefix}webrtc_pilot_enabled', enabled);
 
   Future<void> resetToDefaults() async {
     final keys = _prefs

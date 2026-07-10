@@ -12,6 +12,20 @@ import 'package:mimicam/services/mimicam_server.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('bilinmeyen HTTP path landing page yerine 404 doner', () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    expect(
+      await _getStatusCode(client, base.port, '/does-not-exist'),
+      HttpStatus.notFound,
+    );
+  });
+
   test('private endpointler Bearer token ister, query main token kabul etmez',
       () async {
     final tokenService = PairingTokenService();
@@ -86,15 +100,21 @@ void main() {
 
   test('session/start audio talebini runtime callbackine taşır', () async {
     final tokenService = PairingTokenService();
-    ({String clientId, bool video, bool audio})? started;
+    ({String clientId, bool video, bool audio, String mediaTransport})? started;
     final server = await _testServer(
       tokenService,
       onStreamSessionStarted: (
         clientId, {
         required bool video,
         required bool audio,
+        required String mediaTransport,
       }) {
-        started = (clientId: clientId, video: video, audio: audio);
+        started = (
+          clientId: clientId,
+          video: video,
+          audio: audio,
+          mediaTransport: mediaTransport,
+        );
       },
     );
     addTearDown(server.dispose);
@@ -130,6 +150,7 @@ void main() {
     expect(started?.clientId, trusted.clientId);
     expect(started?.video, isTrue);
     expect(started?.audio, isTrue);
+    expect(started?.mediaTransport, 'mjpeg_wav');
   });
 
   test('streamToken private endpointlerde ana token yerine geçmez', () async {
@@ -169,6 +190,52 @@ void main() {
         bearerToken: trusted.token,
       ),
       HttpStatus.ok,
+    );
+  });
+
+  test('media endpointleri Bearer ile streamToken kontrolunu bypass edemez',
+      () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final anne = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final baba = tokenService.issueTrustedClientToken(
+      clientName: 'Baba',
+      deviceId: 'baba',
+    );
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    final start = await _postSessionStart(
+      client,
+      base.port,
+      anne.token,
+      anne.clientId,
+    );
+    final streamToken = start['streamToken'] as String;
+
+    expect(
+      await _getStatusCode(
+        client,
+        base.port,
+        MimiCamProtocolV2.video,
+        bearerToken: anne.token,
+      ),
+      HttpStatus.unauthorized,
+    );
+    expect(
+      await _getStatusCode(
+        client,
+        base.port,
+        MimiCamProtocolV2.audio,
+        bearerToken: baba.token,
+        query: {'streamToken': streamToken},
+      ),
+      HttpStatus.unauthorized,
     );
   });
 
@@ -332,6 +399,7 @@ Future<MimiCamServer> _testServer(
     String clientId, {
     required bool video,
     required bool audio,
+    required String mediaTransport,
   })? onStreamSessionStarted,
 }) async {
   SharedPreferences.setMockInitialValues({});

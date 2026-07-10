@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../../../core/media/adaptive_media_profile.dart';
 import '../../../core/protocol/alert_event_dto.dart';
@@ -11,6 +12,7 @@ import '../../../services/monetization/broadcast_access_service.dart';
 import '../../shared/presentation/localized_measurement_text.dart';
 import '../../shared/presentation/media_profile_text.dart';
 import '../client_runtime.dart';
+import '../controls/room_controls_panel.dart';
 import 'active_stream_session.dart';
 import 'client_media_stream_supervisor.dart';
 import 'client_stream_health_state.dart';
@@ -428,6 +430,14 @@ class _WatchScreenState extends State<WatchScreen> {
           _ActionGroup(
             actions: _watchActionSpecs(strings, state),
           ),
+          if (state.session != null && widget.runtime.roomControls != null) ...[
+            const SizedBox(height: 18),
+            RoomControlsPanel(
+              controls: widget.runtime.roomControls!,
+              session: state.session!,
+              onError: (error) => _showSnack(error.toString()),
+            ),
+          ],
           const SizedBox(height: 28),
           SizedBox(
             width: double.infinity,
@@ -881,6 +891,16 @@ class _StreamSurfaceState extends State<_StreamSurface> {
       if (error != null) return _StreamErrorPanel(message: error.toString());
       return const _StreamPlaceholder();
     }
+    final webRtc = widget.activeStream?.webRtc;
+    if (widget.activeStream?.usesWebRtc == true && webRtc != null) {
+      return RTCVideoView(
+        webRtc.videoRenderer,
+        objectFit: widget.fit == BoxFit.cover
+            ? RTCVideoViewObjectFit.RTCVideoViewObjectFitCover
+            : RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+        placeholderBuilder: (_) => const _StreamPlaceholder(),
+      );
+    }
     final streamError = _streamError;
     if (_latestFrame == null && streamError != null) {
       return _StreamErrorPanel(message: streamError.toString());
@@ -904,7 +924,7 @@ class _StreamSurfaceState extends State<_StreamSurface> {
         ? null
         : '${session.httpScheme}://${session.host}:${session.port}'
             '|${session.sessionToken}|${activeStream.streamToken}'
-            '|${widget.audioEnabled}';
+            '|${widget.audioEnabled}|${activeStream.transport.name}';
     if (nextKey == _streamKey) return;
     _streamKey = nextKey;
     final previous = _supervisor;
@@ -913,6 +933,10 @@ class _StreamSurfaceState extends State<_StreamSurface> {
     _latestFrame = null;
     _streamError = null;
     if (session == null || activeStream == null) {
+      if (mounted) setState(() {});
+      return;
+    }
+    if (activeStream.usesWebRtc) {
       if (mounted) setState(() {});
       return;
     }

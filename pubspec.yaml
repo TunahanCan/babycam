@@ -27,6 +27,8 @@ dependencies:
   just_audio: ^0.10.6
   bluetooth_low_energy: ^6.2.1
   in_app_purchase: ^3.3.0
+  flutter_webrtc: ^1.5.2
+  nsd: ^5.0.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

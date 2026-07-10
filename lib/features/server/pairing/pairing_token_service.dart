@@ -1,45 +1,18 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
 import '../../../core/security/secure_random_token_generator.dart';
 import '../../../core/security/trusted_client_token.dart';
+import 'trusted_client_repository.dart';
 
-class TrustedClientRecord {
-  const TrustedClientRecord(
-      {required this.clientId,
-      required this.clientName,
-      required this.tokenHash,
-      required this.createdAtMs,
-      required this.lastSeenAtMs,
-      required this.expiresAtMs,
-      this.revokedAtMs});
-  final String clientId;
-  final String clientName;
-  final String tokenHash;
-  final int createdAtMs;
-  final int lastSeenAtMs;
-  final int expiresAtMs;
-  final int? revokedAtMs;
-  bool get revoked => revokedAtMs != null;
-  DateTime get pairedAt => DateTime.fromMillisecondsSinceEpoch(createdAtMs);
-  DateTime get lastSeenAt => DateTime.fromMillisecondsSinceEpoch(lastSeenAtMs);
-
-  TrustedClientRecord copyWith(
-          {String? tokenHash,
-          int? lastSeenAtMs,
-          int? expiresAtMs,
-          int? revokedAtMs}) =>
-      TrustedClientRecord(
-        clientId: clientId,
-        clientName: clientName,
-        tokenHash: tokenHash ?? this.tokenHash,
-        createdAtMs: createdAtMs,
-        lastSeenAtMs: lastSeenAtMs ?? this.lastSeenAtMs,
-        expiresAtMs: expiresAtMs ?? this.expiresAtMs,
-        revokedAtMs: revokedAtMs ?? this.revokedAtMs,
-      );
-}
+export 'trusted_client_repository.dart'
+    show
+        InMemoryTrustedClientRepository,
+        SharedPreferencesTrustedClientRepository,
+        TrustedClientRecord,
+        TrustedClientRepository;
 
 class StreamAccessToken {
   const StreamAccessToken({
@@ -88,11 +61,20 @@ class PairingTokenService {
       this.maxPairConfirmAttemptsPerWindow =
           defaultMaxPairConfirmAttemptsPerWindow,
       this.maxTrustedClients = defaultMaxTrustedClients,
+      this.lastSeenPersistenceInterval = const Duration(minutes: 1),
+      TrustedClientRepository? trustedClientRepository,
       SecureRandomTokenGenerator? tokenGenerator})
       : _now = now ?? DateTime.now,
         _nonceTtl = nonceTtl,
         _streamTokenTtl = streamTokenTtl,
-        _tokenGenerator = tokenGenerator ?? SecureRandomTokenGenerator();
+        _tokenGenerator = tokenGenerator ?? SecureRandomTokenGenerator(),
+        _trustedClientRepository =
+            trustedClientRepository ?? InMemoryTrustedClientRepository() {
+    final nowMs = _now().millisecondsSinceEpoch;
+    for (final record in _trustedClientRepository.readAll()) {
+      if (record.expiresAtMs > nowMs) _clients[record.clientId] = record;
+    }
+  }
 
   static const defaultMaxTrustedClients = 5;
   static const defaultMaxActiveNonces = 64;
@@ -105,11 +87,17 @@ class PairingTokenService {
   final Duration pairConfirmRateLimitWindow;
   final int maxPairConfirmAttemptsPerWindow;
   final int maxTrustedClients;
+  final Duration lastSeenPersistenceInterval;
   final SecureRandomTokenGenerator _tokenGenerator;
+  final TrustedClientRepository _trustedClientRepository;
   final _nonces = <String, int>{};
   final _pairConfirmAttempts = <String, List<int>>{};
   final _clients = <String, TrustedClientRecord>{};
   final _streamTokens = <String, StreamTokenRecord>{};
+  Future<void> _persistenceQueue = Future<void>.value();
+  Object? _lastPersistenceError;
+
+  Object? get lastPersistenceError => _lastPersistenceError;
 
   String createPairingNonce() {
     pruneExpiredNonces();
@@ -172,6 +160,7 @@ class PairingTokenService {
       lastSeenAtMs: nowMs,
       expiresAtMs: expiresAtMs,
     );
+    _persistTrustedClients();
     return TrustedClientToken(
         clientId: clientId, token: token, expiresAtMs: expiresAtMs);
   }
@@ -195,9 +184,14 @@ class PairingTokenService {
       if (record.tokenHash == tokenHash &&
           record.revokedAtMs == null &&
           record.expiresAtMs > nowMs) {
-        final updated = record.copyWith(lastSeenAtMs: nowMs);
-        _clients[entry.key] = updated;
-        return updated;
+        if (nowMs - record.lastSeenAtMs >=
+            lastSeenPersistenceInterval.inMilliseconds) {
+          final updated = record.copyWith(lastSeenAtMs: nowMs);
+          _clients[entry.key] = updated;
+          _persistTrustedClients();
+          return updated;
+        }
+        return record;
       }
     }
     return null;
@@ -258,8 +252,13 @@ class PairingTokenService {
   String hashToken(String token) =>
       sha256.convert(utf8.encode(token)).toString();
   TrustedClientRecord? recordForClient(String clientId) => _clients[clientId];
-  int get pairedClientCount =>
-      _clients.values.where((c) => c.revokedAtMs == null).length;
+  int get pairedClientCount => _clients.values
+      .where(
+        (client) =>
+            client.revokedAtMs == null &&
+            client.expiresAtMs > _now().millisecondsSinceEpoch,
+      )
+      .length;
 
   void revokeSession(String token) {
     final tokenHash = hashToken(token);
@@ -268,6 +267,7 @@ class PairingTokenService {
       if (entry.value.tokenHash == tokenHash) {
         _clients[entry.key] = entry.value.copyWith(revokedAtMs: nowMs);
         revokeStreamTokensForClient(entry.key);
+        _persistTrustedClients();
       }
     }
   }
@@ -278,6 +278,7 @@ class PairingTokenService {
       _clients[clientId] =
           record.copyWith(revokedAtMs: _now().millisecondsSinceEpoch);
       revokeStreamTokensForClient(clientId);
+      _persistTrustedClients();
     }
   }
 
@@ -287,6 +288,30 @@ class PairingTokenService {
       _clients[entry.key] = entry.value.copyWith(revokedAtMs: nowMs);
     }
     _streamTokens.clear();
+    _persistTrustedClients();
+  }
+
+  void clearEphemeralState() {
+    _nonces.clear();
+    _pairConfirmAttempts.clear();
+    _streamTokens.clear();
+  }
+
+  Future<void> flushPersistence() => _persistenceQueue;
+
+  void _persistTrustedClients() {
+    final snapshot = List<TrustedClientRecord>.of(
+      _clients.values,
+      growable: false,
+    );
+    _persistenceQueue = _persistenceQueue
+        .catchError((_) {})
+        .then((_) => _trustedClientRepository.replaceAll(snapshot))
+        .then<void>((_) => _lastPersistenceError = null)
+        .catchError((Object error) {
+      _lastPersistenceError = error;
+    });
+    unawaited(_persistenceQueue);
   }
 
   void _pruneNonceCapacity() {

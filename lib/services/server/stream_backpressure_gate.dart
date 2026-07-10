@@ -9,16 +9,20 @@ StreamBackpressureMetrics combineBackpressureMetrics(
     return next > current ? next : current;
   }
 
-  double? mergeAverage(double? current, double? next) {
+  double? maxDouble(double? current, double? next) {
     if (current == null) return next;
     if (next == null) return current;
-    return (current + next) / 2;
+    return next > current ? next : current;
   }
 
   var skippedWrites = 0;
   var skippedVideoFrames = 0;
   var skippedAudioChunks = 0;
+  var consecutiveSkippedVideoFrames = 0;
+  var consecutiveSkippedAudioChunks = 0;
   var consecutiveWriteFailures = 0;
+  int? lastSkippedVideoFrameAtMs;
+  int? lastSkippedAudioChunkAtMs;
   int? lastSuccessfulVideoWriteAtMs;
   int? lastSuccessfulAudioWriteAtMs;
   int? lastWriteDurationMs;
@@ -27,7 +31,25 @@ StreamBackpressureMetrics combineBackpressureMetrics(
     skippedWrites += metric.skippedWrites;
     skippedVideoFrames += metric.skippedVideoFrames;
     skippedAudioChunks += metric.skippedAudioChunks;
+    consecutiveSkippedVideoFrames = maxInt(
+          consecutiveSkippedVideoFrames,
+          metric.consecutiveSkippedVideoFrames,
+        ) ??
+        0;
+    consecutiveSkippedAudioChunks = maxInt(
+          consecutiveSkippedAudioChunks,
+          metric.consecutiveSkippedAudioChunks,
+        ) ??
+        0;
     consecutiveWriteFailures += metric.consecutiveWriteFailures;
+    lastSkippedVideoFrameAtMs = maxInt(
+      lastSkippedVideoFrameAtMs,
+      metric.lastSkippedVideoFrameAtMs,
+    );
+    lastSkippedAudioChunkAtMs = maxInt(
+      lastSkippedAudioChunkAtMs,
+      metric.lastSkippedAudioChunkAtMs,
+    );
     lastSuccessfulVideoWriteAtMs = maxInt(
       lastSuccessfulVideoWriteAtMs,
       metric.lastSuccessfulVideoWriteAtMs,
@@ -38,7 +60,7 @@ StreamBackpressureMetrics combineBackpressureMetrics(
     );
     lastWriteDurationMs =
         maxInt(lastWriteDurationMs, metric.lastWriteDurationMs);
-    averageWriteDurationMs = mergeAverage(
+    averageWriteDurationMs = maxDouble(
       averageWriteDurationMs,
       metric.averageWriteDurationMs,
     );
@@ -47,6 +69,10 @@ StreamBackpressureMetrics combineBackpressureMetrics(
     skippedWrites: skippedWrites,
     skippedVideoFrames: skippedVideoFrames,
     skippedAudioChunks: skippedAudioChunks,
+    consecutiveSkippedVideoFrames: consecutiveSkippedVideoFrames,
+    consecutiveSkippedAudioChunks: consecutiveSkippedAudioChunks,
+    lastSkippedVideoFrameAtMs: lastSkippedVideoFrameAtMs,
+    lastSkippedAudioChunkAtMs: lastSkippedAudioChunkAtMs,
     lastSuccessfulVideoWriteAtMs: lastSuccessfulVideoWriteAtMs,
     lastSuccessfulAudioWriteAtMs: lastSuccessfulAudioWriteAtMs,
     consecutiveWriteFailures: consecutiveWriteFailures,
@@ -60,6 +86,10 @@ class StreamBackpressureMetrics {
     this.skippedWrites = 0,
     this.skippedVideoFrames = 0,
     this.skippedAudioChunks = 0,
+    this.consecutiveSkippedVideoFrames = 0,
+    this.consecutiveSkippedAudioChunks = 0,
+    this.lastSkippedVideoFrameAtMs,
+    this.lastSkippedAudioChunkAtMs,
     this.lastSuccessfulVideoWriteAtMs,
     this.lastSuccessfulAudioWriteAtMs,
     this.consecutiveWriteFailures = 0,
@@ -70,6 +100,10 @@ class StreamBackpressureMetrics {
   final int skippedWrites;
   final int skippedVideoFrames;
   final int skippedAudioChunks;
+  final int consecutiveSkippedVideoFrames;
+  final int consecutiveSkippedAudioChunks;
+  final int? lastSkippedVideoFrameAtMs;
+  final int? lastSkippedAudioChunkAtMs;
   final int? lastSuccessfulVideoWriteAtMs;
   final int? lastSuccessfulAudioWriteAtMs;
   final int consecutiveWriteFailures;
@@ -81,6 +115,10 @@ class _MutableStreamBackpressureMetrics {
   int skippedWrites = 0;
   int skippedVideoFrames = 0;
   int skippedAudioChunks = 0;
+  int consecutiveSkippedVideoFrames = 0;
+  int consecutiveSkippedAudioChunks = 0;
+  int? lastSkippedVideoFrameAtMs;
+  int? lastSkippedAudioChunkAtMs;
   int? lastSuccessfulVideoWriteAtMs;
   int? lastSuccessfulAudioWriteAtMs;
   int consecutiveWriteFailures = 0;
@@ -91,6 +129,10 @@ class _MutableStreamBackpressureMetrics {
         skippedWrites: skippedWrites,
         skippedVideoFrames: skippedVideoFrames,
         skippedAudioChunks: skippedAudioChunks,
+        consecutiveSkippedVideoFrames: consecutiveSkippedVideoFrames,
+        consecutiveSkippedAudioChunks: consecutiveSkippedAudioChunks,
+        lastSkippedVideoFrameAtMs: lastSkippedVideoFrameAtMs,
+        lastSkippedAudioChunkAtMs: lastSkippedAudioChunkAtMs,
         lastSuccessfulVideoWriteAtMs: lastSuccessfulVideoWriteAtMs,
         lastSuccessfulAudioWriteAtMs: lastSuccessfulAudioWriteAtMs,
         consecutiveWriteFailures: consecutiveWriteFailures,
@@ -102,10 +144,13 @@ class _MutableStreamBackpressureMetrics {
 class StreamBackpressureGate<T extends Object> {
   StreamBackpressureGate({
     this.kind = StreamBackpressureKind.generic,
+    this.audioSkipRecoveryCooldown = const Duration(milliseconds: 300),
     int Function()? nowMs,
-  }) : _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch);
+  })  : assert(!audioSkipRecoveryCooldown.isNegative),
+        _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final StreamBackpressureKind kind;
+  final Duration audioSkipRecoveryCooldown;
   final int Function() _nowMs;
   final _busyClients = <T>{};
   final _metrics = <T, _MutableStreamBackpressureMetrics>{};
@@ -143,6 +188,22 @@ class StreamBackpressureGate<T extends Object> {
       total.skippedWrites += metrics.skippedWrites;
       total.skippedVideoFrames += metrics.skippedVideoFrames;
       total.skippedAudioChunks += metrics.skippedAudioChunks;
+      total.consecutiveSkippedVideoFrames = _maxInt(
+        total.consecutiveSkippedVideoFrames,
+        metrics.consecutiveSkippedVideoFrames,
+      );
+      total.consecutiveSkippedAudioChunks = _maxInt(
+        total.consecutiveSkippedAudioChunks,
+        metrics.consecutiveSkippedAudioChunks,
+      );
+      total.lastSkippedVideoFrameAtMs = _maxNullable(
+        total.lastSkippedVideoFrameAtMs,
+        metrics.lastSkippedVideoFrameAtMs,
+      );
+      total.lastSkippedAudioChunkAtMs = _maxNullable(
+        total.lastSkippedAudioChunkAtMs,
+        metrics.lastSkippedAudioChunkAtMs,
+      );
       total.consecutiveWriteFailures += metrics.consecutiveWriteFailures;
       total.lastSuccessfulVideoWriteAtMs = _maxNullable(
         total.lastSuccessfulVideoWriteAtMs,
@@ -156,7 +217,7 @@ class StreamBackpressureGate<T extends Object> {
         total.lastWriteDurationMs,
         metrics.lastWriteDurationMs,
       );
-      total.averageWriteDurationMs = _mergeAverage(
+      total.averageWriteDurationMs = _maxNullableDouble(
         total.averageWriteDurationMs,
         metrics.averageWriteDurationMs,
       );
@@ -168,12 +229,16 @@ class StreamBackpressureGate<T extends Object> {
     final metrics = _metricsFor(client);
     metrics.skippedWrites++;
     metrics.skippedVideoFrames++;
+    metrics.consecutiveSkippedVideoFrames++;
+    metrics.lastSkippedVideoFrameAtMs = _nowMs();
   }
 
   void recordSkippedAudioChunk(T client) {
     final metrics = _metricsFor(client);
     metrics.skippedWrites++;
     metrics.skippedAudioChunks++;
+    metrics.consecutiveSkippedAudioChunks++;
+    metrics.lastSkippedAudioChunkAtMs = _nowMs();
   }
 
   void recordSuccess(T client, {required Duration duration}) {
@@ -188,8 +253,14 @@ class StreamBackpressureGate<T extends Object> {
     switch (kind) {
       case StreamBackpressureKind.video:
         metrics.lastSuccessfulVideoWriteAtMs = nowMs;
+        metrics.consecutiveSkippedVideoFrames = 0;
       case StreamBackpressureKind.audio:
         metrics.lastSuccessfulAudioWriteAtMs = nowMs;
+        final lastSkipAtMs = metrics.lastSkippedAudioChunkAtMs;
+        if (lastSkipAtMs == null ||
+            nowMs - lastSkipAtMs >= audioSkipRecoveryCooldown.inMilliseconds) {
+          metrics.consecutiveSkippedAudioChunks = 0;
+        }
       case StreamBackpressureKind.generic:
         break;
     }
@@ -208,8 +279,12 @@ class StreamBackpressureGate<T extends Object> {
     switch (kind) {
       case StreamBackpressureKind.video:
         metrics.skippedVideoFrames++;
+        metrics.consecutiveSkippedVideoFrames++;
+        metrics.lastSkippedVideoFrameAtMs = _nowMs();
       case StreamBackpressureKind.audio:
         metrics.skippedAudioChunks++;
+        metrics.consecutiveSkippedAudioChunks++;
+        metrics.lastSkippedAudioChunkAtMs = _nowMs();
       case StreamBackpressureKind.generic:
         break;
     }
@@ -221,9 +296,11 @@ class StreamBackpressureGate<T extends Object> {
     return next > current ? next : current;
   }
 
-  double? _mergeAverage(double? current, double? next) {
+  double? _maxNullableDouble(double? current, double? next) {
     if (current == null) return next;
     if (next == null) return current;
-    return (current + next) / 2;
+    return next > current ? next : current;
   }
+
+  int _maxInt(int current, int next) => next > current ? next : current;
 }

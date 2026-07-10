@@ -56,27 +56,82 @@ void main() {
     expect(service.snapshot.failureReason, 'permissionDenied');
     expect(service.snapshot.lastStartError, contains('permission denied'));
   });
+
+  test('es zamanli start talepleri tek recorder operasyonunda birlesir',
+      () async {
+    final permission = Completer<bool>();
+    final recorder = _FakeRecorder(permissionResult: permission.future);
+    final service = MicrophoneCaptureService(
+      sampleRate: 16000,
+      channels: 1,
+      recorder: recorder,
+    );
+
+    final first = service.start(onChunk: (_) {});
+    final second = service.start(onChunk: (_) {});
+    expect(recorder.permissionCalls, 1);
+    permission.complete(true);
+
+    expect(await Future.wait([first, second]), [true, true]);
+    expect(recorder.startCalls, 1);
+    expect(service.isActive, isTrue);
+    await service.dispose();
+  });
+
+  test('pending start sirasinda stop gec gelen streami aktif birakmaz',
+      () async {
+    final streamResult = Completer<Stream<Uint8List>>();
+    final recorder = _FakeRecorder(streamResult: streamResult.future);
+    final service = MicrophoneCaptureService(
+      sampleRate: 16000,
+      channels: 1,
+      recorder: recorder,
+    );
+
+    final starting = service.start(onChunk: (_) {});
+    await pumpEventQueue();
+    final stopping = service.stop();
+    streamResult.complete(recorder.stream);
+
+    expect(await starting, isFalse);
+    await stopping;
+    expect(service.isActive, isFalse);
+    expect(recorder.stopped, isTrue);
+    await service.dispose();
+  });
 }
 
 class _FakeRecorder implements MicrophoneRecorderPort {
-  _FakeRecorder({this.hasPermissionValue = true});
+  _FakeRecorder({
+    this.hasPermissionValue = true,
+    this.permissionResult,
+    this.streamResult,
+  });
 
   final bool hasPermissionValue;
-  final _controller = StreamController<Uint8List>();
+  final Future<bool>? permissionResult;
+  final Future<Stream<Uint8List>>? streamResult;
+  final _controller = StreamController<Uint8List>.broadcast();
+  int permissionCalls = 0;
   int startCalls = 0;
   bool stopped = false;
   bool disposed = false;
   RecordConfig? lastConfig;
 
   @override
-  Future<bool> hasPermission() async => hasPermissionValue;
+  Future<bool> hasPermission() {
+    permissionCalls++;
+    return permissionResult ?? Future<bool>.value(hasPermissionValue);
+  }
 
   @override
   Future<Stream<Uint8List>> startStream(RecordConfig config) async {
     startCalls++;
     lastConfig = config;
-    return _controller.stream;
+    return streamResult ?? Future<Stream<Uint8List>>.value(_controller.stream);
   }
+
+  Stream<Uint8List> get stream => _controller.stream;
 
   void add(Uint8List bytes) {
     _controller.add(bytes);

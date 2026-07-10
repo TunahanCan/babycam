@@ -274,11 +274,21 @@ class _FakePurchaseGateway implements BroadcastPurchaseGateway {
     required String productId,
     required String priceLabel,
   }) async =>
-      const BroadcastPurchaseResult(status: BroadcastPurchaseStatus.purchased);
+      const BroadcastPurchaseResult(
+        status: BroadcastPurchaseStatus.purchased,
+        verified: true,
+        verificationSource: 'test_store',
+        verificationFingerprint: 'test-fingerprint',
+      );
 
   @override
   Future<BroadcastPurchaseResult> restore({required String productId}) async =>
-      const BroadcastPurchaseResult(status: BroadcastPurchaseStatus.restored);
+      const BroadcastPurchaseResult(
+        status: BroadcastPurchaseStatus.restored,
+        verified: true,
+        verificationSource: 'test_store',
+        verificationFingerprint: 'test-fingerprint',
+      );
 
   @override
   Future<void> dispose() async {}

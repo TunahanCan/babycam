@@ -43,6 +43,58 @@ void main() {
     expect(frames, hasLength(1));
     expect(frames.single, [4, 5, 6]);
   });
+
+  test('sequence ve send timestamp multipart metadata olarak parse edilir', () {
+    final parser = MjpegStreamParser();
+    final bytes = utf8.encode(
+          '--frame\r\nContent-Type: image/jpeg\r\n'
+          'Content-Length: 3\r\n'
+          'X-MimiCam-Sequence: 42\r\n'
+          'X-MimiCam-Captured-At-Ms: 900\r\n'
+          'X-MimiCam-Sent-At-Ms: 1000\r\n\r\n',
+        ) +
+        [7, 8, 9] +
+        utf8.encode('\r\n');
+
+    final frame = parser.addFrames(Uint8List.fromList(bytes)).single;
+
+    expect(frame.jpeg, [7, 8, 9]);
+    expect(frame.sequence, 42);
+    expect(frame.capturedAtMs, 900);
+    expect(frame.sentAtMs, 1000);
+  });
+
+  test('relative transit estimator saat offsetini cikarip queue delay olcer',
+      () {
+    final estimator = VideoTransitEstimator()
+      ..observe(sentAtMs: 1000, arrivedAtMs: 6000)
+      ..observe(sentAtMs: 1100, arrivedAtMs: 6130);
+
+    expect(estimator.queueDelayMs, 30);
+    expect(estimator.jitterMs, closeTo(1.875, 0.001));
+  });
+
+  test(
+      'buyuk frame parcalari tek body kopyasi ve bounded header ile parse edilir',
+      () {
+    final parser = MjpegStreamParser();
+    final jpeg = List<int>.generate(128 * 1024, (index) => index & 0xff);
+    final stream = Uint8List.fromList(_frame(jpeg));
+    final frames = <Uint8List>[];
+
+    for (var offset = 0; offset < stream.length; offset += 257) {
+      final end = (offset + 257).clamp(0, stream.length);
+      frames.addAll(parser.add(Uint8List.sublistView(stream, offset, end)));
+    }
+
+    expect(frames, hasLength(1));
+    expect(frames.single, jpeg);
+    expect(parser.metrics.framesParsed, 1);
+    expect(parser.metrics.bodyBytesCopied, jpeg.length);
+    expect(parser.metrics.peakFrameBytes, jpeg.length);
+    expect(parser.metrics.peakHeaderBytes, lessThan(1024));
+    expect(parser.metrics.bufferedBytes, 0);
+  });
 }
 
 List<int> _frame(List<int> jpeg) =>

@@ -12,14 +12,21 @@ import 'client_stream_health_state.dart';
 class NetworkQualityMonitor {
   NetworkQualityMonitor({
     this.pollInterval = const Duration(seconds: 4),
-    this.timeout = const Duration(seconds: 2),
+    this.livePollInterval = const Duration(seconds: 1),
+    this.qualityReportInterval = const Duration(seconds: 4),
+    this.timeout = const Duration(milliseconds: 1200),
     this.healthState,
     BatterySnapshotProvider? batteryProvider,
     HttpClient Function(PairingSession session)? clientFactory,
-  })  : _batteryProvider = batteryProvider ?? BatteryPlusSnapshotProvider(),
+  })  : _batteryProvider = CachedBatterySnapshotProvider(
+          batteryProvider ?? BatteryPlusSnapshotProvider(),
+          ttl: const Duration(seconds: 30),
+        ),
         _clientFactory = clientFactory;
 
   final Duration pollInterval;
+  final Duration livePollInterval;
+  final Duration qualityReportInterval;
   final Duration timeout;
   final ClientStreamHealthState? healthState;
   final BatterySnapshotProvider _batteryProvider;
@@ -28,6 +35,7 @@ class NetworkQualityMonitor {
 
   Stream<NetworkQualityUpdate> watch(PairingSession session) async* {
     var failures = 0;
+    final reportSchedule = _QualityReportSchedule();
     late final HttpClient client;
     try {
       client = _createClient(session)..connectionTimeout = timeout;
@@ -37,10 +45,17 @@ class NetworkQualityMonitor {
     }
     try {
       while (true) {
-        final update = await _measure(client, session, failures);
+        final update = await _measure(
+          client,
+          session,
+          failures,
+          reportSchedule,
+        );
         failures = update.snapshot.consecutiveFailures;
         yield update;
-        await Future<void>.delayed(pollInterval);
+        await Future<void>.delayed(
+          (healthState?.watchActive ?? false) ? livePollInterval : pollInterval,
+        );
       }
     } finally {
       client.close(force: true);
@@ -59,7 +74,11 @@ class NetworkQualityMonitor {
   }
 
   Future<NetworkQualityUpdate> _measure(
-      HttpClient client, PairingSession session, int previousFailures) async {
+    HttpClient client,
+    PairingSession session,
+    int previousFailures,
+    _QualityReportSchedule reportSchedule,
+  ) async {
     final stopwatch = Stopwatch()..start();
     try {
       final status = await _getJson(
@@ -74,7 +93,16 @@ class NetworkQualityMonitor {
         _classifier.classify(rttMs: rttMs),
         healthSnapshot?.healthTier ?? NetworkQualityTier.unknown,
       );
-      final report = _shouldSendQualityReport(healthSnapshot, tier)
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final fingerprint = _qualityEventFingerprint(healthSnapshot);
+      final shouldReport = _shouldSendQualityReport(
+        healthSnapshot,
+        tier,
+        reportSchedule,
+        nowMs: nowMs,
+        eventFingerprint: fingerprint,
+      );
+      final report = shouldReport
           ? await _sendQualityReport(
               client,
               session,
@@ -84,6 +112,13 @@ class NetworkQualityMonitor {
               healthSnapshot: healthSnapshot,
             ).timeout(timeout)
           : status;
+      if (shouldReport) {
+        reportSchedule.record(
+          nowMs: nowMs,
+          tier: tier,
+          eventFingerprint: fingerprint,
+        );
+      }
       return NetworkQualityUpdate(
         snapshot: NetworkQualitySnapshot(
           tier: tier,
@@ -185,11 +220,31 @@ class NetworkQualityMonitor {
   bool _shouldSendQualityReport(
     ClientQualitySnapshot? healthSnapshot,
     NetworkQualityTier tier,
-  ) {
-    if (healthState == null) return true;
-    if (healthSnapshot?.watchActive ?? false) return true;
-    return _severity(tier) >= _severity(NetworkQualityTier.weak);
+    _QualityReportSchedule schedule, {
+    required int nowMs,
+    required int eventFingerprint,
+  }) {
+    final eligible = healthState == null ||
+        (healthSnapshot?.watchActive ?? false) ||
+        _severity(tier) >= _severity(NetworkQualityTier.weak);
+    if (!eligible) return false;
+    if (schedule.lastSentAtMs == null || schedule.lastTier != tier) return true;
+    if (schedule.lastEventFingerprint != eventFingerprint &&
+        _severity(tier) >= _severity(NetworkQualityTier.weak)) {
+      return true;
+    }
+    return nowMs - schedule.lastSentAtMs! >=
+        qualityReportInterval.inMilliseconds;
   }
+
+  int _qualityEventFingerprint(ClientQualitySnapshot? snapshot) => Object.hash(
+        snapshot?.streamTimedOut,
+        snapshot?.audioUnderrun,
+        snapshot?.skippedVideoFrames,
+        snapshot?.skippedAudioChunks,
+        snapshot?.wsDisconnectCount,
+        snapshot?.reconnectCount,
+      );
 
   NetworkQualityTier _worseTier(
     NetworkQualityTier current,
@@ -205,4 +260,20 @@ class NetworkQualityMonitor {
         NetworkQualityTier.excellent => 1,
         NetworkQualityTier.unknown => 0,
       };
+}
+
+class _QualityReportSchedule {
+  int? lastSentAtMs;
+  NetworkQualityTier? lastTier;
+  int? lastEventFingerprint;
+
+  void record({
+    required int nowMs,
+    required NetworkQualityTier tier,
+    required int eventFingerprint,
+  }) {
+    lastSentAtMs = nowMs;
+    lastTier = tier;
+    lastEventFingerprint = eventFingerprint;
+  }
 }

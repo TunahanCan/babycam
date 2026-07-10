@@ -6,42 +6,96 @@ import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
 import 'active_stream_session.dart';
 import 'client_stream_health_state.dart';
+import 'webrtc/webrtc_client_connector.dart';
+import 'webrtc/webrtc_transport_selector.dart';
 
 class StreamSessionController {
   StreamSessionController({
     this.healthState,
     this.streamTimeout = const Duration(seconds: 5),
     HttpClient Function(PairingSession session)? clientFactory,
-  }) : _clientFactory = clientFactory;
+    WebRtcClientConnector? webRtcConnector,
+  })  : _clientFactory = clientFactory,
+        _webRtcConnector = webRtcConnector;
 
   final ClientStreamHealthState? healthState;
   final Duration streamTimeout;
   final HttpClient Function(PairingSession session)? _clientFactory;
+  final WebRtcClientConnector? _webRtcConnector;
   bool isActive = false;
   String? lastStreamToken;
   int? lastStreamTokenExpiresAtMs;
   HttpClient? _client;
   String? _clientKey;
+  WebRtcClientMediaHandle? _webRtcHandle;
 
   Future<ActiveStreamSession?> start(
     PairingSession session, {
     bool audioEnabled = false,
   }) async {
-    final json = await _post(
+    final webRtcRequested = _supportsWebRtc(session) &&
+        _webRtcConnector != null &&
+        await _webRtcConnector.initialize();
+    var json = await _post(
       session,
       MimiCamProtocolV2.sessionStart,
       requestBody: {
         'clientId': session.clientId,
         'video': true,
         'audio': audioEnabled,
+        'mediaTransport': webRtcRequested ? 'webrtc' : 'mjpeg_wav',
       },
     );
-    final token = json?['streamToken']?.toString();
+    var token = json?['streamToken']?.toString();
     if (token == null || token.isEmpty) {
       isActive = false;
       lastStreamToken = null;
       lastStreamTokenExpiresAtMs = null;
       throw StateError('Session start did not return a stream token.');
+    }
+    Object? fallbackReason;
+    if (webRtcRequested) {
+      final selection = await WebRtcTransportSelector(
+        connector: _webRtcConnector,
+      ).select(
+        pilotEnabled: true,
+        session: session,
+        streamToken: token,
+        video: true,
+        audio: audioEnabled,
+      );
+      if (selection.transport == ClientMediaTransport.webRtc &&
+          selection.webRtc != null) {
+        _webRtcHandle = selection.webRtc;
+        lastStreamToken = token;
+        final expiresAtMs = json?['streamTokenExpiresAtMs'];
+        lastStreamTokenExpiresAtMs = expiresAtMs is int ? expiresAtMs : null;
+        isActive = true;
+        healthState?.resetForNewWatchSession();
+        return ActiveStreamSession(
+          streamToken: token,
+          expiresAtMs: lastStreamTokenExpiresAtMs,
+          audioEnabled: audioEnabled,
+          transport: ClientMediaTransport.webRtc,
+          webRtc: selection.webRtc,
+        );
+      }
+      fallbackReason = selection.fallbackReason;
+      await _post(session, MimiCamProtocolV2.sessionStop);
+      json = await _post(
+        session,
+        MimiCamProtocolV2.sessionStart,
+        requestBody: {
+          'clientId': session.clientId,
+          'video': true,
+          'audio': audioEnabled,
+          'mediaTransport': 'mjpeg_wav',
+        },
+      );
+      token = json?['streamToken']?.toString();
+      if (token == null || token.isEmpty) {
+        throw StateError('Fallback session did not return a stream token.');
+      }
     }
     lastStreamToken = token;
     final expiresAtMs = json?['streamTokenExpiresAtMs'];
@@ -52,11 +106,14 @@ class StreamSessionController {
       streamToken: token,
       expiresAtMs: lastStreamTokenExpiresAtMs,
       audioEnabled: audioEnabled,
+      transportFallbackReason: fallbackReason,
     );
   }
 
   Future<void> stop(PairingSession session) async {
     try {
+      await _webRtcHandle?.close();
+      _webRtcHandle = null;
       await _post(session, MimiCamProtocolV2.sessionStop);
     } finally {
       isActive = false;
@@ -65,6 +122,15 @@ class StreamSessionController {
       lastStreamTokenExpiresAtMs = null;
       dispose();
     }
+  }
+
+  bool _supportsWebRtc(PairingSession session) {
+    final capabilities = session.payload.capabilities;
+    final webRtc = capabilities['webrtc'];
+    if (webRtc is Map && webRtc['enabled'] == true) return true;
+    final transports = capabilities['mediaTransports'];
+    return transports is Iterable &&
+        transports.any((value) => value == 'webrtc');
   }
 
   Future<Map<String, Object?>?> _post(

@@ -34,8 +34,10 @@ void main() {
   });
 
   test('audio skip ve failure sayaçları tutulur', () {
+    var nowMs = 1000;
     final gate = StreamBackpressureGate<String>(
       kind: StreamBackpressureKind.audio,
+      nowMs: () => nowMs,
     );
 
     expect(gate.tryMarkBusy('client'), isTrue);
@@ -44,7 +46,19 @@ void main() {
 
     final metrics = gate.metricsFor('client');
     expect(metrics.skippedAudioChunks, 1);
+    expect(metrics.consecutiveSkippedAudioChunks, 1);
     expect(metrics.consecutiveWriteFailures, 1);
+
+    gate.recordSuccess('client', duration: const Duration(milliseconds: 20));
+    expect(gate.metricsFor('client').consecutiveSkippedAudioChunks, 1);
+
+    nowMs += 299;
+    gate.recordSuccess('client', duration: const Duration(milliseconds: 20));
+    expect(gate.metricsFor('client').consecutiveSkippedAudioChunks, 1);
+
+    nowMs += 1;
+    gate.recordSuccess('client', duration: const Duration(milliseconds: 20));
+    expect(gate.metricsFor('client').consecutiveSkippedAudioChunks, 0);
   });
 
   test('audio busy iken video skip metriği ayrıca kaydedilir', () {
@@ -73,5 +87,28 @@ void main() {
 
     expect(aggregate.skippedVideoFrames, 1);
     expect(aggregate.skippedAudioChunks, 1);
+  });
+
+  test('aggregate write duration en yavas client ortalamasini korur', () {
+    final gate = StreamBackpressureGate<String>();
+    gate.recordSuccess('fast', duration: const Duration(milliseconds: 8));
+    gate.recordSuccess('slow', duration: const Duration(milliseconds: 40));
+    gate.recordSuccess('medium', duration: const Duration(milliseconds: 20));
+
+    final clientMetrics = [
+      gate.metricsFor('fast'),
+      gate.metricsFor('slow'),
+      gate.metricsFor('medium'),
+    ];
+
+    expect(gate.aggregateMetrics().averageWriteDurationMs, 40);
+    expect(
+      combineBackpressureMetrics(clientMetrics).averageWriteDurationMs,
+      40,
+    );
+    expect(
+      combineBackpressureMetrics(clientMetrics.reversed).averageWriteDurationMs,
+      40,
+    );
   });
 }

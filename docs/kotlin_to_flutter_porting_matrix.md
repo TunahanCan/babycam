@@ -16,7 +16,9 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | Permission policy | Rebuilt | `RolePermissionCoordinator` |
 | Configuration thresholds | Rebuilt | `ConfigurationService` |
 | Protocol constants | Rebuilt | `MimiCamProtocolV2` |
-| Local address selection | Rebuilt | `NetworkAddressProvider` |
+| Local address selection | Rebuilt | `NetworkAddressProvider`, IPv4/IPv6 URI-safe selection |
+| DNS-SD/NSD discovery | New | `_mimicam._tcp`, `MimiCamServiceAdvertiser`, `MimiCamServiceBrowser` |
+| Dual-stack server bind | New | IPv6 `v6Only:false` attempt with IPv4 fallback |
 | Local network guard | New | `LocalNetworkGuard` |
 | Local HTTP server | Rebuilt | `MimiCamServer` |
 | Route auth guard | New | `RequestAuthGuard` |
@@ -30,12 +32,16 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | Token renewal | New | `TrustedTokenRenewalClient` |
 | Multi-child profile storage | New | `ChildProfile`, `PairingSessionStore` |
 | Active watch session lifecycle | Rebuilt | `StreamSessionController`, `ActiveClientRegistry` |
+| Demand-owned camera/microphone | New | `MediaRuntimeController`, `MediaResourceDemand`, `ServerRuntime` |
 | MJPEG server stream | Rebuilt | `MjpegStreamService` |
 | MJPEG client parsing | Rebuilt | `MjpegStreamParser`, `ClientVideoViewer` |
 | WAV/PCM server stream | Rebuilt | `WavAudioStreamService` |
 | WAV/PCM client parsing | Rebuilt | `WavPcmStreamParser`, `ClientLiveAudioPipeline` |
 | Native Android audio output | Rebuilt | `AudioTrack` in `android/app/src/main/.../MainActivity.kt` |
 | Native iOS audio output | Rebuilt | `AVAudioEngine` in `ios/Runner/AppDelegate.swift` |
+| Native audio interruptions | New | Android audio focus/noisy/device callbacks; iOS interruption/route/reset observers |
+| Android background ownership | Rebuilt | Cached Flutter engine owned by non-sticky `MimiCamForegroundService` while demand exists |
+| iOS background contract | New | Controlled media pause on background and retained-demand recovery on foreground |
 | Camera image analysis | Rebuilt | `analysis/video/`, `MediaAnalysisCoordinator` |
 | Motion scoring | Rebuilt | `MotionAnalyzerV2` |
 | Luma downsampling | Rebuilt | `LumaDownsampler` |
@@ -51,15 +57,19 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | Local notifications | Rebuilt | `ClientNotificationService` |
 | In-app alert history | New | `ClientAlertHistory` |
 | Adaptive media quality | New | `MediaQualitySelector`, `UtilityBasedProfileSelector` |
+| Thermal/power governor | New | `DeviceResourceSnapshotProvider`, `MediaResourceGovernor` |
+| Bounded E2E media telemetry | New | `MediaSessionTelemetry`, p50/p95/p99 and counters in `/test/status` |
 | Stream backpressure | New | `StreamBackpressureGate` |
 | Runtime diagnostics | New | `/test`, `/test/status`, `/test/probe`, `/test/alert`, `/test/audio-tone` |
 | Battery reporting | New | `BatterySnapshot`, `BatterySnapshotProvider`, `battery_plus` |
-| Comfort audio controls | Partial | State and command reducer exist; real playback still needs sink work |
+| WebRTC H.264 + Opus | Pilot | Opt-in one-peer `flutter_webrtc` path with authenticated HTTP signaling and MJPEG/WAV fallback |
+| Comfort audio controls | Rebuilt | Procedural PCM catalog, native room playback and client controls |
 | Night light controls | Partial | State/command model and torch/screen-glow path exist |
-| Two-way talk controls | Partial | Session and byte ingest exist; real playback/overlay still needs sink work |
+| Two-way talk audio | Rebuilt | Parent microphone PCM upload, exclusive native room playback and comfort resume |
+| Two-way talk video | Partial | Compatibility ingest exists; parent overlay is intentionally unsupported |
 | Full screen watch UI | Rebuilt | `WatchScreen` |
 | Server full screen preview | New | `ServerHomeScreen` preview controls |
-| Paid unlock | New | `BroadcastAccessService`, `in_app_purchase` |
+| Paid unlock | Hardened | Fail-closed local store-envelope verification, SHA-256 evidence fingerprint, `in_app_purchase` |
 | Localization | Expanded | `AppStrings`, `app_ui_text_catalog.dart`, extras |
 | UI theme tokens | Rebuilt | `MimiCamDesignTokens`, shells, role presentation |
 
@@ -67,7 +77,7 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 
 | Area | Decision |
 | --- | --- |
-| UDP discovery | Removed from current MVP |
+| UDP discovery | Replaced by DNS-SD/NSD |
 | Telegram automation | Removed |
 | Cloud relay | Out of scope |
 | Account system | Out of scope |
@@ -76,11 +86,12 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | Apple Watch | Out of scope |
 | HTTPS/WSS | Out of scope for current runtime |
 | Certificate pinning | Out of scope until HTTPS/WSS exists |
-| WebRTC/H.264 | Out of scope |
-| Opus audio | Out of scope |
+| Multi-peer WebRTC | Out of scope; pilot is one peer |
+| TURN/relay/internet NAT traversal | Out of scope; pilot is LAN host ICE only |
 | Direct Bluetooth media | Out of scope |
 | Client-per-video-encode pipeline | Removed; server broadcasts latest frame |
 | Mixed Server/Client shell | Removed; role graphs are isolated |
+| Public nonce/body limits/socket lease/session ticket bundle | Intentionally excluded from this local-LAN implementation pass |
 
 ## Flutter Architecture Pieces Added During Port
 
@@ -88,7 +99,15 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | --- | --- |
 | `ClientRuntime` | Owns client session, watch, alerts, token renewal, quality, and paid access state |
 | `ServerRuntime` | Owns server UI state without mixing widget code into protocol internals |
-| `MimiCamServer` | Owns local HTTP/WebSocket routes and media runtime |
+| `MimiCamServer` | HTTP composition boundary; diagnostics and room/WebRTC/resource work delegate to focused services |
+| `MediaRuntimeController` | Serializes independent camera/microphone demand and platform pause/recovery |
+| `PlatformRuntimeContract` | Publishes native lifecycle/audio/engine ownership events and snapshots |
+| `MediaResourceGovernor` | Combines thermal, power, codec and transport pressure |
+| `MediaSessionTelemetry` | Keeps bounded session latency distributions and reliability counters |
+| `BabyMonitorFeatureController` | Facade for comfort, night-light and talk routes |
+| `RoomAudioCoordinator` | Gives talk priority over comfort on one native PCM sink |
+| `FlutterWebRtcServerGateway` | Owns pilot peer, local tracks and H.264/Opus preferences |
+| `MimiCamServiceAdvertiser` / `MimiCamServiceBrowser` | Own DNS-SD advertise/browse lifecycle |
 | `ActiveClientRegistry` | Keeps trusted clients, watch sessions, stream sockets, and quality reports aligned |
 | `PairingSessionStore` | Separates secure tokens from non-secret metadata |
 | `ClientStreamHealthState` | Builds health reports from real streams |
@@ -97,7 +116,7 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | `WavAudioStreamService` | Owns WAV response lifecycle and backpressure |
 | `ClientMediaStreamSupervisor` | Coordinates video/audio stream start, failure classification, and reconnect behavior |
 | `ClientLiveAudioPipeline` | Parses WAV and writes PCM to native output |
-| `BroadcastAccessService` | Enforces 2-hour free time and one-time paid unlock |
+| `BroadcastAccessService` | Enforces free time and persists only verified unlock results |
 | `ClientAlertHistory` | Keeps alert history independent of OS notification permission |
 
 ## Platform Mapping
@@ -107,12 +126,15 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | Camera | Flutter `camera` plugin | Flutter `camera` plugin |
 | Microphone capture | `record` plugin | `record` plugin |
 | PCM playback | `AudioTrack` | `AVAudioEngine` and `AVAudioPlayerNode` |
+| Audio lifecycle | Audio focus, becoming-noisy and output-device callbacks | AVAudioSession interruption, route and media-services reset |
 | QR scan | `mobile_scanner` | `mobile_scanner` with explicit permission gating |
 | Notifications | `flutter_local_notifications` | `flutter_local_notifications` |
 | Battery | `battery_plus` | `battery_plus` |
-| Paid unlock | `in_app_purchase` Android billing | `in_app_purchase` StoreKit |
-| Foreground/server presence | Native foreground service bridge | App lifecycle constrained |
+| Paid unlock | Google Play envelope validation before local entitlement | App Store envelope validation before local entitlement |
+| Foreground/server presence | Existing Flutter engine owned by non-sticky foreground service | Camera pauses in background and retained demand recovers in foreground |
 | Local network permission | Android network stack | `NSLocalNetworkUsageDescription` and Bonjour config |
+| Discovery | Android NSD through `nsd` | Bonjour through `nsd`, `_mimicam._tcp` declared |
+| Thermal/power snapshot | `PowerManager` + battery state | `ProcessInfo` + `UIDevice` battery state |
 
 ## Tests That Protect the Port
 
@@ -130,7 +152,14 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | WAV/audio stream | `test/features/client/client_live_audio_pipeline_test.dart`, `test/features/client/wav_pcm_stream_parser_test.dart` |
 | Alerts | `test/analysis/alert/alert_engine_test.dart`, `test/features/client/client_alert_listener_test.dart` |
 | Adaptive quality | `test/services/server/media_quality_selector_test.dart`, `test/services/server/utility_based_profile_selector_test.dart` |
+| Demand ownership | `test/features/server/media_runtime_controller_test.dart` |
+| Platform lifecycle | `test/services/platform/platform_runtime_contract_test.dart` |
+| Resource governor | `test/services/server/media_resource_governor_test.dart` |
+| Session telemetry | `test/core/media/media_session_telemetry_test.dart` |
+| WebRTC pilot/fallback | `test/features/server/webrtc_signaling_endpoints_test.dart`, `test/features/client/stream_session_controller_test.dart` |
+| DNS-SD/IPv6 discovery model | `test/services/discovery/mimicam_service_discovery_test.dart` |
 | Feature controls | `test/features/server/feature_control_endpoints_test.dart` |
+| Comfort/talk native ownership | `test/services/server/room_audio_coordinator_test.dart`, `test/features/client/client_room_controls_test.dart` |
 | Paid access | `test/services/monetization/broadcast_access_service_test.dart`, `test/features/client/client_runtime_lifecycle_test.dart` |
 | Diagnostics | `test/features/server/test_endpoints_test.dart` |
 | Localization | `test/l10n/app_strings_test.dart` |
@@ -148,5 +177,11 @@ mark it as supported until it has:
 5. Tests.
 6. README and architecture updates.
 
-This rule is especially important for cloud relay, automatic discovery,
-Bluetooth, HTTPS/WSS, WebRTC, comfort playback, and two-way talk.
+This rule is especially important for cloud relay, Bluetooth, HTTPS/WSS,
+multi-peer/relayed WebRTC, talk video and purchase server verification. The
+current WebRTC implementation must remain labelled a pilot until the physical
+device matrix has codec, interruption, network-impairment and soak evidence.
+
+Purchase-verification caveat: current code verifies store source/product/state
+and non-empty verification envelopes locally, then stores only a fingerprint.
+It does not yet perform Apple/Google server-side receipt authenticity checks.

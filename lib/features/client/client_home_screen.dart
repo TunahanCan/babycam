@@ -8,6 +8,7 @@ import '../../core/protocol/mimicam_protocol.dart';
 import '../../core/protocol/alert_event_dto.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../l10n/app_strings.dart';
+import '../../services/discovery/mimicam_service_discovery.dart';
 import '../shared/presentation/mimicam_design_tokens.dart';
 import '../shared/presentation/mimicam_shells.dart';
 import 'client_runtime.dart';
@@ -131,6 +132,17 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
               manualIpController: _manualIpController,
               onManualConnect: () => _connectManualIp(context),
             ),
+            const SizedBox(height: 14),
+            StreamBuilder<List<MimiCamDiscoveredService>>(
+              stream: widget.runtime.discoveryUpdates,
+              initialData: widget.runtime.discoveredServices,
+              builder: (context, snapshot) => _DiscoveredRoomsCard(
+                services: snapshot.data ?? const [],
+                onRefresh: widget.runtime.startDiscovery,
+                onConnect: (service) =>
+                    _connectDiscoveredService(context, service),
+              ),
+            ),
           ],
         ),
       2 => _ClientTabFrame(
@@ -226,6 +238,32 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       if (!context.mounted) return;
       _showMessage(
           context, strings.uiFormat('manualPairingFailed', {'error': error}));
+    }
+  }
+
+  Future<void> _connectDiscoveredService(
+    BuildContext context,
+    MimiCamDiscoveredService service,
+  ) async {
+    final strings = AppStrings.of(context);
+    try {
+      final payload = await _fetchManualPairingPayload(
+        strings,
+        (host: service.host, port: service.port),
+      );
+      await ClientPairingFlow(widget.runtime).pairAndArmAlerts(payload);
+      if (!context.mounted) return;
+      setState(() => _tab = 0);
+      _showMessage(
+        context,
+        strings.uiFormat('pairedMessage', {'name': payload.deviceName}),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      _showMessage(
+        context,
+        strings.uiFormat('manualPairingFailed', {'error': error}),
+      );
     }
   }
 
@@ -1054,6 +1092,90 @@ class _FindActionCard extends StatelessWidget {
         const SizedBox(height: 28),
         _PrivacyNote(text: strings.ui('localNetworkPrivacyNote')),
       ],
+    );
+  }
+}
+
+class _DiscoveredRoomsCard extends StatelessWidget {
+  const _DiscoveredRoomsCard({
+    required this.services,
+    required this.onRefresh,
+    required this.onConnect,
+  });
+
+  final List<MimiCamDiscoveredService> services;
+  final Future<void> Function() onRefresh;
+  final ValueChanged<MimiCamDiscoveredService> onConnect;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: MimiCamDesignTokens.cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.wifi_find_rounded,
+                color: MimiCamDesignTokens.pink,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  strings.ui('discoveredRoomsTitle'),
+                  style: MimiCamDesignTokens.cardTitle,
+                ),
+              ),
+              IconButton(
+                tooltip: strings.ui('refreshDiscovery'),
+                onPressed: () => onRefresh().catchError((_) {}),
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            services.isEmpty
+                ? strings.ui('noRoomsDiscovered')
+                : strings.ui('discoveredRoomsSubtitle'),
+            style: const TextStyle(
+              color: MimiCamDesignTokens.slate,
+              fontSize: 13.5,
+            ),
+          ),
+          if (services.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            for (final service in services) ...[
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  backgroundColor: MimiCamDesignTokens.mintSoft,
+                  child: Icon(
+                    Icons.child_care_rounded,
+                    color: MimiCamDesignTokens.navy,
+                  ),
+                ),
+                title: Text(
+                  service.name,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                subtitle: Text(
+                  '${service.authority}'
+                  '${service.webRtcAvailable ? ' · WebRTC' : ''}',
+                ),
+                trailing: FilledButton(
+                  onPressed: () => onConnect(service),
+                  child: Text(strings.ui('connectDiscoveredRoom')),
+                ),
+              ),
+              if (service != services.last) const Divider(height: 1),
+            ],
+          ],
+        ],
+      ),
     );
   }
 }

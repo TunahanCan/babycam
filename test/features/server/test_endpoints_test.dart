@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -165,7 +166,13 @@ void main() {
       headers: {HttpHeaders.authorizationHeader: 'Bearer ${trusted.token}'},
     );
     addTearDown(() => socket.close());
-    final firstMessage = socket.first.timeout(const Duration(seconds: 2));
+    final messages = <dynamic>[];
+    final firstMessage = Completer<dynamic>();
+    final subscription = socket.listen((message) {
+      messages.add(message);
+      if (!firstMessage.isCompleted) firstMessage.complete(message);
+    });
+    addTearDown(subscription.cancel);
     final client = HttpClient();
     addTearDown(() => client.close(force: true));
 
@@ -176,7 +183,9 @@ void main() {
       trusted.token,
       {'message': 'MimiCam test bildirimi'},
     );
-    final message = await firstMessage;
+    final message =
+        await firstMessage.future.timeout(const Duration(seconds: 2));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
     final decoded = jsonDecode(message as String) as Map;
 
     expect(response.statusCode, HttpStatus.ok);
@@ -184,6 +193,7 @@ void main() {
     expect(response.body['deliveredWebSocketClients'], 1);
     expect(decoded['message'], 'MimiCam test bildirimi');
     expect(decoded['messageKey'], 'legacyAlert');
+    expect(messages, hasLength(1));
   });
 
   test('/test browser websocket query token ile sentetik bildirimi alir',

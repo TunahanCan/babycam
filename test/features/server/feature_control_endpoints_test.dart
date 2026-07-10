@@ -10,6 +10,9 @@ import 'package:mimicam/l10n/app_strings.dart';
 import 'package:mimicam/services/configuration_service.dart';
 import 'package:mimicam/services/mimicam_server.dart';
 import 'package:mimicam/services/monetization/broadcast_access_service.dart';
+import 'package:mimicam/services/platform/pcm_audio_output.dart';
+import 'package:mimicam/services/server/baby_monitor_feature_controller.dart';
+import 'package:mimicam/services/server/room_audio_coordinator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -212,6 +215,9 @@ Future<MimiCamServer> _testServer(
     tokenService: tokenService,
     httpPort: 0,
     startMediaOnSessionStart: false,
+    featureController: BabyMonitorFeatureController(
+      roomAudio: RoomAudioCoordinator(sink: _FakePcmAudioSink()),
+    ),
     broadcastAccess: enableBroadcastAccess
         ? BroadcastAccessService(
             preferences,
@@ -221,17 +227,41 @@ Future<MimiCamServer> _testServer(
   );
 }
 
+class _FakePcmAudioSink implements PcmAudioSink {
+  @override
+  Future<void> start({required int sampleRate, required int channels}) async {}
+
+  @override
+  Future<Map<String, Object?>> status() async => const {'started': true};
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<bool> write(Uint8List pcm16le) async => true;
+}
+
 class _FakePurchaseGateway implements BroadcastPurchaseGateway {
   @override
   Future<BroadcastPurchaseResult> purchase({
     required String productId,
     required String priceLabel,
   }) async =>
-      const BroadcastPurchaseResult(status: BroadcastPurchaseStatus.purchased);
+      const BroadcastPurchaseResult(
+        status: BroadcastPurchaseStatus.purchased,
+        verified: true,
+        verificationSource: 'test_store',
+        verificationFingerprint: 'test-fingerprint',
+      );
 
   @override
   Future<BroadcastPurchaseResult> restore({required String productId}) async =>
-      const BroadcastPurchaseResult(status: BroadcastPurchaseStatus.restored);
+      const BroadcastPurchaseResult(
+        status: BroadcastPurchaseStatus.restored,
+        verified: true,
+        verificationSource: 'test_store',
+        verificationFingerprint: 'test-fingerprint',
+      );
 
   @override
   Future<void> dispose() async {}

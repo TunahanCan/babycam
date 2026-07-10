@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../core/media/adaptive_media_profile.dart';
 import '../../services/monetization/broadcast_access_service.dart';
+import '../../services/platform/platform_runtime_contract.dart';
 import 'media/media_resource_counter.dart';
 import 'media/media_runtime_controller.dart';
 import 'media/server_power_mode.dart';
@@ -53,10 +54,20 @@ enum ServerRuntimePhase {
   error
 }
 
+enum ServerStreamTransport { legacy, webRtc }
+
 class StreamSessionOptions {
-  const StreamSessionOptions({this.video = true, this.audio = false});
+  const StreamSessionOptions({
+    this.video = true,
+    this.audio = false,
+    this.transport = ServerStreamTransport.legacy,
+  });
+
   final bool video;
   final bool audio;
+  final ServerStreamTransport transport;
+
+  bool get ownsCaptureExternally => transport == ServerStreamTransport.webRtc;
 }
 
 class ServerRuntime {
@@ -69,6 +80,9 @@ class ServerRuntime {
     Object? Function()? previewSource,
     MediaQualityProfile Function()? mediaProfile,
     BroadcastAccessService? broadcastAccess,
+    PlatformMediaLifecycleCoordinator? platformLifecycle,
+    Future<void> Function(MediaResourceDemand demand)? onMediaDemandChanged,
+    Future<void> Function(String reason)? onPauseExternalMedia,
   })  : _mediaRuntime = mediaRuntime,
         _onStartPairing = onStartPairing,
         _onStopPairing = onStopPairing,
@@ -76,7 +90,12 @@ class ServerRuntime {
         _onSettingsChanged = onSettingsChanged,
         _previewSource = previewSource,
         _mediaProfile = mediaProfile,
-        _broadcastAccess = broadcastAccess;
+        _broadcastAccess = broadcastAccess,
+        _platformLifecycle = platformLifecycle,
+        _onMediaDemandChanged = onMediaDemandChanged,
+        _onPauseExternalMedia = onPauseExternalMedia {
+    _platformLifecycle?.start();
+  }
 
   final MediaRuntimeController _mediaRuntime;
   final Future<String> Function()? _onStartPairing;
@@ -86,8 +105,13 @@ class ServerRuntime {
   final Object? Function()? _previewSource;
   final MediaQualityProfile Function()? _mediaProfile;
   final BroadcastAccessService? _broadcastAccess;
+  final PlatformMediaLifecycleCoordinator? _platformLifecycle;
+  final Future<void> Function(MediaResourceDemand demand)?
+      _onMediaDemandChanged;
+  final Future<void> Function(String reason)? _onPauseExternalMedia;
   final _states = StreamController<ServerRuntimeState>.broadcast();
   final _activeSessions = <String, StreamSessionOptions>{};
+  final _legacyMediaSuspensions = <String>{};
   final _notificationClients = <String, ({bool cry, bool motion})>{};
   final _resources = MediaResourceCounter();
   ServerRuntimeState _state =
@@ -178,11 +202,13 @@ class ServerRuntime {
       broadcastAccess: accessSnapshot,
     ));
     try {
-      await _mediaRuntime.start();
+      await _mediaRuntime.reconcile(_resourceDemand());
+      await _publishMediaDemand();
       if (_disposed) {
         _resources.localPreviewActive = false;
         await access?.endSession(accessSessionId);
-        await _mediaRuntime.stop();
+        await _mediaRuntime.reconcile(MediaResourceDemand.none);
+        await _publishMediaDemand();
         return;
       }
       _emit(_stateForPhase(
@@ -193,6 +219,7 @@ class ServerRuntime {
     } catch (error) {
       _resources.localPreviewActive = false;
       accessSnapshot = await access?.endSession(accessSessionId);
+      await _publishMediaDemand();
       _emit(_errorState(error, broadcastAccess: accessSnapshot));
       rethrow;
     }
@@ -208,13 +235,33 @@ class ServerRuntime {
   Future<void> startStreamSession(
       String clientId, StreamSessionOptions options) async {
     if (_disposed) return;
+    final previous = _activeSessions[clientId];
     _activeSessions[clientId] = options;
     try {
+      await _transitionExternalCaptureOwnership(
+        clientId,
+        fromExternal: previous?.ownsCaptureExternally ?? false,
+        toExternal: options.ownsCaptureExternally,
+      );
       await _recomputeResources(
           startMediaIfNeeded: true, phase: ServerRuntimePhase.mediaActive);
     } catch (error) {
-      _activeSessions.remove(clientId);
+      if (previous == null) {
+        _activeSessions.remove(clientId);
+      } else {
+        _activeSessions[clientId] = previous;
+      }
+      try {
+        await _transitionExternalCaptureOwnership(
+          clientId,
+          fromExternal: options.ownsCaptureExternally,
+          toExternal: previous?.ownsCaptureExternally ?? false,
+        );
+      } catch (_) {
+        // Preserve the original media acquisition error.
+      }
       _refreshResourceCounts();
+      await _publishMediaDemand();
       _emit(_errorState(error));
       rethrow;
     }
@@ -226,7 +273,10 @@ class ServerRuntime {
       startStreamSession(sessionId, const StreamSessionOptions());
 
   Future<void> endSession(String sessionId) async {
-    _activeSessions.remove(sessionId);
+    final removed = _activeSessions.remove(sessionId);
+    if (removed?.ownsCaptureExternally == true) {
+      await _removeLegacyMediaSuspension('webrtc:$sessionId');
+    }
     await stopMediaRuntimeIfNoActiveClients();
   }
 
@@ -254,11 +304,10 @@ class ServerRuntime {
   Future<void> stopMediaRuntimeIfNoActiveClients() async {
     await _recomputeResources(
         startMediaIfNeeded: false, phase: ServerRuntimePhase.mediaIdle);
-    if (!_resources.needsVideoCapture && !_resources.needsAudioCapture) {
-      await _mediaRuntime.stop();
-    }
-    _emit(_stateForPhase(_resources.hasNotificationDemand
-        ? ServerRuntimePhase.mediaIdle
+    final demand = _resourceDemand();
+    final mediaStillRequired = !demand.isEmpty;
+    _emit(_stateForPhase(mediaStillRequired
+        ? ServerRuntimePhase.mediaActive
         : ServerRuntimePhase.mediaIdle));
   }
 
@@ -266,9 +315,13 @@ class ServerRuntime {
     _activeSessions.clear();
     _notificationClients.clear();
     _resources.localPreviewActive = false;
+    _refreshResourceCounts();
     await _broadcastAccess?.endAllSessions();
     _broadcastAccessTimer?.cancel();
-    await _mediaRuntime.stop();
+    await _mediaRuntime.reconcile(MediaResourceDemand.none);
+    _legacyMediaSuspensions.clear();
+    if (_mediaRuntime.isSuspended) await _mediaRuntime.resume();
+    await _publishMediaDemand();
     await _onStop?.call();
     _emit(ServerRuntimeState(
       phase: ServerRuntimePhase.stopped,
@@ -288,25 +341,49 @@ class ServerRuntime {
     _emit(_stateForPhase(_state.phase));
   }
 
+  Future<void> pauseMediaForPlatform(String reason) async {
+    if (_disposed) return;
+    await _addLegacyMediaSuspension('platform');
+    await _onPauseExternalMedia?.call(reason);
+    await _publishMediaDemand(forceNone: true);
+    if (_disposed) return;
+    _emit(_stateForPhase(ServerRuntimePhase.mediaIdle));
+  }
+
+  Future<void> recoverMediaForPlatform(String reason) async {
+    if (_disposed) return;
+    await _removeLegacyMediaSuspension('platform');
+    await _publishMediaDemand();
+    if (_disposed) return;
+    _emit(_stateForPhase(
+      _mediaRuntime.isActive
+          ? ServerRuntimePhase.mediaActive
+          : ServerRuntimePhase.mediaIdle,
+    ));
+  }
+
   Future<void> _recomputeResources(
       {required bool startMediaIfNeeded,
       required ServerRuntimePhase phase}) async {
     if (_disposed) return;
     _refreshResourceCounts();
-    if (startMediaIfNeeded &&
-        (_resources.needsVideoCapture || _resources.needsAudioCapture)) {
+    final demand = _resourceDemand();
+    if (startMediaIfNeeded && !demand.isEmpty) {
       _emit(_stateForPhase(ServerRuntimePhase.mediaStarting));
       try {
-        await _mediaRuntime.start();
+        await _mediaRuntime.reconcile(demand);
       } catch (error) {
         _emit(_errorState(error));
         rethrow;
       }
       if (_disposed) {
-        await _mediaRuntime.stop();
+        await _mediaRuntime.reconcile(MediaResourceDemand.none);
         return;
       }
+    } else {
+      await _mediaRuntime.reconcile(demand);
     }
+    await _publishMediaDemand();
     _emit(_stateForPhase(phase));
   }
 
@@ -315,12 +392,23 @@ class ServerRuntime {
         _activeSessions.values.where((s) => s.video).length;
     _resources.activeAudioClients =
         _activeSessions.values.where((s) => s.audio).length;
+    _resources.externalVideoClients = _activeSessions.values
+        .where((session) => session.video && session.ownsCaptureExternally)
+        .length;
+    _resources.externalAudioClients = _activeSessions.values
+        .where((session) => session.audio && session.ownsCaptureExternally)
+        .length;
     _resources.activeEventClients = _notificationClients.length;
     _resources.wantsCryDetection =
         _notificationClients.values.any((s) => s.cry);
     _resources.wantsMotionDetection =
         _notificationClients.values.any((s) => s.motion);
   }
+
+  MediaResourceDemand _resourceDemand() => MediaResourceDemand(
+        video: _resources.needsVideoCapture,
+        audio: _resources.needsAudioCapture,
+      );
 
   ServerRuntimeState _stateForPhase(
     ServerRuntimePhase phase, {
@@ -338,10 +426,16 @@ class ServerRuntime {
       activeVideoClients: _resources.activeVideoClients,
       activeAudioClients: _resources.activeAudioClients,
       activeEventClients: _resources.activeEventClients,
-      cameraActive: _resources.needsVideoCapture,
-      microphoneActive: _resources.needsAudioCapture,
-      motionAnalyzerActive: _resources.wantsMotionDetection,
-      cryAnalyzerActive: _resources.wantsCryDetection,
+      cameraActive: _mediaRuntime.videoActive ||
+          (_resources.externalVideoClients > 0 &&
+              !_legacyMediaSuspensions.contains('platform')),
+      microphoneActive: _mediaRuntime.audioActive ||
+          (_resources.externalAudioClients > 0 &&
+              !_legacyMediaSuspensions.contains('platform')),
+      motionAnalyzerActive:
+          _mediaRuntime.videoActive && _resources.wantsMotionDetection,
+      cryAnalyzerActive:
+          _mediaRuntime.audioActive && _resources.wantsCryDetection,
       qrPayload: _state.qrPayload,
       lastAlert: _state.lastAlert,
       errorMessage: _state.errorMessage,
@@ -390,10 +484,14 @@ class ServerRuntime {
 
   Future<void> _handleBroadcastAccessExpired() async {
     if (_disposed) return;
-    await _mediaRuntime.stop();
+    await _mediaRuntime.reconcile(MediaResourceDemand.none);
     _activeSessions.clear();
     _notificationClients.clear();
     _resources.localPreviewActive = false;
+    _refreshResourceCounts();
+    _legacyMediaSuspensions.clear();
+    if (_mediaRuntime.isSuspended) await _mediaRuntime.resume();
+    await _publishMediaDemand();
     final snapshot = await _broadcastAccess?.endAllSessions();
     _broadcastAccessTimer?.cancel();
     if (_disposed || snapshot == null || !snapshot.isLocked) return;
@@ -406,8 +504,47 @@ class ServerRuntime {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    await _platformLifecycle?.dispose();
     await stop();
     await _broadcastAccess?.dispose();
     await _states.close();
+  }
+
+  Future<void> _transitionExternalCaptureOwnership(
+    String clientId, {
+    required bool fromExternal,
+    required bool toExternal,
+  }) async {
+    if (fromExternal == toExternal) return;
+    final owner = 'webrtc:$clientId';
+    if (toExternal) {
+      await _addLegacyMediaSuspension(owner);
+    } else {
+      await _removeLegacyMediaSuspension(owner);
+    }
+  }
+
+  Future<void> _addLegacyMediaSuspension(String owner) async {
+    if (!_legacyMediaSuspensions.add(owner)) return;
+    if (_legacyMediaSuspensions.length == 1) await _mediaRuntime.suspend();
+  }
+
+  Future<void> _removeLegacyMediaSuspension(String owner) async {
+    if (!_legacyMediaSuspensions.remove(owner)) return;
+    if (_legacyMediaSuspensions.isEmpty) await _mediaRuntime.resume();
+  }
+
+  Future<void> _publishMediaDemand({bool forceNone = false}) async {
+    final callback = _onMediaDemandChanged;
+    if (callback == null) return;
+    final demand = forceNone
+        ? MediaResourceDemand.none
+        : MediaResourceDemand(
+            video: _mediaRuntime.videoActive ||
+                _resources.externalVideoClients > 0,
+            audio: _mediaRuntime.audioActive ||
+                _resources.externalAudioClients > 0,
+          );
+    await callback(demand);
   }
 }

@@ -9,6 +9,7 @@ import '../../app/app_role.dart';
 import '../../l10n/app_strings.dart';
 import '../../services/configuration_service.dart';
 import '../../services/monetization/broadcast_access_service.dart';
+import '../../services/platform/platform_runtime_contract.dart';
 import '../shared/presentation/localized_measurement_text.dart';
 import '../shared/presentation/media_profile_text.dart';
 import '../shared/presentation/mimicam_design_tokens.dart';
@@ -303,6 +304,8 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
             ),
             const SizedBox(height: 10),
             _ServiceStatusGrid(state: state),
+            const SizedBox(height: 12),
+            const _PlatformRuntimeContractCard(),
           ],
         ),
       _ => _ServerTabFrame(
@@ -911,6 +914,117 @@ class _ServiceStatusGrid extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+class _PlatformRuntimeContractCard extends StatefulWidget {
+  const _PlatformRuntimeContractCard();
+
+  @override
+  State<_PlatformRuntimeContractCard> createState() =>
+      _PlatformRuntimeContractCardState();
+}
+
+class _PlatformRuntimeContractCardState
+    extends State<_PlatformRuntimeContractCard> {
+  static const _contract = PlatformRuntimeContract();
+  Timer? _refreshTimer;
+  PlatformRuntimeSnapshot? _snapshot;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+    // The native EventChannel has one lifecycle owner: ServerRuntime. A second
+    // listener here could replace its event sink on iOS/Android, so this
+    // presentation card refreshes the read-only method-channel snapshot.
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => _refresh(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final snapshot = _snapshot;
+    final platform = snapshot?.platform;
+    final active = snapshot?.foregroundServiceActive == true;
+    final message = switch (platform) {
+      PlatformRuntimeKind.ios => strings.ui('iosForegroundOnlyContract'),
+      PlatformRuntimeKind.android when active =>
+        strings.ui('androidServiceActiveContract'),
+      PlatformRuntimeKind.android =>
+        strings.ui('androidServiceInactiveContract'),
+      _ => strings.ui('platformRuntimeUnknownContract'),
+    };
+    return MimiCamCard(
+      dark: true,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            backgroundColor: active
+                ? MimiCamDesignTokens.serverCyan
+                : MimiCamDesignTokens.serverViolet,
+            child: Icon(
+              platform == PlatformRuntimeKind.ios
+                  ? Icons.phone_iphone_rounded
+                  : Icons.settings_applications_rounded,
+              color: MimiCamDesignTokens.serverInk,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  strings.ui('platformRuntimeContractTitle'),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13.5,
+                    height: 1.3,
+                  ),
+                ),
+                if (snapshot?.backgroundRecoveryAfterProcessDeath == false) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    strings.ui('processRecoveryForegroundContract'),
+                    style: const TextStyle(
+                      color: MimiCamDesignTokens.serverCyan,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _refresh() {
+    unawaited(_contract.snapshot().then((snapshot) {
+      if (mounted) setState(() => _snapshot = snapshot);
+    }));
   }
 }
 

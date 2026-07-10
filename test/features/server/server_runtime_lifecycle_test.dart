@@ -120,6 +120,84 @@ void main() {
     expect(runtime.currentState.errorMessage, contains('camera unavailable'));
   });
 
+  test('remote session kapaninca aktif local preview mediaActive kalir',
+      () async {
+    final media = MediaRuntimeController();
+    final runtime = ServerRuntime(mediaRuntime: media);
+
+    await runtime.startLocalPreview();
+    await runtime.startStreamSession(
+      'client-1',
+      const StreamSessionOptions(video: true),
+    );
+    await runtime.endSession('client-1');
+
+    expect(media.isActive, isTrue);
+    expect(runtime.currentState.phase, ServerRuntimePhase.mediaActive);
+    expect(runtime.currentState.cameraActive, isTrue);
+    expect(runtime.currentState.microphoneActive, isFalse);
+  });
+
+  test('local preview kamera açar ancak mikrofon demand üretmez', () async {
+    var videoStarts = 0;
+    var audioStarts = 0;
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(
+        onStartVideo: () async => videoStarts++,
+        onStopVideo: () async {},
+        onStartAudio: () async => audioStarts++,
+        onStopAudio: () async {},
+      ),
+    );
+
+    await runtime.startLocalPreview();
+
+    expect(videoStarts, 1);
+    expect(audioStarts, 0);
+    expect(runtime.currentState.cameraActive, isTrue);
+    expect(runtime.currentState.microphoneActive, isFalse);
+  });
+
+  test('WebRTC capture legacy kamerayi askıya alır ve native demandi korur',
+      () async {
+    var videoStarts = 0;
+    var videoStops = 0;
+    final nativeDemands = <MediaResourceDemand>[];
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(
+        onStartVideo: () async => videoStarts++,
+        onStopVideo: () async => videoStops++,
+        onStartAudio: () async {},
+        onStopAudio: () async {},
+      ),
+      onMediaDemandChanged: (demand) async => nativeDemands.add(demand),
+    );
+
+    await runtime.startLocalPreview();
+    await runtime.startStreamSession(
+      'client-webrtc',
+      const StreamSessionOptions(
+        video: true,
+        audio: true,
+        transport: ServerStreamTransport.webRtc,
+      ),
+    );
+
+    expect(videoStarts, 1);
+    expect(videoStops, 1);
+    expect(runtime.currentState.cameraActive, isTrue);
+    expect(runtime.currentState.microphoneActive, isTrue);
+    expect(nativeDemands.last, MediaResourceDemand.all);
+
+    await runtime.endSession('client-webrtc');
+
+    expect(videoStarts, 2);
+    expect(runtime.currentState.cameraActive, isTrue);
+    expect(runtime.currentState.microphoneActive, isFalse);
+    expect(nativeDemands.last,
+        const MediaResourceDemand(video: true, audio: false));
+  });
+
   test('stream session media hatasında aktif client rollback yapar', () async {
     final runtime = ServerRuntime(
       mediaRuntime: MediaRuntimeController(

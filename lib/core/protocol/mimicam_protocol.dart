@@ -15,6 +15,9 @@ class MimiCamProtocolV2 {
   static const talkVideo = '/talk/video';
   static const video = '/video';
   static const audio = '/audio';
+  static const webRtcOffer = '/webrtc/offer';
+  static const webRtcIce = '/webrtc/ice';
+  static const webRtcClose = '/webrtc/close';
   static const events = '/ws/events';
   static const status = '/status';
   static const statusPublic = '/status/public';

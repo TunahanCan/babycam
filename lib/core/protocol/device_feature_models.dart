@@ -236,6 +236,7 @@ class TalkSession {
   bool isExpired(int nowMs) => expiresAtMs <= nowMs;
 
   TalkSession copyWith({
+    int? expiresAtMs,
     int? audioBytesReceived,
     int? videoBytesReceived,
     int? lastAudioAtMs,
@@ -245,7 +246,7 @@ class TalkSession {
         clientId: clientId,
         token: token,
         startedAtMs: startedAtMs,
-        expiresAtMs: expiresAtMs,
+        expiresAtMs: expiresAtMs ?? this.expiresAtMs,
         audioBytesReceived: audioBytesReceived ?? this.audioBytesReceived,
         videoBytesReceived: videoBytesReceived ?? this.videoBytesReceived,
         lastAudioAtMs: lastAudioAtMs ?? this.lastAudioAtMs,

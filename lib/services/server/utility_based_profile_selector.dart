@@ -66,7 +66,7 @@ class UtilityBasedProfileSelector {
     }
     if (networkTier == NetworkQualityTier.weak ||
         backpressureMetrics.averageWriteDurationMs != null &&
-            backpressureMetrics.averageWriteDurationMs! >= 700) {
+            backpressureMetrics.averageWriteDurationMs! >= 120) {
       return _PlannedMediaTier.weak;
     }
     if (activeClientCount >= 2) return _PlannedMediaTier.shared;
@@ -76,6 +76,14 @@ class UtilityBasedProfileSelector {
 
   static NetworkQualityTier transportTier(ClientQualityReport report) {
     if (report.consecutiveFailures >= 3) return NetworkQualityTier.offline;
+    if (_atLeast(report.videoQueueDelayMs, 400) ||
+        _atLeastDouble(report.videoJitterMs, 120)) {
+      return NetworkQualityTier.critical;
+    }
+    if (_atLeast(report.videoQueueDelayMs, 150) ||
+        _atLeastDouble(report.videoJitterMs, 60)) {
+      return NetworkQualityTier.weak;
+    }
     if (report.rttMs != null) {
       if (report.rttMs! >= 1000) return NetworkQualityTier.critical;
       if (report.rttMs! >= 500) return NetworkQualityTier.weak;
@@ -94,6 +102,8 @@ class UtilityBasedProfileSelector {
   static bool hasVideoProblem(ClientQualityReport report) =>
       report.streamTimedOut ||
       _atLeast(report.videoFrameGapMs, 5000) ||
+      _atLeast(report.videoQueueDelayMs, 400) ||
+      _atLeastDouble(report.videoJitterMs, 120) ||
       report.skippedVideoFrames >= 8 ||
       report.consecutiveFailures >= 3;
 
@@ -103,6 +113,9 @@ class UtilityBasedProfileSelector {
       _atLeast(report.audioGapMs, 1800);
 
   static bool _atLeast(int? value, int threshold) =>
+      value != null && value >= threshold;
+
+  static bool _atLeastDouble(double? value, double threshold) =>
       value != null && value >= threshold;
 }
 
@@ -128,8 +141,9 @@ class _QualitySignals {
   }) {
     var effectiveTier = networkTier;
     var videoTrouble = backpressureMetrics.consecutiveWriteFailures >= 2 ||
-        backpressureMetrics.skippedVideoFrames >= 12;
-    var audioTrouble = backpressureMetrics.skippedAudioChunks > 0;
+        backpressureMetrics.consecutiveSkippedVideoFrames >= 3 ||
+        (backpressureMetrics.averageWriteDurationMs ?? 0) >= 250;
+    var audioTrouble = backpressureMetrics.consecutiveSkippedAudioChunks > 0;
     for (final report in reports) {
       effectiveTier = effectiveTier
           .worse(UtilityBasedProfileSelector.transportTier(report));

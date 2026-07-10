@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -20,6 +22,8 @@ class BroadcastAccessSnapshot {
     required this.remainingMs,
     required this.priceLabel,
     required this.productId,
+    this.purchaseVerifiedAtMs,
+    this.purchaseVerificationSource,
   });
 
   final bool unlocked;
@@ -29,6 +33,8 @@ class BroadcastAccessSnapshot {
   final int remainingMs;
   final String priceLabel;
   final String productId;
+  final int? purchaseVerifiedAtMs;
+  final String? purchaseVerificationSource;
 
   bool get isLocked => !unlocked && remainingMs <= 0;
   double get usedRatio {
@@ -47,6 +53,8 @@ class BroadcastAccessSnapshot {
         'priceLabel': priceLabel,
         'productId': productId,
         'locked': isLocked,
+        'purchaseVerifiedAtMs': purchaseVerifiedAtMs,
+        'purchaseVerificationSource': purchaseVerificationSource,
       };
 }
 
@@ -76,6 +84,7 @@ enum BroadcastPurchaseStatus {
   pending,
   canceled,
   unavailable,
+  verificationFailed,
   error,
 }
 
@@ -83,14 +92,113 @@ class BroadcastPurchaseResult {
   const BroadcastPurchaseResult({
     required this.status,
     this.message,
+    this.verified = false,
+    this.verificationSource,
+    this.verificationFingerprint,
   });
 
   final BroadcastPurchaseStatus status;
   final String? message;
+  final bool verified;
+  final String? verificationSource;
+  final String? verificationFingerprint;
 
   bool get unlocksAccess =>
-      status == BroadcastPurchaseStatus.purchased ||
-      status == BroadcastPurchaseStatus.restored;
+      verified &&
+      (status == BroadcastPurchaseStatus.purchased ||
+          status == BroadcastPurchaseStatus.restored);
+}
+
+class BroadcastPurchaseVerification {
+  const BroadcastPurchaseVerification._({
+    required this.verified,
+    required this.source,
+    this.fingerprint,
+    this.reason,
+  });
+
+  const BroadcastPurchaseVerification.verified({
+    required String source,
+    required String fingerprint,
+  }) : this._(
+          verified: true,
+          source: source,
+          fingerprint: fingerprint,
+        );
+
+  const BroadcastPurchaseVerification.rejected({
+    required String source,
+    required String reason,
+  }) : this._(
+          verified: false,
+          source: source,
+          reason: reason,
+        );
+
+  final bool verified;
+  final String source;
+  final String? fingerprint;
+  final String? reason;
+}
+
+abstract class BroadcastPurchaseVerifier {
+  Future<BroadcastPurchaseVerification> verify(
+    PurchaseDetails purchase, {
+    required String expectedProductId,
+  });
+}
+
+/// Validates the store-originated verification envelope before an entitlement
+/// is granted. The raw receipt/purchase token is deliberately never persisted.
+/// A remote verifier can replace this strategy without changing purchase flow.
+class StorePayloadPurchaseVerifier implements BroadcastPurchaseVerifier {
+  const StorePayloadPurchaseVerifier();
+
+  static const _supportedSources = {'app_store', 'google_play'};
+
+  @override
+  Future<BroadcastPurchaseVerification> verify(
+    PurchaseDetails purchase, {
+    required String expectedProductId,
+  }) async {
+    final source = purchase.verificationData.source.trim();
+    if (purchase.productID != expectedProductId) {
+      return BroadcastPurchaseVerification.rejected(
+        source: source,
+        reason: 'The store transaction belongs to a different product.',
+      );
+    }
+    if (!_supportedSources.contains(source)) {
+      return BroadcastPurchaseVerification.rejected(
+        source: source,
+        reason: 'Unknown purchase verification source.',
+      );
+    }
+    if (purchase.status != PurchaseStatus.purchased &&
+        purchase.status != PurchaseStatus.restored) {
+      return BroadcastPurchaseVerification.rejected(
+        source: source,
+        reason: 'The transaction is not in a deliverable state.',
+      );
+    }
+    final serverData = purchase.verificationData.serverVerificationData.trim();
+    final localData = purchase.verificationData.localVerificationData.trim();
+    if (serverData.isEmpty || localData.isEmpty) {
+      return BroadcastPurchaseVerification.rejected(
+        source: source,
+        reason: 'The store did not provide verification evidence.',
+      );
+    }
+
+    final fingerprint = sha256
+        .convert(
+            utf8.encode('$source\u0000${purchase.productID}\u0000$serverData'))
+        .toString();
+    return BroadcastPurchaseVerification.verified(
+      source: source,
+      fingerprint: fingerprint,
+    );
+  }
 }
 
 abstract class BroadcastPurchaseGateway {
@@ -107,10 +215,13 @@ abstract class BroadcastPurchaseGateway {
 class InAppBroadcastPurchaseGateway implements BroadcastPurchaseGateway {
   InAppBroadcastPurchaseGateway({
     InAppPurchase? inAppPurchase,
+    BroadcastPurchaseVerifier? verifier,
     this.timeout = const Duration(minutes: 2),
-  }) : _iap = inAppPurchase ?? InAppPurchase.instance;
+  })  : _iap = inAppPurchase ?? InAppPurchase.instance,
+        _verifier = verifier ?? const StorePayloadPurchaseVerifier();
 
   final InAppPurchase _iap;
+  final BroadcastPurchaseVerifier _verifier;
   final Duration timeout;
   StreamSubscription<List<PurchaseDetails>>? _subscription;
   Completer<BroadcastPurchaseResult>? _active;
@@ -211,18 +322,17 @@ class InAppBroadcastPurchaseGateway implements BroadcastPurchaseGateway {
     if (productId == null || _active == null) return;
     for (final purchase in purchases) {
       if (purchase.productID != productId) continue;
-      if (purchase.pendingCompletePurchase) {
-        await _iap.completePurchase(purchase);
-      }
       switch (purchase.status) {
         case PurchaseStatus.purchased:
-          _complete(const BroadcastPurchaseResult(
-            status: BroadcastPurchaseStatus.purchased,
-          ));
+          await _completeVerifiedPurchase(
+            purchase,
+            BroadcastPurchaseStatus.purchased,
+          );
         case PurchaseStatus.restored:
-          _complete(const BroadcastPurchaseResult(
-            status: BroadcastPurchaseStatus.restored,
-          ));
+          await _completeVerifiedPurchase(
+            purchase,
+            BroadcastPurchaseStatus.restored,
+          );
         case PurchaseStatus.pending:
           break;
         case PurchaseStatus.canceled:
@@ -236,6 +346,42 @@ class InAppBroadcastPurchaseGateway implements BroadcastPurchaseGateway {
             message: purchase.error?.message ?? 'Purchase failed.',
           ));
       }
+    }
+  }
+
+  Future<void> _completeVerifiedPurchase(
+    PurchaseDetails purchase,
+    BroadcastPurchaseStatus status,
+  ) async {
+    final productId = _activeProductId;
+    if (productId == null) return;
+    try {
+      final verification = await _verifier.verify(
+        purchase,
+        expectedProductId: productId,
+      );
+      if (!verification.verified || verification.fingerprint == null) {
+        _complete(BroadcastPurchaseResult(
+          status: BroadcastPurchaseStatus.verificationFailed,
+          message: verification.reason ?? 'Purchase verification failed.',
+          verificationSource: verification.source,
+        ));
+        return;
+      }
+      if (purchase.pendingCompletePurchase) {
+        await _iap.completePurchase(purchase);
+      }
+      _complete(BroadcastPurchaseResult(
+        status: status,
+        verified: true,
+        verificationSource: verification.source,
+        verificationFingerprint: verification.fingerprint,
+      ));
+    } catch (error) {
+      _complete(BroadcastPurchaseResult(
+        status: BroadcastPurchaseStatus.verificationFailed,
+        message: 'Purchase verification could not be completed: $error',
+      ));
     }
   }
 
@@ -272,6 +418,10 @@ class BroadcastAccessService {
   static const _prefix = 'broadcast_access.';
   static const _unlockedKey = '${_prefix}unlocked';
   static const _usedMsKey = '${_prefix}used_ms';
+  static const _verifiedAtMsKey = '${_prefix}verified_at_ms';
+  static const _verificationSourceKey = '${_prefix}verification_source';
+  static const _verificationFingerprintKey =
+      '${_prefix}verification_fingerprint';
 
   final SharedPreferences _preferences;
   BroadcastPurchaseGateway? _purchaseGateway;
@@ -319,14 +469,14 @@ class BroadcastAccessService {
       priceLabel: _priceLabel,
     );
     if (!result.unlocksAccess) throw BroadcastPurchaseException(result);
-    await _preferences.setBool(_unlockedKey, true);
+    await _persistVerifiedUnlock(result);
     return _snapshot();
   }
 
   Future<BroadcastAccessSnapshot> restorePurchase() async {
     final result = await _gateway.restore(productId: _productId);
     if (!result.unlocksAccess) throw BroadcastPurchaseException(result);
-    await _preferences.setBool(_unlockedKey, true);
+    await _persistVerifiedUnlock(result);
     return _snapshot();
   }
 
@@ -352,7 +502,28 @@ class BroadcastAccessService {
       remainingMs: remainingMs,
       priceLabel: _priceLabel,
       productId: _productId,
+      purchaseVerifiedAtMs: _preferences.getInt(_verifiedAtMsKey),
+      purchaseVerificationSource:
+          _preferences.getString(_verificationSourceKey),
     );
+  }
+
+  Future<void> _persistVerifiedUnlock(BroadcastPurchaseResult result) async {
+    final source = result.verificationSource;
+    final fingerprint = result.verificationFingerprint;
+    if (!result.verified ||
+        source == null ||
+        source.isEmpty ||
+        fingerprint == null ||
+        fingerprint.isEmpty) {
+      throw const BroadcastPurchaseException(BroadcastPurchaseResult(
+          status: BroadcastPurchaseStatus.verificationFailed,
+          message: 'Verified purchase evidence is missing.'));
+    }
+    await _preferences.setString(_verificationSourceKey, source);
+    await _preferences.setString(_verificationFingerprintKey, fingerprint);
+    await _preferences.setInt(_verifiedAtMsKey, _nowMs());
+    await _preferences.setBool(_unlockedKey, true);
   }
 
   int _effectiveUsedMs() {

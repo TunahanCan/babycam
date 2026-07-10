@@ -15,6 +15,21 @@ abstract class ServerMediaSource {
     required ServerVideoFrameSink onVideoFrame,
     required ServerAudioChunkSink onAudioChunk,
     ServerMediaErrorSink? onError,
+  }) =>
+      reconcile(
+        video: true,
+        audio: true,
+        onVideoFrame: onVideoFrame,
+        onAudioChunk: onAudioChunk,
+        onError: onError,
+      );
+
+  Future<void> reconcile({
+    required bool video,
+    required bool audio,
+    required ServerVideoFrameSink onVideoFrame,
+    required ServerAudioChunkSink onAudioChunk,
+    ServerMediaErrorSink? onError,
   });
 
   Future<void> stop();
@@ -54,7 +69,7 @@ class ServerMediaSourceSnapshot {
       };
 }
 
-class DeterministicServerMediaSource implements ServerMediaSource {
+class DeterministicServerMediaSource extends ServerMediaSource {
   DeterministicServerMediaSource({
     this.videoInterval = const Duration(milliseconds: 120),
     this.audioInterval = const Duration(milliseconds: 40),
@@ -104,7 +119,9 @@ class DeterministicServerMediaSource implements ServerMediaSource {
       );
 
   @override
-  Future<void> start({
+  Future<void> reconcile({
+    required bool video,
+    required bool audio,
     required ServerVideoFrameSink onVideoFrame,
     required ServerAudioChunkSink onAudioChunk,
     ServerMediaErrorSink? onError,
@@ -112,12 +129,26 @@ class DeterministicServerMediaSource implements ServerMediaSource {
     _videoSink = onVideoFrame;
     _audioSink = onAudioChunk;
     _errorSink = onError;
-    if (_active) return;
-    _active = true;
-    _emitVideoFrame();
-    _emitAudioChunk();
-    _videoTimer = Timer.periodic(videoInterval, (_) => _emitVideoFrame());
-    _audioTimer = Timer.periodic(audioInterval, (_) => _emitAudioChunk());
+    _active = video || audio;
+    if (video && _videoTimer == null) {
+      _emitVideoFrame();
+      _videoTimer = Timer.periodic(videoInterval, (_) => _emitVideoFrame());
+    } else if (!video) {
+      _videoTimer?.cancel();
+      _videoTimer = null;
+    }
+    if (audio && _audioTimer == null) {
+      _emitAudioChunk();
+      _audioTimer = Timer.periodic(audioInterval, (_) => _emitAudioChunk());
+    } else if (!audio) {
+      _audioTimer?.cancel();
+      _audioTimer = null;
+    }
+    if (!_active) {
+      _videoSink = null;
+      _audioSink = null;
+      _errorSink = null;
+    }
   }
 
   @override

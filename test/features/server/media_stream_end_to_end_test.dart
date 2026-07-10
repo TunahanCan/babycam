@@ -94,6 +94,79 @@ void main() {
     expect(status['activeStreamClients'], 1);
   });
 
+  test('session/stop client medya socketlerini kapatip runtimei bosaltir',
+      () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final controlClient = HttpClient();
+    final mediaClient = HttpClient();
+    addTearDown(() => controlClient.close(force: true));
+    addTearDown(() => mediaClient.close(force: true));
+
+    final started = await _postSessionStart(
+      controlClient,
+      base.port,
+      trusted.token,
+      trusted.clientId,
+      audio: false,
+    );
+    final streamToken = started['streamToken'] as String;
+    final mediaRequest = await mediaClient.getUrl(Uri(
+      scheme: 'http',
+      host: InternetAddress.loopbackIPv4.address,
+      port: base.port,
+      path: MimiCamProtocolV2.video,
+      queryParameters: {'streamToken': streamToken},
+    ));
+    final mediaResponse = await mediaRequest.close();
+    final firstFrame = Completer<void>();
+    final streamClosed = Completer<void>();
+    final parser = MjpegStreamParser();
+    final subscription = mediaResponse.listen(
+      (chunk) {
+        if (firstFrame.isCompleted) return;
+        if (parser.add(Uint8List.fromList(chunk)).isNotEmpty) {
+          firstFrame.complete();
+        }
+      },
+      onError: (Object _) {
+        if (!streamClosed.isCompleted) streamClosed.complete();
+      },
+      onDone: () {
+        if (!streamClosed.isCompleted) streamClosed.complete();
+      },
+      cancelOnError: true,
+    );
+    addTearDown(subscription.cancel);
+    await firstFrame.future.timeout(const Duration(seconds: 2));
+
+    final stopped = await _postJson(
+      controlClient,
+      base.port,
+      MimiCamProtocolV2.sessionStop,
+      trusted.token,
+      {'clientId': trusted.clientId},
+    );
+    await streamClosed.future.timeout(const Duration(seconds: 2));
+    final status = await _getJson(
+      controlClient,
+      base.port,
+      MimiCamProtocolV2.status,
+      trusted.token,
+    );
+
+    expect(stopped.statusCode, HttpStatus.ok);
+    expect(stopped.body['activeStreamClients'], 0);
+    expect(status['activeStreamClients'], 0);
+    expect(status['videoClients'], 0);
+  });
+
   test('iki parent client ayni anda video ve audio endpointlerinden medya alir',
       () async {
     final tokenService = PairingTokenService();
@@ -186,7 +259,7 @@ void main() {
     final checks = response.body['checks'] as Map;
     final loopback = response.body['loopback'] as Map;
 
-    expect(response.statusCode, HttpStatus.ok);
+    expect(response.statusCode, HttpStatus.ok, reason: '${response.body}');
     expect(response.body['ok'], isTrue);
     expect(checks['video'], isTrue);
     expect(checks['audio'], isTrue);
@@ -230,7 +303,7 @@ void main() {
     final audio = response.body['audio'] as Map;
     final loopback = response.body['loopback'] as Map;
 
-    expect(response.statusCode, HttpStatus.ok);
+    expect(response.statusCode, HttpStatus.ok, reason: '${response.body}');
     expect(response.body['ok'], isTrue);
     expect(audio['ok'], isTrue);
     expect(audio['mode'], 'tone');

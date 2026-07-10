@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -163,6 +164,67 @@ void main() {
 
     expect(update.snapshot.tier, NetworkQualityTier.unknown);
     expect(update.snapshot.consecutiveFailures, 1);
+  });
+
+  test('aktif watch ayni kalite seviyesinde quality POSTlarini throttle eder',
+      () async {
+    final health = ClientStreamHealthState(nowMs: () => 1000)
+      ..setWatchActive(true);
+    var statusRequests = 0;
+    var reportRequests = 0;
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      if (request.uri.path == MimiCamProtocolV2.status) {
+        statusRequests++;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(jsonEncode({'ok': true}));
+      } else if (request.uri.path == MimiCamProtocolV2.qualityReport) {
+        reportRequests++;
+        await request.drain<void>();
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(jsonEncode({'ok': true}));
+      } else {
+        request.response.statusCode = HttpStatus.notFound;
+      }
+      await request.response.close();
+    });
+    final monitor = NetworkQualityMonitor(
+      healthState: health,
+      livePollInterval: const Duration(milliseconds: 5),
+      qualityReportInterval: const Duration(hours: 1),
+      timeout: const Duration(seconds: 2),
+    );
+
+    final updates = await monitor.watch(_session(server.port)).take(3).toList();
+
+    expect(updates, hasLength(3));
+    expect(statusRequests, 3);
+    expect(reportRequests, 1);
+  });
+
+  test('kalite seviyesi kotulesince throttle beklemeden rapor yollar',
+      () async {
+    final health = ClientStreamHealthState(nowMs: () => 1000)
+      ..setWatchActive(true);
+    final captured = <Map<String, Object?>>[];
+    final server = await _qualityServer(captured);
+    addTearDown(() => server.close(force: true));
+    final monitor = NetworkQualityMonitor(
+      healthState: health,
+      livePollInterval: const Duration(milliseconds: 5),
+      qualityReportInterval: const Duration(hours: 1),
+      timeout: const Duration(seconds: 2),
+    );
+    final iterator = StreamIterator(monitor.watch(_session(server.port)));
+    addTearDown(iterator.cancel);
+
+    expect(await iterator.moveNext(), isTrue);
+    health.markWsDisconnected();
+    expect(await iterator.moveNext(), isTrue);
+
+    expect(captured, hasLength(2));
+    expect(captured.last['networkTier'], NetworkQualityTier.weak.name);
   });
 }
 

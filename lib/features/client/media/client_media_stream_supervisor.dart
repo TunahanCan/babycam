@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
 import '../../../core/bytes/byte_chunk.dart';
+import '../../../core/media/media_session_telemetry.dart';
+import '../../../core/network/retry_policy.dart';
 import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
@@ -81,13 +82,18 @@ class ClientMediaStreamSupervisor {
     this.videoClientFactory,
     this.audioPipelineFactory,
     this.connectTimeout = const Duration(seconds: 5),
-    this.readTimeout = const Duration(seconds: 8),
+    this.readTimeout = const Duration(seconds: 3),
     this.retryDelay = const Duration(milliseconds: 700),
     this.maxRetryDelay = const Duration(seconds: 4),
+    RetryPolicy? retryPolicy,
     this.onStatus,
     this.onSessionRefreshRequired,
     this.onFatalError,
-  });
+  }) : _retryPolicy = retryPolicy ??
+            ExponentialBackoffPolicy(
+              initialDelay: retryDelay,
+              maxDelay: maxRetryDelay,
+            );
 
   final PairingSession session;
   final ActiveStreamSession activeStream;
@@ -102,6 +108,7 @@ class ClientMediaStreamSupervisor {
   final Duration readTimeout;
   final Duration retryDelay;
   final Duration maxRetryDelay;
+  final RetryPolicy _retryPolicy;
   final ValueChanged<ClientMediaStreamUpdate>? onStatus;
   final Future<void> Function(ClientMediaStreamFailure failure)?
       onSessionRefreshRequired;
@@ -116,11 +123,14 @@ class ClientMediaStreamSupervisor {
   int _audioReconnects = 0;
   bool _firstVideoFrameSeen = false;
   bool _firstAudioChunkSeen = false;
+  int? _lastVideoSequence;
+  final _videoTransitEstimator = VideoTransitEstimator();
 
   Future<void> start() async {
     if (_started) return;
     _started = true;
     final generation = ++_generation;
+    _lastVideoSequence = null;
     healthState?.setWatchActive(true);
     _emit('connecting');
     unawaited(_videoLoop(generation));
@@ -132,14 +142,24 @@ class ClientMediaStreamSupervisor {
         pairedServerHost: session.host,
         pairedServerPort: session.port,
         bearerToken: session.sessionToken,
-        shouldRetry: _shouldRetryAudio,
-        onAudioChunkWritten: _markAudioChunkWritten,
+        shouldRetry: (error) {
+          if (!_isCurrentAudioPipeline(generation, pipeline)) return false;
+          return _shouldRetryAudio(error);
+        },
+        onAudioChunkWritten: () {
+          if (!_isCurrentAudioPipeline(generation, pipeline)) return;
+          _markAudioChunkWritten();
+        },
         onStatus: (status) {
+          if (!_isCurrentAudioPipeline(generation, pipeline)) return;
           healthState?.updateAudioPipelineStatus(status.toJson());
           if (status.event == 'error') _audioReconnects = status.reconnects;
           _emit('audio_${status.event}');
         },
-        onError: _handleAudioError,
+        onError: (error) {
+          if (!_isCurrentAudioPipeline(generation, pipeline)) return;
+          _handleAudioError(error);
+        },
       );
     }
   }
@@ -155,11 +175,11 @@ class ClientMediaStreamSupervisor {
   }
 
   Future<void> _videoLoop(int generation) async {
-    var nextRetry = retryDelay;
+    var retryAttempt = 0;
     while (_isCurrent(generation)) {
       try {
         await _connectAndReadVideo(generation);
-        nextRetry = retryDelay;
+        retryAttempt = 0;
       } catch (error) {
         if (!_isCurrent(generation)) return;
         final failure = _classify(error);
@@ -171,15 +191,13 @@ class ClientMediaStreamSupervisor {
           healthState?.markStreamTimeout();
         }
         _videoReconnects++;
+        MediaSessionTelemetry.shared.increment(MediaMetricName.reconnectCount);
         healthState?.markReconnectAttempt();
         _emit('video_reconnecting', failure: failure);
-        await Future<void>.delayed(nextRetry);
-        nextRetry = Duration(
-          milliseconds: min(
-            maxRetryDelay.inMilliseconds,
-            (nextRetry.inMilliseconds * 1.7).round(),
-          ),
+        await Future<void>.delayed(
+          _retryPolicy.delayForAttempt(retryAttempt),
         );
+        retryAttempt++;
       }
     }
   }
@@ -189,6 +207,7 @@ class ClientMediaStreamSupervisor {
       ..connectionTimeout = connectTimeout;
     _videoClient = client;
     final parser = MjpegStreamParser();
+    _videoTransitEstimator.reset();
     final uri = _videoUri();
     try {
       final request = await client.getUrl(uri).timeout(connectTimeout);
@@ -208,12 +227,66 @@ class ClientMediaStreamSupervisor {
 
       await for (final chunk in response.timeout(readTimeout)) {
         if (!_isCurrent(generation)) return;
-        final frames = parser.add(chunk.asUint8ListView());
+        final frames = parser.addFrames(chunk.asUint8ListView());
         if (frames.isEmpty) continue;
-        for (final frame in frames) {
-          healthState?.markVideoFrameReceived();
-          onVideoFrame(frame);
+        final latest = frames.last;
+        final coalescedFrames = frames.length - 1;
+        if (coalescedFrames > 0) {
+          healthState?.markVideoFramesCoalesced(coalescedFrames);
+          MediaSessionTelemetry.shared.increment(
+            MediaMetricName.videoCoalescedPresentationCount,
+            coalescedFrames,
+          );
         }
+
+        // HTTP/TCP may combine several complete MJPEG parts in one chunk. Walk
+        // every sequence number so those locally coalesced frames are not
+        // mistaken for frames that disappeared before reaching the client.
+        var sequenceCursor = _lastVideoSequence;
+        var missingSequenceFrames = 0;
+        for (final frame in frames) {
+          final sequence = frame.sequence;
+          if (sequence == null) continue;
+          if (sequenceCursor != null && sequence > sequenceCursor + 1) {
+            missingSequenceFrames += sequence - sequenceCursor - 1;
+          }
+          sequenceCursor = sequence;
+        }
+        _lastVideoSequence = sequenceCursor;
+        if (missingSequenceFrames > 0) {
+          healthState?.markVideoFramesSkipped(missingSequenceFrames);
+          MediaSessionTelemetry.shared.increment(
+            MediaMetricName.videoSkippedTransportCount,
+            missingSequenceFrames,
+          );
+        }
+        final arrivedAtMs = DateTime.now().millisecondsSinceEpoch;
+        final sentAtMs = latest.sentAtMs;
+        if (sentAtMs != null) {
+          _videoTransitEstimator.observe(
+            sentAtMs: sentAtMs,
+            arrivedAtMs: arrivedAtMs,
+          );
+          _recordWallClockDuration(
+            MediaMetricName.videoNetworkTransit,
+            startedAtMs: sentAtMs,
+            endedAtMs: arrivedAtMs,
+          );
+          healthState?.updateVideoTransport(
+            jitterMs: _videoTransitEstimator.jitterMs,
+            queueDelayMs: _videoTransitEstimator.queueDelayMs,
+          );
+        }
+        final capturedAtMs = latest.capturedAtMs;
+        if (capturedAtMs != null) {
+          _recordWallClockDuration(
+            MediaMetricName.videoCaptureToReceive,
+            startedAtMs: capturedAtMs,
+            endedAtMs: arrivedAtMs,
+          );
+        }
+        healthState?.markVideoFrameReceived();
+        onVideoFrame(latest.jpeg);
         if (!_firstVideoFrameSeen) {
           _firstVideoFrameSeen = true;
           _emit('first_video_frame');
@@ -247,12 +320,29 @@ class ClientMediaStreamSupervisor {
     final failure = _classify(error);
     if (failure.isTerminal) return false;
     _audioReconnects++;
+    MediaSessionTelemetry.shared.increment(MediaMetricName.reconnectCount);
     if (failure.kind == ClientMediaStreamFailureKind.timeout) {
       healthState?.markAudioUnderrun();
     }
     healthState?.markReconnectAttempt();
     _emit('audio_reconnecting', failure: failure);
     return true;
+  }
+
+  void _recordWallClockDuration(
+    String metric, {
+    required int startedAtMs,
+    required int endedAtMs,
+  }) {
+    final durationMs = endedAtMs - startedAtMs;
+    // Cross-device clocks may not be synchronized. Reject impossible samples
+    // instead of corrupting percentiles; relative transit jitter remains
+    // available through VideoTransitEstimator in that case.
+    if (durationMs < 0 || durationMs > 120000) return;
+    MediaSessionTelemetry.shared.recordDurationUs(
+      metric,
+      durationMs * Duration.microsecondsPerMillisecond,
+    );
   }
 
   void _handleTerminalFailure(ClientMediaStreamFailure failure) {
@@ -362,6 +452,12 @@ class ClientMediaStreamSupervisor {
   }
 
   bool _isCurrent(int generation) => _started && generation == _generation;
+
+  bool _isCurrentAudioPipeline(
+    int generation,
+    ClientLiveAudioPipeline pipeline,
+  ) =>
+      _isCurrent(generation) && identical(_audioPipeline, pipeline);
 
   void _closeVideoClient() {
     _videoClient?.close(force: true);

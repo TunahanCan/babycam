@@ -83,6 +83,35 @@ class MediaQualitySelector {
     return desired;
   }
 
+  /// Computes the profile that would be selected without advancing hysteresis
+  /// state. This lets latency-sensitive HTTP responses report the pending
+  /// decision while the serialized camera apply remains asynchronous.
+  MediaQualityProfile preview({
+    required DeviceCapabilityTier deviceTier,
+    required NetworkQualityTier networkTier,
+    required int activeClientCount,
+    ClientQualityReport? worstReport,
+    Iterable<ClientQualityReport> qualityReports = const [],
+    StreamBackpressureMetrics backpressureMetrics =
+        const StreamBackpressureMetrics(),
+  }) {
+    final savedProfile = _currentProfile;
+    final savedStableSinceMs = _stableSinceMs;
+    try {
+      return select(
+        deviceTier: deviceTier,
+        networkTier: networkTier,
+        activeClientCount: activeClientCount,
+        worstReport: worstReport,
+        qualityReports: qualityReports,
+        backpressureMetrics: backpressureMetrics,
+      );
+    } finally {
+      _currentProfile = savedProfile;
+      _stableSinceMs = savedStableSinceMs;
+    }
+  }
+
   void reset() {
     _currentProfile = null;
     _stableSinceMs = null;

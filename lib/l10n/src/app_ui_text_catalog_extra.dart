@@ -364,6 +364,37 @@ const _deUiText = <String, String>{
   'purchaseCanceled': 'Kauf wurde abgebrochen.',
   'purchaseUnavailable': 'Kauf ist im Store noch nicht bereit.',
   'purchaseFailed': 'Kauf konnte nicht abgeschlossen werden.',
+  'comfortAudio': 'Beruhigender Raumklang',
+  'comfortAudioDescription':
+      'Wähle den Ton, der auf dem Babyzimmer-Gerät abgespielt wird.',
+  'whiteNoise': 'Weißes Rauschen',
+  'pinkNoise': 'Rosa Rauschen',
+  'rainSound': 'Regen',
+  'softLullaby': 'Sanftes Schlaflied',
+  'playComfort': 'Abspielen',
+  'pauseComfort': 'Pausieren',
+  'holdToTalk': 'Zum Sprechen gedrückt halten',
+  'talkingNow': 'Stimme wird ins Zimmer übertragen',
+  'talkHelp':
+      'Beim Loslassen werden Mikrofon und Sprechverbindung geschlossen.',
+  'roomVolume': 'Raumlautstärke',
+  'platformRuntimeContractTitle': 'Hintergrund-Laufzeitvertrag',
+  'iosForegroundOnlyContract':
+      'Unter iOS läuft der Kamerastream nur im Vordergrund weiter.',
+  'androidServiceActiveContract':
+      'Der Android-Vordergrunddienst verwaltet Kamera und Mikrofon.',
+  'androidServiceInactiveContract':
+      'Der Android-Vordergrunddienst ist noch nicht aktiv.',
+  'platformRuntimeUnknownContract':
+      'Hintergrund-Kamerastreaming ist auf dieser Plattform nicht verfügbar.',
+  'processRecoveryForegroundContract':
+      'Nach einem Prozessabbruch muss die App im Vordergrund neu geöffnet werden.',
+  'discoveredRoomsTitle': 'Räume in diesem Netzwerk',
+  'discoveredRoomsSubtitle': 'Über Bonjour / NSD gefundene MimiCam-Geräte.',
+  'noRoomsDiscovered':
+      'Noch kein Raum gefunden; die lokale Suche läuft weiter.',
+  'refreshDiscovery': 'Lokale Suche aktualisieren',
+  'connectDiscoveredRoom': 'Verbinden',
 };
 
 const _arUiText = <String, String>{
@@ -683,4 +714,32 @@ const _arUiText = <String, String>{
   'purchaseCanceled': 'تم إلغاء الشراء.',
   'purchaseUnavailable': 'الشراء غير جاهز في المتجر.',
   'purchaseFailed': 'تعذر إكمال الشراء.',
+  'comfortAudio': 'صوت مهدئ للغرفة',
+  'comfortAudioDescription': 'اختر الصوت الذي سيعمل على جهاز غرفة الطفل.',
+  'whiteNoise': 'ضوضاء بيضاء',
+  'pinkNoise': 'ضوضاء وردية',
+  'rainSound': 'مطر',
+  'softLullaby': 'تهويدة هادئة',
+  'playComfort': 'تشغيل',
+  'pauseComfort': 'إيقاف مؤقت',
+  'holdToTalk': 'اضغط مطولاً للتحدث',
+  'talkingNow': 'يتم إرسال الصوت إلى الغرفة',
+  'talkHelp': 'عند إفلات الزر يتوقف الميكروفون واتصال التحدث.',
+  'roomVolume': 'مستوى صوت الغرفة',
+  'platformRuntimeContractTitle': 'عقد التشغيل في الخلفية',
+  'iosForegroundOnlyContract':
+      'على iOS يستمر بث الكاميرا فقط عندما يكون التطبيق في الواجهة.',
+  'androidServiceActiveContract':
+      'تدير خدمة Android الأمامية الكاميرا والميكروفون النشطين.',
+  'androidServiceInactiveContract':
+      'خدمة Android الأمامية للبث في الخلفية غير نشطة بعد.',
+  'platformRuntimeUnknownContract':
+      'بث الكاميرا في الخلفية غير متاح على هذه المنصة.',
+  'processRecoveryForegroundContract':
+      'إذا توقفت العملية فأعد فتح التطبيق في الواجهة.',
+  'discoveredRoomsTitle': 'الغرف على هذه الشبكة',
+  'discoveredRoomsSubtitle': 'أجهزة MimiCam التي عثر عليها Bonjour / NSD.',
+  'noRoomsDiscovered': 'لم يتم العثور على غرفة بعد؛ يستمر البحث المحلي.',
+  'refreshDiscovery': 'تحديث البحث المحلي',
+  'connectDiscoveredRoom': 'اتصال',
 };

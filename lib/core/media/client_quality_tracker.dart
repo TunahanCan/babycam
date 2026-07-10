@@ -10,6 +10,7 @@ class ClientQualityReport {
     this.videoFrameGapMs,
     this.audioGapMs,
     this.skippedVideoFrames = 0,
+    this.coalescedVideoFrames = 0,
     this.skippedAudioChunks = 0,
     this.wsDisconnectCount = 0,
     this.reconnectCount = 0,
@@ -17,7 +18,10 @@ class ClientQualityReport {
     this.audioUnderrun = false,
     this.watchActive = false,
     this.recentlyReconnected = false,
+    this.videoJitterMs,
+    this.videoQueueDelayMs,
     this.audioPipeline = const {},
+    this.mediaTelemetry = const {},
   });
 
   final String clientId;
@@ -28,6 +32,7 @@ class ClientQualityReport {
   final int? videoFrameGapMs;
   final int? audioGapMs;
   final int skippedVideoFrames;
+  final int coalescedVideoFrames;
   final int skippedAudioChunks;
   final int wsDisconnectCount;
   final int reconnectCount;
@@ -35,7 +40,10 @@ class ClientQualityReport {
   final bool audioUnderrun;
   final bool watchActive;
   final bool recentlyReconnected;
+  final double? videoJitterMs;
+  final int? videoQueueDelayMs;
   final Map<String, Object?> audioPipeline;
+  final Map<String, Object?> mediaTelemetry;
 
   NetworkQualityTier get tier => networkTier;
   int get reportedAtMs => createdAtMs;
@@ -55,6 +63,7 @@ class ClientQualityReport {
         'audioGapMs': audioGapMs,
         'skippedFrames': skippedVideoFrames,
         'skippedVideoFrames': skippedVideoFrames,
+        'coalescedVideoFrames': coalescedVideoFrames,
         'skippedAudioChunks': skippedAudioChunks,
         'wsDisconnectCount': wsDisconnectCount,
         'reconnectCount': reconnectCount,
@@ -62,7 +71,10 @@ class ClientQualityReport {
         'audioUnderrun': audioUnderrun,
         'watchActive': watchActive,
         'recentlyReconnected': recentlyReconnected,
+        'videoJitterMs': videoJitterMs,
+        'videoQueueDelayMs': videoQueueDelayMs,
         'audioPipeline': audioPipeline,
+        'mediaTelemetry': mediaTelemetry,
         'createdAtMs': createdAtMs,
       };
 
@@ -83,6 +95,7 @@ class ClientQualityReport {
       skippedVideoFrames: _intValue(json['skippedVideoFrames']) ??
           _intValue(json['skippedFrames']) ??
           0,
+      coalescedVideoFrames: _intValue(json['coalescedVideoFrames']) ?? 0,
       skippedAudioChunks: _intValue(json['skippedAudioChunks']) ?? 0,
       wsDisconnectCount: _intValue(json['wsDisconnectCount']) ?? 0,
       reconnectCount: _intValue(json['reconnectCount']) ?? 0,
@@ -90,9 +103,12 @@ class ClientQualityReport {
       audioUnderrun: _boolValue(json['audioUnderrun']),
       watchActive: _boolValue(json['watchActive']),
       recentlyReconnected: _boolValue(json['recentlyReconnected']),
+      videoJitterMs: _doubleValue(json['videoJitterMs']),
+      videoQueueDelayMs: _intValue(json['videoQueueDelayMs']),
       audioPipeline: _mapValue(
         json['audioPipeline'] ?? json['clientAudioPipeline'],
       ),
+      mediaTelemetry: _mapValue(json['mediaTelemetry']),
       createdAtMs: _intValue(json['createdAtMs']) ??
           _intValue(json['reportedAtMs']) ??
           nowMs,
@@ -108,6 +124,7 @@ class ClientQualityReport {
     int? videoFrameGapMs,
     int? audioGapMs,
     int? skippedVideoFrames,
+    int? coalescedVideoFrames,
     int? skippedAudioChunks,
     int? wsDisconnectCount,
     int? reconnectCount,
@@ -115,7 +132,10 @@ class ClientQualityReport {
     bool? audioUnderrun,
     bool? watchActive,
     bool? recentlyReconnected,
+    double? videoJitterMs,
+    int? videoQueueDelayMs,
     Map<String, Object?>? audioPipeline,
+    Map<String, Object?>? mediaTelemetry,
   }) =>
       ClientQualityReport(
         clientId: clientId ?? this.clientId,
@@ -126,6 +146,7 @@ class ClientQualityReport {
         videoFrameGapMs: videoFrameGapMs ?? this.videoFrameGapMs,
         audioGapMs: audioGapMs ?? this.audioGapMs,
         skippedVideoFrames: skippedVideoFrames ?? this.skippedVideoFrames,
+        coalescedVideoFrames: coalescedVideoFrames ?? this.coalescedVideoFrames,
         skippedAudioChunks: skippedAudioChunks ?? this.skippedAudioChunks,
         wsDisconnectCount: wsDisconnectCount ?? this.wsDisconnectCount,
         reconnectCount: reconnectCount ?? this.reconnectCount,
@@ -133,13 +154,18 @@ class ClientQualityReport {
         audioUnderrun: audioUnderrun ?? this.audioUnderrun,
         watchActive: watchActive ?? this.watchActive,
         recentlyReconnected: recentlyReconnected ?? this.recentlyReconnected,
+        videoJitterMs: videoJitterMs ?? this.videoJitterMs,
+        videoQueueDelayMs: videoQueueDelayMs ?? this.videoQueueDelayMs,
         audioPipeline: audioPipeline ?? this.audioPipeline,
+        mediaTelemetry: mediaTelemetry ?? this.mediaTelemetry,
       );
 
   NetworkQualityTier _healthTier() {
     if (streamTimedOut ||
         audioUnderrun ||
-        skippedAudioChunks > 0 ||
+        skippedAudioChunks >= 3 ||
+        _atLeast(videoQueueDelayMs, 400) ||
+        _atLeastDouble(videoJitterMs, 120) ||
         _atLeast(videoFrameGapMs, 5000) ||
         _atLeast(audioGapMs, 1500) ||
         consecutiveFailures >= 2 ||
@@ -150,6 +176,9 @@ class ClientQualityReport {
     if (_atLeast(videoFrameGapMs, 2000) ||
         _atLeast(audioGapMs, 1000) ||
         skippedVideoFrames >= 3 ||
+        skippedAudioChunks > 0 ||
+        _atLeast(videoQueueDelayMs, 150) ||
+        _atLeastDouble(videoJitterMs, 60) ||
         consecutiveFailures >= 1 ||
         wsDisconnectCount > 0 ||
         reconnectCount > 0 ||
@@ -160,6 +189,9 @@ class ClientQualityReport {
   }
 
   static bool _atLeast(int? value, int threshold) =>
+      value != null && value >= threshold;
+
+  static bool _atLeastDouble(double? value, double threshold) =>
       value != null && value >= threshold;
 
   static int? _intValue(Object? value) {
@@ -173,6 +205,12 @@ class ClientQualityReport {
     if (value is bool) return value;
     if (value is String) return value.toLowerCase() == 'true';
     return false;
+  }
+
+  static double? _doubleValue(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 
   static Map<String, Object?> _mapValue(Object? value) {

@@ -125,14 +125,14 @@ void main() {
       {
         'tier': 'excellent',
         'skippedFrames': 4,
-        'skippedAudioChunks': 1,
+        'skippedAudioChunks': 3,
       },
       clientId: 'anne',
       nowMs: 1000,
     );
 
     expect(report.skippedVideoFrames, 4);
-    expect(report.skippedAudioChunks, 1);
+    expect(report.skippedAudioChunks, 3);
     expect(report.effectiveTier, NetworkQualityTier.critical);
   });
 }

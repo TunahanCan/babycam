@@ -6,15 +6,18 @@ import 'alerts/client_alert_listener.dart';
 import 'alerts/client_alert_history.dart';
 import 'alerts/client_notification_service.dart';
 import 'client_runtime.dart';
+import 'controls/client_room_controls.dart';
 import 'media/client_stream_health_state.dart';
 import 'media/network_quality_monitor.dart';
 import 'media/stream_session_controller.dart';
+import 'media/webrtc/flutter_webrtc_client_connector.dart';
 import 'pairing/client_identity_store.dart';
 import 'pairing/pairing_session_store.dart';
 import 'pairing/qr_pairing_client.dart';
 import 'pairing/trusted_token_renewal_client.dart';
 import '../../l10n/app_strings.dart';
 import '../../services/monetization/broadcast_access_service.dart';
+import '../../services/discovery/mimicam_service_discovery.dart';
 
 class ClientCompositionRoot {
   static int createCount = 0;
@@ -32,11 +35,16 @@ class ClientCompositionRoot {
       secureTokens: secureTokens,
     );
     final streamHealth = ClientStreamHealthState();
-    final streams = StreamSessionController(healthState: streamHealth);
+    final streams = StreamSessionController(
+      healthState: streamHealth,
+      webRtcConnector: FlutterWebRtcClientConnector(),
+    );
     final networkQuality = NetworkQualityMonitor(healthState: streamHealth);
     final alertHistory = ClientAlertHistory(preferences: preferences);
     final broadcastAccess = BroadcastAccessService(preferences);
     final notifications = ClientNotificationService();
+    final roomControls = ClientRoomControls();
+    final serviceBrowser = MimiCamServiceBrowser();
     final alerts = ClientAlertListener(
       healthState: streamHealth,
       onAlert: (alert) {
@@ -70,9 +78,12 @@ class ClientCompositionRoot {
       alertHistory: alertHistory,
       streamHealthState: streamHealth,
       broadcastAccess: broadcastAccess,
+      roomControls: roomControls,
+      serviceBrowser: serviceBrowser,
     );
     unawaited(runtime.loadAlertHistory());
     unawaited(runtime.refreshBroadcastAccess());
+    unawaited(runtime.startDiscovery().catchError((_) {}));
     unawaited(_restoreSavedSession(runtime, store));
     return runtime;
   }

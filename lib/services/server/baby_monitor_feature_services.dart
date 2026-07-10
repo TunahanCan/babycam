@@ -35,25 +35,25 @@ class ComfortAudioService {
     ComfortAudioTrack(
       id: 'white_noise',
       title: 'White noise',
-      assetPath: 'assets/comfort/white_noise.wav',
+      assetPath: 'generated://white_noise',
       kind: 'white_noise',
     ),
     ComfortAudioTrack(
       id: 'pink_noise',
       title: 'Pink noise',
-      assetPath: 'assets/comfort/pink_noise.wav',
+      assetPath: 'generated://pink_noise',
       kind: 'white_noise',
     ),
     ComfortAudioTrack(
       id: 'rain',
       title: 'Rain',
-      assetPath: 'assets/comfort/rain.wav',
+      assetPath: 'generated://rain',
       kind: 'ambient',
     ),
     ComfortAudioTrack(
       id: 'soft_lullaby',
       title: 'Soft lullaby',
-      assetPath: 'assets/comfort/soft_lullaby.wav',
+      assetPath: 'generated://soft_lullaby',
       kind: 'lullaby',
     ),
   ];
@@ -65,6 +65,15 @@ class ComfortAudioService {
 
   List<Map<String, Object?>> get trackCatalog =>
       [for (final track in builtInTracks) track.toJson()];
+
+  ComfortAudioState markPlaybackFailed(Object error) {
+    _state = _state.copyWith(
+      playing: false,
+      updatedAtMs: _now().millisecondsSinceEpoch,
+      lastError: 'PLAYBACK_FAILED: $error',
+    );
+    return _state;
+  }
 
   ComfortAudioState applyCommand(Map<Object?, Object?>? command) {
     final action = command?['action']?.toString().trim();
@@ -306,6 +315,7 @@ class TalkSessionRegistry {
     if (active == null || active.token != token) return null;
     final nowMs = _now().millisecondsSinceEpoch;
     final next = active.copyWith(
+      expiresAtMs: nowMs + sessionTtl.inMilliseconds,
       audioBytesReceived: active.audioBytesReceived + bytes.length,
       lastAudioAtMs: nowMs,
     );
@@ -319,6 +329,7 @@ class TalkSessionRegistry {
     if (active == null || active.token != token) return null;
     final nowMs = _now().millisecondsSinceEpoch;
     final next = active.copyWith(
+      expiresAtMs: nowMs + sessionTtl.inMilliseconds,
       videoBytesReceived: active.videoBytesReceived + bytes.length,
       lastVideoAtMs: nowMs,
     );

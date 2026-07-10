@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import '../../../core/mimicam_protocol.dart';
+import '../../../core/network/retry_policy.dart';
 import '../../../core/protocol/alert_event_dto.dart';
 import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
@@ -17,13 +17,20 @@ class ClientAlertListener {
     this.maxReconnectDelay = const Duration(seconds: 8),
     this.onAlert,
     HttpClient Function(PairingSession session)? clientFactory,
-  }) : _clientFactory = clientFactory;
+    RetryPolicy? retryPolicy,
+  })  : _clientFactory = clientFactory,
+        _retryPolicy = retryPolicy ??
+            ExponentialBackoffPolicy(
+              initialDelay: reconnectDelay,
+              maxDelay: maxReconnectDelay,
+            );
 
   final ClientStreamHealthState? healthState;
   final Duration reconnectDelay;
   final Duration maxReconnectDelay;
   final void Function(AlertEventDto alert)? onAlert;
   final HttpClient Function(PairingSession session)? _clientFactory;
+  final RetryPolicy _retryPolicy;
 
   bool isListening = false;
   bool isConnected = false;
@@ -76,11 +83,11 @@ class ClientAlertListener {
   }
 
   Future<void> _listenLoop(int generation, PairingSession session) async {
-    var delay = reconnectDelay;
+    var retryAttempt = 0;
     while (_isCurrent(generation)) {
       try {
         await _connectAndRead(generation, session);
-        delay = reconnectDelay;
+        retryAttempt = 0;
       } catch (error) {
         if (!_isCurrent(generation)) return;
         final first = _firstConnection;
@@ -91,13 +98,8 @@ class ClientAlertListener {
       if (!_isCurrent(generation)) return;
       _markDisconnected();
       healthState?.markReconnectAttempt();
-      await _waitBeforeReconnect(delay);
-      delay = Duration(
-        milliseconds: min(
-          maxReconnectDelay.inMilliseconds,
-          (delay.inMilliseconds * 1.7).round(),
-        ),
-      );
+      await _waitBeforeReconnect(_retryPolicy.delayForAttempt(retryAttempt));
+      retryAttempt++;
     }
   }
 

@@ -131,6 +131,8 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         requireEventDelivery: requireEventDelivery,
       ));
       checks.addAll({
+        if (requireVideo && loopback['videoOk'] == true) 'video': true,
+        if (requireAudio && loopback['audioOk'] == true) 'audio': true,
         if (requireVideo) 'videoClient': loopback['videoOk'] == true,
         if (requireAudio) 'audioClient': loopback['audioOk'] == true,
       });
@@ -360,7 +362,7 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
     int port,
     String streamToken,
     Duration timeout, {
-    void Function()? emitTone,
+    FutureOr<void> Function()? emitTone,
   }) async {
     final client = HttpClient()..connectionTimeout = timeout;
     try {
@@ -376,7 +378,7 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         await response.drain<void>();
         throw StateError('loopback audio failed: ${response.statusCode}');
       }
-      emitTone?.call();
+      if (emitTone != null) unawaited(Future<void>.sync(emitTone));
       final buffer = BytesBuilder(copy: false);
       final completer = Completer<_LoopbackAudioProbeResult>();
       late final StreamSubscription<List<int>> subscription;
@@ -567,8 +569,18 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         amplitude: amplitude.clamp(.02, .80).toDouble(),
       );
 
-  void _emitLoopbackAudioTone() {
-    _audioStreamService.broadcast(_testTonePcm(durationMs: 300));
+  Future<void> _emitLoopbackAudioTone() async {
+    final pcm = _testTonePcm(durationMs: 100);
+    const frameBytes = MimiCamServer._audioSampleRate *
+        MimiCamServer._audioChannels *
+        (MimiCamServer._audioBitsPerSample ~/ 8) *
+        20 ~/
+        1000;
+    for (var offset = 0; offset < pcm.length; offset += frameBytes) {
+      final end = min(offset + frameBytes, pcm.length);
+      _audioStreamService.broadcast(Uint8List.sublistView(pcm, offset, end));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
   }
 
   AlertEvent _broadcastTestAlert(Map<Object?, Object?>? body) {
@@ -711,8 +723,8 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
       'battery': _serverBattery.toJson(),
       'transport': _transportStatus(),
       'streamHealth': _streamHealthStatus(nowMs),
-      'comfort': _comfortAudio.state.toJson(),
-      'nightLight': _nightLight.state.toJson(),
+      'comfort': _features.comfortAudio.state.toJson(),
+      'nightLight': _features.nightLight.state.toJson(),
       'talk': _talkStatus(),
       'analysis': _analysisMetrics?.toJson(),
     };

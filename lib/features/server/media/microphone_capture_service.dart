@@ -58,6 +58,9 @@ class MicrophoneCaptureService {
   final int Function() _nowMs;
 
   StreamSubscription<Uint8List>? _subscription;
+  Future<bool>? _startOperation;
+  int _generation = 0;
+  bool _disposed = false;
   bool _recorderCreated = false;
   bool? _permissionGranted;
   String? _lastFailureReason;
@@ -86,8 +89,34 @@ class MicrophoneCaptureService {
   Future<bool> start({
     required MicrophoneChunkHandler onChunk,
     void Function(Object error, StackTrace stackTrace)? onError,
+  }) {
+    if (_disposed) {
+      return Future<bool>.error(
+        StateError('MicrophoneCaptureService is disposed.'),
+      );
+    }
+    if (_subscription != null) return Future<bool>.value(true);
+    final current = _startOperation;
+    if (current != null) return current;
+
+    final generation = ++_generation;
+    late final Future<bool> operation;
+    operation = _start(
+      generation: generation,
+      onChunk: onChunk,
+      onError: onError,
+    ).whenComplete(() {
+      if (identical(_startOperation, operation)) _startOperation = null;
+    });
+    _startOperation = operation;
+    return operation;
+  }
+
+  Future<bool> _start({
+    required int generation,
+    required MicrophoneChunkHandler onChunk,
+    required void Function(Object error, StackTrace stackTrace)? onError,
   }) async {
-    if (_subscription != null) return true;
     final recorder = _recorder ??= _recorderFactory();
     _recorderCreated = true;
     _lastStartAttemptAtMs = _nowMs();
@@ -96,6 +125,7 @@ class MicrophoneCaptureService {
 
     try {
       final hasPermission = await recorder.hasPermission();
+      if (!_isCurrent(generation)) return false;
       _permissionGranted = hasPermission;
       if (!hasPermission) {
         _lastFailureReason = 'permissionDenied';
@@ -108,14 +138,34 @@ class MicrophoneCaptureService {
         sampleRate: sampleRate,
         numChannels: channels,
       ));
-      _subscription = stream.listen(
-        (pcm16le) => _handleChunk(pcm16le, onChunk),
+      if (!_isCurrent(generation)) {
+        await _stopRecorder(recorder);
+        return false;
+      }
+      late final StreamSubscription<Uint8List> subscription;
+      subscription = stream.listen(
+        (pcm16le) {
+          if (_isCurrent(generation)) _handleChunk(pcm16le, onChunk);
+        },
         onError: (Object error, StackTrace stackTrace) {
+          if (!_isCurrent(generation)) return;
           _lastFailureReason = 'captureStreamError';
           _lastStartError = error.toString();
           onError?.call(error, stackTrace);
         },
+        onDone: () {
+          if (_isCurrent(generation) &&
+              identical(_subscription, subscription)) {
+            _subscription = null;
+          }
+        },
       );
+      if (!_isCurrent(generation)) {
+        await subscription.cancel();
+        await _stopRecorder(recorder);
+        return false;
+      }
+      _subscription = subscription;
       return true;
     } catch (error) {
       _lastFailureReason = 'captureStartFailed';
@@ -125,20 +175,36 @@ class MicrophoneCaptureService {
   }
 
   Future<void> stop() async {
-    await _subscription?.cancel();
+    _generation++;
+    final starting = _startOperation;
+    if (starting != null) {
+      try {
+        await starting;
+      } catch (_) {}
+    }
+    final subscription = _subscription;
     _subscription = null;
+    await subscription?.cancel();
     final recorder = _recorder;
     if (recorder == null) return;
-    try {
-      await recorder.stop();
-    } catch (_) {}
+    await _stopRecorder(recorder);
   }
 
   Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
     await stop();
     final recorder = _recorder;
     _recorder = null;
     await recorder?.dispose();
+  }
+
+  bool _isCurrent(int generation) => !_disposed && generation == _generation;
+
+  Future<void> _stopRecorder(MicrophoneRecorderPort recorder) async {
+    try {
+      await recorder.stop();
+    } catch (_) {}
   }
 
   void resetDiagnostics() {

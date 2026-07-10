@@ -5,7 +5,9 @@ import '../../core/protocol/alert_event_dto.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../core/protocol/pairing_session.dart';
 import '../../services/monetization/broadcast_access_service.dart';
+import '../../services/discovery/mimicam_service_discovery.dart';
 import 'alerts/client_alert_history.dart';
+import 'controls/client_room_controls.dart';
 import 'media/active_stream_session.dart';
 import 'media/client_stream_health_state.dart';
 
@@ -61,6 +63,8 @@ class ClientRuntime {
     Future<void> Function()? clearStore,
     ClientAlertHistory? alertHistory,
     this.streamHealthState,
+    this.roomControls,
+    this.serviceBrowser,
     BroadcastAccessService? broadcastAccess,
   })  : _pair = pair,
         _renew = renew,
@@ -88,6 +92,8 @@ class ClientRuntime {
   final BroadcastAccessService? _broadcastAccess;
   final ClientAlertHistory alertHistory;
   final ClientStreamHealthState? streamHealthState;
+  final ClientRoomControls? roomControls;
+  final MimiCamServiceBrowser? serviceBrowser;
   final _states = StreamController<ClientRuntimeState>.broadcast();
   ClientRuntimeState _state =
       const ClientRuntimeState(phase: ClientRuntimePhase.unpaired);
@@ -99,6 +105,18 @@ class ClientRuntime {
   Stream<ClientRuntimeState> get states => _states.stream;
   List<AlertEventDto> get alerts => alertHistory.alerts;
   Stream<List<AlertEventDto>> get alertUpdates => alertHistory.changes;
+  List<MimiCamDiscoveredService> get discoveredServices =>
+      serviceBrowser?.services ?? const [];
+  Stream<List<MimiCamDiscoveredService>> get discoveryUpdates =>
+      serviceBrowser?.updates ?? const Stream.empty();
+
+  Future<void> startDiscovery() async {
+    await serviceBrowser?.start();
+  }
+
+  Future<void> stopDiscovery() async {
+    await serviceBrowser?.stop();
+  }
 
   Future<void> recordAlert(AlertEventDto alert) => alertHistory.add(alert);
   Future<void> loadAlertHistory() => alertHistory.load();
@@ -431,6 +449,8 @@ class ClientRuntime {
     await _broadcastAccess?.endAllSessions();
     _broadcastAccessTimer?.cancel();
     await _stopAlerts?.call();
+    await roomControls?.dispose();
+    await serviceBrowser?.dispose();
     await alertHistory.dispose();
     await _broadcastAccess?.dispose();
     await _states.close();
