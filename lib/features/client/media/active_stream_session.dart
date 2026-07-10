@@ -1,3 +1,4 @@
+import '../../../services/monetization/broadcast_access_service.dart';
 import 'webrtc/webrtc_client_connector.dart';
 import 'webrtc/webrtc_transport_selector.dart';
 
@@ -9,6 +10,7 @@ class ActiveStreamSession {
     this.transport = ClientMediaTransport.mjpegWav,
     this.webRtc,
     this.transportFallbackReason,
+    this.broadcastAccess,
   });
 
   final String streamToken;
@@ -17,6 +19,7 @@ class ActiveStreamSession {
   final ClientMediaTransport transport;
   final WebRtcClientMediaHandle? webRtc;
   final Object? transportFallbackReason;
+  final BroadcastAccessSnapshot? broadcastAccess;
 
   bool get usesWebRtc =>
       transport == ClientMediaTransport.webRtc && webRtc != null;
@@ -28,6 +31,7 @@ class ActiveStreamSession {
     ClientMediaTransport? transport,
     WebRtcClientMediaHandle? webRtc,
     Object? transportFallbackReason,
+    BroadcastAccessSnapshot? broadcastAccess,
   }) =>
       ActiveStreamSession(
         streamToken: streamToken ?? this.streamToken,
@@ -37,5 +41,6 @@ class ActiveStreamSession {
         webRtc: webRtc ?? this.webRtc,
         transportFallbackReason:
             transportFallbackReason ?? this.transportFallbackReason,
+        broadcastAccess: broadcastAccess ?? this.broadcastAccess,
       );
 }

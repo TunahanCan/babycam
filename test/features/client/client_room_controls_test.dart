@@ -16,6 +16,7 @@ void main() {
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final receivedTalk = BytesBuilder(copy: false);
+    var talkAudioAuthorized = false;
     unawaited(server.forEach((request) async {
       if (request.uri.path == MimiCamProtocolV2.comfortCommand) {
         await utf8.decoder.bind(request).join();
@@ -42,6 +43,10 @@ void main() {
         return;
       }
       if (request.uri.path == MimiCamProtocolV2.talkAudio) {
+        talkAudioAuthorized = request.headers.value(
+              HttpHeaders.authorizationHeader,
+            ) ==
+            'Bearer trusted-token';
         await for (final chunk in request) {
           receivedTalk.add(chunk);
         }
@@ -83,8 +88,43 @@ void main() {
     expect(comfort?.playing, isTrue);
     expect(comfort?.trackId, 'rain');
     expect(receivedTalk.takeBytes(), [1, 0, 2, 0]);
+    expect(talkAudioAuthorized, isTrue);
     expect(controls.currentState.talking, isFalse);
     expect(controls.currentState.talkBytesSent, 4);
+  });
+
+  test('missing talk token rolls back an uncertain room talk session',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var stops = 0;
+    unawaited(server.forEach((request) async {
+      await utf8.decoder.bind(request).join();
+      if (request.uri.path == MimiCamProtocolV2.talkStart) {
+        await _json(request.response, {
+          'ok': true,
+          'session': const <String, Object?>{},
+        });
+        return;
+      }
+      if (request.uri.path == MimiCamProtocolV2.talkStop) {
+        stops++;
+        await _json(request.response, {'ok': true});
+        return;
+      }
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
+    }));
+    addTearDown(() => server.close(force: true));
+    final controls = ClientRoomControls();
+    addTearDown(controls.dispose);
+
+    await expectLater(
+      controls.startTalking(_session(server.port)),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(stops, 1);
+    expect(controls.currentState.talking, isFalse);
   });
 }
 

@@ -23,4 +23,49 @@ void main() {
     expect(
         guard.isAllowedRemoteAddress(InternetAddress('172.32.0.1')), isFalse);
   });
+
+  test('ULA, link-local and global-unicast IPv6 LAN addresses are accepted',
+      () {
+    const guard = LocalNetworkGuard();
+
+    expect(guard.isAllowedRemoteAddress(InternetAddress('fd00::20')), isTrue);
+    expect(guard.isAllowedRemoteAddress(InternetAddress('fe80::20')), isTrue);
+    expect(
+      guard.isAllowedRemoteAddress(InternetAddress('2001:db8:42::20')),
+      isTrue,
+    );
+    expect(guard.isAllowedRemoteAddress(InternetAddress('ff02::fb')), isFalse);
+    expect(guard.isAllowedRemoteAddress(InternetAddress('::')), isFalse);
+  });
+
+  test('known IPv6 interface prefix rejects a different global subnet', () {
+    final guard = LocalNetworkGuard(localPrefixes: [
+      LocalNetworkPrefix(
+        address: InternetAddress('2001:db8:42::1'),
+        prefixLength: 64,
+      ),
+    ]);
+
+    expect(
+      guard.isAllowedRemoteAddress(InternetAddress('2001:db8:42::99')),
+      isTrue,
+    );
+    expect(
+      guard.isAllowedRemoteAddress(InternetAddress('2001:db8:43::99')),
+      isFalse,
+    );
+  });
+
+  test('IPv4-mapped IPv6 follows the private IPv4 decision', () {
+    const guard = LocalNetworkGuard();
+
+    expect(
+      guard.isAllowedRemoteAddress(InternetAddress('::ffff:192.168.1.20')),
+      isTrue,
+    );
+    expect(
+      guard.isAllowedRemoteAddress(InternetAddress('::ffff:8.8.8.8')),
+      isFalse,
+    );
+  });
 }

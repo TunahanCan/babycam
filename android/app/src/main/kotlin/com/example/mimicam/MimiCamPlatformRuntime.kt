@@ -97,7 +97,64 @@ object MimiCamPlatformRuntime : EventChannel.StreamHandler {
     private var microphoneDemand = false
 
     @Volatile
+    private var playbackDemand = false
+
+    @Volatile
+    private var serviceCameraDemand = false
+
+    @Volatile
+    private var serviceMicrophoneDemand = false
+
+    @Volatile
+    private var servicePlaybackDemand = false
+
+    @Volatile
+    private var serviceNativeCameraCaptureDemand = false
+
+    @Volatile
+    private var serviceNativeMicrophoneCaptureDemand = false
+
+    @Volatile
+    private var audioOutputActive = false
+
+    @Volatile
+    private var nativeCameraRequested = false
+
+    @Volatile
+    private var nativeMicrophoneRequested = false
+
+    @Volatile
+    private var nativeCameraActive = false
+
+    @Volatile
+    private var nativeMicrophoneActive = false
+
+    @Volatile
+    private var nativeCameraError: String? = null
+
+    @Volatile
+    private var nativeMicrophoneError: String? = null
+
+    @Volatile
+    private var nativeCaptureDiagnostics: Map<String, Any?> = emptyMap()
+
+    @Volatile
     private var lastServiceStopReason: String? = null
+
+    val isForegroundServiceActive: Boolean
+        get() = foregroundServiceActive
+
+    val canStartWhileInUseForegroundService: Boolean
+        get() = MimiCamEngineOwner.activityAttached &&
+            (applicationState == "foreground" || applicationState == "foregroundActive")
+
+    private val externalCameraCaptureDemand: Boolean
+        get() = foregroundServiceActive && serviceCameraDemand &&
+            !serviceNativeCameraCaptureDemand
+
+    private val externalMicrophoneCaptureDemand: Boolean
+        get() = foregroundServiceActive && serviceMicrophoneDemand &&
+            !serviceNativeMicrophoneCaptureDemand
 
     override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
         eventSink = events
@@ -116,15 +173,43 @@ object MimiCamPlatformRuntime : EventChannel.StreamHandler {
         emit("applicationLifecycle", mapOf("state" to state))
     }
 
+    fun setRequestedMediaDemand(
+        active: Boolean,
+        camera: Boolean,
+        microphone: Boolean,
+        playback: Boolean
+    ) {
+        val hasDemand = active && (camera || microphone || playback)
+        cameraDemand = hasDemand && camera
+        microphoneDemand = hasDemand && microphone
+        playbackDemand = hasDemand && playback
+        emit(
+            "mediaDemandChanged",
+            mapOf(
+                "active" to hasDemand,
+                "cameraDemand" to cameraDemand,
+                "microphoneDemand" to microphoneDemand,
+                "playbackDemand" to playbackDemand
+            )
+        )
+    }
+
     fun setForegroundServiceState(
         active: Boolean,
         camera: Boolean,
         microphone: Boolean,
+        playback: Boolean = false,
+        nativeCameraCapture: Boolean = camera,
+        nativeMicrophoneCapture: Boolean = microphone,
         stopReason: String? = null
     ) {
         foregroundServiceActive = active
-        cameraDemand = camera
-        microphoneDemand = microphone
+        serviceCameraDemand = active && camera
+        serviceMicrophoneDemand = active && microphone
+        servicePlaybackDemand = active && playback
+        serviceNativeCameraCaptureDemand = active && camera && nativeCameraCapture
+        serviceNativeMicrophoneCaptureDemand =
+            active && microphone && nativeMicrophoneCapture
         lastServiceStopReason = stopReason
         emit(
             "foregroundServiceState",
@@ -132,7 +217,69 @@ object MimiCamPlatformRuntime : EventChannel.StreamHandler {
                 "active" to active,
                 "cameraDemand" to camera,
                 "microphoneDemand" to microphone,
+                "playbackDemand" to playback,
+                "nativeCameraCapture" to serviceNativeCameraCaptureDemand,
+                "nativeMicrophoneCapture" to serviceNativeMicrophoneCaptureDemand,
+                "externalCameraCaptureDemand" to externalCameraCaptureDemand,
+                "externalMicrophoneCaptureDemand" to externalMicrophoneCaptureDemand,
                 "stopReason" to stopReason
+            )
+        )
+    }
+
+    fun setForegroundServiceFailure(reason: String) {
+        foregroundServiceActive = false
+        serviceCameraDemand = false
+        serviceMicrophoneDemand = false
+        servicePlaybackDemand = false
+        serviceNativeCameraCaptureDemand = false
+        serviceNativeMicrophoneCaptureDemand = false
+        lastServiceStopReason = reason
+        emit(
+            "foregroundServiceStartFailed",
+            mapOf(
+                "reason" to reason,
+                "cameraDemand" to cameraDemand,
+                "microphoneDemand" to microphoneDemand,
+                "playbackDemand" to playbackDemand
+            )
+        )
+    }
+
+    fun setAudioOutputActive(active: Boolean, reason: String) {
+        if (audioOutputActive == active) return
+        audioOutputActive = active
+        emit(
+            "audioOutputStateChanged",
+            mapOf("active" to active, "reason" to reason)
+        )
+    }
+
+    fun setNativeMediaCaptureState(
+        cameraRequested: Boolean,
+        microphoneRequested: Boolean,
+        cameraActive: Boolean,
+        microphoneActive: Boolean,
+        cameraError: String?,
+        microphoneError: String?,
+        diagnostics: Map<String, Any?>
+    ) {
+        nativeCameraRequested = cameraRequested
+        nativeMicrophoneRequested = microphoneRequested
+        nativeCameraActive = cameraActive
+        nativeMicrophoneActive = microphoneActive
+        nativeCameraError = cameraError
+        nativeMicrophoneError = microphoneError
+        nativeCaptureDiagnostics = diagnostics
+        emit(
+            "nativeMediaCaptureState",
+            mapOf(
+                "cameraRequested" to cameraRequested,
+                "microphoneRequested" to microphoneRequested,
+                "cameraActive" to cameraActive,
+                "microphoneActive" to microphoneActive,
+                "cameraError" to cameraError,
+                "microphoneError" to microphoneError
             )
         )
     }
@@ -150,14 +297,59 @@ object MimiCamPlatformRuntime : EventChannel.StreamHandler {
         "platform" to "android",
         "applicationState" to applicationState,
         "supportsCameraInBackground" to true,
+        "supportsMicrophoneInBackground" to true,
+        "nativeServiceMediaAvailable" to true,
         "cameraRequiresForegroundStart" to true,
         "backgroundRecoveryAfterProcessDeath" to false,
         "foregroundServiceActive" to foregroundServiceActive,
         "cameraDemand" to cameraDemand,
         "microphoneDemand" to microphoneDemand,
+        "playbackDemand" to playbackDemand,
+        "audioOutputActive" to audioOutputActive,
+        "supportsServerInBackground" to foregroundServiceActive,
+        "supportsAudioOutputInBackground" to
+            (foregroundServiceActive && servicePlaybackDemand),
+        "serviceOwnsNativeMediaHardware" to
+            (foregroundServiceActive && (nativeCameraActive || nativeMicrophoneActive)),
+        "externalCameraCaptureDemand" to externalCameraCaptureDemand,
+        "externalMicrophoneCaptureDemand" to externalMicrophoneCaptureDemand,
+        "externalMediaCaptureDemand" to
+            (externalCameraCaptureDemand || externalMicrophoneCaptureDemand),
+        "serviceOwnsMediaHardware" to
+            (
+                foregroundServiceActive &&
+                    (
+                        nativeCameraActive ||
+                            nativeMicrophoneActive ||
+                            externalCameraCaptureDemand ||
+                            externalMicrophoneCaptureDemand
+                        )
+                ),
+        "nativeCameraRequested" to nativeCameraRequested,
+        "nativeMicrophoneRequested" to nativeMicrophoneRequested,
+        "nativeCameraActive" to nativeCameraActive,
+        "nativeMicrophoneActive" to nativeMicrophoneActive,
+        "nativeCameraError" to nativeCameraError,
+        "nativeMicrophoneError" to nativeMicrophoneError,
+        "nativeCaptureDiagnostics" to nativeCaptureDiagnostics,
+        "serviceCameraDemand" to serviceCameraDemand,
+        "serviceMicrophoneDemand" to serviceMicrophoneDemand,
+        "servicePlaybackDemand" to servicePlaybackDemand,
+        "serviceNativeCameraCaptureDemand" to serviceNativeCameraCaptureDemand,
+        "serviceNativeMicrophoneCaptureDemand" to
+            serviceNativeMicrophoneCaptureDemand,
         "activityAttached" to MimiCamEngineOwner.activityAttached,
         "serviceOwnsEngine" to MimiCamEngineOwner.serviceOwnsEngine,
         "engineAvailable" to (MimiCamEngineOwner.engine != null),
-        "lastServiceStopReason" to lastServiceStopReason
+        "lastServiceStopReason" to lastServiceStopReason,
+        "contractMessage" to if (
+            externalCameraCaptureDemand || externalMicrophoneCaptureDemand
+        ) {
+            "Android foreground service WebRTC medya yakalayıcısı için motoru ve FGS tiplerini korur."
+        } else if (nativeCameraActive || nativeMicrophoneActive) {
+            "Android foreground service CameraX ve AudioRecord donanımının gerçek sahibidir."
+        } else {
+            "Android kamera ve mikrofonu görünür başlangıçtan sonra foreground service devralır."
+        }
     )
 }

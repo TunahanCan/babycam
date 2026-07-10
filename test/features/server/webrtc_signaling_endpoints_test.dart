@@ -101,6 +101,70 @@ void main() {
     expect(gateway.remoteCandidates, hasLength(1));
     expect(gateway.closedPeers, ['peer-1']);
   });
+
+  test('healthy WebRTC peer remains authoritative after stream token expiry',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'config.webrtc_pilot_enabled': true,
+    });
+    final prefs = await SharedPreferences.getInstance();
+    var now = DateTime(2026);
+    final tokens = PairingTokenService(
+      now: () => now,
+      streamTokenTtl: const Duration(milliseconds: 10),
+    );
+    final server = MimiCamServer(
+      config: ConfigurationService(prefs),
+      strings: AppStrings(const Locale('tr')),
+      onLog: (_) {},
+      onAlert: (_) {},
+      tokenService: tokens,
+      webRtcGateway: _FakeWebRtcServerGateway(),
+      startMediaOnSessionStart: false,
+      httpPort: 0,
+    );
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokens.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+    final started = await _post(
+      client,
+      base.port,
+      MimiCamProtocolV2.sessionStart,
+      const {
+        'video': true,
+        'audio': true,
+        'mediaTransport': 'webrtc',
+      },
+      bearer: trusted.token,
+    );
+    await _post(
+      client,
+      base.port,
+      MimiCamProtocolV2.webRtcOffer,
+      const {
+        'offer': {'type': 'offer', 'sdp': 'v=0\r\n'},
+        'video': true,
+        'audio': true,
+      },
+      bearer: trusted.token,
+      query: {'streamToken': started['streamToken']!.toString()},
+    );
+
+    now = now.add(const Duration(seconds: 2));
+    final status = await _get(
+      client,
+      base.port,
+      MimiCamProtocolV2.status,
+      bearer: trusted.token,
+    );
+
+    expect(status['activeStreamClients'], 1);
+  });
 }
 
 class _FakeWebRtcServerGateway implements WebRtcServerGateway {

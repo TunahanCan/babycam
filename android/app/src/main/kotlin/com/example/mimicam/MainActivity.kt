@@ -28,6 +28,16 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             MimiCamPlatformRuntime.EVENT_CHANNEL
         ).setStreamHandler(MimiCamPlatformRuntime)
+        EventChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            MimiCamServiceMediaBridge.EVENT_CHANNEL
+        ).setStreamHandler(MimiCamServiceMediaBridge)
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            MimiCamServiceMediaBridge.METHOD_CHANNEL
+        ).setMethodCallHandler { call, result ->
+            MimiCamServiceMediaBridge.handleMethodCall(call, result)
+        }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             MimiCamPlatformRuntime.METHOD_CHANNEL
@@ -38,13 +48,20 @@ class MainActivity : FlutterActivity() {
                 )
                 "setMediaDemand" -> {
                     val args = call.arguments as? Map<*, *>
-                    updateForegroundService(
+                    val camera = args?.get("camera") as? Boolean ?: false
+                    val microphone = args?.get("microphone") as? Boolean ?: false
+                    applyMediaDemand(
                         context = appContext,
-                        camera = args?.get("camera") as? Boolean ?: false,
-                        microphone = args?.get("microphone") as? Boolean ?: false,
-                        active = args?.get("active") as? Boolean ?: false
+                        camera = camera,
+                        microphone = microphone,
+                        playback = args?.get("playback") as? Boolean ?: false,
+                        nativeCameraCapture =
+                            args?.get("nativeCameraCapture") as? Boolean ?: camera,
+                        nativeMicrophoneCapture =
+                            args?.get("nativeMicrophoneCapture") as? Boolean ?: microphone,
+                        active = args?.get("active") as? Boolean ?: false,
+                        result = result
                     )
-                    result.success(null)
                 }
                 else -> result.notImplemented()
             }
@@ -65,34 +82,34 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "startServer" -> {
-                    try {
-                        val args = call.arguments as? Map<*, *>
-                        val camera = args?.get("camera") as? Boolean ?: true
-                        val microphone = args?.get("microphone") as? Boolean ?: true
-                        val intent = MimiCamForegroundService.startIntent(
-                            appContext,
-                            camera = camera,
-                            microphone = microphone
-                        )
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            appContext.startForegroundService(intent)
-                        } else {
-                            appContext.startService(intent)
-                        }
-                        result.success(null)
-                    } catch (error: Exception) {
-                        result.error(
-                            "FOREGROUND_SERVICE_START_FAILED",
-                            error.message,
-                            MimiCamPlatformRuntime.snapshot(appContext)
-                        )
-                    }
+                    val args = call.arguments as? Map<*, *>
+                    val camera = args?.get("camera") as? Boolean ?: false
+                    val microphone = args?.get("microphone") as? Boolean ?: false
+                    val playback = args?.get("playback") as? Boolean ?: false
+                    applyMediaDemand(
+                        context = appContext,
+                        camera = camera,
+                        microphone = microphone,
+                        playback = playback,
+                        nativeCameraCapture =
+                            args?.get("nativeCameraCapture") as? Boolean ?: camera,
+                        nativeMicrophoneCapture =
+                            args?.get("nativeMicrophoneCapture") as? Boolean ?: microphone,
+                        active = camera || microphone || playback,
+                        result = result
+                    )
                 }
                 "stopServer" -> {
-                    appContext.startService(
-                        MimiCamForegroundService.stopIntent(appContext)
+                    applyMediaDemand(
+                        context = appContext,
+                        camera = false,
+                        microphone = false,
+                        playback = false,
+                        nativeCameraCapture = false,
+                        nativeMicrophoneCapture = false,
+                        active = false,
+                        result = result
                     )
-                    result.success(null)
                 }
                 "status" -> result.success(
                     MimiCamPlatformRuntime.snapshot(appContext)
@@ -189,18 +206,80 @@ class MainActivity : FlutterActivity() {
     }
 
     private companion object {
-        fun updateForegroundService(
+        fun applyMediaDemand(
             context: Context,
             camera: Boolean,
             microphone: Boolean,
-            active: Boolean
+            playback: Boolean,
+            nativeCameraCapture: Boolean,
+            nativeMicrophoneCapture: Boolean,
+            active: Boolean,
+            result: MethodChannel.Result
         ) {
-            val intent = if (active) {
-                MimiCamForegroundService.updateIntent(context, camera, microphone)
-            } else {
-                MimiCamForegroundService.stopIntent(context)
+            val hasDemand = active && (camera || microphone || playback)
+            val serviceCameraCapture = hasDemand && camera && nativeCameraCapture
+            val serviceMicrophoneCapture =
+                hasDemand && microphone && nativeMicrophoneCapture
+            MimiCamPlatformRuntime.setRequestedMediaDemand(
+                active = hasDemand,
+                camera = camera,
+                microphone = microphone,
+                playback = playback
+            )
+            if (!hasDemand) {
+                context.stopService(Intent(context, MimiCamForegroundService::class.java))
+                result.success(null)
+                return
             }
-            context.startService(intent)
+
+            try {
+                if (MimiCamPlatformRuntime.isForegroundServiceActive) {
+                    context.startService(
+                        MimiCamForegroundService.updateIntent(
+                            context,
+                            camera = camera,
+                            microphone = microphone,
+                            playback = playback,
+                            nativeCameraCapture = serviceCameraCapture,
+                            nativeMicrophoneCapture = serviceMicrophoneCapture
+                        )
+                    )
+                } else {
+                    if (!MimiCamPlatformRuntime.canStartWhileInUseForegroundService) {
+                        val reason = "visible_activity_required"
+                        MimiCamPlatformRuntime.setForegroundServiceFailure(reason)
+                        result.error(
+                            "FOREGROUND_SERVICE_VISIBLE_START_REQUIRED",
+                            "Camera, microphone, or playback service must be armed while MimiCam is visible.",
+                            MimiCamPlatformRuntime.snapshot(context)
+                        )
+                        return
+                    }
+                    val intent = MimiCamForegroundService.startIntent(
+                        context,
+                        camera = camera,
+                        microphone = microphone,
+                        playback = playback,
+                        nativeCameraCapture = serviceCameraCapture,
+                        nativeMicrophoneCapture = serviceMicrophoneCapture
+                    )
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        context.startForegroundService(intent)
+                    } else {
+                        context.startService(intent)
+                    }
+                }
+                result.success(null)
+            } catch (error: Exception) {
+                MimiCamPlatformRuntime.setForegroundServiceFailure(
+                    "${error.javaClass.simpleName}: ${error.message}"
+                )
+                result.error(
+                    "FOREGROUND_SERVICE_START_FAILED",
+                    error.message,
+                    MimiCamPlatformRuntime.snapshot(context)
+                )
+            }
         }
 
         fun deviceResourceSnapshot(context: Context): Map<String, Any?> {

@@ -45,6 +45,8 @@ class MicrophoneCaptureService {
     MicrophoneRecorderFactory? recorderFactory,
     AudioStreamLeveler? streamLeveler,
     int Function()? nowMs,
+    this.restartBaseDelay = const Duration(milliseconds: 250),
+    this.restartMaxDelay = const Duration(seconds: 5),
   })  : _recorder = recorder,
         _recorderFactory = recorderFactory ?? RecordMicrophoneRecorder.new,
         _streamLeveler = streamLeveler ?? AudioStreamLeveler.liveMonitor(),
@@ -56,9 +58,14 @@ class MicrophoneCaptureService {
   final MicrophoneRecorderFactory _recorderFactory;
   final AudioStreamLeveler _streamLeveler;
   final int Function() _nowMs;
+  final Duration restartBaseDelay;
+  final Duration restartMaxDelay;
 
   StreamSubscription<Uint8List>? _subscription;
   Future<bool>? _startOperation;
+  Timer? _restartTimer;
+  int _restartAttempt = 0;
+  int? _terminalHandledGeneration;
   int _generation = 0;
   bool _disposed = false;
   bool _recorderCreated = false;
@@ -71,7 +78,8 @@ class MicrophoneCaptureService {
   int? _lastChunkAtMs;
   int _lastChunkBytes = 0;
 
-  bool get isActive => _subscription != null;
+  bool get isActive =>
+      _subscription != null || _restartTimer != null || _startOperation != null;
   MicrophoneCaptureSnapshot get snapshot => MicrophoneCaptureSnapshot(
         recorderCreated: _recorderCreated,
         permissionGranted: _permissionGranted,
@@ -152,11 +160,23 @@ class MicrophoneCaptureService {
           _lastFailureReason = 'captureStreamError';
           _lastStartError = error.toString();
           onError?.call(error, stackTrace);
+          unawaited(_handleTerminalCapture(
+            generation: generation,
+            subscription: subscription,
+            onChunk: onChunk,
+            onError: onError,
+          ));
         },
         onDone: () {
           if (_isCurrent(generation) &&
               identical(_subscription, subscription)) {
-            _subscription = null;
+            _lastFailureReason = 'captureStreamEnded';
+            unawaited(_handleTerminalCapture(
+              generation: generation,
+              subscription: subscription,
+              onChunk: onChunk,
+              onError: onError,
+            ));
           }
         },
       );
@@ -175,6 +195,10 @@ class MicrophoneCaptureService {
   }
 
   Future<void> stop() async {
+    _restartTimer?.cancel();
+    _restartTimer = null;
+    _restartAttempt = 0;
+    _terminalHandledGeneration = null;
     _generation++;
     final starting = _startOperation;
     if (starting != null) {
@@ -201,6 +225,60 @@ class MicrophoneCaptureService {
 
   bool _isCurrent(int generation) => !_disposed && generation == _generation;
 
+  Future<void> _handleTerminalCapture({
+    required int generation,
+    required StreamSubscription<Uint8List> subscription,
+    required MicrophoneChunkHandler onChunk,
+    required void Function(Object error, StackTrace stackTrace)? onError,
+  }) async {
+    if (!_isCurrent(generation) ||
+        _terminalHandledGeneration == generation ||
+        !identical(_subscription, subscription)) {
+      return;
+    }
+    _terminalHandledGeneration = generation;
+    _subscription = null;
+    try {
+      await subscription.cancel();
+    } catch (_) {}
+    final recorder = _recorder;
+    if (recorder != null) await _stopRecorder(recorder);
+    if (!_isCurrent(generation)) return;
+    _scheduleRestart(onChunk: onChunk, onError: onError);
+  }
+
+  void _scheduleRestart({
+    required MicrophoneChunkHandler onChunk,
+    required void Function(Object error, StackTrace stackTrace)? onError,
+  }) {
+    if (_disposed || _restartTimer != null) return;
+    final exponent = _restartAttempt.clamp(0, 8).toInt();
+    final delayMs = (restartBaseDelay.inMilliseconds * (1 << exponent))
+        .clamp(
+          restartBaseDelay.inMilliseconds,
+          restartMaxDelay.inMilliseconds,
+        )
+        .toInt();
+    _restartAttempt++;
+    _restartTimer = Timer(Duration(milliseconds: delayMs), () {
+      _restartTimer = null;
+      if (_disposed) return;
+      unawaited(start(onChunk: onChunk, onError: onError).then<void>(
+        (started) {
+          if (!started && !_disposed) {
+            _scheduleRestart(onChunk: onChunk, onError: onError);
+          }
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          _lastFailureReason = 'captureRestartFailed';
+          _lastStartError = error.toString();
+          onError?.call(error, stackTrace);
+          _scheduleRestart(onChunk: onChunk, onError: onError);
+        },
+      ));
+    });
+  }
+
   Future<void> _stopRecorder(MicrophoneRecorderPort recorder) async {
     try {
       await recorder.stop();
@@ -219,6 +297,8 @@ class MicrophoneCaptureService {
   }
 
   void _handleChunk(Uint8List pcm16le, MicrophoneChunkHandler onChunk) {
+    _restartAttempt = 0;
+    _terminalHandledGeneration = null;
     final now = _nowMs();
     _lastChunkAtMs = now;
     _lastChunkBytes = pcm16le.length;

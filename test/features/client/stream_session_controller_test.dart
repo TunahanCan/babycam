@@ -9,6 +9,7 @@ import 'package:mimicam/core/protocol/pairing_session.dart';
 import 'package:mimicam/features/client/media/client_stream_health_state.dart';
 import 'package:mimicam/features/client/media/stream_session_controller.dart';
 import 'package:mimicam/features/client/media/webrtc/webrtc_client_connector.dart';
+import 'package:mimicam/services/monetization/broadcast_access_service.dart';
 
 void main() {
   test('health state session start sonrası ayrı video/audio request açmaz',
@@ -29,6 +30,15 @@ void main() {
           'streamTokenExpiresAtMs': DateTime.now()
               .add(const Duration(minutes: 1))
               .millisecondsSinceEpoch,
+          'broadcastAccess': {
+            'unlocked': false,
+            'active': true,
+            'freeLimitMs': 7200000,
+            'usedMs': 1000,
+            'remainingMs': 7199000,
+            'priceLabel': r'$9.99',
+            'productId': BroadcastAccessConfig.productId,
+          },
         }));
         await request.response.close();
         return;
@@ -67,6 +77,7 @@ void main() {
     expect(sessionStartBody?['video'], isTrue);
     expect(controller.lastStreamToken, 'stream_token');
     expect(active?.audioEnabled, isTrue);
+    expect(active?.broadcastAccess?.remainingMs, 7199000);
     expect(snapshot.lastVideoFrameAtMs, isNull);
     expect(snapshot.lastAudioChunkAtMs, isNull);
     expect(videoRequests, 0);
@@ -104,10 +115,54 @@ void main() {
     );
   });
 
-  test('session start streamToken donmezse aktif state acilmaz', () async {
+  test('server paywall response preserves authoritative access snapshot',
+      () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     server.listen((request) async {
+      request.response
+        ..statusCode = HttpStatus.paymentRequired
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({
+          'ok': false,
+          'code': 'BROADCAST_ACCESS_LOCKED',
+          'broadcastAccess': {
+            'unlocked': false,
+            'active': false,
+            'freeLimitMs': 7200000,
+            'usedMs': 7200000,
+            'remainingMs': 0,
+            'priceLabel': r'$9.99',
+            'productId': BroadcastAccessConfig.productId,
+          },
+        }));
+      await request.response.close();
+    });
+    final controller = StreamSessionController(
+      streamTimeout: const Duration(seconds: 1),
+    );
+    addTearDown(controller.dispose);
+
+    await expectLater(
+      controller.start(_session(server.port)),
+      throwsA(
+        isA<BroadcastAccessLockedException>()
+            .having((error) => error.snapshot.isLocked, 'locked', isTrue)
+            .having(
+              (error) => error.snapshot.priceLabel,
+              'localized price',
+              r'$9.99',
+            ),
+      ),
+    );
+  });
+
+  test('session start streamToken donmezse aktif state acilmaz', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    var stops = 0;
+    server.listen((request) async {
+      if (request.uri.path == MimiCamProtocolV2.sessionStop) stops++;
       request.response.headers.contentType = ContentType.json;
       request.response.write(jsonEncode({'ok': true}));
       await request.response.close();
@@ -130,6 +185,7 @@ void main() {
 
     expect(controller.isActive, isFalse);
     expect(controller.lastStreamToken, isNull);
+    expect(stops, 1);
   });
 
   test('WebRTC negotiation failure stops pilot session and starts fallback',

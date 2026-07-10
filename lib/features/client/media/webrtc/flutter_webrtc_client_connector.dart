@@ -21,6 +21,7 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
   final Duration icePollInterval;
   final void Function(String message)? onLog;
   final _handles = <_FlutterWebRtcClientMediaHandle>{};
+  Future<bool>? _initializeOperation;
   bool _initialized = false;
   bool _available = false;
   bool _disposed = false;
@@ -29,17 +30,31 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
   bool get isAvailable => _initialized && _available && !_disposed;
 
   @override
-  Future<bool> initialize() async {
-    if (_disposed) return false;
-    if (_initialized) return _available;
-    _initialized = true;
+  Future<bool> initialize() {
+    if (_disposed) return Future<bool>.value(false);
+    if (_initialized) return Future<bool>.value(_available);
+    final current = _initializeOperation;
+    if (current != null) return current;
+    late final Future<bool> operation;
+    operation = _initialize().whenComplete(() {
+      if (identical(_initializeOperation, operation)) {
+        _initializeOperation = null;
+      }
+    });
+    _initializeOperation = operation;
+    return operation;
+  }
+
+  Future<bool> _initialize() async {
     try {
       final video = await getRtpReceiverCapabilities('video');
       final audio = await getRtpReceiverCapabilities('audio');
       _available =
           _hasCodec(video, 'video/h264') && _hasCodec(audio, 'audio/opus');
+      _initialized = true;
     } catch (error) {
       _available = false;
+      _initialized = false;
       onLog?.call('WebRTC receiver capability probe failed: $error');
     }
     return _available;
@@ -52,7 +67,7 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
     required bool video,
     required bool audio,
   }) async {
-    if (!await initialize()) {
+    if (!await initialize() || _disposed) {
       throw const WebRtcNegotiationException(
         'H.264/Opus WebRTC is unavailable on this device.',
       );
@@ -88,7 +103,7 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
         );
         final capabilities = await getRtpReceiverCapabilities('audio');
         await transceiver.setCodecPreferences(
-          _preferredFirst(capabilities.codecs ?? const [], 'audio/opus'),
+          _pilotCodecs(capabilities.codecs ?? const [], 'audio/opus'),
         );
       }
       if (video) {
@@ -100,7 +115,7 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
         );
         final capabilities = await getRtpReceiverCapabilities('video');
         await transceiver.setCodecPreferences(
-          _preferredFirst(capabilities.codecs ?? const [], 'video/h264'),
+          _pilotCodecs(capabilities.codecs ?? const [], 'video/h264'),
         );
       }
 
@@ -234,7 +249,10 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
     required Future<void> connected,
   }) async {
     var done = false;
-    unawaited(connected.whenComplete(() => done = true));
+    unawaited(connected.then<void>(
+      (_) => done = true,
+      onError: (Object _, StackTrace __) => done = true,
+    ));
     final deadline = DateTime.now().add(negotiationTimeout);
     while (!done && DateTime.now().isBefore(deadline)) {
       final response = await _getJson(
@@ -363,17 +381,20 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
         (codec) => codec.mimeType.toLowerCase() == mimeType,
       );
 
-  static List<RTCRtpCodecCapability> _preferredFirst(
+  static List<RTCRtpCodecCapability> _pilotCodecs(
     List<RTCRtpCodecCapability> codecs,
     String mimeType,
   ) =>
-      [
-        ...codecs.where((codec) => codec.mimeType.toLowerCase() == mimeType),
-        ...codecs.where((codec) => codec.mimeType.toLowerCase() != mimeType)
-      ];
+      codecs
+          .where((codec) => codec.mimeType.toLowerCase() == mimeType)
+          .toList(growable: false);
 }
 
-class _FlutterWebRtcClientMediaHandle implements WebRtcClientMediaHandle {
+class _FlutterWebRtcClientMediaHandle
+    implements
+        WebRtcClientMediaHandle,
+        WebRtcClientStatsSource,
+        WebRtcClientAudioController {
   _FlutterWebRtcClientMediaHandle({
     required this.peerId,
     required this.videoRenderer,
@@ -409,6 +430,73 @@ class _FlutterWebRtcClientMediaHandle implements WebRtcClientMediaHandle {
   }
 
   @override
+  Future<WebRtcClientStatsSnapshot> collectStats() async {
+    final reports = await _connection.getStats();
+    final codecs = <String, String>{};
+    for (final report in reports) {
+      if (report.type != 'codec') continue;
+      final mimeType = report.values['mimeType']?.toString();
+      if (mimeType != null && mimeType.isNotEmpty) codecs[report.id] = mimeType;
+    }
+    var videoBytes = 0;
+    var audioBytes = 0;
+    var framesDecoded = 0;
+    var framesDropped = 0;
+    var packetsReceived = 0;
+    var packetsLost = 0;
+    double? jitterMs;
+    double? jitterBufferDelayMs;
+    String? videoCodec;
+    String? audioCodec;
+    for (final report in reports) {
+      if (report.type != 'inbound-rtp') continue;
+      final values = report.values;
+      final kind = (values['kind'] ?? values['mediaType'])?.toString();
+      final bytes = _intStat(values['bytesReceived']);
+      packetsReceived += _intStat(values['packetsReceived']);
+      packetsLost += _intStat(values['packetsLost']);
+      final reportJitter = _doubleStat(values['jitter']);
+      if (reportJitter != null) jitterMs = reportJitter * 1000;
+      final emitted = _doubleStat(values['jitterBufferEmittedCount']);
+      final delay = _doubleStat(values['jitterBufferDelay']);
+      if (emitted != null && emitted > 0 && delay != null) {
+        jitterBufferDelayMs = delay * 1000 / emitted;
+      }
+      final codec = codecs[values['codecId']?.toString()];
+      if (kind == 'video') {
+        videoBytes += bytes;
+        framesDecoded += _intStat(values['framesDecoded']);
+        framesDropped += _intStat(values['framesDropped']);
+        videoCodec ??= codec;
+      } else if (kind == 'audio') {
+        audioBytes += bytes;
+        audioCodec ??= codec;
+      }
+    }
+    return WebRtcClientStatsSnapshot(
+      videoBytesReceived: videoBytes,
+      audioBytesReceived: audioBytes,
+      videoFramesDecoded: framesDecoded,
+      videoFramesDropped: framesDropped,
+      packetsReceived: packetsReceived,
+      packetsLost: packetsLost,
+      jitterMs: jitterMs,
+      jitterBufferDelayMs: jitterBufferDelayMs,
+      videoCodec: videoCodec,
+      audioCodec: audioCodec,
+      measuredAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  @override
+  Future<void> setAudioEnabled(bool enabled) async {
+    for (final receiver in await _connection.getReceivers()) {
+      final track = receiver.track;
+      if (track?.kind == 'audio') track!.enabled = enabled;
+    }
+  }
+
+  @override
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
@@ -422,5 +510,16 @@ class _FlutterWebRtcClientMediaHandle implements WebRtcClientMediaHandle {
     await videoRenderer.dispose();
     await _states.close();
     _onDisposed(this);
+  }
+
+  static int _intStat(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.round();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static double? _doubleStat(Object? value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '');
   }
 }

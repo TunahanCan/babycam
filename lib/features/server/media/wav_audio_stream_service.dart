@@ -82,6 +82,7 @@ class WavAudioStreamService {
       );
 
   Future<void> attachClient(HttpResponse response, String clientId) async {
+    response.bufferOutput = false;
     response.headers
       ..contentType = ContentType('audio', 'wav')
       ..chunkedTransferEncoding = true

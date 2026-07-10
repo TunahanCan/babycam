@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import '../../../core/protocol/device_feature_models.dart';
 import '../../../core/protocol/mimicam_protocol.dart';
@@ -44,6 +46,9 @@ class ClientRoomControls {
   String? _talkToken;
   Future<void>? _startInFlight;
   Future<void>? _flushInFlight;
+  Object? _talkPumpError;
+  final _pendingTalkChunks = ListQueue<Uint8List>();
+  static const _maxPendingTalkChunks = 12;
   int _chunksSinceFlush = 0;
   bool _disposed = false;
 
@@ -108,73 +113,61 @@ class ClientRoomControls {
   }
 
   Future<void> _startTalking(PairingSession session) async {
-    final start = await _requestJson(
-      session,
-      MimiCamProtocolV2.talkStart,
-      method: 'POST',
-      body: const {
-        'sampleRate': 16000,
-        'channels': 1,
-        'codec': 'pcm_s16le',
-      },
-    );
-    final sessionJson = start?['session'];
-    final token =
-        sessionJson is Map ? sessionJson['talkToken']?.toString().trim() : null;
-    if (token == null || token.isEmpty) {
-      throw StateError('Talk start did not return a talk token.');
+    String token;
+    try {
+      final start = await _requestJson(
+        session,
+        MimiCamProtocolV2.talkStart,
+        method: 'POST',
+        body: const {
+          'sampleRate': 16000,
+          'channels': 1,
+          'codec': 'pcm_s16le',
+        },
+      );
+      final sessionJson = start?['session'];
+      final candidate = sessionJson is Map
+          ? sessionJson['talkToken']?.toString().trim()
+          : null;
+      if (candidate == null || candidate.isEmpty) {
+        throw StateError('Talk start did not return a talk token.');
+      }
+      token = candidate;
+    } catch (error, stackTrace) {
+      await _stopUncertainTalkStart(session);
+      Error.throwWithStackTrace(error, stackTrace);
     }
-    if (_disposed) throw StateError('Room controls are disposed.');
-
-    final client = _clientFactory()..connectionTimeout = timeout;
-    final uri = ServerEndpointBuilder(session).http(
-      MimiCamProtocolV2.talkAudio,
-      query: {'talkToken': token},
-    );
-    final request = await client.postUrl(uri).timeout(timeout);
-    request.headers
-      ..contentType = ContentType('audio', 'L16', parameters: {
-        'rate': '16000',
-        'channels': '1',
-      })
-      ..set(HttpHeaders.acceptHeader, 'application/json');
-    _talkClient = client;
-    _talkRequest = request;
+    // Store cleanup ownership as soon as the room has created the session.
+    // Every following failure can now issue /talk/stop instead of orphaning it.
     _talkSession = session;
     _talkToken = token;
     _chunksSinceFlush = 0;
+    _talkPumpError = null;
+    _pendingTalkChunks.clear();
 
     try {
+      if (_disposed) throw StateError('Room controls are disposed.');
+      final client = _clientFactory()..connectionTimeout = timeout;
+      _talkClient = client;
+      final uri = ServerEndpointBuilder(session).http(
+        MimiCamProtocolV2.talkAudio,
+        query: {'talkToken': token},
+      );
+      final request = await client.postUrl(uri).timeout(timeout);
+      request.headers
+        ..contentType = ContentType('audio', 'L16', parameters: {
+          'rate': '16000',
+          'channels': '1',
+        })
+        ..set(HttpHeaders.acceptHeader, 'application/json')
+        ..set(
+          HttpHeaders.authorizationHeader,
+          'Bearer ${session.sessionToken}',
+        );
+      _talkRequest = request;
       final started = await _microphone.start(
         onChunk: (chunk) {
-          final activeRequest = _talkRequest;
-          if (activeRequest == null) return;
-          if (_flushInFlight != null) {
-            _emit(ClientRoomControlSnapshot(
-              comfort: _state.comfort,
-              talking: true,
-              talkBytesSent: _state.talkBytesSent,
-              talkBytesDropped:
-                  _state.talkBytesDropped + chunk.streamPcm16le.length,
-            ));
-            return;
-          }
-          activeRequest.add(chunk.streamPcm16le);
-          _chunksSinceFlush++;
-          _emit(ClientRoomControlSnapshot(
-            comfort: _state.comfort,
-            talking: true,
-            talkBytesSent: _state.talkBytesSent + chunk.streamPcm16le.length,
-            talkBytesDropped: _state.talkBytesDropped,
-          ));
-          if (_chunksSinceFlush >= 5 && _flushInFlight == null) {
-            _chunksSinceFlush = 0;
-            late final Future<void> flush;
-            flush = activeRequest.flush().whenComplete(() {
-              if (identical(_flushInFlight, flush)) _flushInFlight = null;
-            });
-            _flushInFlight = flush;
-          }
+          _enqueueTalkChunk(chunk.streamPcm16le);
         },
         onError: (error, _) {
           _emit(ClientRoomControlSnapshot(
@@ -202,6 +195,20 @@ class ClientRoomControls {
     }
   }
 
+  Future<void> _stopUncertainTalkStart(PairingSession session) async {
+    try {
+      // The server permits the authenticated owning client to stop without a
+      // token, which is exactly what is needed when the start response is lost
+      // or malformed after room output already switched to talk mode.
+      await _requestJson(
+        session,
+        MimiCamProtocolV2.talkStop,
+        method: 'POST',
+        body: const {},
+      );
+    } catch (_) {}
+  }
+
   Future<void> stopTalking() async {
     final starting = _startInFlight;
     if (starting != null) {
@@ -215,28 +222,40 @@ class ClientRoomControls {
     final token = _talkToken;
     if (session == null || token == null) return;
     Object? error;
+
+    Future<void> attempt(Future<void> Function() operation) async {
+      try {
+        await operation();
+      } catch (caught) {
+        error ??= caught;
+      }
+    }
+
     try {
-      await _microphone.stop();
-      await _flushInFlight;
+      await attempt(_microphone.stop);
+      await attempt(_drainTalkPump);
       final request = _talkRequest;
       _talkRequest = null;
       if (request != null) {
-        final response = await request.close().timeout(timeout);
-        final body = await utf8.decoder.bind(response).join().timeout(timeout);
-        if (response.statusCode != HttpStatus.ok) {
-          throw StateError(
-            'Talk audio failed: ${response.statusCode} ${body.trim()}',
-          );
-        }
+        await attempt(() async {
+          final response = await request.close().timeout(timeout);
+          final body =
+              await utf8.decoder.bind(response).join().timeout(timeout);
+          if (response.statusCode != HttpStatus.ok) {
+            throw StateError(
+              'Talk audio failed: ${response.statusCode} ${body.trim()}',
+            );
+          }
+        });
       }
-      await _requestJson(
-        session,
-        MimiCamProtocolV2.talkStop,
-        method: 'POST',
-        body: {'talkToken': token},
-      );
-    } catch (caught) {
-      error = caught;
+      await attempt(() async {
+        await _requestJson(
+          session,
+          MimiCamProtocolV2.talkStop,
+          method: 'POST',
+          body: {'talkToken': token},
+        );
+      });
     } finally {
       _talkClient?.close(force: true);
       _talkClient = null;
@@ -244,6 +263,8 @@ class ClientRoomControls {
       _talkSession = null;
       _talkToken = null;
       _flushInFlight = null;
+      _talkPumpError = null;
+      _pendingTalkChunks.clear();
       _emit(ClientRoomControlSnapshot(
         comfort: _state.comfort,
         talking: false,
@@ -252,7 +273,8 @@ class ClientRoomControls {
         lastError: error,
       ));
     }
-    if (error != null) throw error;
+    final terminalError = error;
+    if (terminalError != null) throw terminalError;
   }
 
   Future<void> dispose() async {
@@ -326,6 +348,76 @@ class ClientRoomControls {
     _talkSession = null;
     _talkToken = null;
     _flushInFlight = null;
+    _talkPumpError = null;
+    _pendingTalkChunks.clear();
+  }
+
+  void _enqueueTalkChunk(Uint8List chunk) {
+    if (_talkRequest == null || chunk.isEmpty) return;
+    if (_pendingTalkChunks.length >= _maxPendingTalkChunks) {
+      final dropped = _pendingTalkChunks.removeFirst();
+      _emit(ClientRoomControlSnapshot(
+        comfort: _state.comfort,
+        talking: true,
+        talkBytesSent: _state.talkBytesSent,
+        talkBytesDropped: _state.talkBytesDropped + dropped.length,
+      ));
+    }
+    _pendingTalkChunks.addLast(Uint8List.fromList(chunk));
+    _ensureTalkPump();
+  }
+
+  void _ensureTalkPump() {
+    if (_flushInFlight != null) return;
+    if (_pendingTalkChunks.isEmpty || _talkRequest == null) return;
+    late final Future<void> pump;
+    pump = _pumpTalkChunks().catchError((Object error) {
+      _talkPumpError = error;
+      _pendingTalkChunks.clear();
+    }).whenComplete(() {
+      if (identical(_flushInFlight, pump)) _flushInFlight = null;
+      if (_talkPumpError == null &&
+          _pendingTalkChunks.isNotEmpty &&
+          _talkRequest != null) {
+        scheduleMicrotask(_ensureTalkPump);
+      } else if (_talkPumpError != null && _talkSession != null) {
+        scheduleMicrotask(() {
+          unawaited(stopTalking().catchError((_) {}));
+        });
+      }
+    });
+    _flushInFlight = pump;
+  }
+
+  Future<void> _drainTalkPump() async {
+    while (_flushInFlight != null || _pendingTalkChunks.isNotEmpty) {
+      _ensureTalkPump();
+      final current = _flushInFlight;
+      if (current == null) break;
+      await current;
+    }
+    final error = _talkPumpError;
+    if (error != null) throw error;
+  }
+
+  Future<void> _pumpTalkChunks() async {
+    final request = _talkRequest;
+    if (request == null) return;
+    while (_pendingTalkChunks.isNotEmpty && identical(_talkRequest, request)) {
+      final chunk = _pendingTalkChunks.removeFirst();
+      request.add(chunk);
+      _chunksSinceFlush++;
+      _emit(ClientRoomControlSnapshot(
+        comfort: _state.comfort,
+        talking: true,
+        talkBytesSent: _state.talkBytesSent + chunk.length,
+        talkBytesDropped: _state.talkBytesDropped,
+      ));
+    }
+    if (_chunksSinceFlush > 0 && identical(_talkRequest, request)) {
+      _chunksSinceFlush = 0;
+      await request.flush();
+    }
   }
 
   void _emit(ClientRoomControlSnapshot state) {

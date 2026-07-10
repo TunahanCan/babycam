@@ -198,12 +198,56 @@ void main() {
     expect(start.body.containsKey('streamToken'), isFalse);
     expect((start.body['broadcastAccess'] as Map)['locked'], isTrue);
   });
+
+  test('inactive authoritative snapshot server expiry timerini tekrar kurmaz',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final access = _ServerTimerBroadcastAccess(
+      await SharedPreferences.getInstance(),
+      beginSnapshot: _timerSnapshot(active: true, remainingMs: 20),
+      authoritativeSnapshot: _timerSnapshot(
+        active: false,
+        remainingMs: 20,
+      ),
+    );
+    addTearDown(access.dispose);
+    final tokenService = PairingTokenService();
+    final server = await _testServer(
+      tokenService,
+      broadcastAccessOverride: access,
+    );
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    final start = await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.sessionStart,
+      {'clientId': trusted.clientId},
+      bearerToken: trusted.token,
+    );
+    expect(start.statusCode, HttpStatus.ok);
+
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+
+    expect(access.snapshotCalls, 1);
+    expect(access.endSessionCalls, 0);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(access.snapshotCalls, 1, reason: 'inactive timer loop yapmaz');
+  });
 }
 
 Future<MimiCamServer> _testServer(
   PairingTokenService tokenService, {
   Map<String, Object> initialPreferences = const {},
   bool enableBroadcastAccess = false,
+  BroadcastAccessService? broadcastAccessOverride,
 }) async {
   SharedPreferences.setMockInitialValues(initialPreferences);
   final preferences = await SharedPreferences.getInstance();
@@ -218,13 +262,61 @@ Future<MimiCamServer> _testServer(
     featureController: BabyMonitorFeatureController(
       roomAudio: RoomAudioCoordinator(sink: _FakePcmAudioSink()),
     ),
-    broadcastAccess: enableBroadcastAccess
-        ? BroadcastAccessService(
-            preferences,
-            purchaseGateway: _FakePurchaseGateway(),
-          )
-        : null,
+    broadcastAccess: broadcastAccessOverride ??
+        (enableBroadcastAccess
+            ? BroadcastAccessService(
+                preferences,
+                purchaseGateway: _FakePurchaseGateway(),
+              )
+            : null),
   );
+}
+
+BroadcastAccessSnapshot _timerSnapshot({
+  required bool active,
+  required int remainingMs,
+}) =>
+    BroadcastAccessSnapshot(
+      unlocked: false,
+      active: active,
+      freeLimitMs: 1000,
+      usedMs: 1000 - remainingMs,
+      remainingMs: remainingMs,
+      priceLabel: 'test',
+      productId: BroadcastAccessConfig.productId,
+    );
+
+class _ServerTimerBroadcastAccess extends BroadcastAccessService {
+  _ServerTimerBroadcastAccess(
+    super.preferences, {
+    required this.beginSnapshot,
+    required this.authoritativeSnapshot,
+  }) : super(purchaseGateway: _FakePurchaseGateway());
+
+  final BroadcastAccessSnapshot beginSnapshot;
+  final BroadcastAccessSnapshot authoritativeSnapshot;
+  int snapshotCalls = 0;
+  int endSessionCalls = 0;
+
+  @override
+  Future<BroadcastAccessSnapshot> beginSession(String sessionId) async =>
+      beginSnapshot;
+
+  @override
+  Future<BroadcastAccessSnapshot> snapshot() async {
+    snapshotCalls++;
+    return authoritativeSnapshot;
+  }
+
+  @override
+  Future<BroadcastAccessSnapshot> endSession(String sessionId) async {
+    endSessionCalls++;
+    return authoritativeSnapshot;
+  }
+
+  @override
+  Future<BroadcastAccessSnapshot> endAllSessions() async =>
+      authoritativeSnapshot;
 }
 
 class _FakePcmAudioSink implements PcmAudioSink {

@@ -99,6 +99,33 @@ void main() {
     expect(recorder.stopped, isTrue);
     await service.dispose();
   });
+
+  test('capture stream hatasindan sonra mikrofonu yeniden baslatir', () async {
+    final recorder = _FakeRecorder();
+    final service = MicrophoneCaptureService(
+      sampleRate: 16000,
+      channels: 1,
+      recorder: recorder,
+      restartBaseDelay: const Duration(milliseconds: 1),
+      restartMaxDelay: const Duration(milliseconds: 2),
+    );
+    final errors = <Object>[];
+
+    expect(
+      await service.start(
+        onChunk: (_) {},
+        onError: (error, _) => errors.add(error),
+      ),
+      isTrue,
+    );
+    recorder.addError(StateError('recorder disconnected'));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    expect(errors, hasLength(1));
+    expect(recorder.startCalls, greaterThanOrEqualTo(2));
+    expect(service.isActive, isTrue);
+    await service.dispose();
+  });
 }
 
 class _FakeRecorder implements MicrophoneRecorderPort {
@@ -135,6 +162,10 @@ class _FakeRecorder implements MicrophoneRecorderPort {
 
   void add(Uint8List bytes) {
     _controller.add(bytes);
+  }
+
+  void addError(Object error) {
+    _controller.addError(error, StackTrace.current);
   }
 
   @override

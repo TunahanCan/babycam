@@ -15,6 +15,7 @@ import '../shared/presentation/media_profile_text.dart';
 import '../shared/presentation/mimicam_design_tokens.dart';
 import '../shared/presentation/mimicam_shells.dart';
 import 'server_runtime.dart';
+import 'media/server_media_source.dart';
 
 class ServerHomeScreen extends StatefulWidget {
   const ServerHomeScreen({
@@ -67,6 +68,7 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
     if (_fullscreenPreview) {
       unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     }
+    unawaited(widget.runtime.stopLocalPreview().catchError((_) {}));
     super.dispose();
   }
 
@@ -220,9 +222,13 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
 
   void _selectTab(int index) {
     final leavingPairingTab = _tab == 1 && index != 1;
+    final leavingPreviewTab = _tab == 0 && index != 0;
     setState(() => _tab = index);
     if (leavingPairingTab) {
       widget.runtime.stopPairingMode();
+    }
+    if (leavingPreviewTab) {
+      unawaited(widget.runtime.stopLocalPreview().catchError((_) {}));
     }
     if (index == 1) {
       unawaited(widget.runtime.startPairingMode());
@@ -1210,9 +1216,12 @@ class _LivePreviewCard extends StatelessWidget {
     final controller = previewSource is CameraController
         ? previewSource as CameraController
         : null;
+    final jpegSource = previewSource is ServerJpegPreviewSource
+        ? previewSource as ServerJpegPreviewSource
+        : null;
     final showCamera = state.cameraActive &&
-        controller != null &&
-        controller.value.isInitialized;
+        ((controller != null && controller.value.isInitialized) ||
+            jpegSource != null);
 
     return MimiCamCard(
       dark: true,
@@ -1264,10 +1273,12 @@ class _LivePreviewCard extends StatelessWidget {
                 constraints: BoxConstraints(maxHeight: isCompact ? 190 : 240),
                 child: AspectRatio(
                   aspectRatio:
-                      showCamera ? controller.value.aspectRatio : 16 / 9,
+                      controller != null && controller.value.isInitialized
+                          ? controller.value.aspectRatio
+                          : 16 / 9,
                   child: RepaintBoundary(
                     child: _CameraPreviewSurface(
-                      controller: controller,
+                      previewSource: previewSource,
                       showCamera: showCamera,
                       fit: fit,
                       borderRadius: BorderRadius.circular(20),
@@ -1491,13 +1502,13 @@ class _PreviewIconButton extends StatelessWidget {
 
 class _CameraPreviewSurface extends StatelessWidget {
   const _CameraPreviewSurface({
-    required this.controller,
+    required this.previewSource,
     required this.showCamera,
     required this.fit,
     this.borderRadius = BorderRadius.zero,
   });
 
-  final CameraController? controller;
+  final Object? previewSource;
   final bool showCamera;
   final BoxFit fit;
   final BorderRadius borderRadius;
@@ -1510,8 +1521,37 @@ class _CameraPreviewSurface extends StatelessWidget {
         color: Colors.black,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final activeController = controller;
-            if (!showCamera || activeController == null) {
+            if (!showCamera) {
+              return const _PreviewWaitingContent();
+            }
+            final jpegSource = previewSource is ServerJpegPreviewSource
+                ? previewSource as ServerJpegPreviewSource
+                : null;
+            if (jpegSource != null) {
+              return StreamBuilder<Uint8List>(
+                stream: jpegSource.previewFrames,
+                initialData: jpegSource.latestPreviewFrame,
+                builder: (context, snapshot) {
+                  final frame = snapshot.data;
+                  if (frame == null || frame.isEmpty) {
+                    return const _PreviewWaitingContent();
+                  }
+                  return Image.memory(
+                    frame,
+                    fit: fit,
+                    gaplessPlayback: true,
+                    filterQuality: FilterQuality.low,
+                    width: constraints.maxWidth,
+                    height: constraints.maxHeight,
+                  );
+                },
+              );
+            }
+            final activeController = previewSource is CameraController
+                ? previewSource as CameraController
+                : null;
+            if (activeController == null ||
+                !activeController.value.isInitialized) {
               return const _PreviewWaitingContent();
             }
             return FittedBox(
@@ -1552,15 +1592,18 @@ class _FullscreenPreview extends StatelessWidget {
     final controller = previewSource is CameraController
         ? previewSource as CameraController
         : null;
+    final jpegSource = previewSource is ServerJpegPreviewSource
+        ? previewSource as ServerJpegPreviewSource
+        : null;
     final showCamera = state.cameraActive &&
-        controller != null &&
-        controller.value.isInitialized;
+        ((controller != null && controller.value.isInitialized) ||
+            jpegSource != null);
     return SafeArea(
       child: Stack(
         fit: StackFit.expand,
         children: [
           _CameraPreviewSurface(
-            controller: controller,
+            previewSource: previewSource,
             showCamera: showCamera,
             fit: fit,
           ),

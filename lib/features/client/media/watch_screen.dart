@@ -17,6 +17,8 @@ import 'active_stream_session.dart';
 import 'client_media_stream_supervisor.dart';
 import 'client_stream_health_state.dart';
 import 'client_video_viewer.dart';
+import 'webrtc/webrtc_client_connector.dart';
+import 'webrtc/webrtc_client_media_supervisor.dart';
 
 class WatchScreen extends StatefulWidget {
   const WatchScreen({super.key, required this.runtime, this.initialTab = 0});
@@ -37,40 +39,61 @@ class _WatchScreenState extends State<WatchScreen> {
   BoxFit _videoFit = BoxFit.cover;
   DateTime _clockNow = DateTime.now();
   Timer? _clockTimer;
+  late final int _presentationToken;
+  int _screenOperationGeneration = 0;
+  bool _screenDisposed = false;
 
   @override
   void initState() {
     super.initState();
+    _presentationToken = widget.runtime.claimWatchPresentation();
     _tab = widget.initialTab.clamp(0, 2);
     _startLiveWatch();
   }
 
   @override
   void dispose() {
+    _screenDisposed = true;
+    _screenOperationGeneration++;
     if (_fullscreen) {
       unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     }
     _clockTimer?.cancel();
-    widget.runtime.stopWatching().catchError((Object _) {});
+    unawaited(widget.runtime
+        .releaseWatchPresentation(_presentationToken)
+        .catchError((Object _) {}));
     super.dispose();
   }
 
   void _startLiveWatch() {
-    if (!widget.runtime.currentState.alertsActive) {
-      unawaited(
-        widget.runtime.startAlertListening().catchError((Object _) => false),
-      );
-    }
-    unawaited(
-      widget.runtime
-          .startWatching(audioEnabled: _audioEnabled)
-          .catchError((Object _) {}),
-    );
+    final operationGeneration = ++_screenOperationGeneration;
+    unawaited(() async {
+      try {
+        if (!_isCurrentScreenOperation(operationGeneration)) return;
+        await widget.runtime.startWatching(audioEnabled: _audioEnabled);
+        if (!_isCurrentScreenOperation(operationGeneration)) return;
+        if (widget.runtime.currentState.activeStream?.usesWebRtc != true) {
+          await widget.runtime.startAlertListening();
+        }
+      } catch (_) {}
+    }());
   }
 
+  bool _isCurrentScreenOperation(int generation) =>
+      !_screenDisposed &&
+      generation == _screenOperationGeneration &&
+      widget.runtime.isWatchPresentationCurrent(_presentationToken);
+
   void _toggleAudio() {
-    setState(() => _audioEnabled = !_audioEnabled);
-    if (_audioEnabled && widget.runtime.currentState.activeStream == null) {
+    final next = !_audioEnabled;
+    setState(() => _audioEnabled = next);
+    if (widget.runtime.currentState.activeStream != null) {
+      unawaited(
+        _restartLiveWatch(audioEnabled: next).catchError(
+          (Object error) => widget.runtime.reportStreamFailure(error),
+        ),
+      );
+    } else if (next) {
       _startLiveWatch();
     }
   }
@@ -165,18 +188,22 @@ class _WatchScreenState extends State<WatchScreen> {
   }
 
   void _enterNightClock() {
+    final operationGeneration = ++_screenOperationGeneration;
     _clockTimer?.cancel();
     setState(() {
       _nightClock = true;
       _fullscreen = false;
       _clockNow = DateTime.now();
     });
-    if (!widget.runtime.currentState.alertsActive) {
-      unawaited(
-        widget.runtime.startAlertListening().catchError((Object _) => false),
-      );
-    }
-    unawaited(widget.runtime.stopWatching().catchError((Object _) {}));
+    unawaited(() async {
+      try {
+        await widget.runtime.stopWatching();
+        if (!_isCurrentScreenOperation(operationGeneration)) return;
+        if (!widget.runtime.currentState.alertsActive) {
+          await widget.runtime.startAlertListening();
+        }
+      } catch (_) {}
+    }());
     _clockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted || !_nightClock) return;
       setState(() => _clockNow = DateTime.now());
@@ -401,8 +428,12 @@ class _WatchScreenState extends State<WatchScreen> {
             _BroadcastAccessCard(
               snapshot: state.broadcastAccess!,
               busy: _purchaseBusy,
-              onUnlock: _unlockBroadcastAccess,
-              onRestore: _restoreBroadcastAccess,
+              onUnlock: widget.runtime.canManageBroadcastPurchase
+                  ? _unlockBroadcastAccess
+                  : null,
+              onRestore: widget.runtime.canManageBroadcastPurchase
+                  ? _restoreBroadcastAccess
+                  : null,
             ),
           ],
           const SizedBox(height: 18),
@@ -593,7 +624,17 @@ class _WatchScreenState extends State<WatchScreen> {
   }
 
   Future<void> _refreshStreamSession() =>
-      widget.runtime.restartWatching(audioEnabled: _audioEnabled);
+      _restartLiveWatch(audioEnabled: _audioEnabled);
+
+  Future<void> _restartLiveWatch({required bool audioEnabled}) async {
+    final operationGeneration = ++_screenOperationGeneration;
+    await widget.runtime.restartWatching(audioEnabled: audioEnabled);
+    if (!_isCurrentScreenOperation(operationGeneration)) return;
+    if (widget.runtime.currentState.activeStream?.usesWebRtc != true &&
+        !widget.runtime.currentState.alertsActive) {
+      await widget.runtime.startAlertListening();
+    }
+  }
 }
 
 class _BroadcastAccessCard extends StatelessWidget {
@@ -606,8 +647,8 @@ class _BroadcastAccessCard extends StatelessWidget {
 
   final BroadcastAccessSnapshot snapshot;
   final bool busy;
-  final VoidCallback onUnlock;
-  final VoidCallback onRestore;
+  final VoidCallback? onUnlock;
+  final VoidCallback? onRestore;
 
   @override
   Widget build(BuildContext context) {
@@ -688,32 +729,33 @@ class _BroadcastAccessCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                FilledButton.icon(
-                  onPressed: busy ? null : onUnlock,
-                  icon: busy
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.lock_open_rounded),
-                  label: Text(
-                    strings.uiFormat('unlockLifetimePrice', {
-                      'price': snapshot.priceLabel,
-                    }),
+            if (onUnlock != null && onRestore != null)
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  FilledButton.icon(
+                    onPressed: busy ? null : onUnlock,
+                    icon: busy
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.lock_open_rounded),
+                    label: Text(
+                      strings.uiFormat('unlockLifetimePrice', {
+                        'price': snapshot.priceLabel,
+                      }),
+                    ),
                   ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: busy ? null : onRestore,
-                  icon: const Icon(Icons.restore_rounded),
-                  label: Text(strings.ui('restorePurchase')),
-                ),
-              ],
-            ),
+                  OutlinedButton.icon(
+                    onPressed: busy ? null : onRestore,
+                    icon: const Icon(Icons.restore_rounded),
+                    label: Text(strings.ui('restorePurchase')),
+                  ),
+                ],
+              ),
           ],
         ],
       ),
@@ -860,6 +902,7 @@ class _StreamSurface extends StatefulWidget {
 
 class _StreamSurfaceState extends State<_StreamSurface> {
   ClientMediaStreamSupervisor? _supervisor;
+  WebRtcClientMediaSupervisor? _webRtcSupervisor;
   Uint8List? _latestFrame;
   Object? _streamError;
   String? _streamKey;
@@ -881,6 +924,9 @@ class _StreamSurfaceState extends State<_StreamSurface> {
     final supervisor = _supervisor;
     _supervisor = null;
     unawaited(supervisor?.stop());
+    final webRtcSupervisor = _webRtcSupervisor;
+    _webRtcSupervisor = null;
+    unawaited(webRtcSupervisor?.stop());
     super.dispose();
   }
 
@@ -930,6 +976,9 @@ class _StreamSurfaceState extends State<_StreamSurface> {
     final previous = _supervisor;
     _supervisor = null;
     unawaited(previous?.stop());
+    final previousWebRtc = _webRtcSupervisor;
+    _webRtcSupervisor = null;
+    unawaited(previousWebRtc?.stop());
     _latestFrame = null;
     _streamError = null;
     if (session == null || activeStream == null) {
@@ -937,6 +986,30 @@ class _StreamSurfaceState extends State<_StreamSurface> {
       return;
     }
     if (activeStream.usesWebRtc) {
+      final handle = activeStream.webRtc!;
+      if (handle is WebRtcClientAudioController) {
+        final audioController = handle as WebRtcClientAudioController;
+        unawaited(audioController.setAudioEnabled(widget.audioEnabled));
+      }
+      late final WebRtcClientMediaSupervisor supervisor;
+      supervisor = WebRtcClientMediaSupervisor(
+        handle: handle,
+        videoExpected: true,
+        audioExpected: activeStream.audioEnabled,
+        healthState: widget.streamHealthState,
+        onReconnectRequired: widget.onSessionRefreshRequired,
+        onFatalError: (error) {
+          if (!mounted || !identical(_webRtcSupervisor, supervisor)) return;
+          setState(() => _streamError = error);
+          widget.onFatalError(error);
+        },
+      );
+      _webRtcSupervisor = supervisor;
+      unawaited(supervisor.start().catchError((Object error) {
+        if (!mounted || !identical(_webRtcSupervisor, supervisor)) return;
+        setState(() => _streamError = error);
+        widget.onFatalError(error);
+      }));
       if (mounted) setState(() {});
       return;
     }

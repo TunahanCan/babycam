@@ -4,6 +4,7 @@ import 'dart:io';
 import '../../../core/protocol/mimicam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
+import '../../../services/monetization/broadcast_access_service.dart';
 import 'active_stream_session.dart';
 import 'client_stream_health_state.dart';
 import 'webrtc/webrtc_client_connector.dart';
@@ -33,6 +34,9 @@ class StreamSessionController {
     PairingSession session, {
     bool audioEnabled = false,
   }) async {
+    if (isActive || _webRtcHandle != null) {
+      await stop(session);
+    }
     final webRtcRequested = _supportsWebRtc(session) &&
         _webRtcConnector != null &&
         await _webRtcConnector.initialize();
@@ -48,9 +52,7 @@ class StreamSessionController {
     );
     var token = json?['streamToken']?.toString();
     if (token == null || token.isEmpty) {
-      isActive = false;
-      lastStreamToken = null;
-      lastStreamTokenExpiresAtMs = null;
+      await _rollbackStartedSession(session);
       throw StateError('Session start did not return a stream token.');
     }
     Object? fallbackReason;
@@ -78,10 +80,17 @@ class StreamSessionController {
           audioEnabled: audioEnabled,
           transport: ClientMediaTransport.webRtc,
           webRtc: selection.webRtc,
+          broadcastAccess: _broadcastAccessFrom(json),
         );
       }
       fallbackReason = selection.fallbackReason;
-      await _post(session, MimiCamProtocolV2.sessionStop);
+      try {
+        await _post(session, MimiCamProtocolV2.sessionStop);
+      } catch (_) {
+        // The replacement start is serialized by the server and supersedes the
+        // same client id. Continue so a lost stop response does not disable the
+        // documented MJPEG/WAV fallback.
+      }
       json = await _post(
         session,
         MimiCamProtocolV2.sessionStart,
@@ -94,6 +103,7 @@ class StreamSessionController {
       );
       token = json?['streamToken']?.toString();
       if (token == null || token.isEmpty) {
+        await _rollbackStartedSession(session);
         throw StateError('Fallback session did not return a stream token.');
       }
     }
@@ -107,20 +117,45 @@ class StreamSessionController {
       expiresAtMs: lastStreamTokenExpiresAtMs,
       audioEnabled: audioEnabled,
       transportFallbackReason: fallbackReason,
+      broadcastAccess: _broadcastAccessFrom(json),
     );
   }
 
   Future<void> stop(PairingSession session) async {
+    Object? firstError;
     try {
-      await _webRtcHandle?.close();
+      try {
+        await _webRtcHandle?.close();
+      } catch (error) {
+        firstError = error;
+      }
       _webRtcHandle = null;
-      await _post(session, MimiCamProtocolV2.sessionStop);
+      try {
+        await _post(session, MimiCamProtocolV2.sessionStop);
+      } catch (error) {
+        firstError ??= error;
+      }
     } finally {
       isActive = false;
       healthState?.setWatchActive(false);
       lastStreamToken = null;
       lastStreamTokenExpiresAtMs = null;
       dispose();
+    }
+    if (firstError != null) throw firstError;
+  }
+
+  Future<void> _rollbackStartedSession(PairingSession session) async {
+    try {
+      await _post(session, MimiCamProtocolV2.sessionStop);
+    } catch (_) {
+      // The malformed success response is already the primary failure. The
+      // server serializes session replacement, so a later start can recover
+      // even when this best-effort rollback response is lost.
+    } finally {
+      isActive = false;
+      lastStreamToken = null;
+      lastStreamTokenExpiresAtMs = null;
     }
   }
 
@@ -150,6 +185,18 @@ class StreamSessionController {
           streamTimeout,
         );
     if (response.statusCode != HttpStatus.ok) {
+      final errorJson = _jsonObject(body);
+      if (response.statusCode == HttpStatus.paymentRequired &&
+          errorJson?['code'] == 'BROADCAST_ACCESS_LOCKED' &&
+          errorJson?['broadcastAccess'] is Map) {
+        throw BroadcastAccessLockedException(
+          BroadcastAccessSnapshot.fromJson(
+            Map<Object?, Object?>.from(
+              errorJson!['broadcastAccess'] as Map,
+            ),
+          ),
+        );
+      }
       final detail = _errorDetail(body);
       throw StateError(
         detail == null
@@ -177,6 +224,25 @@ class StreamSessionController {
       return body.trim();
     }
     return body.trim();
+  }
+
+  Map<String, Object?>? _jsonObject(String body) {
+    if (body.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(body);
+      return decoded is Map ? Map<String, Object?>.from(decoded) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  BroadcastAccessSnapshot? _broadcastAccessFrom(
+    Map<String, Object?>? json,
+  ) {
+    final value = json?['broadcastAccess'];
+    return value is Map
+        ? BroadcastAccessSnapshot.fromJson(Map<Object?, Object?>.from(value))
+        : null;
   }
 
   HttpClient _clientForSession(PairingSession session) {

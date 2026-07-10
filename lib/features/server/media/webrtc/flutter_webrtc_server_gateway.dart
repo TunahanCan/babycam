@@ -7,7 +7,11 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../../../../core/protocol/webrtc_signaling.dart';
 import 'webrtc_server_gateway.dart';
 
-class FlutterWebRtcServerGateway implements WebRtcServerGateway {
+class FlutterWebRtcServerGateway
+    implements
+        WebRtcServerGateway,
+        WebRtcPeerLifecycleSource,
+        WebRtcMediaPolicyController {
   FlutterWebRtcServerGateway({
     this.maxPeers = 1,
     this.onLog,
@@ -16,6 +20,9 @@ class FlutterWebRtcServerGateway implements WebRtcServerGateway {
   final int maxPeers;
   final void Function(String message)? onLog;
   final _peers = <String, _ServerPeer>{};
+  final _reservations = <String>{};
+  final _peerEvents = StreamController<WebRtcPeerLifecycleEvent>.broadcast();
+  Future<bool>? _initializeOperation;
   bool _initialized = false;
   bool _available = false;
   bool _disposed = false;
@@ -27,10 +34,25 @@ class FlutterWebRtcServerGateway implements WebRtcServerGateway {
   int get activePeerCount => _peers.length;
 
   @override
-  Future<bool> initialize() async {
-    if (_disposed) return false;
-    if (_initialized) return _available;
-    _initialized = true;
+  Stream<WebRtcPeerLifecycleEvent> get peerEvents => _peerEvents.stream;
+
+  @override
+  Future<bool> initialize() {
+    if (_disposed) return Future<bool>.value(false);
+    if (_initialized) return Future<bool>.value(_available);
+    final current = _initializeOperation;
+    if (current != null) return current;
+    late final Future<bool> operation;
+    operation = _initialize().whenComplete(() {
+      if (identical(_initializeOperation, operation)) {
+        _initializeOperation = null;
+      }
+    });
+    _initializeOperation = operation;
+    return operation;
+  }
+
+  Future<bool> _initialize() async {
     try {
       final video = await getRtpSenderCapabilities('video');
       final audio = await getRtpSenderCapabilities('audio');
@@ -39,8 +61,10 @@ class FlutterWebRtcServerGateway implements WebRtcServerGateway {
       if (_available) {
         await _probeOfferAnswer(video: video, audio: audio);
       }
+      _initialized = true;
     } catch (error) {
       _available = false;
+      _initialized = false;
       onLog?.call('WebRTC capability probe failed: $error');
     }
     return _available;
@@ -51,18 +75,19 @@ class FlutterWebRtcServerGateway implements WebRtcServerGateway {
     required String clientId,
     required WebRtcOfferRequest request,
   }) async {
-    if (!await initialize()) {
+    if (!await initialize() || _disposed) {
       throw const WebRtcPilotUnavailableException();
     }
     if (!request.video && !request.audio) {
       throw const FormatException('At least one media track is required.');
     }
-    await closeClient(clientId);
-    if (_peers.length >= maxPeers) {
+    await _closeClient(clientId, notify: false);
+    if (_peers.length + _reservations.length >= maxPeers) {
       throw const WebRtcPilotCapacityException();
     }
 
     final peerId = _newPeerId();
+    _reservations.add(peerId);
     RTCPeerConnection? connection;
     MediaStream? localStream;
     try {
@@ -105,6 +130,7 @@ class FlutterWebRtcServerGateway implements WebRtcServerGateway {
         connection: connection,
         localStream: localStream,
       );
+      if (_disposed) throw StateError('WebRTC gateway is disposed.');
       _peers[peerId] = peer;
       connection.onIceCandidate = (candidate) {
         final value = candidate.candidate?.trim();
@@ -118,7 +144,12 @@ class FlutterWebRtcServerGateway implements WebRtcServerGateway {
       connection.onConnectionState = (state) {
         if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
             state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
-          unawaited(_closeEntry(peer));
+          unawaited(_closeEntry(
+            peer,
+            reason: state == RTCPeerConnectionState.RTCPeerConnectionStateFailed
+                ? WebRtcPeerCloseReason.failed
+                : WebRtcPeerCloseReason.connectionClosed,
+          ));
         }
       };
 
@@ -153,6 +184,8 @@ class FlutterWebRtcServerGateway implements WebRtcServerGateway {
         await connection?.dispose();
       }
       rethrow;
+    } finally {
+      _reservations.remove(peerId);
     }
   }
 
@@ -187,16 +220,51 @@ class FlutterWebRtcServerGateway implements WebRtcServerGateway {
     required String peerId,
   }) async {
     final peer = _peerFor(clientId, peerId);
-    await _closeEntry(peer);
+    await _closeEntry(peer, reason: WebRtcPeerCloseReason.requested);
   }
 
   @override
   Future<void> closeClient(String clientId) async {
+    await _closeClient(clientId, notify: true);
+  }
+
+  Future<void> _closeClient(String clientId, {required bool notify}) async {
     final owned = _peers.values
         .where((peer) => peer.clientId == clientId)
         .toList(growable: false);
     for (final peer in owned) {
-      await _closeEntry(peer);
+      await _closeEntry(
+        peer,
+        reason: WebRtcPeerCloseReason.requested,
+        notify: notify,
+      );
+    }
+  }
+
+  @override
+  Future<void> applyMediaPolicy(WebRtcMediaPolicy policy) async {
+    final peers = _peers.values.toList(growable: false);
+    for (final peer in peers) {
+      for (final sender in await peer.connection.getSenders()) {
+        final track = sender.track;
+        if (track?.kind != 'video') continue;
+        track!.enabled = policy.videoEnabled;
+        final parameters = sender.parameters;
+        final encodings = parameters.encodings;
+        if (encodings == null || encodings.isEmpty) continue;
+        for (final encoding in encodings) {
+          encoding
+            ..active = policy.videoEnabled
+            ..maxBitrate = policy.maxVideoBitrateBps
+            ..maxFramerate = policy.maxVideoFrameRate
+            ..scaleResolutionDownBy = policy.scaleResolutionDownBy;
+        }
+        try {
+          await sender.setParameters(parameters);
+        } catch (error) {
+          onLog?.call('WebRTC sender policy could not be applied: $error');
+        }
+      }
     }
   }
 
@@ -204,12 +272,14 @@ class FlutterWebRtcServerGateway implements WebRtcServerGateway {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _reservations.clear();
     final peers = _peers.values.toList(growable: false);
     _peers.clear();
     for (final peer in peers) {
       await _disposePeer(peer);
     }
     _available = false;
+    await _peerEvents.close();
   }
 
   _ServerPeer _peerFor(String clientId, String peerId) {
@@ -220,10 +290,21 @@ class FlutterWebRtcServerGateway implements WebRtcServerGateway {
     return peer;
   }
 
-  Future<void> _closeEntry(_ServerPeer peer) async {
+  Future<void> _closeEntry(
+    _ServerPeer peer, {
+    required WebRtcPeerCloseReason reason,
+    bool notify = true,
+  }) async {
     if (!identical(_peers[peer.id], peer)) return;
     _peers.remove(peer.id);
     await _disposePeer(peer);
+    if (notify && !_peerEvents.isClosed) {
+      _peerEvents.add(WebRtcPeerLifecycleEvent(
+        clientId: peer.clientId,
+        peerId: peer.id,
+        reason: reason,
+      ));
+    }
   }
 
   Future<void> _disposePeer(_ServerPeer peer) async {
@@ -232,11 +313,27 @@ class FlutterWebRtcServerGateway implements WebRtcServerGateway {
     peer.connection.onIceCandidate = null;
     peer.connection.onConnectionState = null;
     for (final track in peer.localStream.getTracks()) {
-      await track.stop();
+      try {
+        await track.stop();
+      } catch (error) {
+        onLog?.call('WebRTC track stop failed: $error');
+      }
     }
-    await peer.localStream.dispose();
-    await peer.connection.close();
-    await peer.connection.dispose();
+    try {
+      await peer.localStream.dispose();
+    } catch (error) {
+      onLog?.call('WebRTC stream dispose failed: $error');
+    }
+    try {
+      await peer.connection.close();
+    } catch (error) {
+      onLog?.call('WebRTC peer close failed: $error');
+    }
+    try {
+      await peer.connection.dispose();
+    } catch (error) {
+      onLog?.call('WebRTC peer dispose failed: $error');
+    }
   }
 
   Future<void> _preferCodecs(RTCPeerConnection connection) async {
@@ -246,11 +343,11 @@ class FlutterWebRtcServerGateway implements WebRtcServerGateway {
       final kind = transceiver.sender.track?.kind;
       if (kind == 'video') {
         await transceiver.setCodecPreferences(
-          _preferredFirst(video.codecs ?? const [], 'video/h264'),
+          _pilotCodecs(video.codecs ?? const [], 'video/h264'),
         );
       } else if (kind == 'audio') {
         await transceiver.setCodecPreferences(
-          _preferredFirst(audio.codecs ?? const [], 'audio/opus'),
+          _pilotCodecs(audio.codecs ?? const [], 'audio/opus'),
         );
       }
     }
@@ -276,14 +373,14 @@ class FlutterWebRtcServerGateway implements WebRtcServerGateway {
         init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
       );
       await audioTransceiver.setCodecPreferences(
-        _preferredFirst(audio.codecs ?? const [], 'audio/opus'),
+        _pilotCodecs(audio.codecs ?? const [], 'audio/opus'),
       );
       final videoTransceiver = await offerer.addTransceiver(
         kind: RTCRtpMediaType.RTCRtpMediaTypeVideo,
         init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
       );
       await videoTransceiver.setCodecPreferences(
-        _preferredFirst(video.codecs ?? const [], 'video/h264'),
+        _pilotCodecs(video.codecs ?? const [], 'video/h264'),
       );
       final offer = await offerer.createOffer();
       await offerer.setLocalDescription(offer);
@@ -304,14 +401,13 @@ class FlutterWebRtcServerGateway implements WebRtcServerGateway {
         (codec) => codec.mimeType.toLowerCase() == mimeType,
       );
 
-  static List<RTCRtpCodecCapability> _preferredFirst(
+  static List<RTCRtpCodecCapability> _pilotCodecs(
     List<RTCRtpCodecCapability> codecs,
     String mimeType,
   ) =>
-      [
-        ...codecs.where((codec) => codec.mimeType.toLowerCase() == mimeType),
-        ...codecs.where((codec) => codec.mimeType.toLowerCase() != mimeType)
-      ];
+      codecs
+          .where((codec) => codec.mimeType.toLowerCase() == mimeType)
+          .toList(growable: false);
 
   static String _newPeerId() {
     final bytes = List<int>.generate(18, (_) => Random.secure().nextInt(256));

@@ -1,0 +1,724 @@
+{
+  "schemaVersion": 1,
+  "suiteId": "mimicam-physical-smoke-v1",
+  "title": "MimiCam iOS and Android physical-device smoke matrix",
+  "preflightTests": [
+    "test/core/network/lan_endpoint_test.dart",
+    "test/core/security/local_network_guard_test.dart",
+    "test/services/network_address_provider_test.dart",
+    "test/services/discovery/mimicam_service_discovery_test.dart",
+    "test/features/client/trusted_session_endpoint_resolver_test.dart",
+    "test/features/client/client_runtime_lifecycle_test.dart",
+    "test/services/platform/platform_runtime_contract_test.dart",
+    "test/services/server/media_resource_governor_test.dart",
+    "test/features/server/webrtc_signaling_endpoints_test.dart",
+    "test/features/client/stream_session_controller_test.dart"
+  ],
+  "deviceSlots": [
+    {
+      "id": "ios-old",
+      "platform": "ios",
+      "requirement": "Oldest supported physical iPhone, minimum supported iOS"
+    },
+    {
+      "id": "ios-current",
+      "platform": "ios",
+      "requirement": "Current non-Pro physical iPhone, latest stable iOS"
+    },
+    {
+      "id": "android-low",
+      "platform": "android",
+      "requirement": "Physical Android with 3-4 GB RAM, oldest supported Android"
+    },
+    {
+      "id": "android-current",
+      "platform": "android",
+      "requirement": "Current physical Pixel or Samsung class device"
+    }
+  ],
+  "releaseGates": [
+    {
+      "id": "legacyVideoLatencyP95Ms",
+      "operator": "<",
+      "threshold": 700,
+      "unit": "ms"
+    },
+    {
+      "id": "webRtcVideoLatencyP95Ms",
+      "operator": "<",
+      "threshold": 400,
+      "unit": "ms"
+    },
+    {
+      "id": "audioStartupP95Ms",
+      "operator": "<",
+      "threshold": 500,
+      "unit": "ms"
+    },
+    {
+      "id": "reconnectAfterReachableP95Ms",
+      "operator": "<",
+      "threshold": 2000,
+      "unit": "ms"
+    },
+    {
+      "id": "memorySlopeMiBPer10Min",
+      "operator": "<",
+      "threshold": 1,
+      "unit": "MiB/10min"
+    },
+    {
+      "id": "thermalResponseSeconds",
+      "operator": "<=",
+      "threshold": 15,
+      "unit": "s"
+    }
+  ],
+  "cases": [
+    {
+      "id": "DEMAND-01",
+      "title": "Camera and microphone demand ownership",
+      "platforms": ["ios", "android"],
+      "mediaLane": "legacy",
+      "networkLane": "baseline",
+      "estimatedMinutes": 8,
+      "setup": [
+        "Pair one physical server and one physical client on the same LAN.",
+        "Keep the native privacy indicators and server diagnostics visible."
+      ],
+      "steps": [
+        "Start video-only watch and hold for 30 seconds.",
+        "Stop, then start audio-only demand and hold for 30 seconds.",
+        "Start video plus audio, then stop the client session.",
+        "Open and close local preview with no remote client."
+      ],
+      "checks": [
+        {
+          "id": "video-only",
+          "description": "Video-only activates camera without microphone privacy indication."
+        },
+        {
+          "id": "audio-only",
+          "description": "Audio-only activates microphone without camera privacy indication."
+        },
+        {
+          "id": "release",
+          "description": "Stopping the last demand releases camera, microphone and native audio output."
+        },
+        {
+          "id": "preview-owner",
+          "description": "Local preview remains an independent camera owner and closes cleanly."
+        }
+      ],
+      "measurements": [],
+      "requiredArtifacts": ["before-after privacy screenshots", "/test/status snapshots"]
+    },
+    {
+      "id": "NET-IPv4-01",
+      "title": "IPv4 DNS-SD and legacy MJPEG/WAV baseline",
+      "platforms": ["ios", "android"],
+      "mediaLane": "legacy",
+      "networkLane": "ipv4-baseline",
+      "estimatedMinutes": 10,
+      "setup": [
+        "Disable IPv6 on the isolated test SSID or use an IPv4-only VLAN.",
+        "Launch both devices with the WebRTC pilot disabled."
+      ],
+      "steps": [
+        "Discover the server through DNS-SD/NSD and pair without manual IP.",
+        "Watch video plus audio for five minutes.",
+        "Capture status and latency measurements."
+      ],
+      "checks": [
+        {
+          "id": "discovery",
+          "description": "Exactly one stable server identity resolves to an IPv4 address."
+        },
+        {
+          "id": "transport",
+          "description": "Selected transport is MJPEG/WAV and both streams remain healthy."
+        },
+        {
+          "id": "no-underrun",
+          "description": "No baseline audio underrun or terminal video failure occurs."
+        }
+      ],
+      "measurements": [
+        {
+          "id": "legacyVideoLatencyP95Ms",
+          "description": "Glass-to-glass video latency p95.",
+          "type": "number",
+          "required": true,
+          "operator": "<",
+          "threshold": 700,
+          "unit": "ms"
+        },
+        {
+          "id": "audioStartupP95Ms",
+          "description": "Watch start to audible playout p95.",
+          "type": "number",
+          "required": true,
+          "operator": "<",
+          "threshold": 500,
+          "unit": "ms"
+        }
+      ],
+      "requiredArtifacts": ["DNS-SD address evidence", "five-minute JSONL status log"]
+    },
+    {
+      "id": "NET-IPv6-01",
+      "title": "IPv6-only DNS-SD, global or ULA address and WebRTC pilot",
+      "platforms": ["ios", "android"],
+      "mediaLane": "webrtc",
+      "networkLane": "ipv6-only",
+      "estimatedMinutes": 12,
+      "setup": [
+        "Use an isolated IPv6-only SSID with working multicast DNS.",
+        "Launch both devices with MIMICAM_WEBRTC_PILOT=true."
+      ],
+      "steps": [
+        "Verify DNS-SD returns IPv6 addresses and pair without IPv4 fallback.",
+        "Start video plus audio and confirm WebRTC selection.",
+        "Capture getStats codec, ICE candidate and latency evidence."
+      ],
+      "checks": [
+        {
+          "id": "ipv6-authority",
+          "description": "All logged URI authorities bracket IPv6 correctly and connect successfully."
+        },
+        {
+          "id": "dns-sd",
+          "description": "DNS-SD stable ID and TXT metadata match the paired server."
+        },
+        {
+          "id": "host-ice",
+          "description": "The selected LAN ICE pair is IPv6 and does not require TURN."
+        }
+      ],
+      "measurements": [
+        {
+          "id": "webRtcVideoLatencyP95Ms",
+          "description": "Glass-to-glass WebRTC video latency p95.",
+          "type": "number",
+          "required": true,
+          "operator": "<",
+          "threshold": 400,
+          "unit": "ms"
+        }
+      ],
+      "requiredArtifacts": ["IPv6 DNS-SD evidence", "WebRTC getStats snapshot"]
+    },
+    {
+      "id": "NET-LinkLocal-01",
+      "title": "Scoped IPv6 link-local parsing and reachability",
+      "platforms": ["ios", "android"],
+      "mediaLane": "legacy",
+      "networkLane": "ipv6-link-local",
+      "estimatedMinutes": 8,
+      "setup": [
+        "Use a two-device LAN where link-local IPv6 is observable.",
+        "Record the client-side interface scope name before testing."
+      ],
+      "steps": [
+        "Connect through DNS-SD using the resolved scoped address.",
+        "Repeat manual entry with [fe80::address%25scope]:port.",
+        "Attempt the same literal without a usable client-side scope and record the expected failure."
+      ],
+      "checks": [
+        {
+          "id": "scope-preserved",
+          "description": "The client-side scope survives parsing and URI creation."
+        },
+        {
+          "id": "manual-brackets",
+          "description": "Bracketed percent-escaped manual authority connects to the intended device."
+        },
+        {
+          "id": "no-cross-device-scope",
+          "description": "A server-side interface name is never treated as portable evidence on a different client."
+        }
+      ],
+      "measurements": [],
+      "requiredArtifacts": ["scoped authority log", "interface-name notes"]
+    },
+    {
+      "id": "DISC-ReAdvertise-01",
+      "title": "DNS-SD re-advertise and stable identity",
+      "platforms": ["ios", "android"],
+      "mediaLane": "legacy",
+      "networkLane": "baseline",
+      "estimatedMinutes": 8,
+      "setup": ["Keep the client discovery screen open while changing server metadata."],
+      "steps": [
+        "Record the initial TXT id, port, protocol and webrtc values.",
+        "Restart pairing mode or toggle WebRTC metadata without changing the port.",
+        "Restart the server on a different ephemeral test port where supported.",
+        "Observe lost/found events and the final client list."
+      ],
+      "checks": [
+        {
+          "id": "stable-id",
+          "description": "TXT id remains stable across re-advertisement and process relaunch."
+        },
+        {
+          "id": "metadata-refresh",
+          "description": "Port and WebRTC TXT changes appear without restarting the client."
+        },
+        {
+          "id": "no-duplicate",
+          "description": "The final discovery list has one unambiguous entry for the device."
+        }
+      ],
+      "measurements": [
+        {
+          "id": "readvertiseVisibleMs",
+          "description": "Time from server publish to updated client discovery row.",
+          "type": "number",
+          "required": true,
+          "operator": "<",
+          "threshold": 5000,
+          "unit": "ms"
+        }
+      ],
+      "requiredArtifacts": ["before-after TXT records", "discovery screen recording"]
+    },
+    {
+      "id": "NET-Handoff-01",
+      "title": "Wi-Fi handoff, DHCP change and trusted endpoint rebind",
+      "platforms": ["ios", "android"],
+      "mediaLane": "legacy",
+      "networkLane": "handoff",
+      "estimatedMinutes": 12,
+      "setup": [
+        "Prepare two APs in the same trusted test LAN or a controllable DHCP lease change.",
+        "Start an authenticated watch and alert subscription."
+      ],
+      "steps": [
+        "Roam or move the server to the second AP and force an address change.",
+        "Wait for DNS-SD to publish the same stable ID at the new endpoint.",
+        "Verify video, audio, alerts and controls use the rebound endpoint.",
+        "Return to the first AP and repeat."
+      ],
+      "checks": [
+        {
+          "id": "token-retained",
+          "description": "The trusted token and client identity remain unchanged during endpoint rebind."
+        },
+        {
+          "id": "new-endpoint",
+          "description": "Status, alerts and subsequent media reconnects use the new address."
+        },
+        {
+          "id": "no-repair",
+          "description": "No QR scan or manual re-pair is required."
+        }
+      ],
+      "measurements": [
+        {
+          "id": "reconnectAfterReachableP95Ms",
+          "description": "Connectivity-restored to first healthy media p95.",
+          "type": "number",
+          "required": true,
+          "operator": "<",
+          "threshold": 2000,
+          "unit": "ms"
+        }
+      ],
+      "requiredArtifacts": ["old-new endpoint log", "reconnect timeline"]
+    },
+    {
+      "id": "LIFE-iOS-01",
+      "title": "iOS foreground-only media lifecycle contract",
+      "platforms": ["ios"],
+      "mediaLane": "legacy",
+      "networkLane": "baseline",
+      "estimatedMinutes": 10,
+      "setup": ["Use a physical iPhone as the server with active video plus audio demand."],
+      "steps": [
+        "Background the app, lock the screen, then wait 30 seconds.",
+        "Return to foreground-active and unlock.",
+        "Repeat during a client reconnect attempt."
+      ],
+      "checks": [
+        {
+          "id": "controlled-pause",
+          "description": "Camera and microphone pause in background without crash or hidden capture."
+        },
+        {
+          "id": "retained-demand",
+          "description": "Foreground-active recovery restores only the retained media demand."
+        },
+        {
+          "id": "contract-visible",
+          "description": "UI/native snapshot reports the foreground-only limitation accurately."
+        }
+      ],
+      "measurements": [
+        {
+          "id": "foregroundRecoveryMs",
+          "description": "Foreground-active to healthy media.",
+          "type": "number",
+          "required": true,
+          "operator": "<",
+          "threshold": 3000,
+          "unit": "ms"
+        }
+      ],
+      "requiredArtifacts": ["privacy indicator recording", "platform lifecycle event log"]
+    },
+    {
+      "id": "LIFE-Android-01",
+      "title": "Android foreground-service lifecycle and process-death contract",
+      "platforms": ["android"],
+      "mediaLane": "legacy",
+      "networkLane": "baseline",
+      "estimatedMinutes": 12,
+      "setup": ["Use a physical Android server and grant camera, microphone and notification permissions."],
+      "steps": [
+        "Start media while visible and confirm the foreground-service notification.",
+        "Background for two minutes and verify the declared capability snapshot.",
+        "Remove the task, then force-stop or kill the process.",
+        "Confirm media does not recover invisibly and requires a visible restart."
+      ],
+      "checks": [
+        {
+          "id": "visible-start",
+          "description": "Camera/microphone demand starts only from a visible allowed state."
+        },
+        {
+          "id": "fgs-notification",
+          "description": "Foreground service notification accurately reflects active media types."
+        },
+        {
+          "id": "not-sticky",
+          "description": "Process death does not trigger hidden capture recovery."
+        },
+        {
+          "id": "ownership-truth",
+          "description": "serviceOwnsMediaHardware/supportsServerInBackground matches observed behavior."
+        }
+      ],
+      "measurements": [],
+      "requiredArtifacts": ["foreground notification screenshot", "adb lifecycle log"]
+    },
+    {
+      "id": "AUDIO-iOS-01",
+      "title": "iOS audio interruption and route recovery",
+      "platforms": ["ios"],
+      "mediaLane": "legacy",
+      "networkLane": "baseline",
+      "estimatedMinutes": 12,
+      "setup": ["Start room audio playout and microphone capture on physical iOS hardware."],
+      "steps": [
+        "Trigger an incoming call or CallKit interruption and resume.",
+        "Trigger Siri, an alarm and Control Center route changes.",
+        "Connect and disconnect wired or Bluetooth audio.",
+        "Repeat once while the app transitions background to foreground.",
+        "Swap room/client roles and repeat the relevant capture/output interruption path."
+      ],
+      "checks": [
+        {
+          "id": "interruption-count",
+          "description": "Native interruption counters and events increment exactly once per transition."
+        },
+        {
+          "id": "resume-policy",
+          "description": "Audio resumes only when the interruption options and app lifecycle allow it."
+        },
+        {
+          "id": "route-change",
+          "description": "Route change and media-service reset do not leak or duplicate audio engines."
+        }
+      ],
+      "measurements": [
+        {
+          "id": "audioRecoveryP95Ms",
+          "description": "Allowed interruption end to audible playout p95.",
+          "type": "number",
+          "required": true,
+          "operator": "<",
+          "threshold": 2000,
+          "unit": "ms"
+        }
+      ],
+      "requiredArtifacts": ["native audio snapshot before-after", "route/interruption event log"]
+    },
+    {
+      "id": "AUDIO-Android-01",
+      "title": "Android audio focus, noisy route and recovery",
+      "platforms": ["android"],
+      "mediaLane": "legacy",
+      "networkLane": "baseline",
+      "estimatedMinutes": 12,
+      "setup": ["Start room audio playout and microphone capture on physical Android hardware."],
+      "steps": [
+        "Trigger transient focus loss, duck, full focus loss and focus gain.",
+        "Disconnect a wired/Bluetooth route to trigger becoming-noisy.",
+        "Start another media app, then return focus to MimiCam.",
+        "Repeat with the app backgrounded under foreground service.",
+        "Swap room/client roles and repeat the relevant capture/output focus path."
+      ],
+      "checks": [
+        {
+          "id": "focus-events",
+          "description": "Native focus counters/events match each injected transition."
+        },
+        {
+          "id": "noisy-stop",
+          "description": "Becoming-noisy stops or reroutes output without speaker blast."
+        },
+        {
+          "id": "no-duplicate-track",
+          "description": "Focus recovery does not create duplicate AudioTrack or recorder ownership."
+        }
+      ],
+      "measurements": [
+        {
+          "id": "audioRecoveryP95Ms",
+          "description": "Focus gain to audible playout p95.",
+          "type": "number",
+          "required": true,
+          "operator": "<",
+          "threshold": 2000,
+          "unit": "ms"
+        }
+      ],
+      "requiredArtifacts": ["adb audio focus log", "native audio status snapshot"]
+    },
+    {
+      "id": "THERMAL-01",
+      "title": "Thermal governor downgrade and stable recovery",
+      "platforms": ["ios", "android"],
+      "mediaLane": "legacy",
+      "networkLane": "baseline",
+      "estimatedMinutes": 25,
+      "setup": [
+        "Use a release/profile build, disable external cooling and start video plus audio.",
+        "Capture deviceResources, resourceGovernor and media profile every five seconds."
+      ],
+      "steps": [
+        "Apply repeatable CPU/GPU/charging load until serious thermal state is observed.",
+        "Continue until critical if safe for the device; stop immediately on OS warning.",
+        "Remove load and observe recovery for ten minutes."
+      ],
+      "checks": [
+        {
+          "id": "serious-constrained",
+          "description": "Serious thermal pressure selects constrained or survival policy."
+        },
+        {
+          "id": "critical-audio-first",
+          "description": "Critical pressure with audio demand selects audio-first/audio-only behavior."
+        },
+        {
+          "id": "stable-upgrade",
+          "description": "Recovery upgrades without rapid profile oscillation."
+        },
+        {
+          "id": "safety",
+          "description": "No OS thermal shutdown, crash or unsafe device temperature occurs."
+        }
+      ],
+      "measurements": [
+        {
+          "id": "thermalResponseSeconds",
+          "description": "Thermal state change to protective governor state.",
+          "type": "number",
+          "required": true,
+          "operator": "<=",
+          "threshold": 15,
+          "unit": "s"
+        },
+        {
+          "id": "profileTransitionsDuringRecovery",
+          "description": "Profile transitions during ten-minute recovery.",
+          "type": "number",
+          "required": true,
+          "operator": "<=",
+          "threshold": 3,
+          "unit": "count"
+        }
+      ],
+      "requiredArtifacts": ["thermal JSONL timeline", "battery/charger state notes"]
+    },
+    {
+      "id": "WEBRTC-Codec-01",
+      "title": "WebRTC H.264 and Opus codec proof",
+      "platforms": ["ios", "android"],
+      "mediaLane": "webrtc",
+      "networkLane": "baseline",
+      "estimatedMinutes": 10,
+      "setup": ["Enable the WebRTC pilot on both physical devices and allow only one peer."],
+      "steps": [
+        "Start video plus audio and wait for connected peer state.",
+        "Capture inbound/outbound RTP codec and selected candidate-pair stats.",
+        "Toggle audio demand off and on without replacing the video peer unexpectedly.",
+        "Close the session and confirm tracks, peer and capture demand are released."
+      ],
+      "checks": [
+        {
+          "id": "h264",
+          "description": "Negotiated video codec is H.264, with payload/profile details recorded."
+        },
+        {
+          "id": "opus",
+          "description": "Negotiated audio codec is Opus."
+        },
+        {
+          "id": "single-peer",
+          "description": "Exactly one peer is active and close releases all tracks."
+        },
+        {
+          "id": "host-ice",
+          "description": "Selected candidate pair is LAN host ICE as declared by the pilot."
+        }
+      ],
+      "measurements": [
+        {
+          "id": "webRtcVideoLatencyP95Ms",
+          "description": "Glass-to-glass WebRTC video latency p95.",
+          "type": "number",
+          "required": true,
+          "operator": "<",
+          "threshold": 400,
+          "unit": "ms"
+        }
+      ],
+      "requiredArtifacts": ["WebRTC getStats JSON", "peer close diagnostics"]
+    },
+    {
+      "id": "WEBRTC-Fallback-01",
+      "title": "WebRTC negotiation and capacity fallback to MJPEG/WAV",
+      "platforms": ["ios", "android"],
+      "mediaLane": "webrtc",
+      "networkLane": "baseline",
+      "estimatedMinutes": 10,
+      "setup": ["Enable the WebRTC pilot and prepare a second client or a codec-disabled test build."],
+      "steps": [
+        "Occupy the single WebRTC peer, then start a second watch.",
+        "Repeat with H.264 or Opus capability unavailable where the device permits.",
+        "Observe pilot cleanup, replacement session start and legacy media."
+      ],
+      "checks": [
+        {
+          "id": "reason-visible",
+          "description": "Fallback reason identifies capacity, capability or negotiation failure."
+        },
+        {
+          "id": "pilot-closed",
+          "description": "Failed pilot session and peer are closed before legacy start."
+        },
+        {
+          "id": "legacy-healthy",
+          "description": "MJPEG video and WAV audio become healthy without re-pairing."
+        }
+      ],
+      "measurements": [
+        {
+          "id": "fallbackReadyMs",
+          "description": "Pilot failure to first healthy legacy media.",
+          "type": "number",
+          "required": true,
+          "operator": "<",
+          "threshold": 3000,
+          "unit": "ms"
+        }
+      ],
+      "requiredArtifacts": ["fallback reason log", "session/peer cleanup status"]
+    },
+    {
+      "id": "SOAK-Legacy-01",
+      "title": "Thirty-minute MJPEG/WAV physical soak",
+      "platforms": ["ios", "android"],
+      "mediaLane": "legacy",
+      "networkLane": "baseline-and-weak",
+      "estimatedMinutes": 40,
+      "setup": ["Use a profile/release build and capture /test/status every five seconds."],
+      "steps": [
+        "Run 15 minutes baseline, five minutes weak network, then ten minutes recovered baseline.",
+        "Exercise alerts, audio toggle and one foreground/background cycle.",
+        "Record memory after five-minute warm-up and at completion."
+      ],
+      "checks": [
+        {
+          "id": "no-crash",
+          "description": "No crash, OOM, stuck privacy indicator or unreleased socket occurs."
+        },
+        {
+          "id": "recovery",
+          "description": "Quality and media recover after weak network without app restart."
+        }
+      ],
+      "measurements": [
+        {
+          "id": "memorySlopeMiBPer10Min",
+          "description": "Post-warm-up resident-memory slope.",
+          "type": "number",
+          "required": true,
+          "operator": "<",
+          "threshold": 1,
+          "unit": "MiB/10min"
+        },
+        {
+          "id": "baselineAudioUnderrunsPer10Min",
+          "description": "Baseline audio underruns per ten minutes.",
+          "type": "number",
+          "required": true,
+          "operator": "<",
+          "threshold": 1,
+          "unit": "count/10min"
+        }
+      ],
+      "requiredArtifacts": ["30-minute JSONL status log", "memory timeline"]
+    },
+    {
+      "id": "SOAK-WebRTC-01",
+      "title": "Thirty-minute H.264/Opus pilot soak",
+      "platforms": ["ios", "android"],
+      "mediaLane": "webrtc",
+      "networkLane": "baseline-and-weak",
+      "estimatedMinutes": 40,
+      "setup": ["Use a profile/release build with WebRTC pilot enabled and one peer."],
+      "steps": [
+        "Run 15 minutes baseline, five minutes weak network, then ten minutes recovered baseline.",
+        "Capture getStats every five seconds and perform one Wi-Fi roam.",
+        "Close the watch and confirm peer, tracks and native demand return to zero."
+      ],
+      "checks": [
+        {
+          "id": "codecs-stable",
+          "description": "H.264 and Opus remain negotiated for the complete peer lifetime."
+        },
+        {
+          "id": "no-crash",
+          "description": "No crash, OOM, peer leak or unexpected legacy fallback occurs."
+        },
+        {
+          "id": "release",
+          "description": "Closing the watch releases peer, tracks and media demand."
+        }
+      ],
+      "measurements": [
+        {
+          "id": "memorySlopeMiBPer10Min",
+          "description": "Post-warm-up resident-memory slope.",
+          "type": "number",
+          "required": true,
+          "operator": "<",
+          "threshold": 1,
+          "unit": "MiB/10min"
+        },
+        {
+          "id": "webRtcVideoLatencyP95Ms",
+          "description": "WebRTC video latency p95 over the soak.",
+          "type": "number",
+          "required": true,
+          "operator": "<",
+          "threshold": 400,
+          "unit": "ms"
+        }
+      ],
+      "requiredArtifacts": ["30-minute status JSONL", "WebRTC getStats JSONL", "memory timeline"]
+    }
+  ]
+}

@@ -61,6 +61,11 @@ class ClientRuntime {
     Future<bool> Function(PairingSession session)? startAlerts,
     Future<void> Function()? stopAlerts,
     Future<void> Function()? clearStore,
+    Stream<PairingSession> Function(PairingSession session)?
+        watchSessionEndpoints,
+    Future<void> Function(PairingSession session)? persistReboundSession,
+    Future<BroadcastAccessSnapshot?> Function(PairingSession session)?
+        refreshRemoteBroadcastAccess,
     ClientAlertHistory? alertHistory,
     this.streamHealthState,
     this.roomControls,
@@ -74,6 +79,9 @@ class ClientRuntime {
         _startAlerts = startAlerts,
         _stopAlerts = stopAlerts,
         _clearStore = clearStore,
+        _watchSessionEndpoints = watchSessionEndpoints,
+        _persistReboundSession = persistReboundSession,
+        _refreshRemoteBroadcastAccess = refreshRemoteBroadcastAccess,
         _broadcastAccess = broadcastAccess,
         alertHistory = alertHistory ?? ClientAlertHistory();
 
@@ -89,6 +97,11 @@ class ClientRuntime {
   final Future<bool> Function(PairingSession session)? _startAlerts;
   final Future<void> Function()? _stopAlerts;
   final Future<void> Function()? _clearStore;
+  final Stream<PairingSession> Function(PairingSession session)?
+      _watchSessionEndpoints;
+  final Future<void> Function(PairingSession session)? _persistReboundSession;
+  final Future<BroadcastAccessSnapshot?> Function(PairingSession session)?
+      _refreshRemoteBroadcastAccess;
   final BroadcastAccessService? _broadcastAccess;
   final ClientAlertHistory alertHistory;
   final ClientStreamHealthState? streamHealthState;
@@ -98,17 +111,55 @@ class ClientRuntime {
   ClientRuntimeState _state =
       const ClientRuntimeState(phase: ClientRuntimePhase.unpaired);
   StreamSubscription<NetworkQualityUpdate>? _networkQualitySubscription;
+  StreamSubscription<PairingSession>? _endpointSubscription;
   Timer? _broadcastAccessTimer;
+  PairingSession? _activeStreamOwnerSession;
+  Future<void> _watchTail = Future<void>.value();
+  Future<void> _endpointRebindTail = Future<void>.value();
+  int _endpointGeneration = 0;
+  int _broadcastAccessTimerGeneration = 0;
+  int _watchPresentationGeneration = 0;
   bool _disposed = false;
 
   ClientRuntimeState get currentState => _state;
-  Stream<ClientRuntimeState> get states => _states.stream;
+  Stream<ClientRuntimeState> get states => Stream<ClientRuntimeState>.multi(
+        (controller) {
+          controller.add(_state);
+          final subscription = _states.stream.listen(
+            controller.add,
+            onError: controller.addError,
+            onDone: controller.close,
+          );
+          controller.onCancel = subscription.cancel;
+        },
+      );
   List<AlertEventDto> get alerts => alertHistory.alerts;
   Stream<List<AlertEventDto>> get alertUpdates => alertHistory.changes;
   List<MimiCamDiscoveredService> get discoveredServices =>
       serviceBrowser?.services ?? const [];
   Stream<List<MimiCamDiscoveredService>> get discoveryUpdates =>
       serviceBrowser?.updates ?? const Stream.empty();
+  bool get canManageBroadcastPurchase => _broadcastAccess != null;
+
+  /// Claims ownership of watch/alert presentation transitions for one screen.
+  /// A later screen claim invalidates delayed teardown work from the previous
+  /// screen without canceling the new stream.
+  int claimWatchPresentation() => ++_watchPresentationGeneration;
+
+  bool isWatchPresentationCurrent(int generation) =>
+      !_disposed && generation == _watchPresentationGeneration;
+
+  Future<void> releaseWatchPresentation(int generation) =>
+      _enqueueWatch(() async {
+        if (!isWatchPresentationCurrent(generation)) return;
+        await _stopWatchingUnlocked();
+        if (!isWatchPresentationCurrent(generation) ||
+            _state.session == null ||
+            _state.activeStream != null) {
+          return;
+        }
+        await startAlertListening();
+      });
 
   Future<void> startDiscovery() async {
     await serviceBrowser?.start();
@@ -125,21 +176,41 @@ class ClientRuntime {
   Future<void> refreshBroadcastAccess() async {
     final access = _broadcastAccess;
     if (access == null || _disposed) return;
-    _emit(_copyState(broadcastAccess: await access.snapshot()));
+    final snapshot = await access.snapshot();
+    _emit(_copyState(broadcastAccess: snapshot));
+    if (_state.activeStream != null) _scheduleBroadcastAccessTimer(snapshot);
   }
 
   Future<void> unlockBroadcastAccess() async {
     final access = _broadcastAccess;
     if (access == null || _disposed) return;
-    final snapshot = await access.unlockWithOneTimePurchase();
-    _emit(_copyState(broadcastAccess: snapshot, clearError: true));
+    _cancelBroadcastAccessTimer();
+    try {
+      final snapshot = await access.unlockWithOneTimePurchase();
+      _emit(_copyState(broadcastAccess: snapshot, clearError: true));
+      if (_state.activeStream != null) _scheduleBroadcastAccessTimer(snapshot);
+    } catch (_) {
+      if (!_disposed && _state.activeStream != null) {
+        _scheduleBroadcastAccessTimer(await access.snapshot());
+      }
+      rethrow;
+    }
   }
 
   Future<void> restoreBroadcastAccessPurchase() async {
     final access = _broadcastAccess;
     if (access == null || _disposed) return;
-    final snapshot = await access.restorePurchase();
-    _emit(_copyState(broadcastAccess: snapshot, clearError: true));
+    _cancelBroadcastAccessTimer();
+    try {
+      final snapshot = await access.restorePurchase();
+      _emit(_copyState(broadcastAccess: snapshot, clearError: true));
+      if (_state.activeStream != null) _scheduleBroadcastAccessTimer(snapshot);
+    } catch (_) {
+      if (!_disposed && _state.activeStream != null) {
+        _scheduleBroadcastAccessTimer(await access.snapshot());
+      }
+      rethrow;
+    }
   }
 
   Future<void> restoreSession(PairingSession session) async {
@@ -154,6 +225,7 @@ class ClientRuntime {
       broadcastAccess: _state.broadcastAccess,
     ));
     _startNetworkQuality(session);
+    await _startEndpointResolution(session);
     if (session.shouldRenew(DateTime.now())) {
       await renewTokenIfNeeded();
     }
@@ -191,6 +263,7 @@ class ClientRuntime {
       broadcastAccess: _state.broadcastAccess,
     ));
     _startNetworkQuality(session);
+    await _startEndpointResolution(session);
   }
 
   Future<void> renewTokenIfNeeded({DateTime? now}) async {
@@ -216,11 +289,26 @@ class ClientRuntime {
       broadcastAccess: _state.broadcastAccess,
     ));
     _startNetworkQuality(renewed);
+    await _startEndpointResolution(renewed);
   }
 
-  Future<void> startWatching({bool audioEnabled = false}) async {
+  Future<void> startWatching({bool audioEnabled = false}) =>
+      _enqueueWatch(() => _startWatchingUnlocked(audioEnabled: audioEnabled));
+
+  Future<void> _startWatchingUnlocked({bool audioEnabled = false}) async {
     if (_disposed || _state.session == null) return;
     final session = _state.session!;
+    if (_state.alertsActive) await stopAlertListening();
+    if (_disposed || _state.session == null) return;
+    if (_state.activeStream != null) {
+      try {
+        await _stopStream?.call(_activeStreamOwnerSession ?? session);
+      } catch (_) {
+        // Starting a replacement must not retain the previous transport.
+      }
+      _activeStreamOwnerSession = null;
+      streamHealthState?.setWatchActive(false);
+    }
     final access = _broadcastAccess;
     BroadcastAccessSnapshot? accessSnapshot;
     const accessSessionId = 'client.watch';
@@ -253,6 +341,18 @@ class ClientRuntime {
         accessSnapshot = await access.endSession(accessSessionId);
       }
       if (!_disposed) {
+        if (error is BroadcastAccessLockedException) {
+          _emit(ClientRuntimeState(
+            phase: ClientRuntimePhase.pairedIdle,
+            session: session,
+            error: error,
+            networkQuality: _state.networkQuality,
+            mediaProfile: _state.mediaProfile,
+            alertsActive: _state.alertsActive,
+            broadcastAccess: error.snapshot,
+          ));
+          rethrow;
+        }
         _emit(ClientRuntimeState(
           phase: ClientRuntimePhase.error,
           session: session,
@@ -270,6 +370,8 @@ class ClientRuntime {
       await access?.endSession(accessSessionId);
       return;
     }
+    _activeStreamOwnerSession = activeStream == null ? null : session;
+    final authoritativeAccess = accessSnapshot ?? activeStream?.broadcastAccess;
     _emit(ClientRuntimeState(
       phase: ClientRuntimePhase.watching,
       session: session,
@@ -277,24 +379,26 @@ class ClientRuntime {
       mediaProfile: _state.mediaProfile,
       activeStream: activeStream?.copyWith(audioEnabled: audioEnabled),
       alertsActive: _state.alertsActive,
-      broadcastAccess: accessSnapshot ?? _state.broadcastAccess,
+      broadcastAccess: authoritativeAccess ?? _state.broadcastAccess,
     ));
-    _scheduleBroadcastAccessTimer(accessSnapshot);
+    _scheduleBroadcastAccessTimer(authoritativeAccess);
   }
 
-  Future<void> restartWatching({bool audioEnabled = false}) async {
-    if (_disposed || _state.session == null) return;
-    _emit(ClientRuntimeState(
-      phase: ClientRuntimePhase.reconnecting,
-      session: _state.session,
-      networkQuality: _state.networkQuality,
-      mediaProfile: _state.mediaProfile,
-      activeStream: _state.activeStream,
-      alertsActive: _state.alertsActive,
-      broadcastAccess: _state.broadcastAccess,
-    ));
-    await startWatching(audioEnabled: audioEnabled);
-  }
+  Future<void> restartWatching({bool audioEnabled = false}) =>
+      _enqueueWatch(() async {
+        if (_disposed || _state.session == null) return;
+        _emit(ClientRuntimeState(
+          phase: ClientRuntimePhase.reconnecting,
+          session: _state.session,
+          networkQuality: _state.networkQuality,
+          mediaProfile: _state.mediaProfile,
+          activeStream: _state.activeStream,
+          alertsActive: _state.alertsActive,
+          broadcastAccess: _state.broadcastAccess,
+        ));
+        await _stopWatchingUnlocked(emitState: false, endAccess: false);
+        await _startWatchingUnlocked(audioEnabled: audioEnabled);
+      });
 
   void reportStreamFailure(Object error) {
     if (_disposed) return;
@@ -310,14 +414,37 @@ class ClientRuntime {
     ));
   }
 
-  Future<void> stopWatching() async {
+  Future<void> stopWatching() => _enqueueWatch(() => _stopWatchingUnlocked());
+
+  Future<void> _stopWatchingUnlocked({
+    bool emitState = true,
+    bool endAccess = true,
+  }) async {
     final session = _state.session;
+    final ownerSession = _activeStreamOwnerSession ?? session;
     if (session != null && _state.activeStream != null) {
-      await _stopStream?.call(session);
+      try {
+        if (ownerSession != null) await _stopStream?.call(ownerSession);
+      } catch (error) {
+        if (!_disposed && emitState) reportStreamFailure(error);
+      }
     }
-    final accessSnapshot = await _broadcastAccess?.endSession('client.watch');
-    _broadcastAccessTimer?.cancel();
-    if (_disposed) return;
+    _activeStreamOwnerSession = null;
+    final accessSnapshot = endAccess
+        ? await _broadcastAccess?.endSession('client.watch')
+        : _state.broadcastAccess;
+    _cancelBroadcastAccessTimer();
+    streamHealthState?.setWatchActive(false);
+    if (_disposed || !emitState) {
+      if (!_disposed && !emitState) {
+        _emit(_copyState(
+          phase: ClientRuntimePhase.reconnecting,
+          clearActiveStream: true,
+          broadcastAccess: accessSnapshot,
+        ));
+      }
+      return;
+    }
     _emit(ClientRuntimeState(
       phase: _state.alertsActive
           ? ClientRuntimePhase.alertOnly
@@ -407,6 +534,7 @@ class ClientRuntime {
     await stopAlertListening();
     await _networkQualitySubscription?.cancel();
     _networkQualitySubscription = null;
+    await _cancelEndpointResolution();
     await _clearStore?.call();
     await alertHistory.clear();
     _emit(ClientRuntimeState(
@@ -418,11 +546,13 @@ class ClientRuntime {
   Future<void> _handleRevokedSession(PairingSession session) async {
     await _networkQualitySubscription?.cancel();
     _networkQualitySubscription = null;
+    await _cancelEndpointResolution();
     if (_state.activeStream != null) {
       try {
-        await _stopStream?.call(session);
+        await _stopStream?.call(_activeStreamOwnerSession ?? session);
       } catch (_) {}
     }
+    _activeStreamOwnerSession = null;
     try {
       await _stopAlerts?.call();
     } catch (_) {}
@@ -441,19 +571,37 @@ class ClientRuntime {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
-    await _networkQualitySubscription?.cancel();
+    const cleanupTimeout = Duration(seconds: 1);
+
+    Future<void> attempt(FutureOr<void> Function() operation) async {
+      try {
+        await Future<void>.sync(() async {
+          await operation();
+        }).timeout(cleanupTimeout);
+      } catch (_) {
+        // Disposal must keep releasing independent transports when a platform
+        // plugin or an in-flight DNS-SD/WebSocket operation does not answer.
+      }
+    }
+
+    await attempt(() => _watchTail);
+    await attempt(() async => _networkQualitySubscription?.cancel());
+    await attempt(_cancelEndpointResolution);
     final session = _state.session;
     if (session != null && _state.activeStream != null) {
-      await _stopStream?.call(session);
+      await attempt(
+        () async => _stopStream?.call(_activeStreamOwnerSession ?? session),
+      );
     }
-    await _broadcastAccess?.endAllSessions();
-    _broadcastAccessTimer?.cancel();
-    await _stopAlerts?.call();
-    await roomControls?.dispose();
-    await serviceBrowser?.dispose();
-    await alertHistory.dispose();
-    await _broadcastAccess?.dispose();
-    await _states.close();
+    _activeStreamOwnerSession = null;
+    await attempt(() async => _broadcastAccess?.endAllSessions());
+    _cancelBroadcastAccessTimer();
+    await attempt(() async => _stopAlerts?.call());
+    await attempt(() async => roomControls?.dispose());
+    await attempt(() async => serviceBrowser?.dispose());
+    await attempt(alertHistory.dispose);
+    await attempt(() async => _broadcastAccess?.dispose());
+    await attempt(_states.close);
   }
 
   void _startNetworkQuality(PairingSession session) {
@@ -475,27 +623,168 @@ class ClientRuntime {
     });
   }
 
-  void _scheduleBroadcastAccessTimer(BroadcastAccessSnapshot? snapshot) {
-    _broadcastAccessTimer?.cancel();
-    if (snapshot == null || snapshot.unlocked || snapshot.remainingMs <= 0) {
+  Future<void> _startEndpointResolution(PairingSession session) async {
+    final watch = _watchSessionEndpoints;
+    if (watch == null || _disposed) return;
+    final generation = ++_endpointGeneration;
+    final previous = _endpointSubscription;
+    _endpointSubscription = null;
+    await previous?.cancel();
+    await _endpointRebindTail;
+    if (_disposed || generation != _endpointGeneration) return;
+    try {
+      _endpointSubscription = watch(session).listen(
+        (rebound) {
+          final operation = _endpointRebindTail.then<void>(
+            (_) => _enqueueWatch(
+              () => _applyEndpointRebind(generation, rebound),
+            ),
+            onError: (_) => _enqueueWatch(
+              () => _applyEndpointRebind(generation, rebound),
+            ),
+          );
+          _endpointRebindTail = operation.then<void>((_) {}, onError: (_) {});
+        },
+        onError: (Object _) {},
+      );
+    } catch (_) {
+      // Discovery is advisory; a watcher failure must not undo pairing.
+    }
+  }
+
+  Future<void> _cancelEndpointResolution() async {
+    _endpointGeneration++;
+    final subscription = _endpointSubscription;
+    _endpointSubscription = null;
+    await subscription?.cancel();
+    await _endpointRebindTail;
+  }
+
+  Future<void> _applyEndpointRebind(
+    int generation,
+    PairingSession rebound,
+  ) async {
+    if (_disposed || generation != _endpointGeneration) return;
+    final current = _state.session;
+    if (current == null ||
+        current.deviceId != rebound.deviceId ||
+        (current.host == rebound.host && current.port == rebound.port)) {
       return;
     }
-    _broadcastAccessTimer = Timer(snapshot.remaining, () {
-      unawaited(_handleBroadcastAccessExpired());
+    final resolved = rebound.copyWith(
+      sessionToken: current.sessionToken,
+      clientId: current.clientId,
+      trustedClientTokenExpiresAtMs: current.trustedClientTokenExpiresAtMs,
+      pairedAtMs: current.pairedAtMs,
+    );
+    try {
+      await _persistReboundSession?.call(resolved);
+    } catch (_) {
+      // Reachability wins over a best-effort metadata persistence failure.
+    }
+    if (_disposed || generation != _endpointGeneration) return;
+    final alertsWereActive = _state.alertsActive;
+    _emit(ClientRuntimeState(
+      phase: _state.phase,
+      session: resolved,
+      error: _state.error,
+      networkQuality: _state.networkQuality,
+      mediaProfile: _state.mediaProfile,
+      activeStream: _state.activeStream,
+      alertsActive: alertsWereActive,
+      broadcastAccess: _state.broadcastAccess,
+    ));
+    _startNetworkQuality(resolved);
+    if (!alertsWereActive) return;
+    try {
+      await _stopAlerts?.call();
+      if (_disposed || generation != _endpointGeneration) return;
+      final started = await _startAlerts?.call(resolved) ?? false;
+      if (!started && !_disposed && generation == _endpointGeneration) {
+        _emit(_copyState(alertsActive: false));
+      }
+    } catch (error) {
+      if (!_disposed && generation == _endpointGeneration) {
+        _emit(_copyState(error: error, alertsActive: false));
+      }
+    }
+  }
+
+  void _scheduleBroadcastAccessTimer(BroadcastAccessSnapshot? snapshot) {
+    _cancelBroadcastAccessTimer();
+    final streamToken = _state.activeStream?.streamToken;
+    if (snapshot == null ||
+        snapshot.unlocked ||
+        !snapshot.active ||
+        snapshot.remainingMs <= 0 ||
+        streamToken == null) {
+      return;
+    }
+    _armBroadcastAccessTimer(snapshot.remaining, streamToken);
+  }
+
+  void _armBroadcastAccessTimer(Duration delay, String streamToken) {
+    final generation = _broadcastAccessTimerGeneration;
+    _broadcastAccessTimer = Timer(delay, () {
+      unawaited(_handleBroadcastAccessExpired(generation, streamToken));
     });
   }
 
-  Future<void> _handleBroadcastAccessExpired() async {
-    if (_disposed || _state.activeStream == null) return;
-    await stopWatching();
-    final snapshot = await _broadcastAccess?.snapshot();
-    if (_disposed || snapshot == null || !snapshot.isLocked) return;
-    _emit(_copyState(
-      phase: ClientRuntimePhase.pairedIdle,
-      error: BroadcastAccessLockedException(snapshot),
-      broadcastAccess: snapshot,
-      clearActiveStream: true,
-    ));
+  void _cancelBroadcastAccessTimer() {
+    _broadcastAccessTimerGeneration++;
+    _broadcastAccessTimer?.cancel();
+    _broadcastAccessTimer = null;
+  }
+
+  Future<void> _handleBroadcastAccessExpired(
+    int generation,
+    String streamToken,
+  ) =>
+      _enqueueWatch(() async {
+        if (!_isCurrentBroadcastTimer(generation, streamToken)) return;
+        final session = _state.session;
+        if (session == null) return;
+
+        BroadcastAccessSnapshot? snapshot;
+        try {
+          snapshot = await _broadcastAccess?.snapshot() ??
+              await _refreshRemoteBroadcastAccess?.call(session);
+        } catch (_) {
+          if (_isCurrentBroadcastTimer(generation, streamToken)) {
+            _armBroadcastAccessTimer(const Duration(seconds: 1), streamToken);
+          }
+          return;
+        }
+        if (!_isCurrentBroadcastTimer(generation, streamToken)) return;
+        if (snapshot == null) {
+          // A stale session-start snapshot is never sufficient authority to
+          // tear down a newer stream. Retry until the room server can answer.
+          _armBroadcastAccessTimer(const Duration(seconds: 1), streamToken);
+          return;
+        }
+        if (!snapshot.isLocked) {
+          _emit(_copyState(
+            broadcastAccess: snapshot,
+            clearError: snapshot.unlocked,
+          ));
+          _scheduleBroadcastAccessTimer(snapshot);
+          return;
+        }
+
+        await _stopWatchingUnlocked();
+        if (_disposed) return;
+        _emit(_copyState(
+          phase: ClientRuntimePhase.pairedIdle,
+          error: BroadcastAccessLockedException(snapshot),
+          broadcastAccess: snapshot,
+          clearActiveStream: true,
+        ));
+      });
+
+  bool _isCurrentBroadcastTimer(int generation, String streamToken) {
+    return !_disposed &&
+        generation == _broadcastAccessTimerGeneration &&
+        _state.activeStream?.streamToken == streamToken;
   }
 
   ClientRuntimeState _copyState({
@@ -525,5 +814,14 @@ class ClientRuntime {
   void _emit(ClientRuntimeState state) {
     _state = state;
     if (!_states.isClosed) _states.add(state);
+  }
+
+  Future<void> _enqueueWatch(Future<void> Function() operation) {
+    final next = _watchTail.then<void>(
+      (_) => operation(),
+      onError: (_) => operation(),
+    );
+    _watchTail = next.then<void>((_) {}, onError: (_) {});
+    return next;
   }
 }

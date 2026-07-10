@@ -1,5 +1,6 @@
 import 'dart:io';
 
+@Deprecated('Use MimiCamDiscoveredService from mimicam_service_discovery.dart.')
 class LanServiceRecord {
   const LanServiceRecord({
     required this.name,
@@ -26,11 +27,16 @@ class LanServiceRecord {
   }
 }
 
+@Deprecated('Use MimiCamServiceBrowser from mimicam_service_discovery.dart.')
 abstract class LanDiscoverySession {
   Stream<List<LanServiceRecord>> get services;
   Future<void> stop();
 }
 
+@Deprecated(
+  'Use MimiCamServiceAdvertiser and MimiCamServiceBrowser from '
+  'mimicam_service_discovery.dart.',
+)
 abstract class LanServiceDiscovery {
   static const serviceType = '_mimicam._tcp';
 

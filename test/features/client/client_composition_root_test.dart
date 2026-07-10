@@ -31,14 +31,19 @@ void main() {
       strings: AppStrings(const Locale('tr')),
       secureTokens: secure,
     );
-    addTearDown(runtime.dispose);
 
     await expectLater(
       runtime.states.firstWhere((state) => state.session != null),
       completion(
         isA<ClientRuntimeState>()
             .having(
-                (state) => state.phase, 'phase', ClientRuntimePhase.pairedIdle)
+              (state) => state.phase,
+              'phase',
+              anyOf(
+                ClientRuntimePhase.pairedIdle,
+                ClientRuntimePhase.alertOnly,
+              ),
+            )
             .having((state) => state.session?.sessionToken, 'token',
                 'restored-token')
             .having((state) => state.session?.payload.deviceName, 'room',
@@ -57,6 +62,12 @@ void main() {
             ),
       ),
     );
+    expect(
+      runtime.currentState.broadcastAccess,
+      isNull,
+      reason: 'The room/server is the only entitlement authority.',
+    );
+    await runtime.dispose().timeout(const Duration(seconds: 5));
   });
 }
 

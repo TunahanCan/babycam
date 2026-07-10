@@ -18,6 +18,23 @@ class PlatformRuntimeSnapshot {
     required this.activityAttached,
     required this.serviceOwnsEngine,
     required this.engineAvailable,
+    this.playbackDemand = false,
+    this.audioOutputActive = false,
+    this.supportsServerInBackground = false,
+    this.supportsAudioOutputInBackground = false,
+    this.supportsMicrophoneInBackground = false,
+    this.nativeServiceMediaAvailable = false,
+    this.serviceOwnsMediaHardware = false,
+    this.serviceOwnsNativeMediaHardware = false,
+    this.externalCameraCaptureDemand = false,
+    this.externalMicrophoneCaptureDemand = false,
+    this.externalMediaCaptureDemand = false,
+    this.nativeCameraRequested = false,
+    this.nativeMicrophoneRequested = false,
+    this.nativeCameraActive = false,
+    this.nativeMicrophoneActive = false,
+    this.nativeCameraError,
+    this.nativeMicrophoneError,
     this.lastServiceStopReason,
     this.contractMessage,
   });
@@ -40,6 +57,33 @@ class PlatformRuntimeSnapshot {
       foregroundServiceActive: map['foregroundServiceActive'] as bool? ?? false,
       cameraDemand: map['cameraDemand'] as bool? ?? false,
       microphoneDemand: map['microphoneDemand'] as bool? ?? false,
+      playbackDemand: map['playbackDemand'] as bool? ?? false,
+      audioOutputActive: map['audioOutputActive'] as bool? ?? false,
+      supportsServerInBackground:
+          map['supportsServerInBackground'] as bool? ?? false,
+      supportsAudioOutputInBackground:
+          map['supportsAudioOutputInBackground'] as bool? ?? false,
+      supportsMicrophoneInBackground:
+          map['supportsMicrophoneInBackground'] as bool? ?? false,
+      nativeServiceMediaAvailable:
+          map['nativeServiceMediaAvailable'] as bool? ?? false,
+      serviceOwnsMediaHardware:
+          map['serviceOwnsMediaHardware'] as bool? ?? false,
+      serviceOwnsNativeMediaHardware:
+          map['serviceOwnsNativeMediaHardware'] as bool? ?? false,
+      externalCameraCaptureDemand:
+          map['externalCameraCaptureDemand'] as bool? ?? false,
+      externalMicrophoneCaptureDemand:
+          map['externalMicrophoneCaptureDemand'] as bool? ?? false,
+      externalMediaCaptureDemand:
+          map['externalMediaCaptureDemand'] as bool? ?? false,
+      nativeCameraRequested: map['nativeCameraRequested'] as bool? ?? false,
+      nativeMicrophoneRequested:
+          map['nativeMicrophoneRequested'] as bool? ?? false,
+      nativeCameraActive: map['nativeCameraActive'] as bool? ?? false,
+      nativeMicrophoneActive: map['nativeMicrophoneActive'] as bool? ?? false,
+      nativeCameraError: map['nativeCameraError']?.toString(),
+      nativeMicrophoneError: map['nativeMicrophoneError']?.toString(),
       activityAttached: map['activityAttached'] as bool? ?? false,
       serviceOwnsEngine: map['serviceOwnsEngine'] as bool? ?? false,
       engineAvailable: map['engineAvailable'] as bool? ?? false,
@@ -56,6 +100,23 @@ class PlatformRuntimeSnapshot {
   final bool foregroundServiceActive;
   final bool cameraDemand;
   final bool microphoneDemand;
+  final bool playbackDemand;
+  final bool audioOutputActive;
+  final bool supportsServerInBackground;
+  final bool supportsAudioOutputInBackground;
+  final bool supportsMicrophoneInBackground;
+  final bool nativeServiceMediaAvailable;
+  final bool serviceOwnsMediaHardware;
+  final bool serviceOwnsNativeMediaHardware;
+  final bool externalCameraCaptureDemand;
+  final bool externalMicrophoneCaptureDemand;
+  final bool externalMediaCaptureDemand;
+  final bool nativeCameraRequested;
+  final bool nativeMicrophoneRequested;
+  final bool nativeCameraActive;
+  final bool nativeMicrophoneActive;
+  final String? nativeCameraError;
+  final String? nativeMicrophoneError;
   final bool activityAttached;
   final bool serviceOwnsEngine;
   final bool engineAvailable;
@@ -71,8 +132,12 @@ class PlatformRuntimeSnapshot {
         PlatformRuntimeKind.ios =>
           'iOS kamera yayını için MimiCam ön planda ve ekran açık kalmalıdır.',
         PlatformRuntimeKind.android => foregroundServiceActive
-            ? 'Android foreground service oda yayınını çalışır durumda tutuyor.'
-            : 'Android arka plan yayını için foreground service başlatılmalıdır.',
+            ? serviceOwnsMediaHardware
+                ? externalMediaCaptureDemand
+                    ? 'Android foreground service WebRTC medya yakalayıcısını koruyor.'
+                    : 'Android foreground service oda medyasını çalışır durumda tutuyor.'
+                : 'Android foreground service medya donanımını hazırlıyor.'
+            : 'Android arka plan talebi için foreground service görünürken başlatılmalıdır.',
         PlatformRuntimeKind.other =>
           'Bu platformda arka plan kamera çalışması desteklenmiyor.',
       };
@@ -110,9 +175,24 @@ class PlatformRuntimeEvent {
   final int sequence;
   final Map<String, Object?> details;
 
-  bool get requiresMediaPause => type == 'mediaPauseRequired';
-  bool get requestsMediaRecovery => type == 'mediaRecoveryRequested';
+  bool get requiresMediaPause =>
+      type == 'mediaPauseRequired' ||
+      (type == 'snapshot' &&
+          details['platform'] == 'ios' &&
+          (details['applicationState'] == 'inactive' ||
+              details['applicationState'] == 'background'));
+  bool get requestsMediaRecovery =>
+      type == 'mediaRecoveryRequested' ||
+      (type == 'snapshot' &&
+          details['platform'] == 'ios' &&
+          details['applicationState'] == 'foregroundActive');
   bool get isAudioLifecycleEvent => type.startsWith('audio');
+  bool get isUnrecoverableAudioOutputLoss =>
+      (type == 'audioFocusLost' && details['permanent'] == true) ||
+      (type == 'audioInterruptionEnded' && details['recovered'] == false) ||
+      (type == 'audioMediaServicesReset' && details['recovered'] == false) ||
+      (type == 'audioOutputResumedFromBackground' &&
+          details['recovered'] == false);
 }
 
 class PlatformRuntimeContract {
@@ -150,12 +230,22 @@ class PlatformRuntimeContract {
     required bool active,
     required bool camera,
     required bool microphone,
-  }) =>
-      _methodChannel.invokeMethod<void>('setMediaDemand', {
-        'active': active,
-        'camera': camera,
-        'microphone': microphone,
-      });
+    bool playback = false,
+    bool? nativeCameraCapture,
+    bool? nativeMicrophoneCapture,
+  }) {
+    final serviceCameraCapture = camera && (nativeCameraCapture ?? camera);
+    final serviceMicrophoneCapture =
+        microphone && (nativeMicrophoneCapture ?? microphone);
+    return _methodChannel.invokeMethod<void>('setMediaDemand', {
+      'active': active,
+      'camera': camera,
+      'microphone': microphone,
+      'playback': playback,
+      'nativeCameraCapture': serviceCameraCapture,
+      'nativeMicrophoneCapture': serviceMicrophoneCapture,
+    });
+  }
 
   static PlatformRuntimeSnapshot _fallbackSnapshot() {
     final platform = switch (defaultTargetPlatform) {
@@ -166,12 +256,19 @@ class PlatformRuntimeContract {
     return PlatformRuntimeSnapshot(
       platform: platform,
       applicationState: 'unknown',
-      supportsCameraInBackground: platform == PlatformRuntimeKind.android,
+      // No native method-channel implementation is available on this target,
+      // so the fallback remains deliberately conservative.
+      supportsCameraInBackground: false,
       cameraRequiresForegroundStart: true,
       backgroundRecoveryAfterProcessDeath: false,
       foregroundServiceActive: false,
       cameraDemand: false,
       microphoneDemand: false,
+      playbackDemand: false,
+      audioOutputActive: false,
+      supportsServerInBackground: false,
+      supportsAudioOutputInBackground: false,
+      serviceOwnsMediaHardware: false,
       activityAttached: false,
       serviceOwnsEngine: false,
       engineAvailable: false,
@@ -187,15 +284,18 @@ class PlatformMediaLifecycleCoordinator {
     required Stream<PlatformRuntimeEvent> events,
     required Future<void> Function(String reason) pauseMedia,
     required Future<void> Function(String reason) recoverMedia,
+    Future<void> Function(PlatformRuntimeEvent event)? onAudioOutputLost,
     void Function(PlatformRuntimeEvent event)? onTelemetry,
   })  : _events = events,
         _pauseMedia = pauseMedia,
         _recoverMedia = recoverMedia,
+        _onAudioOutputLost = onAudioOutputLost,
         _onTelemetry = onTelemetry;
 
   final Stream<PlatformRuntimeEvent> _events;
   final Future<void> Function(String reason) _pauseMedia;
   final Future<void> Function(String reason) _recoverMedia;
+  final Future<void> Function(PlatformRuntimeEvent event)? _onAudioOutputLost;
   final void Function(PlatformRuntimeEvent event)? _onTelemetry;
   StreamSubscription<PlatformRuntimeEvent>? _subscription;
   Future<void> _pending = Future.value();
@@ -217,12 +317,25 @@ class PlatformMediaLifecycleCoordinator {
   }
 
   void _enqueue(PlatformRuntimeEvent event) {
-    _onTelemetry?.call(event);
-    _pending = _pending.then((_) => _handle(event));
+    try {
+      _onTelemetry?.call(event);
+    } catch (_) {
+      // Telemetry must never block the resource lifecycle state machine.
+    }
+    final operation = _pending.then<void>(
+      (_) => _handle(event),
+      // A failed native pause/recovery must not poison the lifecycle queue.
+      // The next event is still allowed to retry or release resources.
+      onError: (_) => _handle(event),
+    );
+    _pending = operation.then<void>((_) {}, onError: (_) {});
   }
 
   Future<void> _handle(PlatformRuntimeEvent event) async {
     if (_disposed) return;
+    if (event.isUnrecoverableAudioOutputLoss) {
+      await _onAudioOutputLost?.call(event);
+    }
     final reason = event.details['reason']?.toString() ?? event.type;
     if (event.requiresMediaPause && !_pausedByPlatform) {
       await _pauseMedia(reason);

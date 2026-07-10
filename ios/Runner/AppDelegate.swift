@@ -9,7 +9,28 @@ import UIKit
   private let localNetworkPermissionRequester = LocalNetworkPermissionRequester()
   private let platformRuntime = PlatformRuntimeBridge.shared
   private lazy var pcmAudioPlayer = PcmAudioPlayer { [weak self] type, details in
-    self?.platformRuntime.emit(type, details: details)
+    guard let self else { return }
+    self.platformRuntime.emit(type, details: details)
+    switch type {
+    case "audioPlaybackStarted":
+      self.platformRuntime.setAudioOutputActive(true, reason: type)
+    case "audioOutputResumedFromBackground":
+      self.platformRuntime.setAudioOutputActive(
+        details["recovered"] as? Bool ?? false,
+        reason: type
+      )
+    case "audioPlaybackStopped", "audioOutputSuspendedForBackground",
+         "audioInterruptionBegan":
+      self.platformRuntime.setAudioOutputActive(false, reason: type)
+    case "audioInterruptionEnded", "audioMediaServicesReset":
+      self.platformRuntime.setAudioOutputActive(
+        details["outputActive"] as? Bool ??
+          (details["recovered"] as? Bool ?? false),
+        reason: type
+      )
+    default:
+      break
+    }
   }
 
   override func application(
@@ -41,9 +62,14 @@ import UIKit
       case "snapshot":
         result(self.platformRuntime.snapshot())
       case "setMediaDemand":
-        // iOS does not allow camera capture after the scene enters background.
-        // Dart owns the controlled pause/recovery policy; native reports the
-        // capability and lifecycle events through the paired EventChannel.
+        let args = call.arguments as? [String: Any]
+        let active = args?["active"] as? Bool ?? false
+        self.platformRuntime.setMediaDemand(
+          active: active,
+          camera: args?["camera"] as? Bool ?? false,
+          microphone: args?["microphone"] as? Bool ?? false,
+          playback: args?["playback"] as? Bool ?? false
+        )
         result(nil)
       default:
         result(FlutterMethodNotImplemented)
@@ -160,6 +186,10 @@ import UIKit
           try self.pcmAudioPlayer.start(sampleRate: sampleRate, channels: channels)
           result(nil)
         } catch {
+          self.platformRuntime.setAudioOutputActive(
+            false,
+            reason: "audioPlaybackStartFailed"
+          )
           result(FlutterError(
             code: "PCM_AUDIO_START_FAILED",
             message: error.localizedDescription,
@@ -191,6 +221,10 @@ import UIKit
           )
           result(nil)
         } catch {
+          self.platformRuntime.setAudioOutputActive(
+            false,
+            reason: "audioTestToneStartFailed"
+          )
           result(FlutterError(
             code: "PCM_AUDIO_TEST_TONE_FAILED",
             message: error.localizedDescription,
@@ -214,6 +248,18 @@ final class PlatformRuntimeBridge: NSObject, FlutterStreamHandler {
   private var eventSink: FlutterEventSink?
   private var sequence: Int64 = 0
   private var applicationState = "foreground"
+  private var cameraDemand = false
+  private var microphoneDemand = false
+  private var playbackDemand = false
+  private var audioOutputActive = false
+  private var mediaPauseIssued = false
+
+  var isApplicationForeground: Bool {
+    lock.lock()
+    let foreground = applicationState == "foreground" || applicationState == "foregroundActive"
+    lock.unlock()
+    return foreground
+  }
 
   func onListen(
     withArguments arguments: Any?,
@@ -236,6 +282,10 @@ final class PlatformRuntimeBridge: NSObject, FlutterStreamHandler {
   func snapshot() -> [String: Any] {
     lock.lock()
     let state = applicationState
+    let currentCameraDemand = cameraDemand
+    let currentMicrophoneDemand = microphoneDemand
+    let currentPlaybackDemand = playbackDemand
+    let currentAudioOutputActive = audioOutputActive
     lock.unlock()
     return [
       "platform": "ios",
@@ -244,32 +294,81 @@ final class PlatformRuntimeBridge: NSObject, FlutterStreamHandler {
       "cameraRequiresForegroundStart": true,
       "backgroundRecoveryAfterProcessDeath": false,
       "foregroundServiceActive": false,
-      "cameraDemand": false,
-      "microphoneDemand": false,
+      "cameraDemand": currentCameraDemand,
+      "microphoneDemand": currentMicrophoneDemand,
+      "playbackDemand": currentPlaybackDemand,
+      "audioOutputActive": currentAudioOutputActive,
+      "supportsServerInBackground": false,
+      "supportsAudioOutputInBackground": false,
+      "serviceOwnsMediaHardware": false,
       "activityAttached": state == "foregroundActive" || state == "foreground",
       "serviceOwnsEngine": false,
       "engineAvailable": true,
       "contractMessage":
-        "iOS kamera yayını yalnız uygulama ön plandayken desteklenir."
+        "iOS oda sunucusu, kamera ve oda sesi yalnız uygulama ön plandayken desteklenir."
     ]
+  }
+
+  func setMediaDemand(
+    active: Bool,
+    camera: Bool,
+    microphone: Bool,
+    playback: Bool
+  ) {
+    let hasDemand = active && (camera || microphone || playback)
+    lock.lock()
+    cameraDemand = hasDemand && camera
+    microphoneDemand = hasDemand && microphone
+    playbackDemand = hasDemand && playback
+    let details: [String: Any] = [
+      "active": hasDemand,
+      "cameraDemand": cameraDemand,
+      "microphoneDemand": microphoneDemand,
+      "playbackDemand": playbackDemand
+    ]
+    lock.unlock()
+    emit("mediaDemandChanged", details: details)
+  }
+
+  func setAudioOutputActive(_ active: Bool, reason: String) {
+    lock.lock()
+    let changed = audioOutputActive != active
+    audioOutputActive = active
+    lock.unlock()
+    guard changed else { return }
+    emit(
+      "audioOutputStateChanged",
+      details: ["active": active, "reason": reason]
+    )
   }
 
   func setApplicationState(_ state: String) {
     lock.lock()
     let changed = applicationState != state
     applicationState = state
+    let shouldPause = (state == "inactive" || state == "background") && !mediaPauseIssued
+    let shouldRecover = state == "foregroundActive" && mediaPauseIssued
+    if shouldPause {
+      mediaPauseIssued = true
+    } else if shouldRecover {
+      mediaPauseIssued = false
+    }
     lock.unlock()
     guard changed else { return }
     emit("applicationLifecycle", details: ["state": state])
-    if state == "background" {
+    if shouldPause {
       emit(
         "mediaPauseRequired",
         details: [
-          "reason": "ios_camera_background_unsupported",
-          "cameraBackgroundSupported": false
+          "reason": state == "inactive"
+            ? "ios_application_inactive"
+            : "ios_application_backgrounded",
+          "cameraBackgroundSupported": false,
+          "serverBackgroundSupported": false,
+          "audioOutputBackgroundSupported": false
         ]
       )
-    } else if state == "foregroundActive" {
+    } else if shouldRecover {
       emit(
         "mediaRecoveryRequested",
         details: ["reason": "application_foregrounded"]
@@ -375,9 +474,72 @@ private final class LocalNetworkPermissionRequester {
   }
 }
 
+/// Coordinates MimiCam's native output without deactivating the process-wide
+/// AVAudioSession that `record` or WebRTC may currently use for microphone
+/// input. AVAudioSession is a singleton; output ownership must therefore be
+/// reference-counted and configured for simultaneous input/output.
+private final class SharedAudioSessionPolicy {
+  static let shared = SharedAudioSessionPolicy()
+
+  private let lock = NSLock()
+  private var outputOwners = 0
+
+  func acquireOutput() throws {
+    lock.lock()
+    outputOwners += 1
+    lock.unlock()
+    do {
+      try configureAndActivate()
+    } catch {
+      releaseOutput()
+      throw error
+    }
+  }
+
+  func recoverOutputIfNeeded() throws {
+    lock.lock()
+    let required = outputOwners > 0
+    lock.unlock()
+    if required { try configureAndActivate() }
+  }
+
+  func releaseOutput() {
+    lock.lock()
+    outputOwners = max(0, outputOwners - 1)
+    lock.unlock()
+    // Never call setActive(false) here. The recorder and WebRTC plugin share
+    // this same session and may still own an input path.
+  }
+
+  func status() -> [String: Any] {
+    lock.lock()
+    let owners = outputOwners
+    lock.unlock()
+    let session = AVAudioSession.sharedInstance()
+    return [
+      "outputOwners": owners,
+      "category": session.category.rawValue,
+      "mode": session.mode.rawValue,
+      "activeOutputRequired": owners > 0
+    ]
+  }
+
+  private func configureAndActivate() throws {
+    let session = AVAudioSession.sharedInstance()
+    try session.setCategory(
+      .playAndRecord,
+      mode: .default,
+      options: [.defaultToSpeaker, .allowBluetoothHFP, .mixWithOthers]
+    )
+    try session.setPreferredIOBufferDuration(0.02)
+    try session.setActive(true)
+  }
+}
+
 private enum PcmAudioPlayerError: LocalizedError {
   case invalidFormat(sampleRate: Int, channels: Int)
   case testToneWriteRejected
+  case outputRequiresForeground
 
   var errorDescription: String? {
     switch self {
@@ -385,6 +547,8 @@ private enum PcmAudioPlayerError: LocalizedError {
       return "Could not create PCM format for \(sampleRate) Hz / \(channels) channel(s)"
     case .testToneWriteRejected:
       return "PCM test tone could not be queued"
+    case .outputRequiresForeground:
+      return "Room audio output requires MimiCam to be active in the foreground"
     }
   }
 }
@@ -394,6 +558,7 @@ private final class PcmAudioPlayer {
 
   private let queue = DispatchQueue(label: "com.mimicam.pcm-audio")
   private let eventEmitter: EventEmitter
+  private let audioSessionPolicy = SharedAudioSessionPolicy.shared
   private var observers: [NSObjectProtocol] = []
   private var engine: AVAudioEngine?
   private var playerNode: AVAudioPlayerNode?
@@ -414,6 +579,8 @@ private final class PcmAudioPlayer {
   private var routeChangeCount = 0
   private var mediaServicesResetCount = 0
   private var interrupted = false
+  private var backgroundSuspended = false
+  private var ownsAudioSessionOutput = false
 
   init(eventEmitter: @escaping EventEmitter) {
     self.eventEmitter = eventEmitter
@@ -427,16 +594,19 @@ private final class PcmAudioPlayer {
   }
 
   func start(sampleRate: Int, channels: Int) throws {
+    guard PlatformRuntimeBridge.shared.isApplicationForeground else {
+      throw PcmAudioPlayerError.outputRequiresForeground
+    }
     let safeSampleRate = min(max(sampleRate, 8000), 48000)
     let safeChannels = max(1, min(channels, 2))
     try queue.sync {
-      self.stopLocked(deactivateSession: true)
+      self.stopLocked(releaseAudioSession: true)
       do {
         try self.startLocked(sampleRate: safeSampleRate, channels: safeChannels)
       } catch {
         self.writeErrors += 1
         self.lastError = "\(type(of: error)): \(error.localizedDescription)"
-        self.stopLocked(deactivateSession: true)
+        self.stopLocked(releaseAudioSession: true)
         throw error
       }
     }
@@ -447,14 +617,8 @@ private final class PcmAudioPlayer {
   }
 
   private func startLocked(sampleRate: Int, channels: Int) throws {
-    let audioSession = AVAudioSession.sharedInstance()
-    try audioSession.setCategory(
-      .playback,
-      mode: .spokenAudio,
-      options: [.mixWithOthers]
-    )
-    try audioSession.setPreferredIOBufferDuration(0.02)
-    try audioSession.setActive(true)
+    try audioSessionPolicy.acquireOutput()
+    ownsAudioSessionOutput = true
 
     guard let format = AVAudioFormat(
       commonFormat: .pcmFormatInt16,
@@ -482,6 +646,7 @@ private final class PcmAudioPlayer {
     self.starts += 1
     self.lastStartAtMs = Self.nowMs()
     self.interrupted = false
+    self.backgroundSuspended = false
     self.lastError = nil
   }
 
@@ -494,12 +659,15 @@ private final class PcmAudioPlayer {
     if data.isEmpty { return false }
     return queue.sync {
       guard !self.interrupted,
+            !self.backgroundSuspended,
             let playerNode = self.playerNode,
             let format = self.format else {
         self.writesDropped += 1
-        self.lastError = self.interrupted
-          ? "write while audio session is interrupted"
-          : "write before start"
+        self.lastError = self.backgroundSuspended
+          ? "write while application is backgrounded"
+          : self.interrupted
+            ? "write while audio session is interrupted"
+            : "write before start"
         return false
       }
       let bytesPerFrame = Int(format.streamDescription.pointee.mBytesPerFrame)
@@ -610,22 +778,24 @@ private final class PcmAudioPlayer {
         "lastError": lastError ?? NSNull(),
         "playing": playerNode?.isPlaying ?? false,
         "interrupted": interrupted,
+        "backgroundSuspended": backgroundSuspended,
         "interruptionCount": interruptionCount,
         "routeChangeCount": routeChangeCount,
         "mediaServicesResetCount": mediaServicesResetCount,
-        "outputRoute": Self.outputRouteDetails()
+        "outputRoute": Self.outputRouteDetails(),
+        "audioSessionPolicy": audioSessionPolicy.status()
       ]
     }
   }
 
   func stop() {
     queue.async { [weak self] in
-      self?.stopLocked(deactivateSession: true)
+      self?.stopLocked(releaseAudioSession: true)
       self?.eventEmitter("audioPlaybackStopped", [:])
     }
   }
 
-  private func stopLocked(deactivateSession: Bool) {
+  private func stopLocked(releaseAudioSession: Bool) {
     playbackGeneration &+= 1
     playerNode?.stop()
     if let node = playerNode {
@@ -637,11 +807,10 @@ private final class PcmAudioPlayer {
     format = nil
     queuedFrames = 0
     interrupted = false
-    if deactivateSession {
-      try? AVAudioSession.sharedInstance().setActive(
-        false,
-        options: [.notifyOthersOnDeactivation]
-      )
+    backgroundSuspended = false
+    if releaseAudioSession && ownsAudioSessionOutput {
+      audioSessionPolicy.releaseOutput()
+      ownsAudioSessionOutput = false
     }
   }
 
@@ -668,6 +837,20 @@ private final class PcmAudioPlayer {
     ) { [weak self] _ in
       self?.handleMediaServicesReset()
     })
+    observers.append(center.addObserver(
+      forName: UIApplication.willResignActiveNotification,
+      object: nil,
+      queue: nil
+    ) { [weak self] _ in
+      self?.suspendOutputForBackground()
+    })
+    observers.append(center.addObserver(
+      forName: UIApplication.didBecomeActiveNotification,
+      object: nil,
+      queue: nil
+    ) { [weak self] _ in
+      self?.recoverOutputFromBackground()
+    })
   }
 
   private func handleInterruption(_ notification: Notification) {
@@ -692,9 +875,11 @@ private final class PcmAudioPlayer {
       queue.async { [weak self] in
         guard let self else { return }
         var recovered = false
-        if shouldResume, self.playerNode != nil {
+        if shouldResume,
+           !self.backgroundSuspended,
+           self.playerNode != nil {
           do {
-            try AVAudioSession.sharedInstance().setActive(true)
+            try self.audioSessionPolicy.recoverOutputIfNeeded()
             if let engine = self.engine, !engine.isRunning {
               try engine.start()
             }
@@ -737,9 +922,10 @@ private final class PcmAudioPlayer {
       guard let self else { return }
       self.mediaServicesResetCount += 1
       let shouldRestart = self.playerNode != nil && self.sampleRate > 0
+      let shouldRemainBackgroundSuspended = self.backgroundSuspended
       let previousSampleRate = self.sampleRate
       let previousChannels = self.channels
-      self.stopLocked(deactivateSession: false)
+      self.stopLocked(releaseAudioSession: true)
       var recovered = false
       if shouldRestart {
         do {
@@ -747,6 +933,10 @@ private final class PcmAudioPlayer {
             sampleRate: previousSampleRate,
             channels: previousChannels
           )
+          if shouldRemainBackgroundSuspended {
+            self.backgroundSuspended = true
+            self.playerNode?.pause()
+          }
           recovered = true
         } catch {
           self.writeErrors += 1
@@ -755,6 +945,49 @@ private final class PcmAudioPlayer {
       }
       self.eventEmitter(
         "audioMediaServicesReset",
+        [
+          "recovered": recovered,
+          "outputActive": recovered && !shouldRemainBackgroundSuspended
+        ]
+      )
+    }
+  }
+
+  private func suspendOutputForBackground() {
+    queue.async { [weak self] in
+      guard let self, self.playerNode != nil, !self.backgroundSuspended else {
+        return
+      }
+      self.backgroundSuspended = true
+      self.playerNode?.pause()
+      self.eventEmitter(
+        "audioOutputSuspendedForBackground",
+        ["backgroundOutputSupported": false]
+      )
+    }
+  }
+
+  private func recoverOutputFromBackground() {
+    queue.async { [weak self] in
+      guard let self, self.backgroundSuspended, self.playerNode != nil else {
+        return
+      }
+      var recovered = false
+      do {
+        try self.audioSessionPolicy.recoverOutputIfNeeded()
+        if let engine = self.engine, !engine.isRunning {
+          try engine.start()
+        }
+        self.playerNode?.play()
+        self.backgroundSuspended = false
+        self.interrupted = false
+        recovered = true
+      } catch {
+        self.writeErrors += 1
+        self.lastError = "background recovery: \(error.localizedDescription)"
+      }
+      self.eventEmitter(
+        "audioOutputResumedFromBackground",
         ["recovered": recovered]
       )
     }

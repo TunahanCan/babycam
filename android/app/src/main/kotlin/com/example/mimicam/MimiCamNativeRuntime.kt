@@ -72,7 +72,7 @@ class PcmAudioPlayer(private val context: Context) {
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
         when (change) {
             AudioManager.AUDIOFOCUS_GAIN -> resumeAfterFocusGain()
-            AudioManager.AUDIOFOCUS_LOSS,
+            AudioManager.AUDIOFOCUS_LOSS -> stopForPermanentFocusLoss()
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> pauseForFocusLoss(change)
         }
@@ -86,6 +86,10 @@ class PcmAudioPlayer(private val context: Context) {
                 pausedForFocusLoss = true
                 interruptions += 1
             }
+            MimiCamPlatformRuntime.setAudioOutputActive(
+                false,
+                "audio_becoming_noisy"
+            )
             MimiCamPlatformRuntime.emit("audioBecomingNoisy")
         }
     }
@@ -164,7 +168,9 @@ class PcmAudioPlayer(private val context: Context) {
                 "audioPlaybackStarted",
                 mapOf("sampleRate" to safeSampleRate, "channels" to safeChannels)
             )
+            MimiCamPlatformRuntime.setAudioOutputActive(true, "audio_playback_started")
         } catch (error: Exception) {
+            MimiCamPlatformRuntime.setAudioOutputActive(false, "audio_playback_start_failed")
             abandonAudioFocus()
             unregisterAudioObservers()
             throw error
@@ -346,6 +352,7 @@ class PcmAudioPlayer(private val context: Context) {
         abandonAudioFocus()
         unregisterAudioObservers()
         MimiCamPlatformRuntime.emit("audioPlaybackStopped")
+        MimiCamPlatformRuntime.setAudioOutputActive(false, "audio_playback_stopped")
     }
 
     @Synchronized
@@ -404,6 +411,7 @@ class PcmAudioPlayer(private val context: Context) {
         interruptions += 1
         pausedForFocusLoss = true
         audioTrack?.pause()
+        MimiCamPlatformRuntime.setAudioOutputActive(false, "audio_focus_lost")
         MimiCamPlatformRuntime.emit(
             "audioFocusLost",
             mapOf("focusChange" to change)
@@ -416,7 +424,24 @@ class PcmAudioPlayer(private val context: Context) {
         if (!pausedForFocusLoss) return
         pausedForFocusLoss = false
         audioTrack?.play()
+        MimiCamPlatformRuntime.setAudioOutputActive(
+            audioTrack != null,
+            "audio_focus_gained"
+        )
         MimiCamPlatformRuntime.emit("audioFocusGained")
+    }
+
+    private fun stopForPermanentFocusLoss() {
+        synchronized(this) {
+            focusLosses += 1
+            interruptions += 1
+            lastError = "permanent audio focus loss"
+        }
+        MimiCamPlatformRuntime.emit(
+            "audioFocusLost",
+            mapOf("focusChange" to AudioManager.AUDIOFOCUS_LOSS, "permanent" to true)
+        )
+        stop()
     }
 
     private fun registerAudioObservers() {

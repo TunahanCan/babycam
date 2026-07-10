@@ -56,6 +56,43 @@ void main() {
           'audioUnderrun',
         ]));
   });
+
+  test('recovery hysteresis prevents thermal profile flapping', () {
+    final stabilizer = MediaResourceDecisionStabilizer(recoverySamples: 3);
+    final constrained = governor.evaluate(_input(
+      thermal: DeviceThermalState.serious,
+    ));
+    final healthy = governor.evaluate(_input(
+      thermal: DeviceThermalState.nominal,
+      charging: true,
+    ));
+
+    expect(
+      stabilizer.stabilize(constrained).state,
+      MediaDegradationState.survival,
+    );
+    expect(stabilizer.stabilize(healthy).state, MediaDegradationState.survival);
+    expect(
+        stabilizer.stabilize(healthy).reasons, contains('recoveryHysteresis'));
+    expect(stabilizer.stabilize(healthy).state, MediaDegradationState.normal);
+  });
+
+  test('audio-only recovery also requires stable healthy samples', () {
+    final stabilizer = MediaResourceDecisionStabilizer(recoverySamples: 3);
+    final audioOnly = governor.evaluate(_input(
+      thermal: DeviceThermalState.critical,
+      audioDemandAvailable: true,
+    ));
+    final healthy = governor.evaluate(_input(
+      thermal: DeviceThermalState.nominal,
+      charging: true,
+    ));
+
+    expect(stabilizer.stabilize(audioOnly).audioOnly, isTrue);
+    expect(stabilizer.stabilize(healthy).audioOnly, isTrue);
+    expect(stabilizer.stabilize(healthy).audioOnly, isTrue);
+    expect(stabilizer.stabilize(healthy).state, MediaDegradationState.normal);
+  });
 }
 
 MediaResourceGovernorInput _input({

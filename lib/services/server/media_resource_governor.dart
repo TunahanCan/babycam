@@ -37,7 +37,8 @@ class MediaResourceGovernorInput {
   final bool audioDemandAvailable;
 
   double get preEncodeDropRatio {
-    final total = framesCaptured + framesDroppedBeforeEncode;
+    // framesCaptured already includes frames later dropped before encode.
+    final total = framesCaptured;
     return total <= 0 ? 0 : framesDroppedBeforeEncode / total;
   }
 }
@@ -120,6 +121,50 @@ class MediaResourceGovernorDecision {
         'audioOnly': audioOnly,
         'reasons': reasons,
       };
+}
+
+/// Applies degradation immediately but requires repeated healthy samples
+/// before upgrading. This avoids camera restarts when thermal state oscillates
+/// around a platform threshold.
+class MediaResourceDecisionStabilizer {
+  MediaResourceDecisionStabilizer({this.recoverySamples = 3})
+      : assert(recoverySamples > 0);
+
+  final int recoverySamples;
+  MediaResourceGovernorDecision _current = MediaResourceGovernorDecision.normal;
+  int _healthySamples = 0;
+
+  MediaResourceGovernorDecision get current => _current;
+
+  MediaResourceGovernorDecision stabilize(
+    MediaResourceGovernorDecision next,
+  ) {
+    final currentSeverity = _current.state.index;
+    final nextSeverity = next.state.index;
+    if (nextSeverity >= currentSeverity) {
+      _current = next;
+      _healthySamples = 0;
+      return _current;
+    }
+    _healthySamples++;
+    if (_healthySamples >= recoverySamples) {
+      _current = next;
+      _healthySamples = 0;
+      return _current;
+    }
+    return MediaResourceGovernorDecision(
+      state: _current.state,
+      reasons: List<String>.unmodifiable({
+        ..._current.reasons,
+        'recoveryHysteresis',
+      }),
+    );
+  }
+
+  void reset() {
+    _current = MediaResourceGovernorDecision.normal;
+    _healthySamples = 0;
+  }
 }
 
 /// Combines thermal, power, codec and transport pressure into one deterministic

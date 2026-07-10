@@ -85,7 +85,10 @@ class BabyMonitorFeatureController {
   ) async {
     final session = talkSessions.recordAudio(token, bytes);
     if (session == null) {
-      await roomAudio.endTalk();
+      // A late chunk from an older upload must not preempt a newer talk
+      // generation. Only stop native output when no authoritative session
+      // remains.
+      if (talkSessions.activeSession == null) await roomAudio.endTalk();
       return const TalkAudioWriteResult(session: null, played: false);
     }
     _scheduleTalkExpiry(session);
@@ -93,8 +96,11 @@ class BabyMonitorFeatureController {
     return TalkAudioWriteResult(session: session, played: played);
   }
 
-  TalkSession? acceptTalkVideo(String token, Uint8List bytes) =>
-      talkSessions.recordVideo(token, bytes);
+  TalkSession? acceptTalkVideo(String token, Uint8List bytes) {
+    final session = talkSessions.recordVideo(token, bytes);
+    if (session != null) _scheduleTalkExpiry(session);
+    return session;
+  }
 
   bool isTalkTokenActive(String token) => talkSessions.isTokenActive(token);
 
@@ -109,6 +115,19 @@ class BabyMonitorFeatureController {
       'outputMode': roomAudio.mode.name,
       if (active != null) 'session': active.toJson(),
     };
+  }
+
+  Future<void> handleAudioOutputLost(String reason) async {
+    _talkExpiryTimer?.cancel();
+    _talkExpiryTimer = null;
+    final active = talkSessions.activeSession;
+    if (active != null) {
+      talkSessions.stop(clientId: active.clientId, token: active.token);
+    }
+    if (comfortAudio.state.playing) {
+      comfortAudio.markPlaybackFailed(reason);
+    }
+    await roomAudio.handleOutputLost();
   }
 
   Future<void> dispose() async {

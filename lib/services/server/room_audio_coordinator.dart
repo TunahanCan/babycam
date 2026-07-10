@@ -11,16 +11,19 @@ class RoomAudioCoordinator {
     PcmAudioSink sink = const PcmAudioOutput(),
     this.sampleRate = 16000,
     this.channels = 1,
-    this.frameDuration = const Duration(milliseconds: 20),
+    this.frameDuration = const Duration(milliseconds: 100),
     ComfortPcmGenerator? generator,
+    FutureOr<void> Function(bool active)? onOutputDemandChanged,
   })  : _sink = sink,
-        _generator = generator ?? ComfortPcmGenerator(sampleRate: sampleRate);
+        _generator = generator ?? ComfortPcmGenerator(sampleRate: sampleRate),
+        _onOutputDemandChanged = onOutputDemandChanged;
 
   final PcmAudioSink _sink;
   final ComfortPcmGenerator _generator;
   final int sampleRate;
   final int channels;
   final Duration frameDuration;
+  FutureOr<void> Function(bool active)? _onOutputDemandChanged;
 
   Future<void> _operations = Future<void>.value();
   Timer? _comfortTimer;
@@ -30,6 +33,7 @@ class RoomAudioCoordinator {
   bool _comfortRequested = false;
   bool _comfortWriteInFlight = false;
   bool _disposed = false;
+  final _modeChanges = StreamController<RoomAudioMode>.broadcast(sync: true);
   int _generation = 0;
   int _writesAccepted = 0;
   int _writesDropped = 0;
@@ -38,6 +42,16 @@ class RoomAudioCoordinator {
   Object? _lastError;
 
   RoomAudioMode get mode => _mode;
+  Stream<RoomAudioMode> get modeChanges => _modeChanges.stream;
+
+  /// Installs the platform demand bridge before any room output is started.
+  /// The server binds this during construction, including when a feature
+  /// controller was injected for tests or an alternate product shell.
+  void bindOutputDemandCallback(
+    FutureOr<void> Function(bool active)? callback,
+  ) {
+    _onOutputDemandChanged = callback;
+  }
 
   Future<void> applyComfort({
     required bool playing,
@@ -53,7 +67,16 @@ class RoomAudioCoordinator {
           await _stopOutputLocked();
           return;
         }
-        await _startComfortLocked();
+        try {
+          await _startComfortLocked();
+        } catch (_) {
+          _comfortRequested = false;
+          _comfortTimer?.cancel();
+          _comfortTimer = null;
+          await _stopSinkBestEffort();
+          _setMode(RoomAudioMode.idle);
+          rethrow;
+        }
       });
 
   Future<void> beginTalk({
@@ -65,9 +88,28 @@ class RoomAudioCoordinator {
         _comfortTimer?.cancel();
         _comfortTimer = null;
         await _stopSinkBestEffort();
-        await _sink.start(sampleRate: sampleRate, channels: channels);
-        _mode = RoomAudioMode.talk;
-        _lastError = null;
+        try {
+          await _startSinkWithDemand(
+            sampleRate: sampleRate,
+            channels: channels,
+          );
+          _setMode(RoomAudioMode.talk);
+          _lastError = null;
+        } catch (error, stackTrace) {
+          _setMode(RoomAudioMode.idle);
+          if (_comfortRequested && _comfortTrackId != null) {
+            try {
+              await _startComfortLocked();
+            } catch (_) {
+              _comfortRequested = false;
+              _comfortTimer?.cancel();
+              _comfortTimer = null;
+              await _stopSinkBestEffort();
+              _setMode(RoomAudioMode.idle);
+            }
+          }
+          Error.throwWithStackTrace(error, stackTrace);
+        }
       });
 
   Future<bool> writeTalk(Uint8List pcm16le) async {
@@ -99,10 +141,17 @@ class RoomAudioCoordinator {
   Future<void> endTalk() => _serialize(() async {
         if (_mode != RoomAudioMode.talk) return;
         await _stopSinkBestEffort();
-        _mode = RoomAudioMode.idle;
+        _setMode(RoomAudioMode.idle);
         if (_comfortRequested && _comfortTrackId != null) {
           await _startComfortLocked();
+        } else {
+          await _publishOutputDemand(false);
         }
+      });
+
+  Future<void> handleOutputLost() => _serialize(() async {
+        _comfortRequested = false;
+        await _stopOutputLocked();
       });
 
   Future<Map<String, Object?>> snapshot() async {
@@ -132,6 +181,7 @@ class RoomAudioCoordinator {
       _comfortRequested = false;
       await _stopOutputLocked();
     }, allowDisposed: true);
+    await _modeChanges.close();
   }
 
   Future<void> _startComfortLocked() async {
@@ -142,8 +192,11 @@ class RoomAudioCoordinator {
     _comfortTimer?.cancel();
     await _stopSinkBestEffort();
     _generator.reset(trackId);
-    await _sink.start(sampleRate: sampleRate, channels: channels);
-    _mode = RoomAudioMode.comfort;
+    await _startSinkWithDemand(
+      sampleRate: sampleRate,
+      channels: channels,
+    );
+    _setMode(RoomAudioMode.comfort);
     _lastError = null;
     _comfortTimer = Timer.periodic(frameDuration, (_) {
       _pumpComfort(generation);
@@ -195,12 +248,46 @@ class RoomAudioCoordinator {
     _comfortTimer?.cancel();
     _comfortTimer = null;
     await _stopSinkBestEffort();
-    _mode = RoomAudioMode.idle;
+    _setMode(RoomAudioMode.idle);
+    await _publishOutputDemand(false);
+  }
+
+  void _setMode(RoomAudioMode mode) {
+    if (_mode == mode) return;
+    _mode = mode;
+    if (!_modeChanges.isClosed) _modeChanges.add(mode);
   }
 
   Future<void> _stopSinkBestEffort() async {
     try {
       await _sink.stop();
+    } catch (error) {
+      _lastError = error;
+    }
+  }
+
+  Future<void> _startSinkWithDemand({
+    required int sampleRate,
+    required int channels,
+  }) async {
+    await _publishOutputDemand(true);
+    try {
+      await _sink.start(sampleRate: sampleRate, channels: channels);
+    } catch (error, stackTrace) {
+      await _publishOutputDemandBestEffort(false);
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
+  Future<void> _publishOutputDemand(bool active) async {
+    final callback = _onOutputDemandChanged;
+    if (callback == null) return;
+    await Future<void>.sync(() => callback(active));
+  }
+
+  Future<void> _publishOutputDemandBestEffort(bool active) async {
+    try {
+      await _publishOutputDemand(active);
     } catch (error) {
       _lastError = error;
     }

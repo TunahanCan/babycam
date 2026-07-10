@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../app/app_role.dart';
+import '../../core/network/lan_endpoint.dart';
 import '../../core/protocol/mimicam_protocol.dart';
 import '../../core/protocol/alert_event_dto.dart';
 import '../../core/protocol/pairing_payload.dart';
@@ -269,7 +270,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   Future<PairingPayload> _fetchManualPairingPayload(
       AppStrings strings, ({String host, int port}) address) async {
-    final client = HttpClient();
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
     try {
       return await _fetchManualPairingPayloadWithClient(
         strings,
@@ -286,20 +287,25 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     ({String host, int port}) address, {
     required HttpClient client,
   }) async {
-    final request = await client.getUrl(
-      Uri(
-        scheme: 'http',
-        host: address.host,
-        port: address.port,
-        path: MimiCamProtocolV2.statusPublic,
-      ),
-    );
-    final response = await request.close();
+    final request = await client
+        .getUrl(
+          Uri(
+            scheme: 'http',
+            host: address.host,
+            port: address.port,
+            path: MimiCamProtocolV2.statusPublic,
+          ),
+        )
+        .timeout(const Duration(seconds: 5));
+    final response = await request.close().timeout(const Duration(seconds: 5));
     if (response.statusCode != HttpStatus.ok) {
       throw StateError(
           strings.uiFormat('serverNotFound', {'code': response.statusCode}));
     }
-    final body = await utf8.decoder.bind(response).join();
+    final body = await utf8.decoder
+        .bind(response)
+        .join()
+        .timeout(const Duration(seconds: 5));
     final json = jsonDecode(body);
     if (json is! Map) {
       throw StateError(strings.ui('invalidServerResponse'));
@@ -331,13 +337,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   }
 
   ({String host, int port})? _parseManualAddress(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return null;
-    final parts = trimmed.split(':');
-    if (parts.length > 2 || parts.first.isEmpty) return null;
-    final port = parts.length == 2 ? int.tryParse(parts.last) : 8080;
-    if (port == null || port <= 0 || port > 65535) return null;
-    return (host: parts.first, port: port);
+    final endpoint = LanEndpoint.parse(value);
+    return endpoint == null ? null : (host: endpoint.host, port: endpoint.port);
   }
 
   void _openWatch(BuildContext context, ClientRuntimeState state) {

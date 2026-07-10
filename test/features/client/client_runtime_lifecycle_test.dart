@@ -101,6 +101,127 @@ void main() {
     expect(runtime.currentState.broadcastAccess?.isLocked, isTrue);
   });
 
+  test('room server paywall remains the client runtime authority', () async {
+    const remoteSnapshot = BroadcastAccessSnapshot(
+      unlocked: false,
+      active: false,
+      freeLimitMs: 100,
+      usedMs: 100,
+      remainingMs: 0,
+      priceLabel: r'$9.99',
+      productId: BroadcastAccessConfig.productId,
+    );
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      startStream: (_, {bool audioEnabled = false}) async =>
+          throw const BroadcastAccessLockedException(remoteSnapshot),
+    );
+
+    await runtime.pairWithServer(payload());
+    await expectLater(
+      runtime.startWatching(),
+      throwsA(isA<BroadcastAccessLockedException>()),
+    );
+
+    expect(runtime.canManageBroadcastPurchase, isFalse);
+    expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
+    expect(runtime.currentState.broadcastAccess, same(remoteSnapshot));
+  });
+
+  test('remote trial timer stops watch and locks from server snapshot',
+      () async {
+    var stops = 0;
+    var authorityReads = 0;
+    const lockedSnapshot = BroadcastAccessSnapshot(
+      unlocked: false,
+      active: false,
+      freeLimitMs: 100,
+      usedMs: 100,
+      remainingMs: 0,
+      priceLabel: r'$9.99',
+      productId: BroadcastAccessConfig.productId,
+    );
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      startStream: (_, {bool audioEnabled = false}) async =>
+          const ActiveStreamSession(
+        streamToken: 'stream',
+        broadcastAccess: BroadcastAccessSnapshot(
+          unlocked: false,
+          active: true,
+          freeLimitMs: 100,
+          usedMs: 90,
+          remainingMs: 10,
+          priceLabel: r'$9.99',
+          productId: BroadcastAccessConfig.productId,
+        ),
+      ),
+      stopStream: (_) async => stops++,
+      refreshRemoteBroadcastAccess: (_) async {
+        authorityReads++;
+        return lockedSnapshot;
+      },
+    );
+    await runtime.pairWithServer(payload());
+    await runtime.startWatching();
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    await pumpEventQueue();
+
+    expect(stops, 1);
+    expect(runtime.currentState.activeStream, isNull);
+    expect(runtime.currentState.broadcastAccess?.isLocked, isTrue);
+    expect(runtime.currentState.error, isA<BroadcastAccessLockedException>());
+    expect(authorityReads, 1);
+    await runtime.dispose();
+  });
+
+  test(
+      'stale remote trial deadline cannot stop an authoritatively unlocked watch',
+      () async {
+    var stops = 0;
+    var reads = 0;
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      startStream: (_, {bool audioEnabled = false}) async =>
+          const ActiveStreamSession(
+        streamToken: 'stream',
+        broadcastAccess: BroadcastAccessSnapshot(
+          unlocked: false,
+          active: true,
+          freeLimitMs: 100,
+          usedMs: 95,
+          remainingMs: 5,
+          priceLabel: r'$9.99',
+          productId: BroadcastAccessConfig.productId,
+        ),
+      ),
+      stopStream: (_) async => stops++,
+      refreshRemoteBroadcastAccess: (_) async {
+        reads++;
+        return const BroadcastAccessSnapshot(
+          unlocked: true,
+          active: true,
+          freeLimitMs: 100,
+          usedMs: 95,
+          remainingMs: 5,
+          priceLabel: r'$9.99',
+          productId: BroadcastAccessConfig.productId,
+        );
+      },
+    );
+    addTearDown(runtime.dispose);
+
+    await runtime.pairWithServer(payload());
+    await runtime.startWatching();
+    await Future<void>.delayed(const Duration(milliseconds: 35));
+    await pumpEventQueue();
+
+    expect(reads, 1);
+    expect(stops, 0);
+    expect(runtime.currentState.activeStream, isNotNull);
+    expect(runtime.currentState.broadcastAccess?.unlocked, isTrue);
+  });
+
   test('canlı izleme başlatma hatası runtime state içinde görünür', () async {
     final runtime = ClientRuntime(
       pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
@@ -156,7 +277,7 @@ void main() {
     expect(runtime.currentState.mediaProfile?.audioFirst, isTrue);
   });
 
-  test('canlı izleme sırasında bildirim dinleme state içinde korunur',
+  test('watch geçişi alert demandini kapatır ve fallback yeniden açabilir',
       () async {
     var alertStarted = 0;
     var alertStopped = 0;
@@ -178,6 +299,10 @@ void main() {
 
     expect(alertStarted, 1);
     expect(runtime.currentState.phase, ClientRuntimePhase.watching);
+    expect(runtime.currentState.alertsActive, isFalse);
+    expect(alertStopped, 1);
+
+    await runtime.startAlertListening();
     expect(runtime.currentState.alertsActive, isTrue);
 
     await runtime.stopWatching();
@@ -185,9 +310,66 @@ void main() {
     expect(runtime.currentState.alertsActive, isTrue);
 
     await runtime.stopAlertListening();
-    expect(alertStopped, 1);
+    expect(alertStopped, 2);
     expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
     expect(runtime.currentState.alertsActive, isFalse);
+  });
+
+  test('restart eski streami kapatıp yeni audio demand ile tekil başlatır',
+      () async {
+    final calls = <String>[];
+    var sequence = 0;
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      startStream: (_, {bool audioEnabled = false}) async {
+        calls.add('start:$audioEnabled');
+        return ActiveStreamSession(
+          streamToken: 'stream-${++sequence}',
+          audioEnabled: audioEnabled,
+        );
+      },
+      stopStream: (_) async => calls.add('stop'),
+    );
+    await runtime.pairWithServer(payload());
+    await runtime.startWatching();
+
+    await runtime.restartWatching(audioEnabled: true);
+
+    expect(calls, ['start:false', 'stop', 'start:true']);
+    expect(runtime.currentState.activeStream?.streamToken, 'stream-2');
+    expect(runtime.currentState.activeStream?.audioEnabled, isTrue);
+    expect(runtime.currentState.phase, ClientRuntimePhase.watching);
+  });
+
+  test('stale screen release cannot stop or arm alerts over a newer watch',
+      () async {
+    var starts = 0;
+    var stops = 0;
+    var alertStarts = 0;
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      startStream: (_, {bool audioEnabled = false}) async =>
+          ActiveStreamSession(streamToken: 'stream-${++starts}'),
+      stopStream: (_) async => stops++,
+      startAlerts: (_) async {
+        alertStarts++;
+        return true;
+      },
+    );
+    addTearDown(runtime.dispose);
+    await runtime.pairWithServer(payload());
+
+    final oldPresentation = runtime.claimWatchPresentation();
+    await runtime.startWatching();
+    final oldRelease = runtime.releaseWatchPresentation(oldPresentation);
+    runtime.claimWatchPresentation();
+    await runtime.startWatching();
+    await oldRelease;
+
+    expect(starts, 2);
+    expect(stops, 1, reason: 'yalnız replacement eski streami kapatır');
+    expect(alertStarts, 0);
+    expect(runtime.currentState.activeStream?.streamToken, 'stream-2');
   });
 
   test('bildirim izni açılmazsa alert listener kapalı kalır', () async {
@@ -265,6 +447,149 @@ void main() {
     expect(runtime.currentState.session?.sessionToken, 'expired-token');
     expect(cleared, 1);
     expect(stopped, 0);
+  });
+
+  test('trusted DNS-SD endpoint change is persisted and active alerts rebind',
+      () async {
+    final endpointUpdates = StreamController<PairingSession>();
+    final persisted = <PairingSession>[];
+    final alertHosts = <String>[];
+    final alertRebound = Completer<void>();
+    var alertStops = 0;
+    var qualityWatches = 0;
+    final original = PairingSession(
+      payload: payload(),
+      sessionToken: 'trusted-token',
+      clientId: 'trusted-client',
+      trustedClientTokenExpiresAtMs:
+          DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch,
+      pairedAtMs: 42,
+    );
+    final rebound = PairingSession(
+      payload: PairingPayload(
+        schemaVersion: original.payload.schemaVersion,
+        host: 'fd00::77',
+        port: 9090,
+        deviceId: original.deviceId,
+        deviceName: original.deviceName,
+        pairingNonce: original.payload.pairingNonce,
+        expiresAtMs: original.payload.expiresAtMs,
+        capabilities: original.payload.capabilities,
+      ),
+      sessionToken: 'untrusted-replacement-token',
+      clientId: 'untrusted-client',
+    );
+    final runtime = ClientRuntime(
+      pair: (_) async => original,
+      watchSessionEndpoints: (_) => endpointUpdates.stream,
+      persistReboundSession: (session) async => persisted.add(session),
+      watchNetworkQuality: (_) {
+        qualityWatches++;
+        return const Stream.empty();
+      },
+      startAlerts: (session) async {
+        alertHosts.add(session.host);
+        if (session.host == rebound.host && !alertRebound.isCompleted) {
+          alertRebound.complete();
+        }
+        return true;
+      },
+      stopAlerts: () async => alertStops++,
+    );
+
+    await runtime.restoreSession(original);
+    await runtime.startAlertListening();
+    final reboundState = runtime.states.firstWhere(
+      (state) => state.session?.host == rebound.host,
+    );
+    endpointUpdates.add(rebound);
+    await reboundState.timeout(const Duration(seconds: 2));
+    await alertRebound.future.timeout(const Duration(seconds: 2));
+
+    expect(runtime.currentState.session?.host, 'fd00::77');
+    expect(runtime.currentState.session?.port, 9090);
+    expect(runtime.currentState.session?.sessionToken, 'trusted-token');
+    expect(runtime.currentState.session?.clientId, 'trusted-client');
+    expect(persisted.single.sessionToken, 'trusted-token');
+    expect(alertHosts, ['h', 'fd00::77']);
+    expect(alertStops, 1);
+    expect(qualityWatches, 2);
+
+    await runtime.dispose();
+    await endpointUpdates.close();
+  });
+
+  test('endpoint rebind cannot be overwritten by an in-flight stream start',
+      () async {
+    final endpointUpdates = StreamController<PairingSession>();
+    final streamStartEntered = Completer<void>();
+    final finishStreamStart = Completer<void>();
+    final startHosts = <String>[];
+    final stopHosts = <String>[];
+    final original = PairingSession(
+      payload: payload(),
+      sessionToken: 'trusted-token',
+      clientId: 'trusted-client',
+    );
+    final rebound = PairingSession(
+      payload: PairingPayload(
+        schemaVersion: original.payload.schemaVersion,
+        host: 'fd00::99',
+        port: 9091,
+        deviceId: original.deviceId,
+        deviceName: original.deviceName,
+        pairingNonce: original.payload.pairingNonce,
+        expiresAtMs: original.payload.expiresAtMs,
+        capabilities: original.payload.capabilities,
+      ),
+      sessionToken: 'ignored-replacement-token',
+    );
+    final runtime = ClientRuntime(
+      pair: (_) async => original,
+      watchSessionEndpoints: (_) => endpointUpdates.stream,
+      startStream: (session, {bool audioEnabled = false}) async {
+        startHosts.add(session.host);
+        if (!streamStartEntered.isCompleted) streamStartEntered.complete();
+        await finishStreamStart.future;
+        return const ActiveStreamSession(streamToken: 'stream');
+      },
+      stopStream: (session) async => stopHosts.add(session.host),
+    );
+    addTearDown(runtime.dispose);
+    addTearDown(endpointUpdates.close);
+
+    await runtime.restoreSession(original);
+    final watching = runtime.startWatching();
+    await streamStartEntered.future;
+    endpointUpdates.add(rebound);
+    finishStreamStart.complete();
+    await watching;
+    await runtime.states
+        .firstWhere((state) => state.session?.host == rebound.host)
+        .timeout(const Duration(seconds: 2));
+
+    expect(runtime.currentState.session?.host, rebound.host);
+    expect(startHosts, ['h']);
+
+    await runtime.stopWatching();
+    expect(stopHosts, ['h']);
+  });
+
+  test('endpoint watcher failure does not undo a trusted session', () async {
+    final session = PairingSession(
+      payload: payload(),
+      sessionToken: 'trusted-token',
+    );
+    final runtime = ClientRuntime(
+      pair: (_) async => session,
+      watchSessionEndpoints: (_) => throw StateError('DNS-SD unavailable'),
+    );
+
+    await runtime.restoreSession(session);
+
+    expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
+    expect(runtime.currentState.session, same(session));
+    await runtime.dispose();
   });
 }
 

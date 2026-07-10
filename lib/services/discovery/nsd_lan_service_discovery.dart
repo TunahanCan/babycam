@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use_from_same_package
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -7,6 +9,10 @@ import 'package:nsd/nsd.dart' as nsd;
 import '../../core/network/retry_policy.dart';
 import 'lan_service_discovery.dart';
 
+@Deprecated(
+  'Use MimiCamServiceAdvertiser and MimiCamServiceBrowser from '
+  'mimicam_service_discovery.dart.',
+)
 class NsdLanServiceDiscovery implements LanServiceDiscovery {
   NsdLanServiceDiscovery({
     RetryPolicy? retryPolicy,

@@ -1,13 +1,23 @@
 import 'dart:async';
 
 class MediaResourceDemand {
-  const MediaResourceDemand({required this.video, required this.audio});
+  const MediaResourceDemand({
+    required this.video,
+    required this.audio,
+    bool? serviceVideoCapture,
+    bool? serviceAudioCapture,
+  })  : assert(serviceVideoCapture != true || video),
+        assert(serviceAudioCapture != true || audio),
+        serviceVideoCapture = serviceVideoCapture ?? video,
+        serviceAudioCapture = serviceAudioCapture ?? audio;
 
   static const none = MediaResourceDemand(video: false, audio: false);
   static const all = MediaResourceDemand(video: true, audio: true);
 
   final bool video;
   final bool audio;
+  final bool serviceVideoCapture;
+  final bool serviceAudioCapture;
 
   bool get isEmpty => !video && !audio;
 
@@ -15,13 +25,18 @@ class MediaResourceDemand {
   bool operator ==(Object other) =>
       other is MediaResourceDemand &&
       other.video == video &&
-      other.audio == audio;
+      other.audio == audio &&
+      other.serviceVideoCapture == serviceVideoCapture &&
+      other.serviceAudioCapture == serviceAudioCapture;
 
   @override
-  int get hashCode => Object.hash(video, audio);
+  int get hashCode =>
+      Object.hash(video, audio, serviceVideoCapture, serviceAudioCapture);
 
   @override
-  String toString() => 'MediaResourceDemand(video: $video, audio: $audio)';
+  String toString() => 'MediaResourceDemand(video: $video, audio: $audio, '
+      'serviceVideoCapture: $serviceVideoCapture, '
+      'serviceAudioCapture: $serviceAudioCapture)';
 }
 
 /// Serial, race-safe reconciler for independently owned camera and microphone

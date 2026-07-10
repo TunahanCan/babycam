@@ -1,0 +1,314 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mimicam.local/schemas/device-matrix-result-v1.json",
+  "title": "MimiCam physical-device matrix result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "suiteId",
+    "runId",
+    "createdAt",
+    "completedAt",
+    "git",
+    "invocation",
+    "environment",
+    "devices",
+    "automation",
+    "cases",
+    "summary"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "suiteId": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "completedAt": {
+      "oneOf": [
+        { "type": "string", "format": "date-time" },
+        { "type": "null" }
+      ]
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "dirty"],
+      "properties": {
+        "commit": { "type": ["string", "null"] },
+        "dirty": { "type": ["boolean", "null"] }
+      }
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dryRun",
+        "flutterBinary",
+        "buildMode",
+        "mediaLane",
+        "selectedCaseIds",
+        "plannedCommands"
+      ],
+      "properties": {
+        "dryRun": { "type": "boolean" },
+        "flutterBinary": { "type": "string", "minLength": 1 },
+        "buildMode": { "enum": ["debug", "profile", "release"] },
+        "mediaLane": { "enum": ["legacy", "webrtc", "mixed"] },
+        "selectedCaseIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "plannedCommands": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostPlatform", "workingDirectory", "networkLabel"],
+      "properties": {
+        "hostPlatform": { "type": "string", "minLength": 1 },
+        "workingDirectory": { "type": "string", "minLength": 1 },
+        "networkLabel": { "type": "string", "minLength": 1 }
+      }
+    },
+    "devices": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/device" }
+    },
+    "automation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "deviceDiscovery",
+        "preflightTests",
+        "launches",
+        "probe",
+        "messages"
+      ],
+      "properties": {
+        "status": { "$ref": "#/$defs/status" },
+        "deviceDiscovery": {
+          "oneOf": [
+            { "$ref": "#/$defs/command" },
+            { "type": "null" }
+          ]
+        },
+        "preflightTests": {
+          "oneOf": [
+            { "$ref": "#/$defs/command" },
+            { "type": "null" }
+          ]
+        },
+        "launches": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "probe": { "type": ["object", "null"] },
+        "messages": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/case" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "total",
+        "counts",
+        "gateFailures",
+        "validationFailures"
+      ],
+      "properties": {
+        "status": { "$ref": "#/$defs/status" },
+        "total": { "type": "integer", "minimum": 0 },
+        "counts": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "gateFailures": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "validationFailures": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "status": {
+      "enum": [
+        "planned",
+        "running",
+        "pass",
+        "fail",
+        "blocked",
+        "skipped",
+        "timeout"
+      ]
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executable",
+        "arguments",
+        "status",
+        "exitCode",
+        "durationMs",
+        "stdout",
+        "stderr"
+      ],
+      "properties": {
+        "executable": { "type": "string", "minLength": 1 },
+        "arguments": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "status": { "$ref": "#/$defs/status" },
+        "exitCode": { "type": ["integer", "null"] },
+        "durationMs": { "type": ["integer", "null"], "minimum": 0 },
+        "stdout": { "type": ["string", "null"] },
+        "stderr": { "type": ["string", "null"] }
+      }
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "platform",
+        "targetPlatform",
+        "emulator",
+        "physical",
+        "supported",
+        "sdk"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "platform": { "enum": ["ios", "android", "other"] },
+        "targetPlatform": { "type": "string" },
+        "emulator": { "type": "boolean" },
+        "physical": { "type": "boolean" },
+        "supported": { "type": "boolean" },
+        "sdk": { "type": ["string", "null"] }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "status", "note"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "status": { "$ref": "#/$defs/status" },
+        "note": { "type": ["string", "null"] }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "status",
+        "serverDeviceId",
+        "clientDeviceId",
+        "platforms",
+        "mediaLane",
+        "networkLane",
+        "estimatedMinutes",
+        "startedAt",
+        "completedAt",
+        "setup",
+        "steps",
+        "checks",
+        "measurements",
+        "measurementDefinitions",
+        "observations",
+        "artifacts",
+        "requiredArtifacts",
+        "diagnostics"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "status": { "$ref": "#/$defs/status" },
+        "serverDeviceId": { "type": ["string", "null"] },
+        "clientDeviceId": { "type": ["string", "null"] },
+        "platforms": {
+          "type": "array",
+          "items": { "enum": ["ios", "android"] },
+          "uniqueItems": true
+        },
+        "mediaLane": { "enum": ["legacy", "webrtc", "both"] },
+        "networkLane": { "type": "string", "minLength": 1 },
+        "estimatedMinutes": { "type": "integer", "minimum": 1 },
+        "startedAt": {
+          "oneOf": [
+            { "type": "string", "format": "date-time" },
+            { "type": "null" }
+          ]
+        },
+        "completedAt": {
+          "oneOf": [
+            { "type": "string", "format": "date-time" },
+            { "type": "null" }
+          ]
+        },
+        "setup": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "steps": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "checks": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/check" }
+        },
+        "measurements": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["number", "string", "boolean", "null"]
+          }
+        },
+        "measurementDefinitions": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "observations": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "requiredArtifacts": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "diagnostics": { "type": "object" }
+      }
+    }
+  }
+}

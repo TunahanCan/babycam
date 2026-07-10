@@ -46,6 +46,7 @@ import 'server/active_client_registry.dart';
 import 'server/alert_protocol_adapter.dart';
 import 'server/baby_monitor_feature_services.dart';
 import 'server/baby_monitor_feature_controller.dart';
+import 'server/best_effort_operation_collector.dart';
 import 'server/camera_jpeg_worker.dart';
 import 'server/jpeg_byte_budget_controller.dart';
 import 'server/media_analysis_coordinator.dart';
@@ -54,7 +55,12 @@ import 'server/media_analysis_metrics.dart';
 import 'server/media_profile_apply_queue.dart';
 import 'server/media_quality_selector.dart';
 import 'server/media_resource_governor.dart';
+import 'server/pcm16_frame_assembler.dart';
 import 'server/request_auth_guard.dart';
+import 'server/room_audio_coordinator.dart';
+import 'server/server_device_identity_resolver.dart';
+import 'server/server_resource_policy_coordinator.dart';
+import 'server/server_session_operation_queue.dart';
 import 'server/stream_backpressure_gate.dart';
 import 'server/test_dashboard_assets.dart';
 import 'server/wav_pcm16.dart';
@@ -77,6 +83,11 @@ class MimiCamServer {
     this.onMediaProfileChanged,
     this.onStreamSessionStarted,
     this.onStreamSessionStopped,
+    this.onWebRtcCaptureStarting,
+    this.onWebRtcCaptureEnded,
+    this.onAlertClientConnected,
+    this.onAlertClientDisconnected,
+    this.onPlaybackDemandChanged,
     DeviceCapabilityTier? deviceTier,
     PairingTokenService? tokenService,
     this.transportConfig = TransportConfig.local,
@@ -91,6 +102,7 @@ class MimiCamServer {
     TalkSessionRegistry? talkSessions,
     BabyMonitorFeatureController? featureController,
     MimiCamServiceAdvertiser? serviceAdvertiser,
+    MimiCamDiscoveryDeviceIdProvider? serverDeviceIdProvider,
     BatterySnapshotProvider? batteryProvider,
     BroadcastAccessService? broadcastAccess,
     DeviceResourceSnapshotProvider? deviceResourceProvider,
@@ -108,6 +120,9 @@ class MimiCamServer {
               talkSessions: talkSessions,
             ),
         _serviceAdvertiser = serviceAdvertiser,
+        _serverDeviceIdentityResolver = ServerDeviceIdentityResolver(
+          serverDeviceIdProvider ?? (() => 'server_local'),
+        ),
         _batteryProvider = CachedBatterySnapshotProvider(
           batteryProvider ?? BatteryPlusSnapshotProvider(),
         ),
@@ -116,17 +131,28 @@ class MimiCamServer {
           deviceResourceProvider ??
               const MethodChannelDeviceResourceSnapshotProvider(),
         ),
-        _mediaResourceGovernor =
-            mediaResourceGovernor ?? const MediaResourceGovernor(),
         _mediaTelemetry = mediaTelemetry ?? MediaSessionTelemetry.shared,
         _deviceTier = deviceTier ?? DeviceCapabilityProbe.detectTier() {
     _activeMediaProfile = MediaQualityProfile.forDeviceTier(_deviceTier);
+    _effectiveLocalNetworkGuard = localNetworkGuard;
     _frameBudget.updateMinInterval(_activeMediaProfile.frameInterval);
     _activeClientRegistry = ActiveClientRegistry(
       tokenService: this.tokenService,
       maxActiveClients: maxActiveWatchClients,
     );
     _authGuard = RequestAuthGuard(tokenService: this.tokenService);
+    _resourcePolicyCoordinator = ServerResourcePolicyCoordinator(
+      governor: mediaResourceGovernor ?? const MediaResourceGovernor(),
+      monitoringRequired: _isResourceMonitoringRequired,
+      refreshProfile: _refreshResourceProfile,
+      onMonitoringIdle: () {
+        _resourcePolicyCoordinator.resetDecision();
+        _resourceDecision = MediaResourceGovernorDecision.normal;
+      },
+      onWatchdogError: (error) {
+        onLog('Resource watchdog could not apply a profile: $error');
+      },
+    );
     _videoStreamService = MjpegStreamService(
       onClientDetached: _activeClientRegistry.detachStream,
       telemetry: _mediaTelemetry,
@@ -144,6 +170,32 @@ class MimiCamServer {
     });
     if (_routeTable.length != routes.length) {
       throw StateError('Duplicate MimiCam HTTP route path.');
+    }
+    final peerLifecycle = webRtcGateway;
+    if (peerLifecycle is WebRtcPeerLifecycleSource) {
+      _webRtcPeerSubscription =
+          (peerLifecycle as WebRtcPeerLifecycleSource).peerEvents.listen(
+        _handleWebRtcPeerLifecycleEvent,
+        onError: (Object error, StackTrace _) {
+          onLog('WebRTC peer lifecycle stream failed: $error');
+        },
+      );
+    }
+    _features.roomAudio.bindOutputDemandCallback(onPlaybackDemandChanged);
+    _roomAudioModeSubscription = _features.roomAudio.modeChanges.listen(
+      _handleRoomAudioModeChanged,
+      onError: (Object error, StackTrace _) {
+        onLog('Room audio lifecycle stream failed: $error');
+      },
+    );
+    final injectedLumaSource = mediaSource;
+    if (injectedLumaSource case ServerLumaFrameSource lumaSource) {
+      _injectedLumaSubscription = lumaSource.lumaFrames.listen(
+        _handleInjectedLumaFrame,
+        onError: (Object error, StackTrace _) {
+          onLog('Native luma analysis stream failed: $error');
+        },
+      );
     }
   }
 
@@ -164,10 +216,16 @@ class MimiCamServer {
     required String mediaTransport,
   })? onStreamSessionStarted;
   final FutureOr<void> Function(String clientId)? onStreamSessionStopped;
+  final FutureOr<void> Function(String clientId)? onWebRtcCaptureStarting;
+  final FutureOr<void> Function(String clientId)? onWebRtcCaptureEnded;
+  final FutureOr<void> Function(String clientId)? onAlertClientConnected;
+  final FutureOr<void> Function(String clientId)? onAlertClientDisconnected;
+  final FutureOr<void> Function(bool active)? onPlaybackDemandChanged;
   final PairingTokenService tokenService;
   final MediaPermissionGateway mediaPermissions;
   final TransportConfig transportConfig;
   final LocalNetworkGuard localNetworkGuard;
+  late LocalNetworkGuard _effectiveLocalNetworkGuard;
   final int maxActiveWatchClients;
   final bool startMediaOnSessionStart;
   final ServerMediaSource? mediaSource;
@@ -176,7 +234,12 @@ class MimiCamServer {
   MediaAnalysisCoordinator? _analysisCoordinator;
   MediaAnalysisMetrics? _analysisMetrics;
   StreamSubscription<AlertEvent>? _alertSubscription;
+  StreamSubscription<WebRtcPeerLifecycleEvent>? _webRtcPeerSubscription;
+  StreamSubscription<RoomAudioMode>? _roomAudioModeSubscription;
+  StreamSubscription<LumaFrame>? _injectedLumaSubscription;
   final _webSockets = <WebSocket>{};
+  final _webSocketClientIds = <WebSocket, String>{};
+  final _eventClientSocketCounts = <String, int>{};
   late final ActiveClientRegistry _activeClientRegistry;
   late final RequestAuthGuard _authGuard;
   final _microphoneCapture = MicrophoneCaptureService(
@@ -185,22 +248,31 @@ class MimiCamServer {
   );
   final BabyMonitorFeatureController _features;
   final MimiCamServiceAdvertiser? _serviceAdvertiser;
+  final ServerDeviceIdentityResolver _serverDeviceIdentityResolver;
   final BatterySnapshotProvider _batteryProvider;
   final BroadcastAccessService? _broadcastAccess;
   final DeviceResourceSnapshotProvider _deviceResourceProvider;
-  final MediaResourceGovernor _mediaResourceGovernor;
+  late final ServerResourcePolicyCoordinator _resourcePolicyCoordinator;
   final MediaSessionTelemetry _mediaTelemetry;
   Timer? _broadcastAccessTimer;
+  int _broadcastAccessTimerGeneration = 0;
   BatterySnapshot _serverBattery = BatterySnapshot.unknown();
   final _clientBatterySnapshots = <String, BatterySnapshot>{};
   late final MjpegStreamService _videoStreamService;
   late final WavAudioStreamService _audioStreamService;
   late final Map<String, _RouteSpec> _routeTable;
+  final _sessionOperations = ServerSessionOperationQueue();
 
   CameraController? cameraController;
   DeviceCapabilityTier get deviceTier => _deviceTier;
   MediaQualityProfile get activeMediaProfile => _activeMediaProfile;
   Map<String, Object?> get mediaCapabilities => _mediaCapabilities();
+  Future<String> get serverDeviceId => _serverDeviceIdentityResolver.resolve();
+
+  Future<void> handleAudioOutputLost(String reason) async {
+    await _features.handleAudioOutputLost(reason);
+    _updateResourceWatchdog();
+  }
 
   HttpServer? _httpServer;
   bool _httpServerListening = false;
@@ -208,7 +280,10 @@ class MimiCamServer {
   bool _disposed = false;
   bool _wakelockEnabled = false;
   Future<void>? _mediaStart;
+  bool _videoCaptureDesired = false;
   final _standaloneSessionDemands = <String, ({bool video, bool audio})>{};
+  final _sessionMediaDemands = <String, ({bool video, bool audio})>{};
+  final _runtimeSessionClients = <String>{};
   Uint8List? _latestJpeg;
   int? _lastCameraFrameAtMs;
   int? _lastVideoFrameEncodedAtMs;
@@ -216,6 +291,7 @@ class MimiCamServer {
   int? _videoProbeEncodeUntilMs;
   int _videoFramesEncoded = 0;
   int _videoFramesDroppedBeforeEncode = 0;
+  int _videoFramesSkippedByPolicy = 0;
   int _videoFramesCaptured = 0;
   int _videoTraceSequence = 0;
   bool _jpegEncodeInFlight = false;
@@ -226,6 +302,7 @@ class MimiCamServer {
   int _lastJpegBytes = 0;
   int _lastAlertDeliveredWebSocketClients = 0;
   int _lastAudioDebugLog = 0;
+  int _selfAudioSuppressedChunks = 0;
   final _frameBudget = MediaFrameBudget();
   final _frameBudgetManager = const FrameBudgetManager();
   final _encodingPolicy = const MediaEncodingPolicy();
@@ -296,17 +373,32 @@ class MimiCamServer {
         (boundType == InternetAddressType.IPv4
             ? InternetAddress.loopbackIPv4.address
             : InternetAddress.loopbackIPv6.address);
+    try {
+      final prefixes = await NetworkAddressProvider.localIpv6Prefixes();
+      _effectiveLocalNetworkGuard = LocalNetworkGuard(
+        allowLoopback: localNetworkGuard.allowLoopback,
+        allowGlobalIpv6WithoutPrefixContext:
+            localNetworkGuard.allowGlobalIpv6WithoutPrefixContext,
+        localPrefixes: [
+          ...localNetworkGuard.localPrefixes,
+          ...prefixes,
+        ],
+      );
+    } catch (error) {
+      onLog('Local IPv6 prefix context could not be loaded: $error');
+    }
     if (!_httpServerListening) {
       _httpServerListening = true;
       _httpServer!.listen(_handleRequest);
     }
     _pairingModeActive = true;
+    final deviceId = await _serverDeviceIdentityResolver.resolve();
     final serviceAdvertiser = _serviceAdvertiser;
     if (serviceAdvertiser != null) {
       try {
         await serviceAdvertiser.start(
           name: 'MimiCam Bebek Odası',
-          deviceId: 'server_local',
+          deviceId: deviceId,
           port: _httpServer!.port,
           protocolVersion: protocol_v2.MimiCamProtocolV2.schemaVersion,
           webRtcAvailable:
@@ -342,6 +434,7 @@ class MimiCamServer {
 
   Future<void> startVideoRuntime() async {
     if (_disposed) throw StateError('MimiCamServer is disposed.');
+    _videoCaptureDesired = true;
     final source = mediaSource;
     if (source != null) {
       await _reconcileInjectedMediaSource(source, video: true);
@@ -360,6 +453,9 @@ class MimiCamServer {
     _mediaStart = start;
     try {
       await start;
+    } catch (_) {
+      _videoCaptureDesired = false;
+      rethrow;
     } finally {
       if (_mediaStart == start) _mediaStart = null;
     }
@@ -505,7 +601,11 @@ class MimiCamServer {
   }
 
   Future<void> reloadAnalysisConfig() async {
-    if (cameraController == null && !_microphoneCapture.isActive) return;
+    if (cameraController == null &&
+        !_microphoneCapture.isActive &&
+        mediaSource?.isActive != true) {
+      return;
+    }
     await _alertSubscription?.cancel();
     _alertSubscription = null;
     await _analysisCoordinator?.dispose();
@@ -518,12 +618,17 @@ class MimiCamServer {
     final started = await _microphoneCapture.start(
       onChunk: (chunk) {
         _mediaTelemetry.increment(MediaMetricName.audioCapturedCount);
-        _analysisCoordinator?.onAudioChunk(AudioChunk(
-          pcm16le: chunk.rawPcm16le,
-          sampleRate: chunk.sampleRate,
-          channels: chunk.channels,
-          timestampMs: chunk.timestampMs,
-        ));
+        if (_features.roomAudio.mode == RoomAudioMode.idle) {
+          _analysisCoordinator?.onAudioChunk(AudioChunk(
+            pcm16le: chunk.rawPcm16le,
+            sampleRate: chunk.sampleRate,
+            channels: chunk.channels,
+            timestampMs: chunk.timestampMs,
+          ));
+        } else {
+          // Do not classify room-generated comfort/talk output as a cry.
+          _selfAudioSuppressedChunks++;
+        }
         if (enableLegacyWebSocketMediaPackets) {
           _broadcastBinary(
               [MimiCamProtocol.packetAudioPcm16Le, ...chunk.streamPcm16le]);
@@ -679,11 +784,18 @@ class MimiCamServer {
     final capturedAtMonoUs = _mediaTelemetry.nowUs;
     final traceId = '${_mediaTelemetry.generation}-${++_videoTraceSequence}';
     _videoFramesCaptured++;
+    _mediaTelemetry.increment(MediaMetricName.videoCapturedCount);
+    _lastCameraFrameAtMs = nowMs;
+    _updateContentAwareFrameBudget(nowMs);
+    if (!_frameBudget.shouldProcess(nowMs)) {
+      // Native service frames arrive as already encoded JPEG. This is an
+      // intentional transport/profile skip, not encoder overload.
+      _videoFramesSkippedByPolicy++;
+      return;
+    }
     _mediaTelemetry
-      ..increment(MediaMetricName.videoCapturedCount)
       ..increment(MediaMetricName.videoEncodedCount)
       ..recordDurationUs(MediaMetricName.videoEncode, 0);
-    _lastCameraFrameAtMs = nowMs;
     _latestJpeg = jpeg;
     _lastVideoFrameEncodedAtMs = nowMs;
     _lastJpegBytes = jpeg.length;
@@ -700,16 +812,27 @@ class MimiCamServer {
     );
   }
 
+  void _handleInjectedLumaFrame(LumaFrame frame) {
+    if (!_injectedVideoDemand) return;
+    _analysisCoordinator?.onCameraFrame(frame);
+  }
+
   void _handleInjectedAudioChunk(Uint8List pcm16le) {
     if (pcm16le.isEmpty) return;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     _mediaTelemetry.increment(MediaMetricName.audioCapturedCount);
-    _analysisCoordinator?.onAudioChunk(AudioChunk(
-      pcm16le: pcm16le,
-      sampleRate: _audioSampleRate,
-      channels: _audioChannels,
-      timestampMs: nowMs,
-    ));
+    if (_features.roomAudio.mode == RoomAudioMode.idle) {
+      _analysisCoordinator?.onAudioChunk(AudioChunk(
+        pcm16le: pcm16le,
+        sampleRate: _audioSampleRate,
+        channels: _audioChannels,
+        timestampMs: nowMs,
+      ));
+    } else {
+      // Android's service-owned microphone can hear AudioTrack output just as
+      // the Dart recorder can. Never classify comfort/talk loopback as a cry.
+      _selfAudioSuppressedChunks++;
+    }
     if (enableLegacyWebSocketMediaPackets) {
       _broadcastBinary([MimiCamProtocol.packetAudioPcm16Le, ...pcm16le]);
     }
@@ -791,7 +914,7 @@ class MimiCamServer {
       // This is not a firewall; it reduces accidental public exposure if the
       // socket becomes reachable outside the local Wi-Fi network.
       if (remoteAddress != null &&
-          !localNetworkGuard.isAllowedRemoteAddress(remoteAddress)) {
+          !_effectiveLocalNetworkGuard.isAllowedRemoteAddress(remoteAddress)) {
         request.response.statusCode = HttpStatus.forbidden;
         await request.response.close();
         return;
@@ -799,14 +922,30 @@ class MimiCamServer {
       if ((request.uri.path == '/ws/stream' ||
               request.uri.path == protocol_v2.MimiCamProtocolV2.events) &&
           WebSocketTransformer.isUpgradeRequest(request)) {
-        if (!_isWebSocketAuthorized(request)) {
+        final eventClientId = _webSocketClientId(request);
+        if (eventClientId == null) {
           request.response.statusCode = HttpStatus.unauthorized;
           await request.response.close();
           return;
         }
         final socket = await WebSocketTransformer.upgrade(request);
         _webSockets.add(socket);
-        socket.done.whenComplete(() => _webSockets.remove(socket));
+        _webSocketClientIds[socket] = eventClientId;
+        final previousCount = _eventClientSocketCounts[eventClientId] ?? 0;
+        _eventClientSocketCounts[eventClientId] = previousCount + 1;
+        if (previousCount == 0) {
+          try {
+            await onAlertClientConnected?.call(eventClientId);
+          } catch (error) {
+            _webSockets.remove(socket);
+            _webSocketClientIds.remove(socket);
+            _eventClientSocketCounts.remove(eventClientId);
+            await socket.close();
+            onLog('Alert media demand could not start: $error');
+            return;
+          }
+        }
+        unawaited(socket.done.whenComplete(() => _releaseWebSocket(socket)));
         onLog(strings.webSocketClientConnected(
             request.connectionInfo?.remoteAddress.address ?? 'unknown'));
         return;
@@ -1054,10 +1193,11 @@ class MimiCamServer {
     final descriptorHost = _hostFromHeader(request.headers.host) ??
         _httpServer?.address.address ??
         InternetAddress.loopbackIPv4.address;
+    final deviceId = await _serverDeviceIdentityResolver.resolve();
     await _writeJson(request.response, {
       'service': 'mimicam',
       'pairing': true,
-      'serverDeviceId': 'server_local',
+      'serverDeviceId': deviceId,
       'serverName': 'Bebek Odası',
       'pairingNonce': pairingNonce,
       'transport': transportConfig.payloadTransport,
@@ -1119,6 +1259,7 @@ class MimiCamServer {
       return;
     }
     final state = await _features.applyComfortCommand(body);
+    _updateResourceWatchdog();
     await _writeJson(request.response, {
       'ok': state.lastError == null,
       'state': state.toJson(),
@@ -1176,6 +1317,7 @@ class MimiCamServer {
         sampleRate: (body?['sampleRate'] as num?)?.toInt() ?? _audioSampleRate,
         channels: (body?['channels'] as num?)?.toInt() ?? _audioChannels,
       );
+      _updateResourceWatchdog();
       await _writeJson(request.response, {
         'ok': true,
         'session': session.toJson(includeToken: true),
@@ -1211,6 +1353,7 @@ class MimiCamServer {
       clientId: clientId,
       token: body?['talkToken']?.toString(),
     );
+    _updateResourceWatchdog();
     await _writeJson(request.response, {
       'ok': stopped,
       'talk': _talkStatus(),
@@ -1227,14 +1370,35 @@ class MimiCamServer {
     var totalBytes = 0;
     TalkSession? session;
     var playedChunks = 0;
-    await for (final chunk in request) {
-      if (chunk.isEmpty) continue;
-      final bytes = Uint8List.fromList(chunk);
-      totalBytes += bytes.length;
+    var rejected = false;
+    final frameBytes = max(
+      2,
+      (_audioSampleRate * _audioChannels * 2 * 20 / 1000).round(),
+    );
+    final assembler = Pcm16FrameAssembler(frameBytes: frameBytes);
+
+    Future<bool> play(Uint8List bytes) async {
       final result = await _features.acceptTalkAudio(token, bytes);
       session = result.session;
+      rejected = session == null;
       if (result.played) playedChunks++;
-      if (session == null) break;
+      return session != null;
+    }
+
+    await for (final chunk in request) {
+      if (chunk.isEmpty) continue;
+      totalBytes += chunk.length;
+      for (final frame in assembler.add(chunk)) {
+        if (!await play(frame)) break;
+      }
+      if (rejected) break;
+    }
+    if (!rejected) {
+      final tail = assembler.flushAlignedTail();
+      if (tail != null && tail.isNotEmpty) await play(tail);
+    }
+    if (assembler.hasPartialSample) {
+      onLog('Talk upload ended with one incomplete PCM16 byte.');
     }
     if (session == null && totalBytes > 0) {
       request.response.statusCode = HttpStatus.unauthorized;
@@ -1352,8 +1516,9 @@ class MimiCamServer {
       final token = tokenService.issueTrustedClientToken(
           clientName: json['clientName']?.toString() ?? 'Client',
           deviceId: json['deviceId']?.toString() ?? 'client');
+      final deviceId = await _serverDeviceIdentityResolver.resolve();
       await _writeJson(request.response, {
-        'serverDeviceId': 'server_local',
+        'serverDeviceId': deviceId,
         'serverName': 'Bebek Odası',
         'clientId': token.clientId,
         'trustedClientToken': token.token,
@@ -1397,7 +1562,10 @@ class MimiCamServer {
     });
   }
 
-  Future<void> _handleSessionStart(HttpRequest request) async {
+  Future<void> _handleSessionStart(HttpRequest request) =>
+      _sessionOperations.run(() => _handleSessionStartLocked(request));
+
+  Future<void> _handleSessionStartLocked(HttpRequest request) async {
     Object? json;
     try {
       json = await _readJsonObjectBody(request);
@@ -1432,6 +1600,7 @@ class MimiCamServer {
         _broadcastAccessSessionId(clientId),
       );
       _notifyBroadcastAccessChanged(accessSnapshot);
+      _scheduleBroadcastAccessTimer(accessSnapshot);
       request.response.statusCode = HttpStatus.tooManyRequests;
       await _writeJson(request.response, {
         'ok': false,
@@ -1440,7 +1609,9 @@ class MimiCamServer {
       });
       return;
     }
+    var runtimeAcquired = false;
     try {
+      _sessionMediaDemands[startResult.clientId] = demand;
       await _applyMediaProfileForCurrentDemand();
       final callback = onStreamSessionStarted;
       if (callback != null) {
@@ -1450,9 +1621,13 @@ class MimiCamServer {
           audio: demand.audio,
           mediaTransport: mediaTransport,
         );
+        runtimeAcquired = true;
+        _runtimeSessionClients.add(startResult.clientId);
       } else if (startMediaOnSessionStart) {
         _standaloneSessionDemands[startResult.clientId] = runtimeDemand;
         await _reconcileStandaloneSessionDemand();
+        runtimeAcquired = true;
+        _runtimeSessionClients.add(startResult.clientId);
       }
       await _writeJson(request.response, {
         'ok': true,
@@ -1463,27 +1638,52 @@ class MimiCamServer {
         'video': demand.video,
         'audio': demand.audio,
         'mediaTransport': mediaTransport,
+        'broadcastAccess': accessSnapshot?.toJson(),
       });
     } catch (error) {
-      _standaloneSessionDemands.remove(startResult.clientId);
-      accessSnapshot = await _broadcastAccess?.endSession(
-        _broadcastAccessSessionId(clientId),
-      );
-      _notifyBroadcastAccessChanged(accessSnapshot);
-      if (startResult.createdActiveSlot) {
-        _activeClientRegistry.stopSession(startResult.clientId);
+      if (runtimeAcquired) {
+        _runtimeSessionClients.remove(startResult.clientId);
+        try {
+          final callback = onStreamSessionStopped;
+          if (callback != null) {
+            await callback(startResult.clientId);
+          } else {
+            _standaloneSessionDemands.remove(startResult.clientId);
+            await _reconcileStandaloneSessionDemand();
+          }
+        } catch (rollbackError) {
+          onLog('Session runtime rollback failed: $rollbackError');
+        }
       }
-      request.response.statusCode = HttpStatus.internalServerError;
+      _standaloneSessionDemands.remove(startResult.clientId);
+      _sessionMediaDemands.remove(startResult.clientId);
+      _activeClientRegistry.stopSession(startResult.clientId);
+      try {
+        accessSnapshot = await _broadcastAccess?.endSession(
+          _broadcastAccessSessionId(clientId),
+        );
+        _notifyBroadcastAccessChanged(accessSnapshot);
+        _scheduleBroadcastAccessTimer(accessSnapshot);
+      } catch (accessError) {
+        onLog('Session access rollback failed: $accessError');
+      }
       onLog('Medya başlatılamadı: $error');
-      await _writeJson(request.response, {
-        'ok': false,
-        'code': 'MEDIA_START_FAILED',
-        'message': error.toString(),
-      });
+      await _writeJsonBestEffort(
+        request.response,
+        statusCode: HttpStatus.internalServerError,
+        body: {
+          'ok': false,
+          'code': 'MEDIA_START_FAILED',
+          'message': error.toString(),
+        },
+      );
     }
   }
 
-  Future<void> _handleSessionStop(HttpRequest request) async {
+  Future<void> _handleSessionStop(HttpRequest request) =>
+      _sessionOperations.run(() => _handleSessionStopLocked(request));
+
+  Future<void> _handleSessionStopLocked(HttpRequest request) async {
     Object? json;
     try {
       json = await _readJsonObjectBody(request);
@@ -1494,39 +1694,36 @@ class MimiCamServer {
     }
 
     final clientId = _clientIdForRequest(request, json);
-    try {
-      await webRtcGateway?.closeClient(clientId);
-      await Future.wait([
-        _videoStreamService.closeClient(clientId),
-        _audioStreamService.closeClient(clientId),
-      ]);
-      _activeClientRegistry.stopSession(clientId);
-      final callback = onStreamSessionStopped;
-      if (callback != null) {
-        await callback(clientId);
-      } else {
-        _standaloneSessionDemands.remove(clientId);
-        await _reconcileStandaloneSessionDemand();
-      }
-      if (_activeClientRegistry.activeClientCount > 0) {
-        await _applyMediaProfileForCurrentDemand();
-      }
+    final errors = await _cleanupClientSession(clientId, closeWebRtc: true);
+    if (errors.isEmpty) {
       await _writeJson(request.response, {
         'ok': true,
         'activeStreamClients': _activeClientRegistry.activeClientCount,
         'mediaProfile': _effectiveMediaProfile().toJson(),
       });
-      final accessSnapshot = await _broadcastAccess?.endSession(
-        _broadcastAccessSessionId(clientId),
-      );
-      _notifyBroadcastAccessChanged(accessSnapshot);
-    } catch (_) {
-      request.response.statusCode = HttpStatus.internalServerError;
-      await request.response.close();
+      return;
     }
+    onLog('Session cleanup completed with errors: ${errors.join(' | ')}');
+    await _writeJsonBestEffort(
+      request.response,
+      statusCode: HttpStatus.internalServerError,
+      body: {
+        'ok': false,
+        'code': 'SESSION_CLEANUP_PARTIAL',
+        'message': errors.first.toString(),
+      },
+    );
   }
 
   Future<void> _handleWebRtcOffer(
+    HttpRequest request,
+    String? authenticatedClientId,
+  ) =>
+      _sessionOperations.run(
+        () => _handleWebRtcOfferLocked(request, authenticatedClientId),
+      );
+
+  Future<void> _handleWebRtcOfferLocked(
     HttpRequest request,
     String? authenticatedClientId,
   ) async {
@@ -1535,15 +1732,32 @@ class MimiCamServer {
       authenticatedClientId,
     );
     if (gateway == null) return;
+    final clientId = authenticatedClientId!;
+    var externalCaptureActivated = false;
+    var peerTransportAttached = false;
+    String? createdPeerId;
     try {
       final body = await _readJsonObjectBody(request);
       final offer = WebRtcOfferRequest.fromJson(body);
+      await onWebRtcCaptureStarting?.call(clientId);
+      externalCaptureActivated = true;
       final answer = await gateway.acceptOffer(
-        clientId: authenticatedClientId!,
+        clientId: clientId,
         request: offer,
       );
+      createdPeerId = answer.peerId;
+      // WebRTC has no MJPEG/WAV socket to call attachStream. Keep an explicit
+      // transport lease so the 90-second bootstrap token expiry cannot prune
+      // a healthy peer from capacity and paywall cleanup accounting.
+      _activeClientRegistry.attachStream(clientId);
+      peerTransportAttached = true;
+      _updateResourceWatchdog();
       await _writeJson(request.response, answer.toJson());
     } on FormatException catch (error) {
+      if (externalCaptureActivated) {
+        await onWebRtcCaptureEnded?.call(clientId);
+        externalCaptureActivated = false;
+      }
       request.response.statusCode = HttpStatus.badRequest;
       await _writeJson(request.response, {
         'ok': false,
@@ -1551,6 +1765,10 @@ class MimiCamServer {
         'message': error.message,
       });
     } on WebRtcPilotCapacityException catch (error) {
+      if (externalCaptureActivated) {
+        await onWebRtcCaptureEnded?.call(clientId);
+        externalCaptureActivated = false;
+      }
       request.response.statusCode = HttpStatus.conflict;
       await _writeJson(request.response, {
         'ok': false,
@@ -1559,6 +1777,10 @@ class MimiCamServer {
         'fallback': 'mjpeg_wav',
       });
     } on WebRtcPilotUnavailableException catch (error) {
+      if (externalCaptureActivated) {
+        await onWebRtcCaptureEnded?.call(clientId);
+        externalCaptureActivated = false;
+      }
       request.response.statusCode = HttpStatus.serviceUnavailable;
       await _writeJson(request.response, {
         'ok': false,
@@ -1567,6 +1789,23 @@ class MimiCamServer {
         'fallback': 'mjpeg_wav',
       });
     } catch (error) {
+      if (peerTransportAttached) {
+        _activeClientRegistry.detachStream(clientId);
+        peerTransportAttached = false;
+      }
+      if (createdPeerId != null) {
+        try {
+          await gateway.closePeer(
+            clientId: clientId,
+            peerId: createdPeerId,
+          );
+        } catch (_) {}
+      }
+      if (externalCaptureActivated) {
+        try {
+          await onWebRtcCaptureEnded?.call(clientId);
+        } catch (_) {}
+      }
       request.response.statusCode = HttpStatus.internalServerError;
       await _writeJson(request.response, {
         'ok': false,
@@ -1630,6 +1869,14 @@ class MimiCamServer {
   Future<void> _handleWebRtcClose(
     HttpRequest request,
     String? authenticatedClientId,
+  ) =>
+      _sessionOperations.run(
+        () => _handleWebRtcCloseLocked(request, authenticatedClientId),
+      );
+
+  Future<void> _handleWebRtcCloseLocked(
+    HttpRequest request,
+    String? authenticatedClientId,
   ) async {
     final gateway = await _authorizedWebRtcGateway(
       request,
@@ -1645,7 +1892,14 @@ class MimiCamServer {
     } on WebRtcPeerNotFoundException {
       // Close is idempotent from the client's perspective.
     }
-    await _writeJson(request.response, const {'ok': true});
+    final errors = await _cleanupClientSession(
+      authenticatedClientId!,
+      closeWebRtc: false,
+    );
+    await _writeJson(request.response, {
+      'ok': errors.isEmpty,
+      if (errors.isNotEmpty) 'cleanupError': errors.first.toString(),
+    });
   }
 
   Future<void> pauseExternalMediaForPlatform(String reason) async {
@@ -1655,6 +1909,83 @@ class MimiCamServer {
       await gateway.closeClient(clientId);
     }
     onLog('WebRTC media paused for platform lifecycle: $reason');
+  }
+
+  void _handleWebRtcPeerLifecycleEvent(WebRtcPeerLifecycleEvent event) {
+    if (_disposed) return;
+    unawaited(_sessionOperations.run(() async {
+      if (!_runtimeSessionClients.contains(event.clientId) &&
+          !_activeClientRegistry.activeClientIds.contains(event.clientId)) {
+        return;
+      }
+      final errors = await _cleanupClientSession(
+        event.clientId,
+        closeWebRtc: false,
+      );
+      onLog(
+        'WebRTC peer closed (${event.reason.name}); session released'
+        '${errors.isEmpty ? '' : ': ${errors.join(' | ')}'}',
+      );
+    }).catchError((Object error) {
+      onLog('WebRTC peer cleanup could not be queued: $error');
+    }));
+  }
+
+  Future<List<Object>> _cleanupClientSession(
+    String clientId, {
+    required bool closeWebRtc,
+  }) async {
+    final cleanup = BestEffortOperationCollector();
+
+    if (closeWebRtc) {
+      await cleanup.attempt(
+        'WebRTC client',
+        () async => webRtcGateway?.closeClient(clientId),
+      );
+    }
+    await cleanup.attempt(
+      'video stream client',
+      () => _videoStreamService.closeClient(clientId),
+    );
+    await cleanup.attempt(
+      'audio stream client',
+      () => _audioStreamService.closeClient(clientId),
+    );
+    _activeClientRegistry.stopSession(clientId);
+    _sessionMediaDemands.remove(clientId);
+
+    final ownedRuntimeSession = _runtimeSessionClients.remove(clientId);
+    if (ownedRuntimeSession) {
+      final callback = onStreamSessionStopped;
+      if (callback != null) {
+        await cleanup.attempt(
+            'media runtime session', () => callback(clientId));
+      } else {
+        _standaloneSessionDemands.remove(clientId);
+        await cleanup.attempt(
+          'standalone media demand',
+          _reconcileStandaloneSessionDemand,
+        );
+      }
+    } else {
+      _standaloneSessionDemands.remove(clientId);
+    }
+
+    await cleanup.attempt('broadcast access session', () async {
+      final accessSnapshot = await _broadcastAccess?.endSession(
+        _broadcastAccessSessionId(clientId),
+      );
+      _notifyBroadcastAccessChanged(accessSnapshot);
+      _scheduleBroadcastAccessTimer(accessSnapshot);
+    });
+    if (_activeClientRegistry.activeClientCount > 0) {
+      await cleanup.attempt(
+        'remaining client media profile',
+        _applyMediaProfileForCurrentDemand,
+      );
+    }
+    _updateResourceWatchdog();
+    return cleanup.errors;
   }
 
   Future<WebRtcServerGateway?> _authorizedWebRtcGateway(
@@ -1789,23 +2120,27 @@ class MimiCamServer {
         .snapshot()
         .distribution(MediaMetricName.videoEncode)
         ?.p95Ms;
-    return _mediaResourceGovernor.evaluate(MediaResourceGovernorInput(
-      device: _deviceResources,
-      networkTier: _activeClientRegistry.effectiveTier(),
-      backpressure: _combinedBackpressureMetrics(),
-      activeClientCount: _activeClientRegistry.activeClientCount,
-      videoEncodeP95Ms: encodeP95,
-      framesCaptured: _videoFramesCaptured,
-      framesDroppedBeforeEncode: _videoFramesDroppedBeforeEncode,
-      decoderCoalescedFrames: reports.fold<int>(
-        0,
-        (total, report) => total + report.coalescedVideoFrames,
+    return _resourcePolicyCoordinator.evaluate(
+      MediaResourceGovernorInput(
+        device: _deviceResources,
+        networkTier: _activeClientRegistry.effectiveTier(),
+        backpressure: _combinedBackpressureMetrics(),
+        activeClientCount: _activeClientRegistry.activeClientCount,
+        videoEncodeP95Ms: encodeP95,
+        framesCaptured: _videoFramesCaptured,
+        framesDroppedBeforeEncode: _videoFramesDroppedBeforeEncode,
+        decoderCoalescedFrames: reports.fold<int>(
+          0,
+          (total, report) => total + report.coalescedVideoFrames,
+        ),
+        audioUnderruns: reports.where((report) => report.audioUnderrun).length,
+        audioDemandAvailable: _microphoneCapture.isActive ||
+            _audioStreamService.hasClients ||
+            _injectedAudioDemand ||
+            _sessionMediaDemands.values.any((value) => value.audio) ||
+            _standaloneSessionDemands.values.any((value) => value.audio),
       ),
-      audioUnderruns: reports.where((report) => report.audioUnderrun).length,
-      audioDemandAvailable: _microphoneCapture.isActive ||
-          _audioStreamService.hasClients ||
-          _standaloneSessionDemands.values.any((value) => value.audio),
-    ));
+    );
   }
 
   void _scheduleMediaProfileApplyForCurrentDemand() {
@@ -1839,36 +2174,70 @@ class MimiCamServer {
     onBroadcastAccessChanged?.call(snapshot);
   }
 
-  void _scheduleBroadcastAccessTimer(BroadcastAccessSnapshot? snapshot) {
+  void _cancelBroadcastAccessTimer() {
+    _broadcastAccessTimerGeneration++;
     _broadcastAccessTimer?.cancel();
-    if (snapshot == null || snapshot.unlocked || snapshot.remainingMs <= 0) {
+    _broadcastAccessTimer = null;
+  }
+
+  void _scheduleBroadcastAccessTimer(BroadcastAccessSnapshot? snapshot) {
+    _cancelBroadcastAccessTimer();
+    if (snapshot == null || snapshot.unlocked || !snapshot.active) {
       return;
     }
-    _broadcastAccessTimer = Timer(snapshot.remaining, () {
-      unawaited(_expireBroadcastAccessIfNeeded());
+    final generation = _broadcastAccessTimerGeneration;
+    final delay = snapshot.isLocked ? Duration.zero : snapshot.remaining;
+    _broadcastAccessTimer = Timer(delay, () {
+      if (_disposed || generation != _broadcastAccessTimerGeneration) return;
+      _broadcastAccessTimer = null;
+      unawaited(
+          _expireBroadcastAccessIfNeeded(generation).catchError((Object error) {
+        onLog('Broadcast expiry cleanup could not be queued: $error');
+      }));
     });
   }
 
-  Future<void> _expireBroadcastAccessIfNeeded() async {
+  Future<void> _expireBroadcastAccessIfNeeded(int generation) =>
+      _sessionOperations.run(
+        () => _expireBroadcastAccessIfNeededLocked(generation),
+      );
+
+  Future<void> _expireBroadcastAccessIfNeededLocked(int generation) async {
     final access = _broadcastAccess;
-    if (access == null || _disposed) return;
-    final snapshot = await access.snapshot();
-    if (!snapshot.isLocked) {
-      _scheduleBroadcastAccessTimer(snapshot);
+    if (access == null ||
+        _disposed ||
+        generation != _broadcastAccessTimerGeneration) {
       return;
     }
+    final snapshot = await access.snapshot();
+    if (_disposed || generation != _broadcastAccessTimerGeneration) return;
+    if (!snapshot.active || snapshot.unlocked) {
+      _cancelBroadcastAccessTimer();
+      _notifyBroadcastAccessChanged(snapshot);
+      return;
+    }
+    if (!snapshot.isLocked) {
+      _scheduleBroadcastAccessTimer(snapshot);
+      _notifyBroadcastAccessChanged(snapshot);
+      return;
+    }
+    _cancelBroadcastAccessTimer();
     final expiredClientIds = _activeClientRegistry.activeClientIds;
     for (final clientId in expiredClientIds) {
-      await webRtcGateway?.closeClient(clientId);
-      await _videoStreamService.closeClient(clientId);
-      await _audioStreamService.closeClient(clientId);
-      await onStreamSessionStopped?.call(clientId);
+      final errors = await _cleanupClientSession(
+        clientId,
+        closeWebRtc: true,
+      );
+      if (errors.isNotEmpty) {
+        onLog(
+          'Expired session $clientId released with errors: '
+          '${errors.join(' | ')}',
+        );
+      }
     }
     _activeClientRegistry.clear();
     await access.endAllSessions();
-    _broadcastAccessTimer?.cancel();
     onLog('Ücretsiz yayın süresi doldu; canlı stream kilitlendi.');
-    await stopMediaRuntime();
     _notifyBroadcastAccessChanged(await access.snapshot());
   }
 
@@ -1904,6 +2273,13 @@ class MimiCamServer {
     if (!_isCurrentMediaProfileApply(applyGeneration)) return;
     _activeMediaProfile = nextProfile;
     _frameBudget.updateMinInterval(_activeMediaProfile.frameInterval);
+    if (mediaSource case final ServerMediaPolicySink nativePolicy) {
+      await nativePolicy.applyMediaPolicy(
+        jpegQuality: _activeMediaProfile.jpegQuality,
+        maxVideoFps: _activeMediaProfile.targetFps,
+      );
+    }
+    await _applyWebRtcMediaPolicy(_activeMediaProfile);
     if (previousProfile.id != _activeMediaProfile.id) {
       onLog('Medya profili: ${_activeMediaProfile.summary}');
       onMediaProfileChanged?.call(_activeMediaProfile);
@@ -1926,29 +2302,31 @@ class MimiCamServer {
     cameraController = null;
     _latestJpeg = null;
     _frameBudget.reset();
+    _resourcePolicyCoordinator.resetDecision();
     await previousController.dispose();
-    if (!_isCurrentMediaProfileApply(applyGeneration)) return false;
-
-    await _ensureCameraPermission();
-    if (!_isCurrentMediaProfileApply(applyGeneration)) return false;
-    final cameras = await availableCameras();
-    if (!_isCurrentMediaProfileApply(applyGeneration)) return false;
-    if (cameras.isEmpty) throw StateError(strings.cameraNotFound);
-
-    final nextController = CameraController(
-      cameras.first,
-      _resolutionPresetFor(profile),
-      enableAudio: false,
-      fps: max(
-        1,
-        _mediaProfileCameraRestartPolicy.captureFps(
-          deviceProfile: MediaQualityProfile.forDeviceTier(_deviceTier),
-          activeProfile: profile,
-        ),
-      ),
-      imageFormatGroup: ImageFormatGroup.yuv420,
-    );
+    CameraController? nextController;
+    var installed = false;
     try {
+      if (!_isCurrentMediaProfileApply(applyGeneration)) return false;
+      await _ensureCameraPermission();
+      if (!_isCurrentMediaProfileApply(applyGeneration)) return false;
+      final cameras = await availableCameras();
+      if (!_isCurrentMediaProfileApply(applyGeneration)) return false;
+      if (cameras.isEmpty) throw StateError(strings.cameraNotFound);
+
+      nextController = CameraController(
+        cameras.first,
+        _resolutionPresetFor(profile),
+        enableAudio: false,
+        fps: max(
+          1,
+          _mediaProfileCameraRestartPolicy.captureFps(
+            deviceProfile: MediaQualityProfile.forDeviceTier(_deviceTier),
+            activeProfile: profile,
+          ),
+        ),
+        imageFormatGroup: ImageFormatGroup.yuv420,
+      );
       await nextController.initialize();
       if (!_isCurrentMediaProfileApply(applyGeneration) ||
           cameraController != null) {
@@ -1965,13 +2343,29 @@ class MimiCamServer {
         await _disposeStaleCameraController(nextController);
         return false;
       }
+      installed = true;
       return true;
     } catch (error, stackTrace) {
-      if (identical(cameraController, nextController)) {
+      if (nextController != null &&
+          identical(cameraController, nextController)) {
         cameraController = null;
       }
-      await _disposeStaleCameraController(nextController);
+      if (nextController != null) {
+        await _disposeStaleCameraController(nextController);
+      }
       Error.throwWithStackTrace(error, stackTrace);
+    } finally {
+      if (!installed &&
+          _videoCaptureDesired &&
+          !_disposed &&
+          cameraController == null) {
+        try {
+          await _startVideoCaptureRuntime();
+          onLog('Camera profile restart rolled back to the previous profile.');
+        } catch (recoveryError) {
+          onLog('Camera profile rollback failed: $recoveryError');
+        }
+      }
     }
   }
 
@@ -2074,12 +2468,16 @@ class MimiCamServer {
       'audioClients': audio.clientCount,
       'encoderBusy': _jpegEncodeInFlight,
       'framesDroppedBeforeEncode': _videoFramesDroppedBeforeEncode,
+      'framesSkippedByPolicy': _videoFramesSkippedByPolicy,
+      'selfAudioSuppressedChunks': _selfAudioSuppressedChunks,
       'mediaProfileApplyFailureCount': _mediaProfileApplyFailureCount,
       'lastMediaProfileApplyError': _lastMediaProfileApplyError?.toString(),
       'lastMediaProfileApplyErrorAtMs': _lastMediaProfileApplyErrorAtMs,
       'deviceResources': _deviceResources.toJson(),
       'resourceGovernor': _resourceDecision.toJson(),
       'sessionTelemetry': _mediaTelemetry.snapshot().toJson(),
+      'clientTransportTelemetry':
+          _activeClientRegistry.worstQualityReport()?.transportTelemetry,
     };
   }
 
@@ -2101,15 +2499,13 @@ class MimiCamServer {
         _ => ResolutionPreset.medium,
       };
 
-  bool _isAuthorized(HttpRequest request) {
-    return _authGuard.trusted(request) != null;
-  }
-
-  bool _isWebSocketAuthorized(HttpRequest request) {
-    if (_isAuthorized(request)) return true;
+  String? _webSocketClientId(HttpRequest request) {
+    final trusted = _authGuard.trusted(request);
+    if (trusted != null) return trusted.clientId;
     final token = request.uri.queryParameters['token'];
-    return token != null &&
-        tokenService.validateTrustedClientToken(token) != null;
+    return token == null
+        ? null
+        : tokenService.validateTrustedClientToken(token)?.clientId;
   }
 
   String _pairConfirmAttemptKey(HttpRequest request) =>
@@ -2239,7 +2635,7 @@ class MimiCamServer {
   }
 
   Future<void> stopMediaRuntime() async {
-    _broadcastAccessTimer?.cancel();
+    _cancelBroadcastAccessTimer();
     await stopVideoRuntime();
     await stopAudioRuntime();
     mediaSource?.resetDiagnostics();
@@ -2248,6 +2644,7 @@ class MimiCamServer {
   }
 
   Future<void> stopVideoRuntime() async {
+    _videoCaptureDesired = false;
     final source = mediaSource;
     if (source != null) {
       await _reconcileInjectedMediaSource(source, video: false);
@@ -2270,6 +2667,7 @@ class MimiCamServer {
       _videoStreamService.resetDiagnostics();
       _jpegByteBudgetController.reset();
       _videoFramesDroppedBeforeEncode = 0;
+      _videoFramesSkippedByPolicy = 0;
       _videoFramesCaptured = 0;
       await _disposeAnalysisIfIdle();
       await _updateMediaHostLifecycle();
@@ -2307,11 +2705,18 @@ class MimiCamServer {
   Future<void> _updateMediaHostLifecycle() async {
     // Injected sources are deterministic test/diagnostic producers and do not
     // own platform camera or microphone hardware.
-    if (mediaSource != null) return;
+    if (mediaSource != null) {
+      // Android's production CameraX/AudioRecord bridge is also a mediaSource.
+      // Its foreground-service ownership stays native, while Dart still owns
+      // the thermal/resource watchdog lifecycle.
+      _updateResourceWatchdog();
+      return;
+    }
     final hasCapture = mediaSource?.isActive == true ||
         cameraController != null ||
         _microphoneCapture.isActive;
     if (hasCapture) {
+      _updateResourceWatchdog();
       if (!_wakelockEnabled) {
         await WakelockPlus.enable();
         _wakelockEnabled = true;
@@ -2320,10 +2725,47 @@ class MimiCamServer {
       return;
     }
     await ForegroundServiceController.stopServer();
+    _updateResourceWatchdog();
     if (_wakelockEnabled) {
       await WakelockPlus.disable();
       _wakelockEnabled = false;
     }
+  }
+
+  bool _isResourceMonitoringRequired() =>
+      !_disposed &&
+      (mediaSource?.isActive == true ||
+          cameraController != null ||
+          _microphoneCapture.isActive ||
+          (webRtcGateway?.activePeerCount ?? 0) > 0 ||
+          _features.roomAudio.mode != RoomAudioMode.idle);
+
+  void _updateResourceWatchdog() =>
+      _resourcePolicyCoordinator.reconcileWatchdog();
+
+  void _handleRoomAudioModeChanged(RoomAudioMode mode) {
+    _updateResourceWatchdog();
+  }
+
+  Future<void> _refreshResourceProfile() async {
+    final provider = _deviceResourceProvider;
+    if (provider is CachedDeviceResourceSnapshotProvider) {
+      provider.invalidate();
+    }
+    await _applyMediaProfileForCurrentDemand();
+  }
+
+  Future<void> _applyWebRtcMediaPolicy(MediaQualityProfile profile) async {
+    final gateway = webRtcGateway;
+    if (gateway == null ||
+        gateway.activePeerCount == 0 ||
+        gateway is! WebRtcMediaPolicyController) {
+      return;
+    }
+    final controller = gateway as WebRtcMediaPolicyController;
+    await controller.applyMediaPolicy(
+      _resourcePolicyCoordinator.webRtcPolicyFor(profile, _resourceDecision),
+    );
   }
 
   Future<void> _handleMjpeg(HttpResponse response, String clientId) async {
@@ -2343,6 +2785,21 @@ class MimiCamServer {
     response.headers.contentType = ContentType.json;
     response.write(jsonEncode(body));
     await response.close();
+  }
+
+  Future<void> _writeJsonBestEffort(
+    HttpResponse response, {
+    required int statusCode,
+    required Map<String, Object?> body,
+  }) async {
+    try {
+      response.statusCode = statusCode;
+      await _writeJson(response, body);
+    } catch (_) {
+      try {
+        await response.close();
+      } catch (_) {}
+    }
   }
 
   Future<void> _writeLandingPage(HttpResponse response) async {
@@ -2373,6 +2830,24 @@ class MimiCamServer {
     await request.response.close();
   }
 
+  Future<void> _releaseWebSocket(WebSocket socket) async {
+    _webSockets.remove(socket);
+    final clientId = _webSocketClientIds.remove(socket);
+    if (clientId == null) return;
+    final count = _eventClientSocketCounts[clientId] ?? 0;
+    if (count > 1) {
+      _eventClientSocketCounts[clientId] = count - 1;
+      return;
+    }
+    _eventClientSocketCounts.remove(clientId);
+    if (_disposed) return;
+    try {
+      await onAlertClientDisconnected?.call(clientId);
+    } catch (error) {
+      onLog('Alert media demand could not stop: $error');
+    }
+  }
+
   int _broadcastBinary(List<int> data) {
     var delivered = 0;
     for (final socket in _webSockets.toList()) {
@@ -2380,7 +2855,7 @@ class MimiCamServer {
         socket.add(data);
         delivered++;
       } catch (_) {
-        _webSockets.remove(socket);
+        unawaited(_releaseWebSocket(socket));
       }
     }
     return delivered;
@@ -2393,7 +2868,7 @@ class MimiCamServer {
         socket.add(data);
         delivered++;
       } catch (_) {
-        _webSockets.remove(socket);
+        unawaited(_releaseWebSocket(socket));
       }
     }
     return delivered;
@@ -2402,50 +2877,105 @@ class MimiCamServer {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _cancelBroadcastAccessTimer();
+    final cleanup = BestEffortOperationCollector();
+
+    await cleanup.attempt('WebRTC lifecycle subscription', () async {
+      await _webRtcPeerSubscription?.cancel();
+      _webRtcPeerSubscription = null;
+    });
+    await cleanup.attempt(
+      'session operation queue',
+      _sessionOperations.close,
+    );
     _mediaProfileApplyQueue.invalidate();
     _cameraEncodeGeneration++;
     _pendingCameraEncode = null;
-    await _cameraJpegWorker.dispose();
-    _broadcastAccessTimer?.cancel();
-    await _broadcastAccess?.endAllSessions();
-    await ForegroundServiceController.stopServer();
+    await cleanup.attempt('camera JPEG worker', _cameraJpegWorker.dispose);
+    _resourcePolicyCoordinator.dispose();
+    await cleanup.attempt(
+      'broadcast access sessions',
+      () async => _broadcastAccess?.endAllSessions(),
+    );
+    await cleanup.attempt(
+      'foreground service',
+      ForegroundServiceController.stopServer,
+    );
     if (_wakelockEnabled) {
-      await WakelockPlus.disable();
+      await cleanup.attempt('wakelock', WakelockPlus.disable);
       _wakelockEnabled = false;
     }
-    await mediaSource?.stop();
-    await _microphoneCapture.dispose();
-    await _alertSubscription?.cancel();
+    await cleanup.attempt(
+      'injected media source',
+      () async => mediaSource?.stop(),
+    );
+    await cleanup.attempt('microphone capture', _microphoneCapture.dispose);
+    await cleanup.attempt('alert subscription', () async {
+      await _alertSubscription?.cancel();
+    });
     _alertSubscription = null;
-    await _analysisCoordinator?.dispose();
+    await cleanup.attempt('analysis coordinator', () async {
+      await _analysisCoordinator?.dispose();
+    });
     _analysisCoordinator = null;
     _analysisMetrics?.reset();
     _frameBudget.reset();
     _activeClientRegistry.clear();
-    await _features.dispose();
-    await _serviceAdvertiser?.dispose();
-    await webRtcGateway?.dispose();
-    await _videoStreamService.closeAll();
+    _runtimeSessionClients.clear();
+    _standaloneSessionDemands.clear();
+    _sessionMediaDemands.clear();
+    await cleanup.attempt('room features', _features.dispose);
+    await cleanup.attempt('native playback demand', () async {
+      await onPlaybackDemandChanged?.call(false);
+    });
+    await cleanup.attempt('room audio subscription', () async {
+      await _roomAudioModeSubscription?.cancel();
+    });
+    _roomAudioModeSubscription = null;
+    await cleanup.attempt('native luma subscription', () async {
+      await _injectedLumaSubscription?.cancel();
+    });
+    _injectedLumaSubscription = null;
+    await cleanup.attempt('service advertiser', () async {
+      await _serviceAdvertiser?.dispose();
+    });
+    await cleanup.attempt('WebRTC gateway', () async {
+      await webRtcGateway?.dispose();
+    });
+    await cleanup.attempt('video streams', _videoStreamService.closeAll);
     _videoStreamService.resetDiagnostics();
-    await _audioStreamService.closeAll();
+    await cleanup.attempt('audio streams', _audioStreamService.closeAll);
     _audioStreamService.resetDiagnostics();
     mediaSource?.resetDiagnostics();
     _jpegByteBudgetController.reset();
     tokenService.clearEphemeralState();
-    await tokenService.flushPersistence();
+    await cleanup.attempt('token persistence', tokenService.flushPersistence);
     final controller = cameraController;
     cameraController = null;
-    await controller?.dispose();
+    await cleanup.attempt(
+      'camera controller',
+      () async => controller?.dispose(),
+    );
     _videoProbeEncodeUntilMs = null;
-    await _httpServer?.close(force: true);
+    await cleanup.attempt('HTTP server', () async {
+      await _httpServer?.close(force: true);
+    });
     for (final socket in _webSockets.toList()) {
-      await socket.close();
+      await cleanup.attempt('WebSocket', socket.close);
     }
     _webSockets.clear();
+    _webSocketClientIds.clear();
+    _eventClientSocketCounts.clear();
     _lastMotionSample = null;
     _lastMotionEnergy = 0;
     _cryActive = false;
     _lastCryActiveAtMs = null;
+    if (cleanup.hasFailures) {
+      onLog(
+        'Server disposed with cleanup errors: '
+        '${cleanup.failureMessages.join(' | ')}',
+      );
+    }
   }
 }
 

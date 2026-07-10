@@ -1,4 +1,40 @@
+import 'dart:async';
+
 import '../../../../core/protocol/webrtc_signaling.dart';
+
+enum WebRtcPeerCloseReason {
+  requested,
+  failed,
+  connectionClosed,
+  platformPause,
+  disposed,
+}
+
+class WebRtcPeerLifecycleEvent {
+  const WebRtcPeerLifecycleEvent({
+    required this.clientId,
+    required this.peerId,
+    required this.reason,
+  });
+
+  final String clientId;
+  final String peerId;
+  final WebRtcPeerCloseReason reason;
+}
+
+class WebRtcMediaPolicy {
+  const WebRtcMediaPolicy({
+    required this.maxVideoBitrateBps,
+    required this.maxVideoFrameRate,
+    required this.scaleResolutionDownBy,
+    this.videoEnabled = true,
+  });
+
+  final int maxVideoBitrateBps;
+  final int maxVideoFrameRate;
+  final double scaleResolutionDownBy;
+  final bool videoEnabled;
+}
 
 abstract class WebRtcServerGateway {
   bool get isAvailable;
@@ -29,6 +65,14 @@ abstract class WebRtcServerGateway {
 
   Future<void> closeClient(String clientId);
   Future<void> dispose();
+}
+
+abstract interface class WebRtcPeerLifecycleSource {
+  Stream<WebRtcPeerLifecycleEvent> get peerEvents;
+}
+
+abstract interface class WebRtcMediaPolicyController {
+  Future<void> applyMediaPolicy(WebRtcMediaPolicy policy);
 }
 
 class WebRtcPilotUnavailableException implements Exception {

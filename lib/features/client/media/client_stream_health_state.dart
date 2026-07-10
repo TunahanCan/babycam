@@ -21,6 +21,7 @@ class ClientQualitySnapshot {
     this.videoQueueDelayMs,
     this.audioPipeline = const {},
     this.mediaTelemetry = const {},
+    this.transportTelemetry = const {},
   });
 
   final int createdAtMs;
@@ -41,6 +42,7 @@ class ClientQualitySnapshot {
   final int? videoQueueDelayMs;
   final Map<String, Object?> audioPipeline;
   final Map<String, Object?> mediaTelemetry;
+  final Map<String, Object?> transportTelemetry;
 
   NetworkQualityTier get healthTier {
     if (streamTimedOut ||
@@ -99,6 +101,7 @@ class ClientQualitySnapshot {
         'recentlyReconnected': recentlyReconnected,
         'audioPipeline': audioPipeline,
         'mediaTelemetry': mediaTelemetry,
+        'transportTelemetry': transportTelemetry,
         'createdAtMs': createdAtMs,
       };
 
@@ -141,6 +144,7 @@ class ClientStreamHealthState {
   var _audioUnderrun = false;
   var _watchActive = false;
   Map<String, Object?> _audioPipeline = const {};
+  Map<String, Object?> _transportTelemetry = const {};
   int _lastAudioDropTotal = 0;
   int? _lastNativeWritesDropped;
   int _nativeWritesDroppedSinceReset = 0;
@@ -162,6 +166,7 @@ class ClientStreamHealthState {
       _streamTimedOut = false;
       _audioUnderrun = false;
       _audioPipeline = const {};
+      _transportTelemetry = const {};
       _resetAudioDropTracking();
     }
   }
@@ -189,6 +194,10 @@ class ClientStreamHealthState {
   }) {
     _videoJitterMs = jitterMs;
     _videoQueueDelayMs = queueDelayMs;
+  }
+
+  void updateTransportTelemetry(Map<String, Object?> telemetry) {
+    _transportTelemetry = Map<String, Object?>.unmodifiable(telemetry);
   }
 
   void markAudioChunkReceived() {
@@ -289,6 +298,7 @@ class ClientStreamHealthState {
       videoQueueDelayMs: _videoQueueDelayMs,
       audioPipeline: _audioPipeline,
       mediaTelemetry: MediaSessionTelemetry.shared.snapshot().toJson(),
+      transportTelemetry: _transportTelemetry,
     );
   }
 
@@ -306,6 +316,7 @@ class ClientStreamHealthState {
     _streamTimedOut = false;
     _audioUnderrun = false;
     _audioPipeline = const {};
+    _transportTelemetry = const {};
     _resetAudioDropTracking();
     _videoJitterMs = null;
     _videoQueueDelayMs = null;

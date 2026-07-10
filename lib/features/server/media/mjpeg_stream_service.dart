@@ -53,6 +53,10 @@ class MjpegStreamService {
     String clientId, {
     Uint8List? firstFrame,
   }) async {
+    // A low-FPS thermal/network profile may not fill dart:io's default output
+    // buffer before the client's first-frame deadline. MJPEG is a live stream,
+    // so every explicit flush must reach the socket immediately.
+    response.bufferOutput = false;
     response.headers.set(
       HttpHeaders.contentTypeHeader,
       'multipart/x-mixed-replace; boundary=frame',

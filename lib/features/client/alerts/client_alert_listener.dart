@@ -104,36 +104,37 @@ class ClientAlertListener {
   }
 
   Future<void> _connectAndRead(int generation, PairingSession session) async {
-    final client = _clientFactory?.call(session);
+    final client = _clientFactory?.call(session) ?? HttpClient();
+    client.connectionTimeout = maxReconnectDelay;
     final uri = ServerEndpointBuilder(session).ws(MimiCamProtocolV2.events);
-    final socket = await WebSocket.connect(
-      uri.toString(),
-      headers: {
-        HttpHeaders.authorizationHeader: 'Bearer ${session.sessionToken}',
-      },
-      compression: CompressionOptions.compressionOff,
-      customClient: client,
-    );
-    if (!_isCurrent(generation)) {
-      await socket.close();
-      client?.close(force: true);
-      return;
-    }
     _client = client;
-    _socket = socket;
-    isConnected = true;
-    healthState?.markWsConnected();
-    final first = _firstConnection;
-    if (first != null && !first.isCompleted) first.complete();
+    WebSocket? socket;
     try {
+      socket = await WebSocket.connect(
+        uri.toString(),
+        headers: {
+          HttpHeaders.authorizationHeader: 'Bearer ${session.sessionToken}',
+        },
+        compression: CompressionOptions.compressionOff,
+        customClient: client,
+      );
+      if (!_isCurrent(generation)) {
+        await socket.close();
+        return;
+      }
+      _socket = socket;
+      isConnected = true;
+      healthState?.markWsConnected();
+      final first = _firstConnection;
+      if (first != null && !first.isCompleted) first.complete();
       await for (final data in socket) {
         if (!_isCurrent(generation)) return;
         _handleSocketMessage(data);
       }
     } finally {
-      if (_socket == socket) _socket = null;
+      if (socket != null && _socket == socket) _socket = null;
       if (_client == client) _client = null;
-      client?.close(force: true);
+      client.close(force: true);
     }
   }
 

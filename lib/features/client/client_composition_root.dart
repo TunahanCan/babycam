@@ -7,8 +7,10 @@ import 'alerts/client_alert_history.dart';
 import 'alerts/client_notification_service.dart';
 import 'client_runtime.dart';
 import 'controls/client_room_controls.dart';
+import 'discovery/trusted_session_endpoint_resolver.dart';
 import 'media/client_stream_health_state.dart';
 import 'media/network_quality_monitor.dart';
+import 'media/remote_broadcast_access_client.dart';
 import 'media/stream_session_controller.dart';
 import 'media/webrtc/flutter_webrtc_client_connector.dart';
 import 'pairing/client_identity_store.dart';
@@ -16,7 +18,6 @@ import 'pairing/pairing_session_store.dart';
 import 'pairing/qr_pairing_client.dart';
 import 'pairing/trusted_token_renewal_client.dart';
 import '../../l10n/app_strings.dart';
-import '../../services/monetization/broadcast_access_service.dart';
 import '../../services/discovery/mimicam_service_discovery.dart';
 
 class ClientCompositionRoot {
@@ -40,11 +41,14 @@ class ClientCompositionRoot {
       webRtcConnector: FlutterWebRtcClientConnector(),
     );
     final networkQuality = NetworkQualityMonitor(healthState: streamHealth);
+    final remoteBroadcastAccess = RemoteBroadcastAccessClient();
     final alertHistory = ClientAlertHistory(preferences: preferences);
-    final broadcastAccess = BroadcastAccessService(preferences);
     final notifications = ClientNotificationService();
     final roomControls = ClientRoomControls();
     final serviceBrowser = MimiCamServiceBrowser();
+    final endpointResolver = TrustedSessionEndpointResolver(
+      browser: serviceBrowser,
+    );
     final alerts = ClientAlertListener(
       healthState: streamHealth,
       onAlert: (alert) {
@@ -75,14 +79,15 @@ class ClientCompositionRoot {
       },
       stopAlerts: alerts.stop,
       clearStore: store.clear,
+      watchSessionEndpoints: endpointResolver.watch,
+      persistReboundSession: store.save,
+      refreshRemoteBroadcastAccess: remoteBroadcastAccess.snapshot,
       alertHistory: alertHistory,
       streamHealthState: streamHealth,
-      broadcastAccess: broadcastAccess,
       roomControls: roomControls,
       serviceBrowser: serviceBrowser,
     );
     unawaited(runtime.loadAlertHistory());
-    unawaited(runtime.refreshBroadcastAccess());
     unawaited(runtime.startDiscovery().catchError((_) {}));
     unawaited(_restoreSavedSession(runtime, store));
     return runtime;

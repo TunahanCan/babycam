@@ -22,6 +22,7 @@ class ClientQualityReport {
     this.videoQueueDelayMs,
     this.audioPipeline = const {},
     this.mediaTelemetry = const {},
+    this.transportTelemetry = const {},
   });
 
   final String clientId;
@@ -44,6 +45,7 @@ class ClientQualityReport {
   final int? videoQueueDelayMs;
   final Map<String, Object?> audioPipeline;
   final Map<String, Object?> mediaTelemetry;
+  final Map<String, Object?> transportTelemetry;
 
   NetworkQualityTier get tier => networkTier;
   int get reportedAtMs => createdAtMs;
@@ -75,6 +77,7 @@ class ClientQualityReport {
         'videoQueueDelayMs': videoQueueDelayMs,
         'audioPipeline': audioPipeline,
         'mediaTelemetry': mediaTelemetry,
+        'transportTelemetry': transportTelemetry,
         'createdAtMs': createdAtMs,
       };
 
@@ -109,6 +112,7 @@ class ClientQualityReport {
         json['audioPipeline'] ?? json['clientAudioPipeline'],
       ),
       mediaTelemetry: _mapValue(json['mediaTelemetry']),
+      transportTelemetry: _mapValue(json['transportTelemetry']),
       createdAtMs: _intValue(json['createdAtMs']) ??
           _intValue(json['reportedAtMs']) ??
           nowMs,
@@ -136,6 +140,7 @@ class ClientQualityReport {
     int? videoQueueDelayMs,
     Map<String, Object?>? audioPipeline,
     Map<String, Object?>? mediaTelemetry,
+    Map<String, Object?>? transportTelemetry,
   }) =>
       ClientQualityReport(
         clientId: clientId ?? this.clientId,
@@ -158,6 +163,7 @@ class ClientQualityReport {
         videoQueueDelayMs: videoQueueDelayMs ?? this.videoQueueDelayMs,
         audioPipeline: audioPipeline ?? this.audioPipeline,
         mediaTelemetry: mediaTelemetry ?? this.mediaTelemetry,
+        transportTelemetry: transportTelemetry ?? this.transportTelemetry,
       );
 
   NetworkQualityTier _healthTier() {

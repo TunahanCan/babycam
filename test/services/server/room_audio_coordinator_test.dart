@@ -13,6 +13,9 @@ void main() {
       sink: sink,
       frameDuration: const Duration(milliseconds: 5),
     );
+    final modes = <RoomAudioMode>[];
+    final modeSubscription = audio.modeChanges.listen(modes.add);
+    addTearDown(modeSubscription.cancel);
     addTearDown(audio.dispose);
 
     await audio.applyComfort(
@@ -32,6 +35,12 @@ void main() {
     expect(comfortWrites, greaterThan(0));
     expect(sink.starts, greaterThanOrEqualTo(3));
     expect(audio.mode, RoomAudioMode.comfort);
+    expect(modes, [
+      RoomAudioMode.comfort,
+      RoomAudioMode.talk,
+      RoomAudioMode.idle,
+      RoomAudioMode.comfort,
+    ]);
     expect(
       sink.writes.any((bytes) =>
           bytes.length == talkPayload.length &&
@@ -98,6 +107,79 @@ void main() {
     expect(sink.starts, 2);
     expect(audio.mode, RoomAudioMode.comfort);
   });
+
+  test('publishes playback demand before native output starts and after stop',
+      () async {
+    final events = <String>[];
+    final sink = _OrderingPcmAudioSink(events);
+    final audio = RoomAudioCoordinator(
+      sink: sink,
+      onOutputDemandChanged: (active) async {
+        events.add('demand:$active');
+      },
+    );
+    addTearDown(audio.dispose);
+
+    await audio.beginTalk();
+    await audio.endTalk();
+
+    expect(events, ['stop', 'demand:true', 'start', 'stop', 'demand:false']);
+  });
+
+  test('revokes preflight playback demand when native start fails', () async {
+    final events = <String>[];
+    final sink = _FailingOrderingPcmAudioSink(events);
+    final audio = RoomAudioCoordinator(
+      sink: sink,
+      onOutputDemandChanged: (active) async {
+        events.add('demand:$active');
+      },
+    );
+    addTearDown(audio.dispose);
+
+    await expectLater(audio.beginTalk(), throwsA(isA<StateError>()));
+
+    expect(events, ['stop', 'demand:true', 'start', 'demand:false']);
+    expect(audio.mode, RoomAudioMode.idle);
+  });
+
+  test('failed talk transition restores real comfort output', () async {
+    final sink = _FailSecondStartPcmAudioSink();
+    final audio = RoomAudioCoordinator(sink: sink);
+    addTearDown(audio.dispose);
+    await audio.applyComfort(
+      playing: true,
+      trackId: 'rain',
+      volume: .3,
+    );
+
+    await expectLater(audio.beginTalk(), throwsA(isA<StateError>()));
+
+    expect(sink.starts, 3);
+    expect(audio.mode, RoomAudioMode.comfort);
+    expect((await audio.snapshot())['comfortRequested'], isTrue);
+  });
+
+  test('unrecoverable native output loss clears mode and playback demand',
+      () async {
+    final demands = <bool>[];
+    final audio = RoomAudioCoordinator(
+      sink: _FakePcmAudioSink(),
+      onOutputDemandChanged: demands.add,
+    );
+    addTearDown(audio.dispose);
+    await audio.applyComfort(
+      playing: true,
+      trackId: 'rain',
+      volume: .3,
+    );
+
+    await audio.handleOutputLost();
+
+    expect(audio.mode, RoomAudioMode.idle);
+    expect((await audio.snapshot())['comfortRequested'], isFalse);
+    expect(demands.last, isFalse);
+  });
 }
 
 class _FakePcmAudioSink implements PcmAudioSink {
@@ -133,5 +215,41 @@ class _FailFirstStartPcmAudioSink extends _FakePcmAudioSink {
   Future<void> start({required int sampleRate, required int channels}) async {
     starts++;
     if (starts == 1) throw StateError('native output unavailable');
+  }
+}
+
+class _FailSecondStartPcmAudioSink extends _FakePcmAudioSink {
+  @override
+  Future<void> start({required int sampleRate, required int channels}) async {
+    starts++;
+    if (starts == 2) throw StateError('talk output unavailable');
+  }
+}
+
+class _OrderingPcmAudioSink extends _FakePcmAudioSink {
+  _OrderingPcmAudioSink(this.events);
+
+  final List<String> events;
+
+  @override
+  Future<void> start({required int sampleRate, required int channels}) async {
+    events.add('start');
+    await super.start(sampleRate: sampleRate, channels: channels);
+  }
+
+  @override
+  Future<void> stop() async {
+    events.add('stop');
+    await super.stop();
+  }
+}
+
+class _FailingOrderingPcmAudioSink extends _OrderingPcmAudioSink {
+  _FailingOrderingPcmAudioSink(super.events);
+
+  @override
+  Future<void> start({required int sampleRate, required int channels}) async {
+    events.add('start');
+    throw StateError('native output unavailable');
   }
 }

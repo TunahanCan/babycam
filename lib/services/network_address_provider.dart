@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import '../core/mimicam_protocol.dart';
+import '../core/network/lan_endpoint.dart';
+import '../core/network/local_network_guard.dart';
 
 class NetworkAddressCandidate {
   const NetworkAddressCandidate({
@@ -17,13 +19,15 @@ class LocalNetworkEndpoint {
     required this.interfaceName,
     required this.address,
     required this.port,
-  });
+    String? host,
+  }) : _host = host;
 
   final String interfaceName;
   final InternetAddress address;
   final int port;
+  final String? _host;
 
-  String get host => address.address;
+  String get host => _host ?? address.address;
   bool get isIpv6 => address.type == InternetAddressType.IPv6;
   String get authority => Uri(host: host, port: port).authority;
 
@@ -36,6 +40,44 @@ class LocalNetworkEndpoint {
 }
 
 class NetworkAddressProvider {
+  static Future<List<LocalNetworkPrefix>> localIpv6Prefixes() async {
+    final interfaces = await NetworkInterface.list(
+      type: InternetAddressType.IPv6,
+      includeLoopback: false,
+    );
+    return ipv6PrefixesForCandidates([
+      for (final interface in interfaces)
+        for (final address in interface.addresses)
+          NetworkAddressCandidate(
+            interfaceName: interface.name,
+            address: address.address,
+          ),
+    ]);
+  }
+
+  /// SLAAC LANs use /64 subnets. Capturing each active interface's /64 keeps
+  /// global IPv6 clients on-link without treating every public IPv6 address as
+  /// a local peer.
+  static List<LocalNetworkPrefix> ipv6PrefixesForCandidates(
+    Iterable<NetworkAddressCandidate> candidates,
+  ) {
+    final prefixes = <String, LocalNetworkPrefix>{};
+    for (final candidate in candidates) {
+      final address = tryParseLanAddress(candidate.address);
+      if (address == null ||
+          address.type != InternetAddressType.IPv6 ||
+          !_isUsable(address) ||
+          address.isLinkLocal) {
+        continue;
+      }
+      final prefix = LocalNetworkPrefix(address: address, prefixLength: 64);
+      final bytes = address.rawAddress;
+      final key = bytes.take(8).join(':');
+      prefixes.putIfAbsent(key, () => prefix);
+    }
+    return List<LocalNetworkPrefix>.unmodifiable(prefixes.values);
+  }
+
   static Future<LocalNetworkEndpoint?> localEndpoint({
     int port = MimiCamProtocol.httpPort,
     InternetAddressType type = InternetAddressType.any,
@@ -64,11 +106,17 @@ class NetworkAddressProvider {
   static LocalNetworkEndpoint? bestLocalEndpoint(
     Iterable<NetworkAddressCandidate> candidates, {
     int port = MimiCamProtocol.httpPort,
+  }) =>
+      rankedLocalEndpoints(candidates, port: port).firstOrNull;
+
+  static List<LocalNetworkEndpoint> rankedLocalEndpoints(
+    Iterable<NetworkAddressCandidate> candidates, {
+    int port = MimiCamProtocol.httpPort,
   }) {
     final scored = candidates
         .map((candidate) => (
               candidate: candidate,
-              address: InternetAddress.tryParse(candidate.address),
+              address: tryParseLanAddress(candidate.address),
             ))
         .where((value) => value.address != null && _isUsable(value.address!))
         .map((value) => (
@@ -82,13 +130,15 @@ class NetworkAddressProvider {
         if (byScore != 0) return byScore;
         return a.candidate.address.compareTo(b.candidate.address);
       });
-    if (scored.isEmpty) return null;
-    final best = scored.first;
-    return LocalNetworkEndpoint(
-      interfaceName: best.candidate.interfaceName,
-      address: best.address,
-      port: port,
-    );
+    return List.unmodifiable([
+      for (final value in scored)
+        LocalNetworkEndpoint(
+          interfaceName: value.candidate.interfaceName,
+          address: value.address,
+          port: port,
+          host: _uriHost(value.candidate, value.address),
+        ),
+    ]);
   }
 
   static String? bestLocalHost(Iterable<NetworkAddressCandidate> candidates) =>
@@ -104,6 +154,8 @@ class NetworkAddressProvider {
       score += _isPrivateIpv4(address.rawAddress) ? 110 : 25;
     } else if (_isUniqueLocalIpv6(address.rawAddress)) {
       score += 105;
+    } else if (address.isLinkLocal) {
+      score += 55;
     } else {
       score += 70;
     }
@@ -124,8 +176,7 @@ class NetworkAddressProvider {
       return false;
     }
     final unspecified = bytes.every((value) => value == 0);
-    final linkLocal = bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80;
-    return !unspecified && !linkLocal;
+    return !unspecified;
   }
 
   static bool _isPrivateIpv4(List<int> bytes) {
@@ -157,5 +208,48 @@ class NetworkAddressProvider {
         name.startsWith('p2p') ||
         name.startsWith('dummy') ||
         name.startsWith('lo');
+  }
+
+  /// Orders resolved DNS-SD addresses by LAN reachability and removes aliases.
+  static List<InternetAddress> orderResolvedAddresses(
+    Iterable<InternetAddress> addresses,
+  ) {
+    final unique = <String, InternetAddress>{};
+    for (final address in addresses) {
+      if (!_isUsable(address)) continue;
+      unique.putIfAbsent(normalizeLanHost(address.address), () => address);
+    }
+    final result = unique.values.toList(growable: false)
+      ..sort((left, right) {
+        final leftScore = _score(
+          NetworkAddressCandidate(interfaceName: '', address: left.address),
+          left,
+        );
+        final rightScore = _score(
+          NetworkAddressCandidate(interfaceName: '', address: right.address),
+          right,
+        );
+        final byScore = rightScore.compareTo(leftScore);
+        if (byScore != 0) return byScore;
+        return left.address.compareTo(right.address);
+      });
+    return List.unmodifiable(result);
+  }
+
+  static String _uriHost(
+    NetworkAddressCandidate candidate,
+    InternetAddress address,
+  ) {
+    final original = normalizeLanHost(candidate.address);
+    if (!address.isLinkLocal || original.contains('%')) return original;
+    final interfaceName = candidate.interfaceName.trim();
+    return interfaceName.isEmpty ? original : '$original%$interfaceName';
+  }
+}
+
+extension<T> on Iterable<T> {
+  T? get firstOrNull {
+    final iterator = this.iterator;
+    return iterator.moveNext() ? iterator.current : null;
   }
 }

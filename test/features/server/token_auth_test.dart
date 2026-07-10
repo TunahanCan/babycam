@@ -12,6 +12,49 @@ import 'package:mimicam/services/mimicam_server.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('public status and pairing response use the same persistent device ID',
+      () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(
+      tokenService,
+      serverDeviceIdProvider: () async => 'server-persistent-123',
+    );
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    final statusResponse = await client.getUrl(Uri(
+      scheme: 'http',
+      host: InternetAddress.loopbackIPv4.address,
+      port: base.port,
+      path: MimiCamProtocolV2.statusPublic,
+    ));
+    final status = jsonDecode(
+      await utf8.decoder.bind(await statusResponse.close()).join(),
+    ) as Map;
+    final pairRequest = await client.postUrl(Uri(
+      scheme: 'http',
+      host: InternetAddress.loopbackIPv4.address,
+      port: base.port,
+      path: MimiCamProtocolV2.pairConfirm,
+    ));
+    pairRequest.headers.contentType = ContentType.json;
+    pairRequest.write(jsonEncode({
+      'pairingNonce': status['pairingNonce'],
+      'clientName': 'Anne',
+      'deviceId': 'client-1',
+    }));
+    final pairResponse = await pairRequest.close();
+    final paired = jsonDecode(
+      await utf8.decoder.bind(pairResponse).join(),
+    ) as Map;
+
+    expect(status['serverDeviceId'], 'server-persistent-123');
+    expect(pairResponse.statusCode, HttpStatus.ok);
+    expect(paired['serverDeviceId'], status['serverDeviceId']);
+  });
+
   test('bilinmeyen HTTP path landing page yerine 404 doner', () async {
     final tokenService = PairingTokenService();
     final server = await _testServer(tokenService);
@@ -401,6 +444,7 @@ Future<MimiCamServer> _testServer(
     required bool audio,
     required String mediaTransport,
   })? onStreamSessionStarted,
+  FutureOr<String> Function()? serverDeviceIdProvider,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
@@ -410,6 +454,7 @@ Future<MimiCamServer> _testServer(
     onLog: (_) {},
     onAlert: (_) {},
     onStreamSessionStarted: onStreamSessionStarted,
+    serverDeviceIdProvider: serverDeviceIdProvider,
     tokenService: tokenService,
     httpPort: 0,
     startMediaOnSessionStart: false,
