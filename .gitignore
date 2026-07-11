@@ -1,5 +1,6 @@
 # Project exclude paths
 /.gradle/
+.DS_Store
 
 # Android/Gradle build output
 android/.gradle/
