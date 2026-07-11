@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -25,6 +26,32 @@ void main() {
     expect(runtime.currentState.cameraActive, isFalse);
     expect(runtime.currentState.microphoneActive, isFalse);
     expect(mediaStarts, 0);
+  });
+
+  test('eşzamanlı pairing start işlemleri tek mutation kuyruğunda çalışır',
+      () async {
+    final firstStart = Completer<void>();
+    var starts = 0;
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(),
+      onStartPairing: () async {
+        starts++;
+        if (starts == 1) await firstStart.future;
+        return 'mimicam://pair?payload=$starts';
+      },
+    );
+    addTearDown(runtime.dispose);
+
+    final first = runtime.startPairingMode();
+    final second = runtime.startPairingMode();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(starts, 1);
+    firstStart.complete();
+    await Future.wait([first, second]);
+
+    expect(starts, 2);
+    expect(runtime.currentState.phase, ServerRuntimePhase.pairingActive);
   });
 
   test('public pairing status sadece HTTP/WS QR bilgisi döner', () async {
@@ -70,6 +97,20 @@ void main() {
     await inactiveResponse.drain<void>();
 
     expect(inactiveResponse.statusCode, HttpStatus.notFound);
+  });
+
+  test('MimiCamServer eşzamanlı pairing start için tek bind paylaşır',
+      () async {
+    final server = await _testServer();
+    addTearDown(server.dispose);
+
+    final urls = await Future.wait([
+      server.startPairingMode(),
+      server.startPairingMode(),
+    ]);
+
+    expect(urls[0], urls[1]);
+    expect(Uri.parse(urls[0]).port, greaterThan(0));
   });
 }
 

@@ -275,6 +275,7 @@ class MimiCamServer {
   }
 
   HttpServer? _httpServer;
+  Future<String>? _pairingStartOperation;
   bool _httpServerListening = false;
   bool _pairingModeActive = false;
   bool _disposed = false;
@@ -335,7 +336,20 @@ class MimiCamServer {
     return address;
   }
 
-  Future<String> startPairingMode() async {
+  Future<String> startPairingMode() {
+    final active = _pairingStartOperation;
+    if (active != null) return active;
+    late final Future<String> operation;
+    operation = _startPairingMode().whenComplete(() {
+      if (identical(_pairingStartOperation, operation)) {
+        _pairingStartOperation = null;
+      }
+    });
+    _pairingStartOperation = operation;
+    return operation;
+  }
+
+  Future<String> _startPairingMode() async {
     if (_disposed) throw StateError('MimiCamServer is disposed.');
     if (config.webRtcPilotEnabled) {
       await webRtcGateway?.initialize();
@@ -419,6 +433,14 @@ class MimiCamServer {
   }
 
   Future<void> stopPairingMode() async {
+    final starting = _pairingStartOperation;
+    if (starting != null) {
+      try {
+        await starting;
+      } catch (_) {
+        // A failed start has no advertisement to stop.
+      }
+    }
     _pairingModeActive = false;
     try {
       await _serviceAdvertiser?.stop();

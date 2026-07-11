@@ -159,6 +159,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
                 status: strings.ui('pairedWithQr'),
                 tone: MimiCamDesignTokens.mint,
                 alertsActive: state.alertsActive,
+                alertsConnected: widget.runtime.alertTransportConnected,
                 onWatch: () => _openWatch(context, state),
               ),
               const SizedBox(height: 16),
@@ -661,6 +662,7 @@ class _RoomCard extends StatelessWidget {
     required this.status,
     required this.tone,
     required this.alertsActive,
+    required this.alertsConnected,
     this.onWatch,
   });
 
@@ -668,10 +670,13 @@ class _RoomCard extends StatelessWidget {
   final String status;
   final Color tone;
   final bool alertsActive;
+  final bool alertsConnected;
   final VoidCallback? onWatch;
 
   @override
   Widget build(BuildContext context) {
+    final alertsReady = alertsActive && alertsConnected;
+    final alertsReconnecting = alertsActive && !alertsConnected;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: MimiCamDesignTokens.cardDecoration(),
@@ -732,28 +737,37 @@ class _RoomCard extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: alertsActive
+              color: alertsReady
                   ? MimiCamDesignTokens.mintSoft
-                  : MimiCamDesignTokens.lavenderSoft,
+                  : alertsReconnecting
+                      ? MimiCamDesignTokens.amberSoft
+                      : MimiCamDesignTokens.lavenderSoft,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
                 Icon(
-                  alertsActive
+                  alertsReady
                       ? Icons.notifications_active_rounded
-                      : Icons.notifications_off_outlined,
-                  color: alertsActive
+                      : alertsReconnecting
+                          ? Icons.sync_rounded
+                          : Icons.notifications_off_outlined,
+                  color: alertsReady
                       ? MimiCamDesignTokens.mint
-                      : MimiCamDesignTokens.pink,
+                      : alertsReconnecting
+                          ? MimiCamDesignTokens.amber
+                          : MimiCamDesignTokens.pink,
                   size: 19,
                 ),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
-                    alertsActive
+                    alertsReady
                         ? AppStrings.of(context).ui('notificationsOn')
-                        : AppStrings.of(context).ui('notificationsOff'),
+                        : alertsReconnecting
+                            ? AppStrings.of(context)
+                                .ui('clientTitleReconnecting')
+                            : AppStrings.of(context).ui('notificationsOff'),
                     style: const TextStyle(
                       color: MimiCamDesignTokens.navy,
                       fontSize: 13,

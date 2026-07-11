@@ -5,6 +5,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mimicam/core/protocol/mimicam_protocol.dart';
 import 'package:mimicam/core/protocol/pairing_payload.dart';
+import 'package:mimicam/core/protocol/pairing_session.dart';
+import 'package:mimicam/features/client/alerts/client_alert_listener.dart';
+import 'package:mimicam/features/client/alerts/client_notification_service.dart';
 import 'package:mimicam/features/client/client_composition_root.dart';
 import 'package:mimicam/features/client/client_runtime.dart';
 import 'package:mimicam/features/client/pairing/pairing_session_store.dart';
@@ -72,6 +75,42 @@ void main() {
     );
     await runtime.dispose().timeout(const Duration(seconds: 5));
   });
+
+  test('iOS banner izni kapalı olsa da LAN alert transportu başlatılır',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final payload = _payload();
+    SharedPreferences.setMockInitialValues({
+      'pairing_session': jsonEncode({
+        'payload': payload.toJson(),
+        'clientId': 'client-ios',
+        'trustedClientTokenExpiresAtMs':
+            DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch,
+        'pairedAtMs': 1000,
+      }),
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final secure = _FakeSecureTokenStore()
+      ..values['pairing_session_token'] = 'restored-token';
+    final notifications = _DeniedNotificationService();
+    final listener = _RecordingAlertListener();
+
+    final runtime = ClientCompositionRoot.create(
+      preferences: preferences,
+      strings: AppStrings(const Locale('tr')),
+      secureTokens: secure,
+      notificationService: notifications,
+      alertListener: listener,
+    );
+    addTearDown(runtime.dispose);
+
+    await runtime.states.firstWhere((state) => state.alertsActive);
+
+    expect(notifications.initializeCalls, 1);
+    expect(listener.startCalls, 1);
+    expect(runtime.currentState.alertsActive, isTrue);
+  });
 }
 
 PairingPayload _payload() => PairingPayload(
@@ -100,5 +139,35 @@ class _FakeSecureTokenStore implements SecureTokenStore {
   @override
   Future<void> delete({required String key}) async {
     values.remove(key);
+  }
+}
+
+class _DeniedNotificationService extends ClientNotificationService {
+  int initializeCalls = 0;
+
+  @override
+  Future<bool> initialize({AppStrings? strings}) async {
+    initializeCalls++;
+    return false;
+  }
+}
+
+class _RecordingAlertListener extends ClientAlertListener {
+  int startCalls = 0;
+
+  @override
+  Future<void> start(
+    PairingSession session, {
+    bool waitForFirstConnection = true,
+  }) async {
+    startCalls++;
+    isListening = true;
+    isConnected = true;
+  }
+
+  @override
+  Future<void> stop() async {
+    isListening = false;
+    isConnected = false;
   }
 }

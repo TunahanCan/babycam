@@ -19,6 +19,7 @@ class PlatformRuntimeSnapshot {
     required this.serviceOwnsEngine,
     required this.engineAvailable,
     this.playbackDemand = false,
+    this.serverDemand = false,
     this.audioOutputActive = false,
     this.supportsServerInBackground = false,
     this.supportsAudioOutputInBackground = false,
@@ -58,6 +59,7 @@ class PlatformRuntimeSnapshot {
       cameraDemand: map['cameraDemand'] as bool? ?? false,
       microphoneDemand: map['microphoneDemand'] as bool? ?? false,
       playbackDemand: map['playbackDemand'] as bool? ?? false,
+      serverDemand: map['serverDemand'] as bool? ?? false,
       audioOutputActive: map['audioOutputActive'] as bool? ?? false,
       supportsServerInBackground:
           map['supportsServerInBackground'] as bool? ?? false,
@@ -101,6 +103,7 @@ class PlatformRuntimeSnapshot {
   final bool cameraDemand;
   final bool microphoneDemand;
   final bool playbackDemand;
+  final bool serverDemand;
   final bool audioOutputActive;
   final bool supportsServerInBackground;
   final bool supportsAudioOutputInBackground;
@@ -247,6 +250,23 @@ class PlatformRuntimeContract {
     });
   }
 
+  /// Keeps the Android room HTTP/WebSocket host and its Wi-Fi lock alive even
+  /// before a media or alert client has connected.
+  ///
+  /// This is intentionally independent from camera/microphone demand: without
+  /// it Android can suspend the Flutter engine while the native NSD record is
+  /// still visible, leaving a room that can be discovered but not reached.
+  Future<void> setServerDemand({required bool active}) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      await _methodChannel.invokeMethod<void>('setServerDemand', {
+        'active': active,
+      });
+    } on MissingPluginException {
+      // Unit tests and older Android shells do not own the server lifecycle.
+    }
+  }
+
   static PlatformRuntimeSnapshot _fallbackSnapshot() {
     final platform = switch (defaultTargetPlatform) {
       TargetPlatform.android => PlatformRuntimeKind.android,
@@ -265,6 +285,7 @@ class PlatformRuntimeContract {
       cameraDemand: false,
       microphoneDemand: false,
       playbackDemand: false,
+      serverDemand: false,
       audioOutputActive: false,
       supportsServerInBackground: false,
       supportsAudioOutputInBackground: false,

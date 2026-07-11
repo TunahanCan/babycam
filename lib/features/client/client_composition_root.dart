@@ -27,6 +27,8 @@ class ClientCompositionRoot {
     required SharedPreferences preferences,
     required AppStrings strings,
     SecureTokenStore? secureTokens,
+    ClientNotificationService? notificationService,
+    ClientAlertListener? alertListener,
   }) {
     createCount++;
     final identity = ClientIdentityStore(secureTokens: secureTokens);
@@ -44,7 +46,7 @@ class ClientCompositionRoot {
     final networkQuality = NetworkQualityMonitor(healthState: streamHealth);
     final remoteBroadcastAccess = RemoteBroadcastAccessClient();
     final alertHistory = ClientAlertHistory(preferences: preferences);
-    final notifications = ClientNotificationService();
+    final notifications = notificationService ?? ClientNotificationService();
     const alertBackground = ClientAlertBackgroundService();
     final roomControls = ClientRoomControls();
     final serviceBrowser = MimiCamServiceBrowser();
@@ -52,21 +54,22 @@ class ClientCompositionRoot {
       browser: serviceBrowser,
     );
     var alertDeliveryTail = Future<void>.value();
-    final alerts = ClientAlertListener(
-      healthState: streamHealth,
-      onAlert: (alert) {
-        alertDeliveryTail = alertDeliveryTail.then<void>((_) async {
-          try {
-            await alertHistory.add(alert);
-          } catch (_) {
-            // A storage failure must not suppress the phone notification.
-          }
-          await notifications.showAlert(alert);
-        }).catchError((_) {
-          // Keep processing later alerts if the platform rejects one post.
-        });
-      },
-    );
+    final alerts = alertListener ??
+        ClientAlertListener(
+          healthState: streamHealth,
+          onAlert: (alert) {
+            alertDeliveryTail = alertDeliveryTail.then<void>((_) async {
+              try {
+                await alertHistory.add(alert);
+              } catch (_) {
+                // A storage failure must not suppress the phone notification.
+              }
+              await notifications.showAlert(alert);
+            }).catchError((_) {
+              // Keep processing later alerts if the platform rejects one post.
+            });
+          },
+        );
 
     Future<void> stopAlerts() async {
       try {
@@ -92,12 +95,10 @@ class ClientCompositionRoot {
       stopStream: streams.stop,
       watchNetworkQuality: networkQuality.watch,
       startAlerts: (session) async {
-        final notificationsEnabled =
-            await notifications.initialize(strings: strings);
-        if (!notificationsEnabled) {
-          await stopAlerts();
-          return false;
-        }
+        // System banner permission and LAN event transport are separate
+        // concerns. Even when iOS notifications are disabled, keep the socket
+        // armed so alerts reach the in-app history and begin server analysis.
+        await notifications.initialize(strings: strings);
         try {
           await alertBackground.start();
           await alerts.start(session, waitForFirstConnection: false);
@@ -108,6 +109,7 @@ class ClientCompositionRoot {
         }
       },
       stopAlerts: stopAlerts,
+      alertConnectionStates: alerts.connectionStates,
       clearStore: store.clear,
       watchSessionEndpoints: endpointResolver.watch,
       persistReboundSession: store.save,

@@ -277,8 +277,7 @@ void main() {
     expect(runtime.currentState.mediaProfile?.audioFirst, isTrue);
   });
 
-  test('watch geçişi alert demandini kapatır ve fallback yeniden açabilir',
-      () async {
+  test('watch geçişi LAN alert demandini kesmeden izlemeyi başlatır', () async {
     var alertStarted = 0;
     var alertStopped = 0;
     final runtime = ClientRuntime(
@@ -299,20 +298,68 @@ void main() {
 
     expect(alertStarted, 1);
     expect(runtime.currentState.phase, ClientRuntimePhase.watching);
-    expect(runtime.currentState.alertsActive, isFalse);
-    expect(alertStopped, 1);
-
-    await runtime.startAlertListening();
     expect(runtime.currentState.alertsActive, isTrue);
+    expect(alertStopped, 0);
 
     await runtime.stopWatching();
     expect(runtime.currentState.phase, ClientRuntimePhase.alertOnly);
     expect(runtime.currentState.alertsActive, isTrue);
 
     await runtime.stopAlertListening();
-    expect(alertStopped, 2);
+    expect(alertStopped, 1);
     expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
     expect(runtime.currentState.alertsActive, isFalse);
+  });
+
+  test('alert transport bağlantısı armed tercihinden ayrı izlenir', () async {
+    final connections = StreamController<bool>();
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      startAlerts: (_) async => true,
+      stopAlerts: () async {},
+      alertConnectionStates: connections.stream,
+    );
+    addTearDown(runtime.dispose);
+    addTearDown(connections.close);
+    await runtime.pairWithServer(payload());
+    await runtime.startAlertListening();
+
+    expect(runtime.currentState.alertsActive, isTrue);
+    expect(runtime.alertTransportConnected, isFalse);
+
+    final connectedUpdate = runtime.states.firstWhere(
+      (_) => runtime.alertTransportConnected,
+    );
+    connections.add(true);
+    await connectedUpdate;
+
+    expect(runtime.currentState.alertsActive, isTrue);
+    expect(runtime.alertTransportConnected, isTrue);
+  });
+
+  test('watch ekranından çıkmak kapalı bildirimleri kendiliğinden açmaz',
+      () async {
+    var alertStarts = 0;
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      startStream: (_, {bool audioEnabled = false}) async =>
+          const ActiveStreamSession(streamToken: 'stream'),
+      stopStream: (_) async {},
+      startAlerts: (_) async {
+        alertStarts++;
+        return true;
+      },
+    );
+    addTearDown(runtime.dispose);
+    await runtime.pairWithServer(payload());
+
+    final presentation = runtime.claimWatchPresentation();
+    await runtime.startWatching();
+    await runtime.releaseWatchPresentation(presentation);
+
+    expect(alertStarts, 0);
+    expect(runtime.currentState.alertsActive, isFalse);
+    expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
   });
 
   test('restart eski streami kapatıp yeni audio demand ile tekil başlatır',

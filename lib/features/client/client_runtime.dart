@@ -60,6 +60,7 @@ class ClientRuntime {
         watchNetworkQuality,
     Future<bool> Function(PairingSession session)? startAlerts,
     Future<void> Function()? stopAlerts,
+    Stream<bool>? alertConnectionStates,
     Future<void> Function()? clearStore,
     Stream<PairingSession> Function(PairingSession session)?
         watchSessionEndpoints,
@@ -83,7 +84,10 @@ class ClientRuntime {
         _persistReboundSession = persistReboundSession,
         _refreshRemoteBroadcastAccess = refreshRemoteBroadcastAccess,
         _broadcastAccess = broadcastAccess,
-        alertHistory = alertHistory ?? ClientAlertHistory();
+        alertHistory = alertHistory ?? ClientAlertHistory() {
+    _alertConnectionSubscription =
+        alertConnectionStates?.distinct().listen(_setAlertTransportConnected);
+  }
 
   final Future<PairingSession> Function(PairingPayload payload) _pair;
   final Future<PairingSession?> Function(PairingSession session)? _renew;
@@ -112,6 +116,7 @@ class ClientRuntime {
       const ClientRuntimeState(phase: ClientRuntimePhase.unpaired);
   StreamSubscription<NetworkQualityUpdate>? _networkQualitySubscription;
   StreamSubscription<PairingSession>? _endpointSubscription;
+  StreamSubscription<bool>? _alertConnectionSubscription;
   Timer? _broadcastAccessTimer;
   PairingSession? _activeStreamOwnerSession;
   Future<void> _watchTail = Future<void>.value();
@@ -120,8 +125,10 @@ class ClientRuntime {
   int _broadcastAccessTimerGeneration = 0;
   int _watchPresentationGeneration = 0;
   bool _disposed = false;
+  bool _alertTransportConnected = false;
 
   ClientRuntimeState get currentState => _state;
+  bool get alertTransportConnected => _alertTransportConnected;
   Stream<ClientRuntimeState> get states => Stream<ClientRuntimeState>.multi(
         (controller) {
           controller.add(_state);
@@ -152,8 +159,11 @@ class ClientRuntime {
   Future<void> releaseWatchPresentation(int generation) =>
       _enqueueWatch(() async {
         if (!isWatchPresentationCurrent(generation)) return;
+        final alertsWereActive = _state.alertsActive;
         await _stopWatchingUnlocked();
         if (!isWatchPresentationCurrent(generation) ||
+            !alertsWereActive ||
+            _state.alertsActive ||
             _state.session == null ||
             _state.activeStream != null) {
           return;
@@ -298,8 +308,10 @@ class ClientRuntime {
   Future<void> _startWatchingUnlocked({bool audioEnabled = false}) async {
     if (_disposed || _state.session == null) return;
     final session = _state.session!;
-    if (_state.alertsActive) await stopAlertListening();
-    if (_disposed || _state.session == null) return;
+    // Keep the event WebSocket independent from the media transport. When the
+    // server cannot analyze alongside WebRTC it rejects the pilot and the
+    // stream controller falls back to MJPEG/WAV; dropping alerts here instead
+    // silently disabled iOS notifications throughout live viewing.
     if (_state.activeStream != null) {
       try {
         await _stopStream?.call(_activeStreamOwnerSession ?? session);
@@ -514,6 +526,7 @@ class ClientRuntime {
 
   Future<void> stopAlertListening() async {
     await _stopAlerts?.call();
+    _setAlertTransportConnected(false);
     if (_disposed) return;
     _emit(ClientRuntimeState(
       phase: _state.activeStream == null
@@ -586,6 +599,7 @@ class ClientRuntime {
 
     await attempt(() => _watchTail);
     await attempt(() async => _networkQualitySubscription?.cancel());
+    await attempt(() async => _alertConnectionSubscription?.cancel());
     await attempt(_cancelEndpointResolution);
     final session = _state.session;
     if (session != null && _state.activeStream != null) {
@@ -602,6 +616,15 @@ class ClientRuntime {
     await attempt(alertHistory.dispose);
     await attempt(() async => _broadcastAccess?.dispose());
     await attempt(_states.close);
+  }
+
+  void _setAlertTransportConnected(bool connected) {
+    if (_disposed || _alertTransportConnected == connected) return;
+    _alertTransportConnected = connected;
+    // Connection health is orthogonal to the user's armed preference. Emit
+    // the current immutable state again so presentation can show reconnecting
+    // without rewriting every runtime transition.
+    if (!_states.isClosed) _states.add(_state);
   }
 
   void _startNetworkQuality(PairingSession session) {

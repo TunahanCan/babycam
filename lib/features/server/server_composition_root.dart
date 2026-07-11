@@ -82,6 +82,16 @@ class ServerCompositionRoot {
       return publishNativeDemand();
     }
 
+    Future<void> stopServerRuntime(MimiCamServer server) async {
+      try {
+        await server.dispose();
+      } finally {
+        // Media demand may already be empty. Release the independent HTTP/WS
+        // host lease only after the Dart server has closed its sockets.
+        await platformContract.setServerDemand(active: false);
+      }
+    }
+
     final nativeMediaSource = defaultTargetPlatform == TargetPlatform.android &&
             startMediaOverride == null
         ? AndroidServiceMediaSource(
@@ -167,25 +177,34 @@ class ServerCompositionRoot {
       onPauseExternalMedia: server.pauseExternalMediaForPlatform,
       onStartPairing: startPairingOverride ??
           () async {
-            final url = await server.startPairingMode();
-            final uri = Uri.parse(url);
-            lastAddress = uri.host;
-            final payload = ServerQrPayloadBuilder(
-              tokenService: tokenService,
-              deviceId: await serverDeviceId,
-              transportConfig: transportConfig,
-            ).build(
-              host: lastAddress ?? '127.0.0.1',
-              port: uri.port,
-              transportConfig: transportConfig,
-              capabilities: server.mediaCapabilities,
-            );
-            return payload.toUriString();
+            // Start the Android host lease while the Activity is visible. It
+            // owns the Flutter engine and Wi-Fi lock before any client/media
+            // demand exists, preventing a discoverable but unreachable room.
+            await platformContract.setServerDemand(active: true);
+            try {
+              final url = await server.startPairingMode();
+              final uri = Uri.parse(url);
+              lastAddress = uri.host;
+              final payload = ServerQrPayloadBuilder(
+                tokenService: tokenService,
+                deviceId: await serverDeviceId,
+                transportConfig: transportConfig,
+              ).build(
+                host: lastAddress ?? '127.0.0.1',
+                port: uri.port,
+                transportConfig: transportConfig,
+                capabilities: server.mediaCapabilities,
+              );
+              return payload.toUriString();
+            } catch (_) {
+              await platformContract.setServerDemand(active: false);
+              rethrow;
+            }
           },
       onStopPairing: startPairingOverride == null
           ? () async => server.stopPairingMode()
           : null,
-      onStop: stopOverride ?? server.dispose,
+      onStop: stopOverride ?? () => stopServerRuntime(server),
     );
     notifyMediaProfileChanged = runtime.refreshMediaProfile;
     notifyBroadcastAccessChanged =

@@ -104,6 +104,9 @@ object MimiCamPlatformRuntime : EventChannel.StreamHandler {
     private var alertDemand = false
 
     @Volatile
+    private var serverDemand = false
+
+    @Volatile
     private var requestedNativeCameraCaptureDemand = false
 
     @Volatile
@@ -120,6 +123,9 @@ object MimiCamPlatformRuntime : EventChannel.StreamHandler {
 
     @Volatile
     private var serviceAlertDemand = false
+
+    @Volatile
+    private var serviceServerDemand = false
 
     @Volatile
     private var serviceNativeCameraCaptureDemand = false
@@ -168,6 +174,13 @@ object MimiCamPlatformRuntime : EventChannel.StreamHandler {
 
     val isAlertDemandRequested: Boolean
         get() = alertDemand
+
+    val isServerDemandRequested: Boolean
+        get() = serverDemand
+
+    val hasRequestedRuntimeDemand: Boolean
+        get() = serverDemand || alertDemand || cameraDemand ||
+            microphoneDemand || playbackDemand
 
     val isNativeCameraCaptureRequested: Boolean
         get() = requestedNativeCameraCaptureDemand
@@ -239,12 +252,19 @@ object MimiCamPlatformRuntime : EventChannel.StreamHandler {
         emit("alertDemandChanged", mapOf("active" to active))
     }
 
+    fun setRequestedServerDemand(active: Boolean) {
+        if (serverDemand == active) return
+        serverDemand = active
+        emit("serverDemandChanged", mapOf("active" to active))
+    }
+
     fun setForegroundServiceState(
         active: Boolean,
         camera: Boolean,
         microphone: Boolean,
         playback: Boolean = false,
         alert: Boolean = false,
+        server: Boolean = false,
         nativeCameraCapture: Boolean = camera,
         nativeMicrophoneCapture: Boolean = microphone,
         stopReason: String? = null
@@ -254,6 +274,7 @@ object MimiCamPlatformRuntime : EventChannel.StreamHandler {
         serviceMicrophoneDemand = active && microphone
         servicePlaybackDemand = active && playback
         serviceAlertDemand = active && alert
+        serviceServerDemand = active && server
         serviceNativeCameraCaptureDemand = active && camera && nativeCameraCapture
         serviceNativeMicrophoneCaptureDemand =
             active && microphone && nativeMicrophoneCapture
@@ -266,6 +287,7 @@ object MimiCamPlatformRuntime : EventChannel.StreamHandler {
                 "microphoneDemand" to microphone,
                 "playbackDemand" to playback,
                 "alertDemand" to serviceAlertDemand,
+                "serverDemand" to serviceServerDemand,
                 "nativeCameraCapture" to serviceNativeCameraCaptureDemand,
                 "nativeMicrophoneCapture" to serviceNativeMicrophoneCaptureDemand,
                 "externalCameraCaptureDemand" to externalCameraCaptureDemand,
@@ -281,6 +303,7 @@ object MimiCamPlatformRuntime : EventChannel.StreamHandler {
         serviceMicrophoneDemand = false
         servicePlaybackDemand = false
         serviceAlertDemand = false
+        serviceServerDemand = false
         serviceNativeCameraCaptureDemand = false
         serviceNativeMicrophoneCaptureDemand = false
         lastServiceStopReason = reason
@@ -291,7 +314,8 @@ object MimiCamPlatformRuntime : EventChannel.StreamHandler {
                 "cameraDemand" to cameraDemand,
                 "microphoneDemand" to microphoneDemand,
                 "playbackDemand" to playbackDemand,
-                "alertDemand" to alertDemand
+                "alertDemand" to alertDemand,
+                "serverDemand" to serverDemand
             )
         )
     }
@@ -356,10 +380,10 @@ object MimiCamPlatformRuntime : EventChannel.StreamHandler {
         "microphoneDemand" to microphoneDemand,
         "playbackDemand" to playbackDemand,
         "alertDemand" to alertDemand,
+        "serverDemand" to serverDemand,
         "audioOutputActive" to audioOutputActive,
         "supportsServerInBackground" to
-            (foregroundServiceActive &&
-                (serviceCameraDemand || serviceMicrophoneDemand || servicePlaybackDemand)),
+            (foregroundServiceActive && serviceServerDemand),
         "supportsAlertsInBackground" to
             (foregroundServiceActive && serviceAlertDemand),
         "supportsAudioOutputInBackground" to
@@ -391,6 +415,7 @@ object MimiCamPlatformRuntime : EventChannel.StreamHandler {
         "serviceMicrophoneDemand" to serviceMicrophoneDemand,
         "servicePlaybackDemand" to servicePlaybackDemand,
         "serviceAlertDemand" to serviceAlertDemand,
+        "serviceServerDemand" to serviceServerDemand,
         "serviceNativeCameraCaptureDemand" to serviceNativeCameraCaptureDemand,
         "serviceNativeMicrophoneCaptureDemand" to
             serviceNativeMicrophoneCaptureDemand,
@@ -404,6 +429,8 @@ object MimiCamPlatformRuntime : EventChannel.StreamHandler {
             "Android foreground service WebRTC medya yakalayıcısı için motoru ve FGS tiplerini korur."
         } else if (nativeCameraActive || nativeMicrophoneActive) {
             "Android foreground service CameraX ve AudioRecord donanımının gerçek sahibidir."
+        } else if (serviceServerDemand) {
+            "Android foreground service yerel ağ sunucusunu ve Wi-Fi bağlantısını canlı tutar."
         } else if (serviceAlertDemand) {
             "Android foreground service istemci uyarı bağlantısını arka planda canlı tutar."
         } else {

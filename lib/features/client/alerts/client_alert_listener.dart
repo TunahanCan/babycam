@@ -35,6 +35,18 @@ class ClientAlertListener {
   bool isListening = false;
   bool isConnected = false;
 
+  final _connectionStates = StreamController<bool>.broadcast();
+
+  Stream<bool> get connectionStates => Stream<bool>.multi((controller) {
+        controller.add(isConnected);
+        final subscription = _connectionStates.stream.listen(
+          controller.add,
+          onError: controller.addError,
+          onDone: controller.close,
+        );
+        controller.onCancel = subscription.cancel;
+      });
+
   WebSocket? _socket;
   HttpClient? _client;
   Future<void>? _loop;
@@ -73,7 +85,7 @@ class ClientAlertListener {
   Future<void> stop() async {
     _intentionalStop = true;
     isListening = false;
-    isConnected = false;
+    _setConnected(false);
     _sessionKey = null;
     _generation++;
     final socket = _socket;
@@ -130,7 +142,7 @@ class ClientAlertListener {
         return;
       }
       _socket = socket;
-      isConnected = true;
+      _setConnected(true);
       healthState?.markWsConnected();
       final first = _firstConnection;
       if (first != null && !first.isCompleted) first.complete();
@@ -148,7 +160,13 @@ class ClientAlertListener {
   void _markDisconnected() {
     if (_intentionalStop) return;
     if (isConnected) healthState?.markWsDisconnected();
-    isConnected = false;
+    _setConnected(false);
+  }
+
+  void _setConnected(bool connected) {
+    if (isConnected == connected) return;
+    isConnected = connected;
+    if (!_connectionStates.isClosed) _connectionStates.add(connected);
   }
 
   bool _isCurrent(int generation) =>

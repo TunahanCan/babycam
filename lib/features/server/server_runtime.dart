@@ -125,6 +125,7 @@ class ServerRuntime {
   Timer? _broadcastAccessTimer;
   int _broadcastAccessTimerGeneration = 0;
   Future<void> _mutationTail = Future<void>.value();
+  Future<void> _pairingMutationTail = Future<void>.value();
   bool _disposed = false;
 
   Stream<ServerRuntimeState> get states => _states.stream;
@@ -180,7 +181,10 @@ class ServerRuntime {
 
   Future<void> startPairingOnly() => startPairingMode();
 
-  Future<void> startPairingMode() async {
+  Future<void> startPairingMode() =>
+      _serializePairingMutation(_startPairingModeLocked);
+
+  Future<void> _startPairingModeLocked() async {
     if (_disposed) return;
     try {
       final qr = await _onStartPairing?.call();
@@ -200,7 +204,10 @@ class ServerRuntime {
     }
   }
 
-  Future<void> stopPairingMode() async {
+  Future<void> stopPairingMode() =>
+      _serializePairingMutation(_stopPairingModeLocked);
+
+  Future<void> _stopPairingModeLocked() async {
     if (_disposed) return;
     await _onStopPairing?.call();
     if (_disposed) return;
@@ -786,6 +793,15 @@ class ServerRuntime {
     // Callers still receive their own failure, while a rejected mutation does
     // not poison later stop/recovery work.
     _mutationTail = next.then<void>((_) {}, onError: (_) {});
+    return next;
+  }
+
+  Future<void> _serializePairingMutation(Future<void> Function() operation) {
+    final next = _pairingMutationTail.then<void>(
+      (_) => operation(),
+      onError: (_) => operation(),
+    );
+    _pairingMutationTail = next.then<void>((_) {}, onError: (_) {});
     return next;
   }
 

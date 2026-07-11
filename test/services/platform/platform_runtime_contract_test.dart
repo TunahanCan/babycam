@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mimicam/services/platform/platform_runtime_contract.dart';
@@ -180,6 +181,29 @@ void main() {
       'nativeCameraCapture': false,
       'nativeMicrophoneCapture': false,
     });
+  });
+
+  test('setServerDemand owns Android LAN host independently from media',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    const channel = MethodChannel('mimicam/platform_runtime_server_test');
+    MethodCall? received;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      received = call;
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    await const PlatformRuntimeContract(methodChannel: channel)
+        .setServerDemand(active: true);
+
+    expect(received?.method, 'setServerDemand');
+    expect(received?.arguments, {'active': true});
   });
 
   test('coordinator serializes one pause and one recovery', () async {

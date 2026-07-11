@@ -84,10 +84,6 @@ class _WatchScreenState extends State<WatchScreen> {
       try {
         if (!_isCurrentScreenOperation(operationGeneration)) return;
         await widget.runtime.startWatching(audioEnabled: _audioEnabled);
-        if (!_isCurrentScreenOperation(operationGeneration)) return;
-        if (widget.runtime.currentState.activeStream?.usesWebRtc != true) {
-          await widget.runtime.startAlertListening();
-        }
       } catch (_) {}
     }());
   }
@@ -227,7 +223,7 @@ class _WatchScreenState extends State<WatchScreen> {
   }
 
   void _enterNightClock() {
-    final operationGeneration = ++_screenOperationGeneration;
+    _screenOperationGeneration++;
     _clockTimer?.cancel();
     setState(() {
       _nightClock = true;
@@ -237,10 +233,6 @@ class _WatchScreenState extends State<WatchScreen> {
     unawaited(() async {
       try {
         await widget.runtime.stopWatching();
-        if (!_isCurrentScreenOperation(operationGeneration)) return;
-        if (!widget.runtime.currentState.alertsActive) {
-          await widget.runtime.startAlertListening();
-        }
       } catch (_) {}
     }());
     _clockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
@@ -699,10 +691,6 @@ class _WatchScreenState extends State<WatchScreen> {
     final operationGeneration = ++_screenOperationGeneration;
     await widget.runtime.restartWatching(audioEnabled: audioEnabled);
     if (!_isCurrentScreenOperation(operationGeneration)) return;
-    if (widget.runtime.currentState.activeStream?.usesWebRtc != true &&
-        !widget.runtime.currentState.alertsActive) {
-      await widget.runtime.startAlertListening();
-    }
   }
 }
 
