@@ -135,6 +135,53 @@ void main() {
     }
   });
 
+  testWidgets('server yayın ekranı uzun diller ve büyük metinde taşmaz',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    for (final scenario in [
+      (locale: const Locale('de'), scale: 1.3),
+      (locale: const Locale('ar', 'SA'), scale: 1.3),
+      (locale: const Locale('tr'), scale: 2.0),
+    ]) {
+      final preferences = await SharedPreferences.getInstance();
+      final runtime = ServerRuntime(
+        mediaRuntime: MediaRuntimeController(),
+        onStartPairing: () async => 'mimicam://pair?payload=x',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: scenario.locale,
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: _localizationsDelegates,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(scenario.scale),
+            ),
+            child: child!,
+          ),
+          home: ServerHomeScreen(
+            runtime: runtime,
+            config: ConfigurationService(preferences),
+            activeRole: AppRole.server,
+            onRoleSelected: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      _expectNoFlutterException(tester);
+
+      await tester.drag(
+        find.byType(Scrollable).first,
+        const Offset(0, -620),
+      );
+      await tester.pumpAndSettle();
+      _expectNoFlutterException(tester);
+    }
+  });
+
   testWidgets('server QR uzun HTTP/WS payload ile kısa ekrana sığar',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(320, 640));

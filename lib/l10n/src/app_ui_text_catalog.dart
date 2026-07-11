@@ -1545,12 +1545,167 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'MODE CHAMBRE BÉBÉ'
   },
   'roomStreamReady': {
-    'tr': 'Oda yayına hazır',
-    'en': 'Room stream is ready',
-    'zh': '房间直播已就绪',
-    'hi': 'कमरे की स्ट्रीम तैयार है',
-    'es': 'Directo de habitación listo',
-    'fr': 'Flux de la chambre prêt'
+    'tr': 'Yayın açık',
+    'en': 'Stream is live',
+    'zh': '直播已开启',
+    'hi': 'स्ट्रीम चालू है',
+    'es': 'Emisión activa',
+    'fr': 'Flux actif'
+  },
+  'serverStreamStoppedTitle': {
+    'tr': 'Yayın durduruldu',
+    'en': 'Stream stopped',
+    'zh': '直播已停止',
+    'hi': 'स्ट्रीम रोक दी गई',
+    'es': 'Emisión detenida',
+    'fr': 'Flux arrêté'
+  },
+  'serverStreamErrorBody': {
+    'tr': 'Kamera izinlerini ve bağlantıyı kontrol edip tekrar dene.',
+    'en': 'Check camera permissions and the connection, then try again.',
+    'zh': '检查摄像头权限和网络连接，然后重试。',
+    'hi': 'कैमरा अनुमति और कनेक्शन जाँचकर फिर कोशिश करें।',
+    'es': 'Revisa los permisos de cámara y la conexión, y prueba de nuevo.',
+    'fr': 'Vérifiez les autorisations caméra et la connexion, puis réessayez.'
+  },
+  'serverStreamStoppedBody': {
+    'tr': 'Kamera, mikrofon ve ebeveyn bağlantıları kapatıldı.',
+    'en': 'Camera, microphone, and parent connections are off.',
+    'zh': '摄像头、麦克风和家长连接均已关闭。',
+    'hi': 'कैमरा, माइक्रोफ़ोन और अभिभावक कनेक्शन बंद हैं।',
+    'es': 'La cámara, el micrófono y las conexiones parentales están apagados.',
+    'fr': 'La caméra, le micro et les connexions parent sont arrêtés.'
+  },
+  'restartRoomStream': {
+    'tr': 'Yayını yeniden başlat',
+    'en': 'Restart stream',
+    'zh': '重新启动直播',
+    'hi': 'स्ट्रीम फिर शुरू करें',
+    'es': 'Reiniciar emisión',
+    'fr': 'Relancer le flux'
+  },
+  'serverMediaPreparingBody': {
+    'tr': 'Kamera görüntüsü hazırlanıyor; telefonu sabit tut.',
+    'en': 'The camera image is preparing; keep the phone steady.',
+    'zh': '摄像头画面正在准备，请保持手机稳定。',
+    'hi': 'कैमरा दृश्य तैयार हो रहा है; फ़ोन को स्थिर रखें।',
+    'es': 'La imagen de la cámara se está preparando; mantén el teléfono fijo.',
+    'fr': 'L’image de la caméra se prépare ; gardez le téléphone stable.'
+  },
+  'serverWaitingForParent': {
+    'tr': 'Kamera hazır. İzlemeye başlamak için ebeveyn cihazını bağla.',
+    'en': 'The camera is ready. Connect the parent device to start watching.',
+    'zh': '摄像头已就绪。连接家长设备即可开始查看。',
+    'hi': 'कैमरा तैयार है। देखने के लिए अभिभावक डिवाइस जोड़ें।',
+    'es': 'La cámara está lista. Conecta el dispositivo parental para mirar.',
+    'fr': 'La caméra est prête. Connectez l’appareil parent pour regarder.'
+  },
+  'serverParentsConnectedBody': {
+    'tr': '{count} ebeveyn bağlı. Oda bağlantısı açık.',
+    'en': '{count} parent device(s) connected. The room link is active.',
+    'zh': '已连接 {count} 台家长设备。房间连接已开启。',
+    'hi': '{count} अभिभावक डिवाइस जुड़ा है। कमरे का कनेक्शन चालू है।',
+    'es':
+        '{count} dispositivo(s) parental(es) conectado(s). La sala está enlazada.',
+    'fr': '{count} appareil(s) parent connecté(s). La liaison est active.'
+  },
+  'connectParentDevice': {
+    'tr': 'Ebeveyn cihazını bağla',
+    'en': 'Connect parent device',
+    'zh': '连接家长设备',
+    'hi': 'अभिभावक डिवाइस जोड़ें',
+    'es': 'Conectar dispositivo parental',
+    'fr': 'Connecter l’appareil parent'
+  },
+  'connectAnotherParent': {
+    'tr': 'Başka cihaz bağla',
+    'en': 'Connect another device',
+    'zh': '连接另一台设备',
+    'hi': 'दूसरा डिवाइस जोड़ें',
+    'es': 'Conectar otro dispositivo',
+    'fr': 'Connecter un autre appareil'
+  },
+  'safeRoomSetupTitle': {
+    'tr': 'Güvenli kurulum',
+    'en': 'Safe setup',
+    'zh': '安全布置',
+    'hi': 'सुरक्षित सेटअप',
+    'es': 'Instalación segura',
+    'fr': 'Installation sûre'
+  },
+  'safeRoomSetupPlacement': {
+    'tr': 'Telefonu sabit ve bebeğin erişemeyeceği bir yere yerleştir.',
+    'en': 'Secure the phone somewhere the baby cannot reach.',
+    'zh': '将手机固定在婴儿无法触及的位置。',
+    'hi': 'फ़ोन को ऐसी स्थिर जगह रखें जहाँ बच्चा न पहुँच सके।',
+    'es': 'Fija el teléfono donde el bebé no pueda alcanzarlo.',
+    'fr': 'Fixez le téléphone hors de portée du bébé.'
+  },
+  'safeRoomSetupPower': {
+    'tr':
+        'Şarj kablosunu bebekten uzak tut; telefonun hava almasını engelleme.',
+    'en':
+        'Keep the charging cable away from the baby and let the phone ventilate.',
+    'zh': '让充电线远离婴儿，并确保手机散热通畅。',
+    'hi': 'चार्जिंग केबल बच्चे से दूर रखें और फ़ोन की हवा न रोकें।',
+    'es': 'Aleja el cable del bebé y deja que el teléfono se ventile.',
+    'fr': 'Éloignez le câble du bébé et laissez le téléphone ventilé.'
+  },
+  'safeRoomSetupVerify': {
+    'tr': 'Görüntü ve sesi ebeveyn cihazından kontrol et.',
+    'en': 'Check the picture and sound from the parent device.',
+    'zh': '在家长设备上检查画面和声音。',
+    'hi': 'अभिभावक डिवाइस से तस्वीर और आवाज़ जाँचें।',
+    'es': 'Comprueba la imagen y el sonido desde el dispositivo parental.',
+    'fr': 'Vérifiez l’image et le son depuis l’appareil parent.'
+  },
+  'adultSupervisionNotice': {
+    'tr': 'MimiCam yetişkin gözetiminin yerine geçmez.',
+    'en': 'MimiCam does not replace adult supervision.',
+    'zh': 'MimiCam 不能替代成人看护。',
+    'hi': 'MimiCam वयस्क निगरानी का विकल्प नहीं है।',
+    'es': 'MimiCam no sustituye la supervisión de un adulto.',
+    'fr': 'MimiCam ne remplace pas la surveillance d’un adulte.'
+  },
+  'streamDetails': {
+    'tr': 'Yayın ayrıntıları',
+    'en': 'Stream details',
+    'zh': '直播详情',
+    'hi': 'स्ट्रीम विवरण',
+    'es': 'Detalles de la emisión',
+    'fr': 'Détails du flux'
+  },
+  'streamDetailsSubtitle': {
+    'tr': 'Bağlantı, görüntü kalitesi ve uyarı durumu',
+    'en': 'Connection, image quality, and alert status',
+    'zh': '连接、画质和提醒状态',
+    'hi': 'कनेक्शन, तस्वीर की गुणवत्ता और अलर्ट स्थिति',
+    'es': 'Conexión, calidad de imagen y estado de alertas',
+    'fr': 'Connexion, qualité d’image et état des alertes'
+  },
+  'technicalError': {
+    'tr': 'Teknik hata',
+    'en': 'Technical error',
+    'zh': '技术错误',
+    'hi': 'तकनीकी त्रुटि',
+    'es': 'Error técnico',
+    'fr': 'Erreur technique'
+  },
+  'stopRoomStreamConfirmTitle': {
+    'tr': 'Yayın durdurulsun mu?',
+    'en': 'Stop the room stream?',
+    'zh': '停止房间直播吗？',
+    'hi': 'कमरे की स्ट्रीम रोकें?',
+    'es': '¿Detener la emisión de la habitación?',
+    'fr': 'Arrêter le flux de la chambre ?'
+  },
+  'stopRoomStreamConfirmBody': {
+    'tr': 'Kamera, mikrofon ve bağlı ebeveyn oturumları kapatılacak.',
+    'en': 'The camera, microphone, and connected parent sessions will close.',
+    'zh': '摄像头、麦克风和已连接的家长会话将关闭。',
+    'hi': 'कैमरा, माइक्रोफ़ोन और जुड़े अभिभावक सत्र बंद हो जाएँगे।',
+    'es': 'Se cerrarán la cámara, el micrófono y las sesiones parentales.',
+    'fr': 'La caméra, le micro et les sessions parent connectées seront fermés.'
   },
   'serverHeroReadyText': {
     'tr': 'Kamera açık, eşleşme hazır. Telefonu sabit bir yere bırakabilirsin.',
@@ -1581,11 +1736,11 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Caméra en attente'
   },
   'parentsCount': {
-    'tr': '{count} ebeveyn',
-    'en': '{count} parent(s)',
-    'zh': '{count} 位家长',
-    'hi': '{count} अभिभावक',
-    'es': '{count} padre/madre',
+    'tr': '{count} ebeveyn bağlı',
+    'en': '{count} parent(s) connected',
+    'zh': '已连接 {count} 位家长',
+    'hi': '{count} अभिभावक जुड़े',
+    'es': '{count} padre/madre conectado(s)',
     'fr': '{count} parent(s) connecté(s)'
   },
   'qualityMeasuring': {
@@ -1694,6 +1849,14 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'hi': 'सक्रिय',
     'es': 'Activo',
     'fr': 'Actif'
+  },
+  'partlyActive': {
+    'tr': 'Kısmen aktif',
+    'en': 'Partly active',
+    'zh': '部分启用',
+    'hi': 'आंशिक रूप से सक्रिय',
+    'es': 'Parcialmente activo',
+    'fr': 'Partiellement actif'
   },
   'preparing': {
     'tr': 'Hazırlanıyor',
@@ -1895,6 +2058,15 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'hi': 'कैमरा अनुमति मिलने पर कमरे की छवि यहाँ दिखेगी।',
     'es': 'Al conceder permiso de cámara, la imagen aparecerá aquí.',
     'fr': 'Quand la permission caméra sera accordée, l’image apparaîtra ici.'
+  },
+  'localPreviewPreparingText': {
+    'tr': 'Oda yayını açık; bu telefondaki önizleme hazırlanıyor.',
+    'en': 'The room stream is active; the preview on this phone is preparing.',
+    'zh': '房间直播已开启；此手机上的预览正在准备。',
+    'hi': 'कमरे की स्ट्रीम चालू है; इस फ़ोन पर पूर्वावलोकन तैयार हो रहा है।',
+    'es':
+        'La emisión está activa; la vista previa de este teléfono se prepara.',
+    'fr': 'Le flux est actif ; l’aperçu sur ce téléphone se prépare.'
   },
   'cameraPreparing': {
     'tr': 'Kamera hazırlanıyor',

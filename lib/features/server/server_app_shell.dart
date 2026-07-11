@@ -13,6 +13,7 @@ class ServerAppShell extends StatelessWidget {
     required this.config,
     required this.activeRole,
     required this.onRoleSelected,
+    required this.onRestartServer,
     this.switchingRole = false,
   });
 
@@ -20,6 +21,7 @@ class ServerAppShell extends StatelessWidget {
   final ConfigurationService config;
   final AppRole activeRole;
   final ValueChanged<AppRole> onRoleSelected;
+  final VoidCallback onRestartServer;
   final bool switchingRole;
 
   @override
@@ -30,6 +32,7 @@ class ServerAppShell extends StatelessWidget {
         config: config,
         activeRole: activeRole,
         onRoleSelected: onRoleSelected,
+        onRestartServer: onRestartServer,
         switchingRole: switchingRole,
       ));
 }

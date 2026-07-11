@@ -132,7 +132,7 @@ inventory = [
 ('08','Canlı izleme','Video paneli, kalite/latency metrikleri, aksiyonlar.'),
 ('09','Uyarı geçmişi','Canlı izleme içi olay zaman çizgisi.'),
 ('10','İzleme ayarları','Otomatik kalite, canlı uyarı ve ekranın açık kalması.'),
-('11','Server Yayın','Bebek odası medya runtime ve algılama durumu.'),
+('11','Server Yayın','Canlı kadraj, ebeveyn bağlantısı ve güvenli kurulum adımları.'),
 ('12','Server QR/IP','Ebeveyn cihazı eşleştirme bileti ve QR.'),
 ('13','Server Servis','Kamera, mikrofon, WebSocket ve client sayısı.'),
 ('14','Server Ayarlar','Hızlı algılama profilleri ve açılır ileri ayarlar.'),
@@ -208,7 +208,7 @@ screen_meta = [
 ('08_watch_live.png','08 · Canlı İzleme','Video paneli, ses/hareket/gecikme metrikleri ve izleme aksiyonları.','UC-04'),
 ('09_watch_history.png','09 · Watch Uyarı Geçmişi','Canlı izleme içinde ağlama/hareket/sistem zaman çizgisi.','UC-04'),
 ('10_watch_settings.png','10 · Watch Ayarları','Otomatik kaliteyi açıklar; canlı uyarı ve ekranı açık tutma kontrollerini gerçekten uygular. Algılama ayarlarının oda cihazında olduğu dürüstçe belirtilir.','UC-04'),
-('11_server_stream.png','11 · Server Yayın','Bebek odası cihazı medya runtime, izleyici sayısı ve algılama durumunu gösterir.','UC-03'),
+('11_server_stream.png','11 · Server Yayın','Kamera öncelikli ana ekran; canlı kadrajı, ebeveyn bağlantısını, medya sağlığını ve güvenli kurulum adımlarını tek bakışta gösterir.','UC-03'),
 ('12_server_qr_ip.png','12 · Server QR/IP','QR/IP bağlantı bileti ebeveyn cihazı eşleşmesi için okunabilir boyutta sunulur.','UC-03'),
 ('13_server_services.png','13 · Server Servis','Kamera, mikrofon, WebSocket ve bağlı client sayıları operasyonel olarak izlenir.','UC-03'),
 ('14_server_settings.png','14 · Server Ayarlar','Hassas, Dengeli ve Daha az uyarı hızlı profilleri üstte; teknik eşik ve süreler açılır ileri bölümde sunulur.','UC-03'),
@@ -230,7 +230,7 @@ notes = [
 ('QR scanner','Native kamera preview test ortamında bağımsız capture edilemediği için QR scanner sayfasında aynı layout’u temsil eden kamera alanı/mock ikon kullanıldı; alt manuel giriş alanı gerçek tasarımla aynı yapıyı taşır.'),
 ('Cihaz çerçevesi','Ekranlarda Android status ve navigation bar korunmuştur; bu, “bire bir fiziksel cihaz ekranı” amacıyla bilinçli bırakıldı.'),
 ('Android ilk açılış','LG H870 release ölçümünde ilk cold-start 1,34 sn’den 0,88 sn’ye; tekrarlı cold-start aralığı 0,83–0,85 sn’den 0,65–0,87 sn’ye indi. Debug APK’nin 10+ sn açılışı üretim performansı değildir.'),
-('Kullanıcı dostu ayarlar','İşlevsiz görünen client kontrolleri gerçek tercihlere bağlandı. Watch ekranındaki sahte eşik kartları kaldırıldı; server tarafında hızlı profiller ve gizlenebilir ileri ayarlar eklendi.'),
+('Kullanıcı dostu ekranlar','İşlevsiz görünen client kontrolleri gerçek tercihlere bağlandı. Server Yayın ekranı kamera öncelikli hale getirildi; tüm Server sekmeleri gece laciverti, mint ve semantik durum renklerinden oluşan sakin ve erişilebilir bir palete taşındı.'),
 ('Kapsam dışı','Gerçek kamera görüntüsü, gerçek ağ/video stream içeriği, fiziksel QR scan senaryosu ve mağaza görselleri bu PDF’in kapsamı dışında tutuldu.'),
 ]
 for i, (title, body) in enumerate(notes):

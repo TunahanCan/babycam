@@ -57,7 +57,7 @@ class MimiCamRolePresentation {
           choiceDescription: strings.ui('babyRoomDeviceDescription'),
           choiceIcon: Icons.child_care,
           choiceBackgroundColor: MimiCamDesignTokens.serverIce,
-          choiceIconColor: MimiCamDesignTokens.serverCyan,
+          choiceIconColor: MimiCamDesignTokens.serverCyanOnLight,
         ),
     };
   }

@@ -186,6 +186,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
           activeRole: AppRole.server,
           switchingRole: _switchingRole,
           onRoleSelected: (role) => unawaited(_requestRoleChange(role)),
+          onRestartServer: () => unawaited(_switchRole(AppRole.server)),
         ),
       AppRole.client => ClientAppShell(
           runtime: (_runtime ??= ClientCompositionRoot.create(

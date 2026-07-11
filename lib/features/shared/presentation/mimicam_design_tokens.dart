@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/mimicam_colors.dart';
+
 class MimiCamDesignTokens {
   const MimiCamDesignTokens._();
 
@@ -12,14 +14,26 @@ class MimiCamDesignTokens {
   static const pink = Color(0xFFFF5C7C);
   static const mint = Color(0xFF6EDCCE);
   static const mintSoft = Color(0xFFDDF8F4);
-  static const serverInk = Color(0xFF0B2634);
-  static const serverNavy = Color(0xFF276F82);
-  static const serverPanel = Color(0xFF1B5265);
-  static const serverCyan = Color(0xFF9BEFE4);
-  static const serverCyanDeep = Color(0xFF59D0C6);
-  static const serverBlue = Color(0xFF82CDE8);
-  static const serverViolet = Color(0xFFB7EAD6);
-  static const serverIce = Color(0xFFF4FFFC);
+  static const serverInk = MimiCamColors.serverBackground;
+  static const serverNavy = MimiCamColors.serverBackgroundTop;
+  static const serverPanel = MimiCamColors.serverSurface;
+  static const serverSurfaceRaised = MimiCamColors.serverSurfaceRaised;
+  static const serverOutline = MimiCamColors.serverOutline;
+  static const serverText = MimiCamColors.serverText;
+  static const serverTextMuted = MimiCamColors.serverTextMuted;
+  static const serverCyan = MimiCamColors.serverPrimary;
+  static const serverCyanDeep = MimiCamColors.serverPrimaryPressed;
+  static const serverBlue = MimiCamColors.serverInfo;
+  static const serverViolet = MimiCamColors.serverLavender;
+  static const serverSuccess = MimiCamColors.serverSuccess;
+  static const serverWarning = MimiCamColors.serverWarning;
+  static const serverError = MimiCamColors.serverError;
+  static const serverDisabled = MimiCamColors.serverDisabled;
+  static const serverIce = MimiCamColors.serverLightSurface;
+  static const serverLightInk = MimiCamColors.serverLightInk;
+  static const serverCyanOnLight = MimiCamColors.serverPrimaryOnLight;
+  static const serverBlueOnLight = MimiCamColors.serverInfoOnLight;
+  static const serverVioletOnLight = MimiCamColors.serverLavenderOnLight;
   static const amber = Color(0xFFF5C451);
   static const amberSoft = Color(0xFFFFF0D8);
   static const lavenderSoft = Color(0xFFF2EEFA);
@@ -63,19 +77,20 @@ class MimiCamDesignTokens {
 
   static BoxDecoration cardDecoration({bool dark = false}) {
     return BoxDecoration(
-      color: dark ? serverPanel.withValues(alpha: .90) : Colors.white,
+      color: dark ? serverPanel.withValues(alpha: .96) : Colors.white,
       borderRadius: BorderRadius.circular(20),
       border: Border.all(
-        color:
-            dark ? serverCyan.withValues(alpha: .34) : const Color(0xFFEEDFD8),
+        color: dark
+            ? serverOutline.withValues(alpha: .66)
+            : const Color(0xFFEEDFD8),
       ),
       boxShadow: [
         BoxShadow(
           color: dark
-              ? serverBlue.withValues(alpha: .30)
+              ? Colors.black.withValues(alpha: .24)
               : const Color(0x14111827),
-          blurRadius: dark ? 26 : 14,
-          offset: const Offset(0, 7),
+          blurRadius: dark ? 18 : 14,
+          offset: const Offset(0, 6),
         ),
       ],
     );

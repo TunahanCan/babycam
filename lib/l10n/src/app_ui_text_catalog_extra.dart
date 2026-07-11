@@ -235,12 +235,40 @@ const _deUiText = <String, String>{
   'phaseMediaActive': 'Medien aktiv',
   'phaseError': 'Fehler',
   'babyRoomMode': 'BABYZIMMER-MODUS',
-  'roomStreamReady': 'Zimmerstream bereit',
+  'roomStreamReady': 'Übertragung aktiv',
+  'serverStreamStoppedTitle': 'Übertragung gestoppt',
+  'serverStreamErrorBody':
+      'Prüfe Kameraberechtigung und Verbindung und versuche es erneut.',
+  'serverStreamStoppedBody':
+      'Kamera, Mikrofon und Eltern-Verbindungen sind ausgeschaltet.',
+  'restartRoomStream': 'Stream neu starten',
+  'serverMediaPreparingBody':
+      'Das Kamerabild wird vorbereitet; halte das Telefon ruhig.',
+  'serverWaitingForParent':
+      'Die Kamera ist bereit. Verbinde das Eltern-Gerät zum Ansehen.',
+  'serverParentsConnectedBody':
+      '{count} Eltern-Gerät(e) verbunden. Die Zimmerverbindung ist aktiv.',
+  'connectParentDevice': 'Eltern-Gerät verbinden',
+  'connectAnotherParent': 'Weiteres Gerät verbinden',
+  'safeRoomSetupTitle': 'Sichere Aufstellung',
+  'safeRoomSetupPlacement':
+      'Befestige das Telefon außerhalb der Reichweite des Babys.',
+  'safeRoomSetupPower':
+      'Halte das Ladekabel vom Baby fern und lasse das Telefon belüftet.',
+  'safeRoomSetupVerify': 'Prüfe Bild und Ton auf dem Eltern-Gerät.',
+  'adultSupervisionNotice':
+      'MimiCam ersetzt nicht die Aufsicht durch Erwachsene.',
+  'streamDetails': 'Übertragungsdetails',
+  'streamDetailsSubtitle': 'Verbindung, Bildqualität und Warnungsstatus',
+  'technicalError': 'Technischer Fehler',
+  'stopRoomStreamConfirmTitle': 'Zimmerstream stoppen?',
+  'stopRoomStreamConfirmBody':
+      'Kamera, Mikrofon und verbundene Eltern-Sitzungen werden beendet.',
   'serverHeroReadyText':
       'Kamera, Mikrofon und Warnlogik laufen auf diesem Gerät.',
   'cameraOpen': 'Kamera offen',
   'cameraWaiting': 'Kamera wartet',
-  'parentsCount': '{count} Eltern',
+  'parentsCount': '{count} Eltern verbunden',
   'qualityMeasuring': 'Qualität wird gemessen',
   'stopRoomStream': 'Zimmerstream stoppen',
   'secureQrPairing': 'Sichere QR-Kopplung',
@@ -256,6 +284,7 @@ const _deUiText = <String, String>{
   'microphone': 'Mikrofon',
   'clientCount': 'Client-Anzahl',
   'active': 'Aktiv',
+  'partlyActive': 'Teilweise aktiv',
   'preparing': 'Vorbereitung',
   'off': 'Aus',
   'eventClientsCount': '{count} Ereignis-Clients',
@@ -283,6 +312,8 @@ const _deUiText = <String, String>{
   'cameraRoomCheckText': 'Prüfe Bildausschnitt und Beleuchtung.',
   'cameraPermissionPreviewText':
       'Kamera-Vorschau erscheint nach Start und Berechtigung.',
+  'localPreviewPreparingText':
+      'Der Zimmerstream ist aktiv; die Vorschau auf diesem Telefon wird vorbereitet.',
   'cameraPreparing': 'Kamera wird vorbereitet',
   'silentSafeDetection': 'Leise und sichere Erkennung',
   'resetDefaults': 'Standardwerte',
@@ -623,12 +654,33 @@ const _arUiText = <String, String>{
   'phaseMediaActive': 'الوسائط نشطة',
   'phaseError': 'خطأ',
   'babyRoomMode': 'وضع غرفة الطفل',
-  'roomStreamReady': 'بث الغرفة جاهز',
+  'roomStreamReady': 'البث نشط',
+  'serverStreamStoppedTitle': 'تم إيقاف البث',
+  'serverStreamErrorBody': 'تحقق من إذن الكاميرا والاتصال ثم حاول مرة أخرى.',
+  'serverStreamStoppedBody': 'تم إيقاف الكاميرا والميكروفون واتصالات الوالدين.',
+  'restartRoomStream': 'إعادة تشغيل البث',
+  'serverMediaPreparingBody': 'يتم تجهيز صورة الكاميرا؛ أبقِ الهاتف ثابتاً.',
+  'serverWaitingForParent': 'الكاميرا جاهزة. صِل جهاز الوالدين لبدء المشاهدة.',
+  'serverParentsConnectedBody':
+      'عدد أجهزة الوالدين المتصلة: {count}. اتصال الغرفة نشط.',
+  'connectParentDevice': 'توصيل جهاز الوالدين',
+  'connectAnotherParent': 'توصيل جهاز آخر',
+  'safeRoomSetupTitle': 'إعداد آمن',
+  'safeRoomSetupPlacement': 'ثبّت الهاتف في مكان لا يستطيع الطفل الوصول إليه.',
+  'safeRoomSetupPower': 'أبعد كابل الشحن عن الطفل واترك تهوية الهاتف مفتوحة.',
+  'safeRoomSetupVerify': 'تحقق من الصورة والصوت عبر جهاز الوالدين.',
+  'adultSupervisionNotice': 'لا يحل MimiCam محل إشراف شخص بالغ.',
+  'streamDetails': 'تفاصيل البث',
+  'streamDetailsSubtitle': 'الاتصال وجودة الصورة وحالة التنبيهات',
+  'technicalError': 'خطأ تقني',
+  'stopRoomStreamConfirmTitle': 'إيقاف بث الغرفة؟',
+  'stopRoomStreamConfirmBody':
+      'سيتم إغلاق الكاميرا والميكروفون وجلسات الوالدين المتصلة.',
   'serverHeroReadyText':
       'الكاميرا والميكروفون ومنطق التنبيهات تعمل على هذا الجهاز.',
   'cameraOpen': 'الكاميرا مفتوحة',
   'cameraWaiting': 'الكاميرا تنتظر',
-  'parentsCount': '{count} والد/والدة',
+  'parentsCount': '{count} من الوالدين متصل',
   'qualityMeasuring': 'قياس الجودة',
   'stopRoomStream': 'إيقاف بث الغرفة',
   'secureQrPairing': 'إقران QR آمن',
@@ -642,6 +694,7 @@ const _arUiText = <String, String>{
   'microphone': 'الميكروفون',
   'clientCount': 'عدد العملاء',
   'active': 'نشط',
+  'partlyActive': 'نشط جزئياً',
   'preparing': 'يتم التجهيز',
   'off': 'متوقف',
   'eventClientsCount': '{count} عملاء أحداث',
@@ -667,6 +720,8 @@ const _arUiText = <String, String>{
   'cameraStarting': 'تشغيل الكاميرا',
   'cameraRoomCheckText': 'تحقق من زاوية الصورة والإضاءة.',
   'cameraPermissionPreviewText': 'تظهر معاينة الكاميرا بعد التشغيل ومنح الإذن.',
+  'localPreviewPreparingText':
+      'بث الغرفة نشط؛ يجري تجهيز المعاينة على هذا الهاتف.',
   'cameraPreparing': 'يتم تجهيز الكاميرا',
   'silentSafeDetection': 'كشف هادئ وآمن',
   'resetDefaults': 'القيم الافتراضية',

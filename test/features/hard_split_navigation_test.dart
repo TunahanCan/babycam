@@ -87,15 +87,110 @@ void main() {
   });
 
   testWidgets('Server bottom nav server alanına kilitlidir', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     var pairingStarts = 0;
+    var streamStops = 0;
+    var restartRequests = 0;
     final runtime = ServerRuntime(
       mediaRuntime: MediaRuntimeController(),
       onStartPairing: () async {
         pairingStarts++;
         return 'mimicam://pair?payload=x';
       },
+      onStop: () async {
+        streamStops++;
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ServerHomeScreen(
+          runtime: runtime,
+          config: ConfigurationService(preferences),
+          activeRole: AppRole.server,
+          onRoleSelected: (_) {},
+          onRestartServer: () => restartRequests++,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Yayın'), findsOneWidget);
+    expect(pairingStarts, greaterThanOrEqualTo(1));
+    expect(find.text('QR/IP'), findsOneWidget);
+    expect(find.text('Servis'), findsOneWidget);
+    expect(find.text('Ayarlar'), findsOneWidget);
+    expect(find.text('İzle'), findsNothing);
+    expect(find.text('Bul'), findsNothing);
+    expect(find.text('Bildirim'), findsNothing);
+    expect(find.text('QR Tara'), findsNothing);
+
+    final preview = find.byKey(const ValueKey('server-live-preview-card'));
+    final status = find.byKey(const ValueKey('server-live-status-card'));
+    expect(preview, findsOneWidget);
+    expect(status, findsOneWidget);
+    expect(
+        tester.getTopLeft(preview).dy, lessThan(tester.getTopLeft(status).dy));
+    final connectParent = find.text('Ebeveyn cihazını bağla');
+    expect(connectParent, findsOneWidget);
+    expect(
+      tester.getCenter(connectParent).dy,
+      lessThan(tester.getTopLeft(find.byType(MimiCamBottomNav)).dy),
+    );
+
+    final scrollable = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(
+      find.text('Oda yayınını durdur'),
+      260,
+      scrollable: scrollable,
+    );
+    await tester.drag(scrollable, const Offset(0, -140));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Oda yayınını durdur'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Yayın durdurulsun mu?'), findsOneWidget);
+    expect(streamStops, 0);
+    await tester.tap(find.text('Vazgeç'));
+    await tester.pumpAndSettle();
+    expect(streamStops, 0);
+
+    await tester.tap(find.text('Oda yayınını durdur'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.widgetWithText(FilledButton, 'Oda yayınını durdur'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(streamStops, 1);
+    final restart = find.text('Yayını yeniden başlat');
+    if (restart.evaluate().isEmpty) {
+      await tester.scrollUntilVisible(
+        restart,
+        -260,
+        scrollable: scrollable,
+      );
+    }
+    expect(find.text('Yayın durduruldu'), findsOneWidget);
+    await tester.tap(restart);
+    expect(restartRequests, 1);
+  });
+
+  testWidgets('Server yayın ana eylemi QR bağlantı ekranını açar',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(),
+      onStartPairing: () async => 'mimicam://pair?payload=x',
     );
 
     await tester.pumpWidget(
@@ -113,16 +208,101 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Yayın'), findsOneWidget);
-    expect(pairingStarts, greaterThanOrEqualTo(1));
-    expect(find.text('QR/IP'), findsOneWidget);
-    expect(find.text('Servis'), findsOneWidget);
-    expect(find.text('Ayarlar'), findsOneWidget);
-    expect(find.text('İzle'), findsNothing);
-    expect(find.text('Bul'), findsNothing);
-    expect(find.text('Bildirim'), findsNothing);
-    expect(find.textContaining('yayınını durdur'), findsOneWidget);
-    expect(find.text('QR Tara'), findsNothing);
+    await tester.tap(find.text('Ebeveyn cihazını bağla'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('QR / IP bağlantı bileti'), findsOneWidget);
+    expect(find.byType(QrImageView), findsOneWidget);
+  });
+
+  testWidgets('Server eşleşmiş veya uyarıya bağlı ebeveyni bağlı gösterir',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(),
+      onStartPairing: () async => 'mimicam://pair?payload=x',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ServerHomeScreen(
+          runtime: runtime,
+          config: ConfigurationService(preferences),
+          activeRole: AppRole.server,
+          onRoleSelected: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await runtime.enableNotificationsForClient(
+      'anne-uyari',
+      cry: true,
+      motion: true,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 ebeveyn bağlı. Oda bağlantısı açık.'), findsOneWidget);
+    expect(find.text('Ebeveyn cihazını bağla'), findsNothing);
+
+    await runtime.disableNotificationsForClient('anne-uyari');
+    await runtime.markClientPaired();
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 ebeveyn bağlı. Oda bağlantısı açık.'), findsOneWidget);
+    expect(find.text('Ebeveyn cihazını bağla'), findsNothing);
+  });
+
+  testWidgets('Server teknik hatayı ana kartta kullanıcıya göstermez',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(
+        onStart: () async => throw StateError('camera-driver-secret'),
+      ),
+      onStartPairing: () async => 'mimicam://pair?payload=x',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ServerHomeScreen(
+          runtime: runtime,
+          config: ConfigurationService(preferences),
+          activeRole: AppRole.server,
+          onRoleSelected: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Kamera izinlerini ve bağlantıyı kontrol edip tekrar dene.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('camera-driver-secret'), findsNothing);
+
+    final details = find.text('Yayın ayrıntıları');
+    await tester.scrollUntilVisible(
+      details,
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(details);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('camera-driver-secret'), findsOneWidget);
   });
 
   testWidgets('Server QR/IP sekmesi sadece bağlantı bileti üretir',

@@ -37,8 +37,11 @@ class MimiCamTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final color = dark ? Colors.white : MimiCamDesignTokens.navy;
-    final chipColor = dark ? Colors.white.withValues(alpha: .12) : Colors.white;
+    final color =
+        dark ? MimiCamDesignTokens.serverText : MimiCamDesignTokens.navy;
+    final chipColor = dark
+        ? MimiCamDesignTokens.serverSurfaceRaised.withValues(alpha: .88)
+        : Colors.white;
     return Row(
       children: [
         Container(
@@ -92,10 +95,11 @@ class MimiCamRoleSwitch extends StatelessWidget {
     final strings = AppStrings.of(context);
     final clientRole = MimiCamRolePresentation.of(AppRole.client, strings);
     final serverRole = MimiCamRolePresentation.of(AppRole.server, strings);
-    final borderColor =
-        dark ? Colors.white.withValues(alpha: .24) : const Color(0xFFD7E1E8);
+    final borderColor = dark
+        ? MimiCamDesignTokens.serverOutline.withValues(alpha: .72)
+        : const Color(0xFFD7E1E8);
     final backgroundColor =
-        dark ? Colors.white.withValues(alpha: .08) : Colors.white;
+        dark ? MimiCamDesignTokens.serverPanel : Colors.white;
     return Container(
       decoration: BoxDecoration(
         color: backgroundColor,
@@ -161,13 +165,15 @@ class MimiCamRoleBadge extends StatelessWidget {
     final nextRole = isClient ? AppRole.server : AppRole.client;
     final role = MimiCamRolePresentation.of(activeRole, strings);
     final accent = role.accentColor(dark: dark);
-    final textColor = dark ? Colors.white : MimiCamDesignTokens.navy;
-    final mutedColor = dark ? Colors.white70 : MimiCamDesignTokens.slate;
+    final textColor =
+        dark ? MimiCamDesignTokens.serverText : MimiCamDesignTokens.navy;
+    final mutedColor =
+        dark ? MimiCamDesignTokens.serverTextMuted : MimiCamDesignTokens.slate;
     final backgroundColor = dark
-        ? MimiCamDesignTokens.serverPanel.withValues(alpha: .72)
+        ? MimiCamDesignTokens.serverPanel.withValues(alpha: .94)
         : Colors.white.withValues(alpha: .92);
     final borderColor = dark
-        ? MimiCamDesignTokens.serverCyan.withValues(alpha: .28)
+        ? MimiCamDesignTokens.serverOutline.withValues(alpha: .72)
         : const Color(0xFFDDE7EE);
 
     return RepaintBoundary(
@@ -190,10 +196,10 @@ class MimiCamRoleBadge extends StatelessWidget {
                 boxShadow: [
                   BoxShadow(
                     color: dark
-                        ? MimiCamDesignTokens.serverBlue.withValues(alpha: .24)
+                        ? Colors.black.withValues(alpha: .22)
                         : const Color(0x16111827),
-                    blurRadius: dark ? 18 : 12,
-                    offset: const Offset(0, 6),
+                    blurRadius: dark ? 14 : 12,
+                    offset: const Offset(0, 5),
                   ),
                 ],
               ),
@@ -266,7 +272,8 @@ class _RoleSwitchSide extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = role == activeRole;
-    final textColor = dark ? Colors.white : MimiCamDesignTokens.navy;
+    final textColor =
+        dark ? MimiCamDesignTokens.serverText : MimiCamDesignTokens.navy;
     return InkWell(
       onTap: enabled && !active ? () => onTap(role) : null,
       child: AnimatedContainer(
@@ -303,7 +310,9 @@ class _RoleSwitchSide extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: dark ? Colors.white70 : MimiCamDesignTokens.slate,
+                color: dark
+                    ? MimiCamDesignTokens.serverTextMuted
+                    : MimiCamDesignTokens.slate,
                 fontSize: 9,
                 fontWeight: active ? FontWeight.w900 : FontWeight.w700,
               ),
@@ -346,21 +355,21 @@ class MimiCamBottomNav extends StatelessWidget {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: dark
-              ? MimiCamDesignTokens.serverPanel.withValues(alpha: .96)
+              ? MimiCamDesignTokens.serverPanel.withValues(alpha: .98)
               : Colors.white.withValues(alpha: .96),
           borderRadius: BorderRadius.circular(30),
           border: Border.all(
             color: dark
-                ? MimiCamDesignTokens.serverCyan.withValues(alpha: .26)
+                ? MimiCamDesignTokens.serverOutline.withValues(alpha: .78)
                 : const Color(0xFFEEDFD8),
           ),
           boxShadow: [
             BoxShadow(
               color: dark
-                  ? MimiCamDesignTokens.serverBlue.withValues(alpha: .28)
+                  ? Colors.black.withValues(alpha: .28)
                   : const Color(0x1F111827),
-              blurRadius: dark ? 22 : 16,
-              offset: const Offset(0, 8),
+              blurRadius: dark ? 16 : 16,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
@@ -400,15 +409,20 @@ class _BottomNavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final baseColor = dark ? Colors.white70 : MimiCamDesignTokens.slate;
-    final selectedTextColor = dark ? Colors.white : MimiCamDesignTokens.navy;
+    final baseColor =
+        dark ? MimiCamDesignTokens.serverTextMuted : MimiCamDesignTokens.slate;
+    final selectedTextColor =
+        dark ? MimiCamDesignTokens.serverText : MimiCamDesignTokens.navy;
+    final scaledLabelSize = MediaQuery.textScalerOf(context).scale(12);
+    final buttonHeight =
+        58.0 + (scaledLabelSize - 12).clamp(0.0, 8.0).toDouble();
     return InkWell(
       borderRadius: BorderRadius.circular(24),
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
         curve: Curves.easeOutCubic,
-        height: 58,
+        height: buttonHeight,
         padding: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
           color:
@@ -473,13 +487,14 @@ enum MimiCamShellVariant {
           ],
         ),
       MimiCamShellVariant.server => const RadialGradient(
-          center: Alignment(.7, -.85),
-          radius: 1.05,
+          center: Alignment(.65, -.9),
+          radius: 1.18,
           colors: [
-            Color(0xFF6ED9CE),
+            Color(0xFF173D49),
             MimiCamDesignTokens.serverNavy,
             MimiCamDesignTokens.serverInk,
           ],
+          stops: [0, .48, 1],
         ),
     };
   }
