@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mimicam/app/app_role.dart';
@@ -27,6 +28,10 @@ void main() {
     expect(find.byIcon(Icons.child_care), findsOneWidget);
     expect(find.byIcon(Icons.wifi_tethering_rounded), findsOneWidget);
     expect(find.text('Güvenlik notu'), findsOneWidget);
+    final wordmark = await rootBundle.load(
+      'assets/branding/mimicam_wordmark.png',
+    );
+    expect(wordmark.lengthInBytes, greaterThan(0));
     expect(
       tester.getTopLeft(find.text('Güvenlik notu')).dy,
       lessThan(520),

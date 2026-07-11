@@ -161,7 +161,7 @@ def add(image: Image.Image):
 
 cover = page(INK)
 draw = ImageDraw.Draw(cover)
-icon_path = ROOT / 'assets/branding/mimicam_launcher_icon.png'
+icon_path = ROOT / 'assets/branding/mimicam_bear_icon.png'
 if icon_path.exists():
     icon = Image.open(icon_path).convert('RGBA')
     icon.thumbnail((230, 230), Image.Resampling.LANCZOS)
