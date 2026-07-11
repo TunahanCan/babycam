@@ -7,11 +7,11 @@ import 'package:permission_handler/permission_handler.dart';
 
 void main() {
   group('RolePermissionPolicy', () {
-    test('client için bildirim ve QR kamera izinlerini seçer', () {
+    test('iOS client için QR kamera iznini seçer', () {
       final permissions = const RolePermissionPolicy()
           .permissionsFor(AppRole.client, isAndroid: false);
 
-      expect(permissions, [Permission.notification, Permission.camera]);
+      expect(permissions, [Permission.camera]);
     });
 
     test('server Android için mikrofon ve pil optimizasyon izni ekler', () {

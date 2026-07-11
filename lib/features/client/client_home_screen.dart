@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../app/app_role.dart';
 import '../../core/network/lan_endpoint.dart';
@@ -55,6 +56,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
   late bool _keepScreenAwake;
   Locale? _selectedLocale;
   StreamSubscription<String>? _notificationTapSubscription;
+  _AlertFilter _alertFilter = _AlertFilter.all;
 
   @override
   void initState() {
@@ -78,7 +80,16 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(NotificationService.refreshLaunchTap());
+      unawaited(_resumeAlertDelivery());
     }
+  }
+
+  Future<void> _resumeAlertDelivery() async {
+    final state = widget.runtime.currentState;
+    if (state.session == null || state.alertsActive) return;
+    // This is important on iOS: a user who enables notifications in Settings
+    // should not need to pair the room again before alert delivery resumes.
+    await widget.runtime.startAlertListening().catchError((_) => false);
   }
 
   void _openNotificationTab(String payload) {
@@ -143,18 +154,13 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
             if (state.session == null)
               _NoRoomCard(onOpenFind: () => setState(() => _tab = 1))
             else ...[
-              const _BabyMonitorPreview(),
-              const SizedBox(height: 8),
               _RoomCard(
                 title: state.session!.payload.deviceName,
                 status: strings.ui('pairedWithQr'),
-                address:
-                    '${state.session!.payload.host}:${state.session!.payload.port}',
                 tone: MimiCamDesignTokens.mint,
+                alertsActive: state.alertsActive,
                 onWatch: () => _openWatch(context, state),
               ),
-              const SizedBox(height: 10),
-              const _ClientStatusGrid(),
               const SizedBox(height: 16),
               _ClientWatchSummary(onWatch: () => _openWatch(context, state)),
             ],
@@ -202,14 +208,16 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
               subtitle: strings.ui('parentEventsPriorityText'),
             ),
             const SizedBox(height: 18),
-            const _NotificationFilterBar(),
+            _NotificationFilterBar(
+              selected: _alertFilter,
+              onChanged: (filter) => setState(() => _alertFilter = filter),
+            ),
             const SizedBox(height: 14),
             StreamBuilder<List<AlertEventDto>>(
               stream: widget.runtime.alertUpdates,
               initialData: widget.runtime.alerts,
               builder: (context, snapshot) => _NotificationList(
-                alerts: snapshot.data ?? const [],
-              ),
+                  alerts: snapshot.data ?? const [], filter: _alertFilter),
             ),
           ],
         ),
@@ -227,6 +235,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
             const SizedBox(height: 18),
             _ClientSettingsList(
               onNotificationsTap: () => setState(() => _tab = 2),
+              onOpenSystemSettings: openAppSettings,
               onLanguageTap: _showLanguagePicker,
               languageLabel: _languageLabel(context),
               keepScreenAwake: _keepScreenAwake,
@@ -605,242 +614,6 @@ class _ClientHeroCard extends StatelessWidget {
   }
 }
 
-class _BabyMonitorPreview extends StatelessWidget {
-  const _BabyMonitorPreview();
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = AppStrings.of(context);
-    return AspectRatio(
-      aspectRatio: 16 / 10,
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFFA47465),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFF2D8CD), width: 4),
-        ),
-        child: Stack(
-          children: [
-            for (final left in [24.0, 82.0, 140.0, 198.0, 256.0])
-              Positioned(
-                left: left,
-                top: 22,
-                bottom: 22,
-                child: Container(width: 1, color: Colors.white54),
-              ),
-            const Positioned(
-              top: 10,
-              left: 12,
-              child: _LiveBadge(),
-            ),
-            const Align(
-              alignment: Alignment.center,
-              child: _CribSketch(),
-            ),
-            Positioned(
-              right: 14,
-              bottom: 12,
-              child: Icon(
-                Icons.signal_cellular_alt_rounded,
-                color: Colors.white.withValues(alpha: .8),
-                size: 22,
-              ),
-            ),
-            Positioned(
-              left: 14,
-              bottom: 12,
-              child: Text(
-                strings.ui('live'),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ClientStatusGrid extends StatelessWidget {
-  const _ClientStatusGrid();
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = AppStrings.of(context);
-    return Row(
-      children: [
-        Expanded(
-          child: _MiniStatusCard(
-            title: strings.ui('roomStatus'),
-            value: strings.ui('temperatureHumidity'),
-            footnote: strings.ui('fine'),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _MiniStatusCard(
-            title: strings.ui('lastMotion'),
-            value: strings.ui('twoMinutesAgo'),
-            footnote: strings.ui('lightMotionDetected'),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MiniStatusCard extends StatelessWidget {
-  const _MiniStatusCard({
-    required this.title,
-    required this.value,
-    required this.footnote,
-  });
-
-  final String title;
-  final String value;
-  final String footnote;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 96,
-      padding: const EdgeInsets.all(14),
-      decoration: MimiCamDesignTokens.cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: MimiCamDesignTokens.nightPlum,
-              fontSize: 13,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: MimiCamDesignTokens.slate,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            footnote,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFF38A879),
-              fontSize: 12.5,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LiveBadge extends StatelessWidget {
-  const _LiveBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-      decoration: const ShapeDecoration(
-        color: Colors.white,
-        shape: StadiumBorder(),
-      ),
-      child: Text(
-        AppStrings.of(context).ui('live').toUpperCase(),
-        style: const TextStyle(
-          color: Color(0xFF218765),
-          fontSize: 10,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
-    );
-  }
-}
-
-class _CribSketch extends StatelessWidget {
-  const _CribSketch();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 220,
-      height: 116,
-      child: Stack(
-        children: [
-          Positioned(
-            left: 34,
-            right: 22,
-            top: 44,
-            child: Container(
-              height: 62,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFDCCD),
-                borderRadius: BorderRadius.circular(50),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 84,
-            top: 22,
-            child: Container(
-              width: 70,
-              height: 42,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0BFAE),
-                borderRadius: BorderRadius.circular(32),
-              ),
-            ),
-          ),
-          const Positioned(
-            right: 20,
-            top: 42,
-            child: CircleAvatar(
-              radius: 18,
-              backgroundColor: Color(0xFFC4A08E),
-            ),
-          ),
-          const Positioned(
-            right: 0,
-            top: 58,
-            child: CircleAvatar(
-              radius: 13,
-              backgroundColor: Color(0xFFC4A08E),
-            ),
-          ),
-          const Positioned(
-            left: 104,
-            top: 48,
-            child: SizedBox(
-              width: 28,
-              child: Divider(
-                color: MimiCamDesignTokens.nightPlum,
-                thickness: 1,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({
     required this.eyebrow,
@@ -886,84 +659,116 @@ class _RoomCard extends StatelessWidget {
   const _RoomCard({
     required this.title,
     required this.status,
-    required this.address,
     required this.tone,
+    required this.alertsActive,
     this.onWatch,
   });
 
   final String title;
   final String status;
-  final String address;
   final Color tone;
+  final bool alertsActive;
   final VoidCallback? onWatch;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: MimiCamDesignTokens.cardDecoration(),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: tone,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: const Icon(
-              Icons.child_care_rounded,
-              color: MimiCamDesignTokens.navy,
-              size: 26,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: tone,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.child_care_rounded,
+                  color: MimiCamDesignTokens.navy,
+                  size: 25,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: MimiCamDesignTokens.navy,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      status,
+                      style: const TextStyle(
+                        color: MimiCamDesignTokens.slate,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (onWatch != null)
+                IconButton.filledTonal(
+                  onPressed: onWatch,
+                  tooltip: AppStrings.of(context).ui('openLiveWatch'),
+                  icon: const Icon(Icons.play_arrow_rounded),
+                ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: alertsActive
+                  ? MimiCamDesignTokens.mintSoft
+                  : MimiCamDesignTokens.lavenderSoft,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
               children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: MimiCamDesignTokens.navy,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
+                Icon(
+                  alertsActive
+                      ? Icons.notifications_active_rounded
+                      : Icons.notifications_off_outlined,
+                  color: alertsActive
+                      ? MimiCamDesignTokens.mint
+                      : MimiCamDesignTokens.pink,
+                  size: 19,
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    alertsActive
+                        ? AppStrings.of(context).ui('notificationsOn')
+                        : AppStrings.of(context).ui('notificationsOff'),
+                    style: const TextStyle(
+                      color: MimiCamDesignTokens.navy,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  status,
-                  style: const TextStyle(
-                    color: MimiCamDesignTokens.slate,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  address,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: MimiCamDesignTokens.slate,
-                    fontSize: 12.5,
-                  ),
+                const Icon(
+                  Icons.lock_outline_rounded,
+                  color: MimiCamDesignTokens.slate,
+                  size: 17,
                 ),
               ],
             ),
           ),
-          if (onWatch != null) ...[
-            const SizedBox(width: 10),
-            IconButton.filled(
-              onPressed: onWatch,
-              style: IconButton.styleFrom(
-                backgroundColor: MimiCamDesignTokens.navy,
-                foregroundColor: Colors.white,
-              ),
-              icon: const Icon(Icons.play_arrow_rounded),
-            ),
-          ],
         ],
       ),
     );
@@ -1177,41 +982,25 @@ class _FindActionCard extends StatelessWidget {
               TextField(
                 controller: manualIpController,
                 keyboardType: TextInputType.url,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => onManualConnect(),
                 decoration: InputDecoration(
                   labelText: strings.ui('ipOrHostPort'),
                   hintText: '192.168.1.20:8080',
-                  filled: true,
-                  fillColor: Colors.white,
-                  suffixIcon: IconButton.filled(
-                    onPressed: onManualConnect,
-                    style: IconButton.styleFrom(
-                      backgroundColor: MimiCamDesignTokens.pink,
-                      foregroundColor: Colors.white,
-                    ),
-                    icon: const Icon(Icons.arrow_forward_rounded),
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: const BorderSide(color: Color(0xFFE8DCD6)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: const BorderSide(color: Color(0xFFE8DCD6)),
-                  ),
                 ),
               ),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 height: 48,
-                child: OutlinedButton.icon(
+                child: FilledButton.tonalIcon(
                   onPressed: onManualConnect,
                   icon: const Icon(Icons.link_rounded),
-                  style: OutlinedButton.styleFrom(
+                  style: FilledButton.styleFrom(
                     foregroundColor: MimiCamDesignTokens.nightPlum,
-                    side: const BorderSide(color: Color(0xFFE8DCD6)),
+                    backgroundColor: MimiCamDesignTokens.blushSoft,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                   ),
                   label: Text(
@@ -1424,8 +1213,16 @@ class _PrivacyNote extends StatelessWidget {
   }
 }
 
+enum _AlertFilter { all, motion, audio, system }
+
 class _NotificationFilterBar extends StatelessWidget {
-  const _NotificationFilterBar();
+  const _NotificationFilterBar({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final _AlertFilter selected;
+  final ValueChanged<_AlertFilter> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1434,13 +1231,29 @@ class _NotificationFilterBar extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          _FilterChip(text: strings.ui('all'), active: true),
+          _FilterChip(
+            text: strings.ui('all'),
+            active: selected == _AlertFilter.all,
+            onTap: () => onChanged(_AlertFilter.all),
+          ),
           const SizedBox(width: 10),
-          _FilterChip(text: strings.ui('motion'), active: false),
+          _FilterChip(
+            text: strings.ui('motion'),
+            active: selected == _AlertFilter.motion,
+            onTap: () => onChanged(_AlertFilter.motion),
+          ),
           const SizedBox(width: 10),
-          _FilterChip(text: strings.ui('audio'), active: false),
+          _FilterChip(
+            text: strings.ui('audio'),
+            active: selected == _AlertFilter.audio,
+            onTap: () => onChanged(_AlertFilter.audio),
+          ),
           const SizedBox(width: 10),
-          _FilterChip(text: strings.ui('system'), active: false),
+          _FilterChip(
+            text: strings.ui('system'),
+            active: selected == _AlertFilter.system,
+            onTap: () => onChanged(_AlertFilter.system),
+          ),
         ],
       ),
     );
@@ -1448,16 +1261,22 @@ class _NotificationFilterBar extends StatelessWidget {
 }
 
 class _NotificationList extends StatelessWidget {
-  const _NotificationList({required this.alerts});
+  const _NotificationList({required this.alerts, required this.filter});
 
   final List<AlertEventDto> alerts;
+  final _AlertFilter filter;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final items = alerts.isEmpty
+    final filteredAlerts = alerts
+        .where((alert) => _matchesAlertFilter(alert, filter))
+        .toList(growable: false)
+      ..sort((a, b) => b.timestampMs.compareTo(a.timestampMs));
+    final items = filteredAlerts.isEmpty
         ? [_emptyNotificationSpec(strings)]
-        : alerts.map((alert) => _notificationSpecFromAlert(strings, alert));
+        : filteredAlerts
+            .map((alert) => _notificationSpecFromAlert(strings, alert));
 
     return Column(
       children: [
@@ -1468,6 +1287,17 @@ class _NotificationList extends StatelessWidget {
       ],
     );
   }
+}
+
+bool _matchesAlertFilter(AlertEventDto alert, _AlertFilter filter) {
+  if (filter == _AlertFilter.all) return true;
+  final family = _alertFamily(alert);
+  return switch (filter) {
+    _AlertFilter.all => true,
+    _AlertFilter.motion => family == _AlertFamily.motion,
+    _AlertFilter.audio => family == _AlertFamily.audio,
+    _AlertFilter.system => family == _AlertFamily.system,
+  };
 }
 
 _NotificationSpec _emptyNotificationSpec(AppStrings strings) =>
@@ -1640,6 +1470,7 @@ class _NotificationCard extends StatelessWidget {
 class _ClientSettingsList extends StatelessWidget {
   const _ClientSettingsList({
     required this.onNotificationsTap,
+    required this.onOpenSystemSettings,
     required this.onLanguageTap,
     required this.languageLabel,
     required this.keepScreenAwake,
@@ -1647,6 +1478,7 @@ class _ClientSettingsList extends StatelessWidget {
   });
 
   final VoidCallback onNotificationsTap;
+  final Future<bool> Function() onOpenSystemSettings;
   final VoidCallback onLanguageTap;
   final String languageLabel;
   final bool keepScreenAwake;
@@ -1700,9 +1532,74 @@ class _ClientSettingsList extends StatelessWidget {
           ),
           onTap: () => onKeepScreenAwakeChanged(!keepScreenAwake),
         ),
+        const SizedBox(height: 12),
+        _SystemNotificationSettingsCard(
+            onOpenSystemSettings: onOpenSystemSettings),
         const SizedBox(height: 28),
         _PrivacyNote(text: strings.ui('serverSettingsHiddenText')),
       ],
+    );
+  }
+}
+
+class _SystemNotificationSettingsCard extends StatelessWidget {
+  const _SystemNotificationSettingsCard({required this.onOpenSystemSettings});
+
+  final Future<bool> Function() onOpenSystemSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: MimiCamDesignTokens.cardDecoration().copyWith(
+        color: MimiCamDesignTokens.lavenderSoft,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const CircleAvatar(
+            radius: 22,
+            backgroundColor: Colors.white,
+            child: Icon(
+              Icons.notifications_outlined,
+              color: MimiCamDesignTokens.pink,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  strings.ui('navNotifications'),
+                  style: const TextStyle(
+                    color: MimiCamDesignTokens.navy,
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  strings.ui('notificationsManageText'),
+                  style: const TextStyle(
+                    color: MimiCamDesignTokens.slate,
+                    fontSize: 13,
+                    height: 1.28,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => unawaited(onOpenSystemSettings()),
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: Text(strings.ui('openAppSettings')),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1772,30 +1669,48 @@ class _SettingsRow extends StatelessWidget {
 }
 
 class _FilterChip extends StatelessWidget {
-  const _FilterChip({required this.text, required this.active});
+  const _FilterChip({
+    required this.text,
+    required this.active,
+    required this.onTap,
+  });
 
   final String text;
   final bool active;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-      decoration: ShapeDecoration(
-        color: active ? MimiCamDesignTokens.pink : Colors.white,
-        shape: StadiumBorder(
-          side: BorderSide(
-            color: active ? MimiCamDesignTokens.pink : const Color(0xFFE8DCD6),
-            width: 2,
+    return Semantics(
+      button: true,
+      selected: active,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: onTap,
+          child: Ink(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            decoration: ShapeDecoration(
+              color: active ? MimiCamDesignTokens.pink : Colors.white,
+              shape: StadiumBorder(
+                side: BorderSide(
+                  color: active
+                      ? MimiCamDesignTokens.pink
+                      : const Color(0xFFE2E8F0),
+                  width: 1.5,
+                ),
+              ),
+            ),
+            child: Text(
+              text,
+              style: TextStyle(
+                color: active ? Colors.white : MimiCamDesignTokens.nightPlum,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
           ),
-        ),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: active ? Colors.white : MimiCamDesignTokens.nightPlum,
-          fontSize: 12,
-          fontWeight: FontWeight.w900,
         ),
       ),
     );

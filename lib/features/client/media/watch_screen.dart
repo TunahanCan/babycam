@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -198,10 +199,17 @@ class _WatchScreenState extends State<WatchScreen> {
     }
     final started = await widget.runtime.startAlertListening();
     if (!started && mounted) {
+      final strings = AppStrings.of(context);
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
         ..showSnackBar(
-          SnackBar(content: Text(AppStrings.of(context).ui('notificationOff'))),
+          SnackBar(
+            content: Text(strings.ui('notificationOff')),
+            action: SnackBarAction(
+              label: strings.ui('openAppSettings'),
+              onPressed: openAppSettings,
+            ),
+          ),
         );
     }
   }

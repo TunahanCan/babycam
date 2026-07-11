@@ -2,6 +2,7 @@ import AVFoundation
 import Flutter
 import Network
 import UIKit
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -38,6 +39,12 @@ import UIKit
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
+    // FlutterLocalNotificationsPlugin registers its handlers through
+    // FlutterAppDelegate. Without assigning the notification center delegate,
+    // iOS suppresses foreground presentation and notification tap callbacks.
+    if #available(iOS 10.0, *) {
+      UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
+    }
     registerCameraPermissionChannel()
     registerLocalNetworkPermissionChannel()
     registerPlatformRuntimeChannels()

@@ -104,7 +104,7 @@ class _RoleChoiceCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onPressed,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
         child: Container(
           padding: const EdgeInsets.all(18),
           decoration: _cardDecoration(color: role.choiceBackgroundColor),
@@ -232,7 +232,7 @@ class _LightShell extends StatelessWidget {
           colors: [
             MimiCamDesignTokens.mintSoft,
             MimiCamDesignTokens.cream,
-            Color(0xFFFFFBF8),
+            Color(0xFFFCFDFE),
           ],
         ),
       ),
@@ -244,10 +244,10 @@ class _LightShell extends StatelessWidget {
 BoxDecoration _cardDecoration({Color? color}) {
   return BoxDecoration(
     color: color ?? Colors.white,
-    borderRadius: BorderRadius.circular(22),
-    border: Border.all(color: const Color(0xFFEEDFD8)),
+    borderRadius: BorderRadius.circular(18),
+    border: Border.all(color: const Color(0xFFE2E8F0)),
     boxShadow: const [
-      BoxShadow(color: Color(0x14111827), blurRadius: 12, offset: Offset(0, 6)),
+      BoxShadow(color: Color(0x12111827), blurRadius: 16, offset: Offset(0, 7)),
     ],
   );
 }

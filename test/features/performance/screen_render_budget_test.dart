@@ -283,6 +283,11 @@ void main() {
     expect(selectedLocale, const Locale('en'));
     expect(clientPreferences.locale, const Locale('en'));
 
+    await tester.scrollUntilVisible(
+      find.byType(Switch).last,
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.byType(Switch).last);
     await tester.pumpAndSettle();
     expect(clientPreferences.keepScreenAwake, isFalse);

@@ -49,7 +49,10 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
   late double _cryDurationSeconds;
   bool _savingSettings = false;
   bool _fullscreenPreview = false;
-  bool _localPreviewWanted = true;
+  // Camera preview is intentionally opt-in. Opening the room device should be
+  // fast and low-power; the parent can be paired before the local camera view
+  // is needed for framing.
+  bool _localPreviewWanted = false;
   bool _previewActionBusy = false;
   bool? _previewActionTargetEnabled;
   bool _purchaseBusy = false;
@@ -66,7 +69,7 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
       if (_tab == 1) {
         unawaited(widget.runtime.startPairingMode());
       } else if (_tab == 0) {
-        _activatePreviewTab();
+        unawaited(widget.runtime.startPairingMode());
       }
     });
   }
@@ -420,6 +423,13 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
           onRoleSelected: widget.onRoleSelected,
           switchingRole: widget.switchingRole,
           children: [
+            _ServerLiveStatusCard(
+              state: state,
+              onConnectParent: () => _selectTab(1),
+              onRetry: _retryLocalPreview,
+              onRestart: widget.onRestartServer,
+            ),
+            const SizedBox(height: 12),
             _LivePreviewCard(
               state: state,
               previewSource: widget.runtime.previewSource,
@@ -430,13 +440,6 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
               onToggleFit: _togglePreviewFit,
               onTogglePreview: () =>
                   _toggleLocalPreview(state.localPreviewActive),
-            ),
-            const SizedBox(height: 12),
-            _ServerLiveStatusCard(
-              state: state,
-              onConnectParent: () => _selectTab(1),
-              onRetry: _retryLocalPreview,
-              onRestart: widget.onRestartServer,
             ),
             if (state.broadcastAccess != null) ...[
               const SizedBox(height: 16),

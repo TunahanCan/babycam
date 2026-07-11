@@ -136,7 +136,7 @@ void main() {
     expect(preview, findsOneWidget);
     expect(status, findsOneWidget);
     expect(
-        tester.getTopLeft(preview).dy, lessThan(tester.getTopLeft(status).dy));
+        tester.getTopLeft(status).dy, lessThan(tester.getTopLeft(preview).dy));
     final connectParent = find.text('Ebeveyn cihazını bağla');
     expect(connectParent, findsOneWidget);
     expect(
@@ -170,13 +170,8 @@ void main() {
 
     expect(streamStops, 1);
     final restart = find.text('Yayını yeniden başlat');
-    if (restart.evaluate().isEmpty) {
-      await tester.scrollUntilVisible(
-        restart,
-        -260,
-        scrollable: scrollable,
-      );
-    }
+    await tester.drag(scrollable, const Offset(0, 700));
+    await tester.pumpAndSettle();
     expect(find.text('Yayın durduruldu'), findsOneWidget);
     await tester.tap(restart);
     expect(restartRequests, 1);
@@ -246,10 +241,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(runtime.currentState.localPreviewActive, isTrue);
-    expect(mediaStarts, 1);
-    expect(find.text('Gizle'), findsOneWidget);
-    expect(find.byTooltip('Önizlemeyi kapat'), findsOneWidget);
+    expect(runtime.currentState.localPreviewActive, isFalse);
+    expect(mediaStarts, 0);
+    expect(find.text('Göster'), findsOneWidget);
+    expect(find.byTooltip('Önizlemeyi aç'), findsOneWidget);
     expect(
       tester
           .getSize(
@@ -258,6 +253,14 @@ void main() {
           .height,
       greaterThanOrEqualTo(48),
     );
+
+    await tester.tap(
+      find.byKey(const ValueKey('server-local-preview-toggle')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(runtime.currentState.localPreviewActive, isTrue);
+    expect(mediaStarts, 1);
 
     await runtime.startStreamSession(
       'parent-video',
@@ -382,16 +385,32 @@ void main() {
 
     expect(
       find.text('Kamera izinlerini ve bağlantıyı kontrol edip tekrar dene.'),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.textContaining('camera-driver-secret'), findsNothing);
 
-    final details = find.text('Yayın ayrıntıları');
+    await tester.tap(
+      find.byKey(const ValueKey('server-local-preview-toggle')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Kamera izinlerini ve bağlantıyı kontrol edip tekrar dene.'),
+      findsOneWidget,
+    );
+
+    final detailsCard = find.byKey(const ValueKey('server-stream-details'));
     await tester.scrollUntilVisible(
-      details,
+      detailsCard,
       260,
       scrollable: find.byType(Scrollable).first,
     );
+    final details = find.descendant(
+      of: detailsCard,
+      matching: find.byType(ExpansionTile),
+    );
+    await tester.ensureVisible(details);
+    await tester.pumpAndSettle();
     await tester.tap(details);
     await tester.pumpAndSettle();
 

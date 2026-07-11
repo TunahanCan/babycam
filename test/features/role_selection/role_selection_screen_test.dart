@@ -41,8 +41,8 @@ void main() {
           .dy,
       lessThan(600),
     );
-    expect(MimiCamColors.brandBlue, const Color(0xFF5AA9FF));
-    expect(MimiCamColors.brandPink, const Color(0xFFFF7BBF));
+    expect(MimiCamColors.brandBlue, const Color(0xFF5B5BD6));
+    expect(MimiCamColors.brandPink, const Color(0xFF7468D7));
     await tester.tap(find.text('Ebeveyn Cihazı'));
     expect(selected, AppRole.client);
   });
