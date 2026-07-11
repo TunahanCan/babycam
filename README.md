@@ -23,7 +23,7 @@ pilot. A failed or unsupported pilot negotiation falls back to MJPEG/WAV.
 | Auth | Trusted Bearer token plus short-lived stream token |
 | Monitoring | Client live watch with audio, alerts, night clock, and full screen controls |
 | Publishing | Server live preview with full screen controls |
-| Monetization | 2 hours free live broadcast/watch time, then one-time 300 TL unlock |
+| Monetization | Hidden and unenforced by default; opt-in paywall build flag |
 | Diagnostics | Browser `/test` panel and JSON `/test/*` endpoints |
 | Resource policy | Demand-owned legacy/analyzer camera/microphone plus thermal, power and backpressure governor |
 | Platform lifecycle | Android service-owned engine; iOS foreground-camera pause/recovery contract |
@@ -58,6 +58,14 @@ flutter run --dart-define=MIMICAM_WEBRTC_PILOT=true
 The server advertises WebRTC only after both H.264 and Opus capability probes
 succeed. The client performs its own capability probe and automatically starts
 a new MJPEG/WAV session if WebRTC negotiation fails.
+
+The broadcast paywall is also off by default so development and device tests
+never show a price card or purchase prompt. Enable it only for an explicit
+store/paywall verification build:
+
+```bash
+flutter run --dart-define=MIMICAM_BROADCAST_PAYWALL_ENABLED=true
+```
 
 Common verification gate:
 
@@ -99,7 +107,13 @@ does not run Server and Client graphs at the same time.
 
 ## Pricing Model
 
-MimiCam now has a local one-time unlock model:
+The pricing implementation is behind
+`MIMICAM_BROADCAST_PAYWALL_ENABLED`, which defaults to `false`. With the flag
+off, no purchase service is created, no trial timer is enforced, price fields
+are not advertised, and Server/Client screens do not render purchase UI.
+
+When the flag is explicitly enabled, MimiCam uses this local one-time unlock
+model:
 
 - First 2 hours of live broadcast/watch time are free.
 - After the free limit is exhausted, live streaming is locked.

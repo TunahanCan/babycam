@@ -21,8 +21,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MimiCamEngineOwner.attachActivity(flutterEngine)
         val appContext = applicationContext
-        MimiCamNativeRuntime.initialize(appContext)
-        val pcmAudioPlayer = MimiCamNativeRuntime.audioPlayer(appContext)
+        fun pcmAudioPlayer() = MimiCamNativeRuntime.audioPlayer(appContext)
 
         EventChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -129,13 +128,13 @@ class MainActivity : FlutterActivity() {
                             (args?.get("sampleRate") as? Number)?.toInt() ?: 16000
                         val channels =
                             (args?.get("channels") as? Number)?.toInt() ?: 1
-                        pcmAudioPlayer.start(sampleRate, channels)
+                        pcmAudioPlayer().start(sampleRate, channels)
                         result.success(null)
                     } catch (error: Exception) {
                         result.error(
                             "PCM_AUDIO_START_FAILED",
                             error.message,
-                            pcmAudioPlayer.status()
+                            pcmAudioPlayer().status()
                         )
                     }
                 }
@@ -144,16 +143,16 @@ class MainActivity : FlutterActivity() {
                     if (bytes == null) {
                         result.success(false)
                     } else {
-                        pcmAudioPlayer.write(bytes) { accepted ->
+                        pcmAudioPlayer().write(bytes) { accepted ->
                             result.success(accepted)
                         }
                     }
                 }
-                "status" -> result.success(pcmAudioPlayer.status())
+                "status" -> result.success(pcmAudioPlayer().status())
                 "playTestTone" -> {
                     try {
                         val args = call.arguments as? Map<*, *>
-                        pcmAudioPlayer.playTestTone(
+                        pcmAudioPlayer().playTestTone(
                             sampleRate =
                                 (args?.get("sampleRate") as? Number)?.toInt() ?: 16000,
                             channels =
@@ -170,12 +169,12 @@ class MainActivity : FlutterActivity() {
                         result.error(
                             "PCM_AUDIO_TEST_TONE_FAILED",
                             error.message,
-                            pcmAudioPlayer.status()
+                            pcmAudioPlayer().status()
                         )
                     }
                 }
                 "stop" -> {
-                    pcmAudioPlayer.stop()
+                    pcmAudioPlayer().stop()
                     result.success(null)
                 }
                 else -> result.notImplemented()

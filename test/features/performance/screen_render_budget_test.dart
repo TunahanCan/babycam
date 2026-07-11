@@ -13,6 +13,7 @@ import 'package:mimicam/features/server/server_runtime.dart';
 import 'package:mimicam/features/shared/presentation/mimicam_shells.dart';
 import 'package:mimicam/l10n/app_strings.dart';
 import 'package:mimicam/services/configuration_service.dart';
+import 'package:mimicam/services/client_preferences_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -123,6 +124,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       _expectNoFlutterException(tester);
+      expect(find.textContaining('300 TL'), findsNothing);
+      expect(find.textContaining('ücretsiz yayın'), findsNothing);
 
       for (final label in ['QR/IP', 'Servis', 'Ayarlar', 'Yayın']) {
         await tester.tap(find.text(label).last);
@@ -201,7 +204,44 @@ void main() {
     _expectNoFlutterException(tester);
   });
 
-  testWidgets('server settings slider specleri dar ekranda render olur',
+  testWidgets('client settings kontrolleri gerçek tercihleri günceller',
+      (tester) async {
+    final preferences = await SharedPreferences.getInstance();
+    final clientPreferences = ClientPreferencesService(preferences);
+    Locale? selectedLocale;
+    final runtime = ClientRuntime(pair: (_) => throw UnimplementedError());
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ClientHomeScreen(
+          runtime: runtime,
+          activeRole: AppRole.client,
+          onRoleSelected: (_) {},
+          preferences: clientPreferences,
+          onLocaleChanged: (locale) => selectedLocale = locale,
+        ),
+      ),
+    );
+    await tester.tap(find.text('Ayarlar').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Dil'));
+    await tester.pumpAndSettle();
+    expect(find.text('Uygulama dili'), findsOneWidget);
+    await tester.tap(find.text('English'));
+    await tester.pumpAndSettle();
+    expect(selectedLocale, const Locale('en'));
+    expect(clientPreferences.locale, const Locale('en'));
+
+    await tester.tap(find.byType(Switch).last);
+    await tester.pumpAndSettle();
+    expect(clientPreferences.keepScreenAwake, isFalse);
+  });
+
+  testWidgets('server gelişmiş ayar sliderları dar ekranda render olur',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(320, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -229,7 +269,52 @@ void main() {
     await tester.tap(find.text('Ayarlar').last);
     await tester.pumpAndSettle();
 
+    expect(find.byType(Slider), findsNothing);
+    await tester.drag(
+      find.byKey(const ValueKey('server-settings')),
+      const Offset(0, -320),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('İleri ayarlar'));
+    await tester.pumpAndSettle();
     expect(find.byType(Slider), findsNWidgets(5));
+    _expectNoFlutterException(tester);
+  });
+
+  testWidgets('server hızlı algılama profili gerçek ayarları kaydeder',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final preferences = await SharedPreferences.getInstance();
+    final config = ConfigurationService(preferences);
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(),
+      onStartPairing: () async => 'mimicam://pair?payload=x',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ServerHomeScreen(
+          runtime: runtime,
+          config: config,
+          activeRole: AppRole.server,
+          onRoleSelected: (_) {},
+          initialTab: 3,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Hassas'));
+    await tester.tap(find.text('Hassas'));
+    await tester.pumpAndSettle();
+
+    expect(config.cryScoreThreshold, .50);
+    expect(config.motionThreshold, .15);
+    expect(config.notifyCooldownMs, 45000);
     _expectNoFlutterException(tester);
   });
 

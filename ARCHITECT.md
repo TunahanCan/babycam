@@ -696,7 +696,21 @@ multi-child monitoring.
 
 ## Monetization Architecture
 
-`BroadcastAccessService` owns local usage and one-time unlock state.
+The complete paywall is build-gated by
+`MIMICAM_BROADCAST_PAYWALL_ENABLED`, which defaults to `false`. In the default
+test build, `ServerCompositionRoot` does not create a
+`BroadcastAccessService`; runtime state has no broadcast-access snapshot,
+capabilities omit price/product fields, stream sessions are not trial-limited,
+and neither Server nor Client renders purchase UI.
+
+An explicit store/paywall verification build enables it with:
+
+```bash
+flutter run --dart-define=MIMICAM_BROADCAST_PAYWALL_ENABLED=true
+```
+
+When enabled, `BroadcastAccessService` owns local usage and one-time unlock
+state.
 
 Config:
 
@@ -1621,6 +1635,8 @@ Important settings:
 - minimum cry duration
 - `webRtcPilotEnabled`, defaulting to
   `--dart-define=MIMICAM_WEBRTC_PILOT=true` only when no stored override exists
+- build-only broadcast paywall flag:
+  `--dart-define=MIMICAM_BROADCAST_PAYWALL_ENABLED=true`; default `false`
 
 Server settings screen updates `ConfigurationService`, then calls
 `MimiCamServer.reloadAnalysisConfig` through `ServerRuntime`.

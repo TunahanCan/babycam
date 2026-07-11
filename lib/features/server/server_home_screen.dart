@@ -56,11 +56,14 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
     super.initState();
     _tab = widget.initialTab.clamp(0, 3);
     _loadSettings();
-    if (_tab == 1) {
-      unawaited(widget.runtime.startPairingMode());
-    } else if (_tab == 0) {
-      _startLocalPreview();
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_tab == 1) {
+        unawaited(widget.runtime.startPairingMode());
+      } else if (_tab == 0) {
+        _startLocalPreview();
+      }
+    });
   }
 
   @override
@@ -97,6 +100,66 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
     _loadSettings();
     await widget.runtime.reloadAnalysisSettings();
     if (mounted) setState(() => _savingSettings = false);
+  }
+
+  Future<void> _confirmResetSettings() async {
+    final strings = AppStrings.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(strings.ui('resetSettingsTitle')),
+        content: Text(strings.ui('resetSettingsDescription')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(strings.ui('cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(strings.ui('resetDefaults')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await _resetSettings();
+  }
+
+  Future<void> _applyDetectionPreset(_DetectionPreset preset) async {
+    final values = preset.settings;
+    setState(() {
+      _savingSettings = true;
+      _motionThreshold = values.motionThreshold;
+      _cryScoreThreshold = values.cryScoreThreshold;
+      _notifyCooldownSeconds = values.notifyCooldownSeconds;
+      _motionDurationSeconds = values.motionDurationSeconds;
+      _cryDurationSeconds = values.cryDurationSeconds;
+    });
+    await Future.wait<void>([
+      widget.config.setMotionThreshold(values.motionThreshold),
+      widget.config.setCryScoreThreshold(values.cryScoreThreshold),
+      widget.config
+          .setNotifyCooldownMs((values.notifyCooldownSeconds * 1000).round()),
+      widget.config.setMotionMinDurationMs(
+          (values.motionDurationSeconds * 1000).round()),
+      widget.config
+          .setCryMinDurationMs((values.cryDurationSeconds * 1000).round()),
+    ]);
+    await widget.runtime.reloadAnalysisSettings();
+    if (mounted) setState(() => _savingSettings = false);
+  }
+
+  _DetectionPreset? get _activeDetectionPreset {
+    for (final preset in _DetectionPreset.values) {
+      final values = preset.settings;
+      if ((_motionThreshold - values.motionThreshold).abs() < .001 &&
+          (_cryScoreThreshold - values.cryScoreThreshold).abs() < .001 &&
+          (_notifyCooldownSeconds - values.notifyCooldownSeconds).abs() < .01 &&
+          (_motionDurationSeconds - values.motionDurationSeconds).abs() < .01 &&
+          (_cryDurationSeconds - values.cryDurationSeconds).abs() < .01) {
+        return preset;
+      }
+    }
+    return null;
   }
 
   void _enterFullscreenPreview() {
@@ -332,7 +395,10 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
               motionDurationSeconds: _motionDurationSeconds,
               cryDurationSeconds: _cryDurationSeconds,
               saving: _savingSettings,
-              onReset: _resetSettings,
+              activePreset: _activeDetectionPreset,
+              onPresetSelected: (preset) =>
+                  unawaited(_applyDetectionPreset(preset)),
+              onReset: _confirmResetSettings,
               onMotionThresholdChanged: (value) =>
                   setState(() => _motionThreshold = value),
               onMotionThresholdChangeEnd: (value) => _persistSettings(
@@ -1674,6 +1740,70 @@ class _PreviewWaitingContent extends StatelessWidget {
   }
 }
 
+enum _DetectionPreset {
+  sensitive,
+  balanced,
+  fewerAlerts;
+
+  IconData get icon => switch (this) {
+        sensitive => Icons.hearing_rounded,
+        balanced => Icons.balance_rounded,
+        fewerAlerts => Icons.notifications_paused_rounded,
+      };
+
+  _DetectionPresetSettings get settings => switch (this) {
+        sensitive => const _DetectionPresetSettings(
+            motionThreshold: .15,
+            cryScoreThreshold: .50,
+            notifyCooldownSeconds: 45,
+            motionDurationSeconds: 1,
+            cryDurationSeconds: 1,
+          ),
+        balanced => const _DetectionPresetSettings(
+            motionThreshold: .22,
+            cryScoreThreshold: .65,
+            notifyCooldownSeconds: 60,
+            motionDurationSeconds: 2,
+            cryDurationSeconds: 1.5,
+          ),
+        fewerAlerts => const _DetectionPresetSettings(
+            motionThreshold: .35,
+            cryScoreThreshold: .78,
+            notifyCooldownSeconds: 90,
+            motionDurationSeconds: 3.5,
+            cryDurationSeconds: 2.5,
+          ),
+      };
+
+  String label(AppStrings strings) => switch (this) {
+        sensitive => strings.ui('sensitivePreset'),
+        balanced => strings.ui('balancedPreset'),
+        fewerAlerts => strings.ui('fewerAlertsPreset'),
+      };
+
+  String description(AppStrings strings) => switch (this) {
+        sensitive => strings.ui('sensitivePresetDescription'),
+        balanced => strings.ui('balancedPresetDescription'),
+        fewerAlerts => strings.ui('fewerAlertsPresetDescription'),
+      };
+}
+
+class _DetectionPresetSettings {
+  const _DetectionPresetSettings({
+    required this.motionThreshold,
+    required this.cryScoreThreshold,
+    required this.notifyCooldownSeconds,
+    required this.motionDurationSeconds,
+    required this.cryDurationSeconds,
+  });
+
+  final double motionThreshold;
+  final double cryScoreThreshold;
+  final double notifyCooldownSeconds;
+  final double motionDurationSeconds;
+  final double cryDurationSeconds;
+}
+
 class _ServerSettingsCard extends StatelessWidget {
   const _ServerSettingsCard({
     required this.motionThreshold,
@@ -1682,6 +1812,8 @@ class _ServerSettingsCard extends StatelessWidget {
     required this.motionDurationSeconds,
     required this.cryDurationSeconds,
     required this.saving,
+    required this.activePreset,
+    required this.onPresetSelected,
     required this.onReset,
     required this.onMotionThresholdChanged,
     required this.onMotionThresholdChangeEnd,
@@ -1701,6 +1833,8 @@ class _ServerSettingsCard extends StatelessWidget {
   final double motionDurationSeconds;
   final double cryDurationSeconds;
   final bool saving;
+  final _DetectionPreset? activePreset;
+  final ValueChanged<_DetectionPreset> onPresetSelected;
   final VoidCallback onReset;
   final ValueChanged<double> onMotionThresholdChanged;
   final ValueChanged<double> onMotionThresholdChangeEnd;
@@ -1745,21 +1879,71 @@ class _ServerSettingsCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          for (final spec in _sliderSpecs(strings)) ...[
-            _SettingSlider(
-              title: spec.title,
-              description: spec.description,
-              valueLabel: spec.valueLabel,
-              value: spec.value,
-              min: spec.min,
-              max: spec.max,
-              divisions: spec.divisions,
-              color: spec.color,
-              onChanged: spec.onChanged,
-              onChangeEnd: spec.onChangeEnd,
+          Text(strings.ui('quickSetup'),
+              style: const TextStyle(
+                color: MimiCamDesignTokens.navy,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
+              )),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final preset in _DetectionPreset.values)
+                ChoiceChip(
+                  selected: activePreset == preset,
+                  onSelected: saving ? null : (_) => onPresetSelected(preset),
+                  avatar: Icon(preset.icon, size: 17),
+                  label: Text(preset.label(strings)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            activePreset?.description(strings) ??
+                strings.ui('customDetectionPresetDescription'),
+            style: const TextStyle(
+              color: MimiCamDesignTokens.slate,
+              fontSize: 13.5,
+              height: 1.25,
             ),
-            const SizedBox(height: 12),
-          ],
+          ),
+          const SizedBox(height: 8),
+          Material(
+            color: Colors.transparent,
+            child: Theme(
+              data:
+                  Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                title: Text(strings.ui('advancedSettings'),
+                    style: const TextStyle(
+                      color: MimiCamDesignTokens.navy,
+                      fontWeight: FontWeight.w900,
+                    )),
+                subtitle: Text(strings.ui('advancedSettingsDescription')),
+                children: [
+                  for (final spec in _sliderSpecs(strings)) ...[
+                    _SettingSlider(
+                      title: spec.title,
+                      description: spec.description,
+                      valueLabel: spec.valueLabel,
+                      value: spec.value,
+                      min: spec.min,
+                      max: spec.max,
+                      divisions: spec.divisions,
+                      color: spec.color,
+                      onChanged: spec.onChanged,
+                      onChangeEnd: spec.onChangeEnd,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 2),
           _KeyVal(strings.ui('localNotification'),
               strings.ui('sentToClientDevice')),

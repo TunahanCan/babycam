@@ -14,13 +14,16 @@ import '../features/server/server_composition_root.dart';
 import '../features/server/server_runtime.dart';
 import '../l10n/app_strings.dart';
 import '../services/configuration_service.dart';
+import '../services/client_preferences_service.dart';
 import 'app_role.dart';
 import 'role_permission_coordinator.dart';
 import 'role_repository.dart';
 import 'role_resolver.dart';
 
 class AppBootstrap extends StatefulWidget {
-  const AppBootstrap({super.key});
+  const AppBootstrap({super.key, this.onLocaleChanged});
+
+  final ValueChanged<Locale?>? onLocaleChanged;
 
   @override
   State<AppBootstrap> createState() => _AppBootstrapState();
@@ -47,6 +50,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
     final roles = SharedPreferencesRoleRepository(prefs);
     final role = await RoleResolver(roles).resolve();
     if (!mounted) return;
+    widget.onLocaleChanged?.call(ClientPreferencesService(prefs).locale);
     setState(() {
       _prefs = prefs;
       _roles = roles;
@@ -171,6 +175,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
     }
     final prefs = _prefs!;
     final config = ConfigurationService(prefs);
+    final clientPreferences = ClientPreferencesService(prefs);
     return switch (_role) {
       AppRole.server => ServerAppShell(
           runtime: (_runtime ??= ServerCompositionRoot.create(
@@ -189,6 +194,9 @@ class _AppBootstrapState extends State<AppBootstrap> {
           )) as ClientRuntime,
           activeRole: AppRole.client,
           switchingRole: _switchingRole,
+          preferences: clientPreferences,
+          selectedLocale: clientPreferences.locale,
+          onLocaleChanged: widget.onLocaleChanged,
           onRoleSelected: (role) => unawaited(_requestRoleChange(role)),
         ),
       null => Theme(

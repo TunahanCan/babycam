@@ -228,7 +228,7 @@ class MimiCamRoleBadge extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Icon(
-                    Icons.more_horiz_rounded,
+                    Icons.swap_horiz_rounded,
                     color: mutedColor,
                     size: 16,
                   ),

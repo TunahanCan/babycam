@@ -126,16 +126,16 @@ inventory = [
 ('02','Client İzle / boş','Eşleşme yokken ebeveyn cihazının yönlendirmesi.'),
 ('03','Client Bul','QR tara veya IP:port ile manuel bağlan.'),
 ('04','Client Bildirim','Ağlama, hareket ve sistem olayları listesi.'),
-('05','Client Ayarlar','Dil, bildirim ve cihaz uyanık kalma tercihleri.'),
+('05','Client Ayarlar','Çalışan dil seçimi, bildirim kısayolu ve canlı izleme ekran kilidi tercihi.'),
 ('06','Client İzle / eşleşmiş','Bebek odası kartı, canlı preview ve durum özetleri.'),
 ('07','QR Scanner','Native kamera viewport + manuel QR metni fallback.'),
 ('08','Canlı izleme','Video paneli, kalite/latency metrikleri, aksiyonlar.'),
 ('09','Uyarı geçmişi','Canlı izleme içi olay zaman çizgisi.'),
-('10','İzleme ayarları','Otomatik kalite ve uyarı eşikleri.'),
+('10','İzleme ayarları','Otomatik kalite, canlı uyarı ve ekranın açık kalması.'),
 ('11','Server Yayın','Bebek odası medya runtime ve algılama durumu.'),
 ('12','Server QR/IP','Ebeveyn cihazı eşleştirme bileti ve QR.'),
 ('13','Server Servis','Kamera, mikrofon, WebSocket ve client sayısı.'),
-('14','Server Ayarlar','Algılama eşikleri, cooldown ve süre ayarları.'),
+('14','Server Ayarlar','Hızlı algılama profilleri ve açılır ileri ayarlar.'),
 ]
 p = new_page(); d = ImageDraw.Draw(p)
 y = header(d, 'Ekran Envanteri', 'Rapora dahil edilen tüm ana ekranlar ve temsil ettikleri ürün durumu.')
@@ -153,9 +153,9 @@ footer(d, page_no); add_page(p)
 use_cases = [
 ('UC-01 İlk rol seçimi','Kullanıcı uygulamayı ilk kez açar. Telefonun “Bebek Odası Cihazı” ya da “Ebeveyn Cihazı” olacağı seçilir. Uygulama LAN/Wi‑Fi kapsamını görünür uyarıyla anlatır.', ['Rol seçimi', 'Rol izni', 'Server veya Client shell']),
 ('UC-02 Ebeveyn cihazı eşleşir','Anne/ebeveyn cihazı Bul sekmesine gider. QR tarar ya da IP:port girer. Server public status/pairing bilgisi ile güvenli tokenlı oturum oluşur.', ['Client Bul', 'QR Scanner veya IP', 'Pairing session', 'Client İzle / eşleşmiş']),
-('UC-03 Bebek odası cihazı yayın açar','Server rolündeki telefon kamera/mikrofon runtime’ını yönetir. QR/IP bileti üretir, aktif client sayılarını izler ve medya/alert servislerini ayırır.', ['Server Yayın', 'Server QR/IP', 'Servis durumu', 'Algılama ayarları']),
+('UC-03 Bebek odası cihazı yayın açar','Server rolündeki telefon kamera/mikrofon runtime’ını yönetir. QR/IP bileti üretir, aktif ebeveyn sayısını izler ve hassas/dengeli/daha az uyarı profilleri sunar.', ['Server Yayın', 'Server QR/IP', 'Servis durumu', 'Kolay algılama ayarları']),
 ('UC-04 Canlı izleme ve uyarı takibi','Ebeveyn canlı yayına girer. Video/audio stream, ağ kalitesi ve server medya profili izlenir; ağ zayıflarsa kalite adaptasyonu devrededir.', ['Client İzle', 'Watch Live', 'Watch History', 'Watch Settings']),
-('UC-05 Çok dilli anne odaklı kullanım','Metinler locale catalog üzerinden gelir; dil seçimi ve ebeveyn mesajları farklı dillerde sürdürülebilir olacak şekilde tasarlanır.', ['AppStrings', 'Client Ayarlar', 'Bildirim metinleri']),
+('UC-05 Çok dilli anne odaklı kullanım','Metinler locale catalog üzerinden gelir; kullanıcı telefon dilini izleyebilir veya uygulama dilini doğrudan seçebilir.', ['AppStrings', 'Çalışan dil seçici', 'Bildirim metinleri']),
 ]
 p = new_page(); d = ImageDraw.Draw(p)
 y = header(d, 'Use Case Özeti', 'Ana kullanıcı amaçları, tetikleyiciler ve ilgili ekran kümeleri.')
@@ -179,7 +179,7 @@ flows = [
 ('Akış 2 · Pairing ve Canlı İzleme','Ebeveyn cihazı aynı Wi‑Fi/LAN içinde server cihazına bağlanır.',[
 ('Client Bul','QR Tara veya Manuel IP ile bağlan kartları.'),('Server QR/IP','Server pairing nonce ve bağlantı bileti üretir.'),('Tokenlı oturum','Trusted token + stream token ile özel endpointler korunur.'),('Watch Live','Video, audio ve event pipeline aynı gerçek oturumu besler.'),('Kalite raporu','Client RTT/frame/audio/WS sinyallerini /quality/report ile iletir.'),('Adaptif kalite','Server 1, 2–3, 4–5 client yüküne ve zayıf Wi‑Fi’ye göre profil seçer.')]),
 ('Akış 3 · Bildirim ve Ayar Döngüsü','Anne odaklı uyarılar server analizi ve client deneyimi arasında akar.',[
-('Server algılama','Ağlama ve hareket eşikleri server ayarlarından beslenir.'),('Alert event','Cry/motion/system event WebSocket üzerinden client’a gelir.'),('Client Bildirim','Öncelikli uyarı kartları ve filtreler gösterilir.'),('Watch Geçmiş','Canlı izleme içi zaman çizgisi son olayları gösterir.'),('Cooldown','Tekrarlı bildirimler cooldown ile sakinleştirilir.'),('Dil / locale','Catalog tüm ana ekran metinlerini çok dilli yönetir.')])
+('Server algılama','Hassas, Dengeli ve Daha az uyarı profilleriyle kolay kurulur.'),('Alert event','Ağlama/hareket/sistem olayı WebSocket üzerinden client’a gelir.'),('Client Bildirim','Öncelikli uyarı kartları ve filtreler gösterilir.'),('Watch Geçmiş','Canlı izleme içi zaman çizgisi son olayları gösterir.'),('İleri ayarlar','Eşik ve süreler isteyen kullanıcı için açılır bölümde kalır.'),('Dil / locale','Telefon dili veya seçilen uygulama dili kalıcı olarak uygulanır.')])
 ]
 for title, subtitle, nodes in flows:
     p = new_page(); d = ImageDraw.Draw(p)
@@ -202,16 +202,16 @@ screen_meta = [
 ('02_client_watch_empty.png','02 · Client İzle / Eşleşme Yok','Ebeveyn cihazı henüz oda seçilmediğinde bağlantı CTA’sı gösterir.','UC-02'),
 ('03_client_find_pair.png','03 · Client Bul / QR + IP','QR tarama ve manuel IP:port fallback’i aynı kart akışında sunulur.','UC-02'),
 ('04_client_notifications.png','04 · Client Bildirim','Ağlama, hareket ve sistem olayları anne için filtrelenebilir kartlar halinde görünür.','UC-04'),
-('05_client_settings.png','05 · Client Ayarlar','Client tarafında dil, bildirim ve cihaz uyanık kalma tercihleri bulunur.','UC-05'),
+('05_client_settings.png','05 · Client Ayarlar','Bildirim satırı ilgili ekrana gider; dil seçimi kalıcıdır; ekranı açık tutma tercihi canlı izlemeye uygulanır.','UC-05'),
 ('06_client_watch_paired.png','06 · Client İzle / Eşleşmiş','Bebek odası kartı, canlı preview ve son durum özetleri ana ekrana gelir.','UC-04'),
 ('07_client_qr_scanner.png','07 · QR Scanner','Native kamera alanı ve manuel QR metni fallback yüzeyi. Rapor için kamera preview mock alanı kullanıldı.','UC-02'),
 ('08_watch_live.png','08 · Canlı İzleme','Video paneli, ses/hareket/gecikme metrikleri ve izleme aksiyonları.','UC-04'),
 ('09_watch_history.png','09 · Watch Uyarı Geçmişi','Canlı izleme içinde ağlama/hareket/sistem zaman çizgisi.','UC-04'),
-('10_watch_settings.png','10 · Watch Ayarları','Otomatik kalite, cooldown ve algılama eşiklerini izleme bağlamında gösterir.','UC-04'),
+('10_watch_settings.png','10 · Watch Ayarları','Otomatik kaliteyi açıklar; canlı uyarı ve ekranı açık tutma kontrollerini gerçekten uygular. Algılama ayarlarının oda cihazında olduğu dürüstçe belirtilir.','UC-04'),
 ('11_server_stream.png','11 · Server Yayın','Bebek odası cihazı medya runtime, izleyici sayısı ve algılama durumunu gösterir.','UC-03'),
 ('12_server_qr_ip.png','12 · Server QR/IP','QR/IP bağlantı bileti ebeveyn cihazı eşleşmesi için okunabilir boyutta sunulur.','UC-03'),
 ('13_server_services.png','13 · Server Servis','Kamera, mikrofon, WebSocket ve bağlı client sayıları operasyonel olarak izlenir.','UC-03'),
-('14_server_settings.png','14 · Server Ayarlar','Ağlama/hareket eşiği, cooldown ve süre ayarları server tarafında yönetilir.','UC-03'),
+('14_server_settings.png','14 · Server Ayarlar','Hassas, Dengeli ve Daha az uyarı hızlı profilleri üstte; teknik eşik ve süreler açılır ileri bölümde sunulur.','UC-03'),
 ]
 for fname, title, desc, uc in screen_meta:
     p = new_page(); d = ImageDraw.Draw(p)
@@ -226,10 +226,11 @@ for fname, title, desc, uc in screen_meta:
 p = new_page(); d = ImageDraw.Draw(p)
 y = header(d, 'Üretim Notları ve Kapsam Dışı', 'PDF’in nasıl üretildiği ve hangi sınırlamaları olduğu.')
 notes = [
-('Kaynak ekranlar','Ekran görüntüleri LG H870 Android cihazda Flutter debug build çalıştırılarak alındı. Her sayfa uygulamadaki gerçek widget ağaçlarını demo runtime state ile gösterir.'),
+('Kaynak ekranlar','Ekran görüntüleri LG H870 Android cihazda Flutter profile build çalıştırılarak alındı. Her sayfa uygulamadaki gerçek widget ağaçlarını demo runtime state ile gösterir.'),
 ('QR scanner','Native kamera preview test ortamında bağımsız capture edilemediği için QR scanner sayfasında aynı layout’u temsil eden kamera alanı/mock ikon kullanıldı; alt manuel giriş alanı gerçek tasarımla aynı yapıyı taşır.'),
-('Debug chrome','Ekranlarda Android status/navigation bar ve debug cihaz görünümü korunmuştur; bu, “bire bir cihaz ekranı” amacıyla bilinçli bırakıldı.'),
-('Yakalanan iyileştirme','Watch canlı metric kartında LG font ölçeğinde görülen 2px overflow düzeltildi ve screenshotlar yeniden alındı.'),
+('Cihaz çerçevesi','Ekranlarda Android status ve navigation bar korunmuştur; bu, “bire bir fiziksel cihaz ekranı” amacıyla bilinçli bırakıldı.'),
+('Android ilk açılış','LG H870 release ölçümünde ilk cold-start 1,34 sn’den 0,88 sn’ye; tekrarlı cold-start aralığı 0,83–0,85 sn’den 0,65–0,87 sn’ye indi. Debug APK’nin 10+ sn açılışı üretim performansı değildir.'),
+('Kullanıcı dostu ayarlar','İşlevsiz görünen client kontrolleri gerçek tercihlere bağlandı. Watch ekranındaki sahte eşik kartları kaldırıldı; server tarafında hızlı profiller ve gizlenebilir ileri ayarlar eklendi.'),
 ('Kapsam dışı','Gerçek kamera görüntüsü, gerçek ağ/video stream içeriği, fiziksel QR scan senaryosu ve mağaza görselleri bu PDF’in kapsamı dışında tutuldu.'),
 ]
 for i, (title, body) in enumerate(notes):

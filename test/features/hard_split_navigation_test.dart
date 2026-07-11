@@ -35,7 +35,8 @@ void main() {
     );
 
     expect(find.text('CLIENT'), findsNothing);
-    expect(find.text('EBEVEYN'), findsNWidgets(2));
+    expect(find.text('EBEVEYN'), findsOneWidget);
+    expect(find.text('İZLEME CİHAZI'), findsOneWidget);
     expect(find.text('ANNE İÇİN ÖNCELİK'), findsOneWidget);
     expect(find.text('Bildirim'), findsOneWidget);
     expect(find.text('SUNUCU'), findsNothing);

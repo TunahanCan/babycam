@@ -5,14 +5,27 @@ import '../core/theme/mimicam_theme.dart';
 import '../l10n/app_strings.dart';
 import 'app_bootstrap.dart';
 
-class MimiCamApp extends StatelessWidget {
+class MimiCamApp extends StatefulWidget {
   const MimiCamApp({super.key});
+
+  @override
+  State<MimiCamApp> createState() => _MimiCamAppState();
+}
+
+class _MimiCamAppState extends State<MimiCamApp> {
+  Locale? _locale;
+
+  void _setLocale(Locale? locale) {
+    if (_locale == locale) return;
+    setState(() => _locale = locale);
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'MimiCam',
       theme: MimiCamTheme.neutralTheme(),
+      locale: _locale,
       supportedLocales: AppStrings.supportedLocales,
       localizationsDelegates: const [
         AppStrings.delegate,
@@ -20,7 +33,7 @@ class MimiCamApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: const AppBootstrap(),
+      home: AppBootstrap(onLocaleChanged: _setLocale),
     );
   }
 }

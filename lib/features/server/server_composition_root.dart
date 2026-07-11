@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/feature_flags.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../core/security/transport_config.dart';
 import '../../l10n/app_strings.dart';
@@ -27,6 +28,8 @@ class ServerCompositionRoot {
       Future<String> Function()? startPairingOverride,
       Future<void> Function()? startMediaOverride,
       Future<void> Function()? stopOverride,
+      bool broadcastPaywallEnabled =
+          MimiCamFeatureFlags.broadcastPaywallEnabled,
       TransportConfig transportConfig = TransportConfig.local}) {
     createCount++;
     final tokenService = PairingTokenService(
@@ -34,7 +37,9 @@ class ServerCompositionRoot {
         config.preferences,
       ),
     );
-    final broadcastAccess = BroadcastAccessService(config.preferences);
+    final BroadcastAccessService? broadcastAccess = broadcastPaywallEnabled
+        ? BroadcastAccessService(config.preferences)
+        : null;
     final discoveryIdentity =
         PersistentMimiCamDiscoveryIdentity(config.preferences);
     final serverDeviceId = discoveryIdentity.getOrCreate();

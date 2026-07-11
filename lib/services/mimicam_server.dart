@@ -1236,7 +1236,8 @@ class MimiCamServer {
       'comfort': _features.comfortAudio.state.toJson(),
       'nightLight': _features.nightLight.state.toJson(),
       'talk': _talkStatus(),
-      'broadcastAccess': (await _broadcastAccess?.snapshot())?.toJson(),
+      if (_broadcastAccess != null)
+        'broadcastAccess': (await _broadcastAccess.snapshot()).toJson(),
       if (_analysisCoordinator != null) ..._analysisCoordinator!.diagnostics(),
     });
   }
@@ -1638,7 +1639,7 @@ class MimiCamServer {
         'video': demand.video,
         'audio': demand.audio,
         'mediaTransport': mediaTransport,
-        'broadcastAccess': accessSnapshot?.toJson(),
+        if (accessSnapshot != null) 'broadcastAccess': accessSnapshot.toJson(),
       });
     } catch (error) {
       if (runtimeAcquired) {
@@ -2422,9 +2423,12 @@ class MimiCamServer {
         'dnsSdDiscovery': true,
         'ipv6': _httpServer?.address.type == InternetAddressType.IPv6,
         'bleDiscovery': false,
-        'freeBroadcastLimitMs': BroadcastAccessConfig.freeLimit.inMilliseconds,
-        'oneTimeUnlockPrice': BroadcastAccessConfig.oneTimePriceLabel,
-        'oneTimeUnlockProductId': BroadcastAccessConfig.productId,
+        if (_broadcastAccess != null) ...{
+          'freeBroadcastLimitMs':
+              BroadcastAccessConfig.freeLimit.inMilliseconds,
+          'oneTimeUnlockPrice': BroadcastAccessConfig.oneTimePriceLabel,
+          'oneTimeUnlockProductId': BroadcastAccessConfig.productId,
+        },
         'transportPreferred': transportConfig.payloadTransport,
         'transportModes': const ['wifi_lan', 'hotspot_lan', 'dns_sd'],
         'deviceTier': _deviceTier.name,

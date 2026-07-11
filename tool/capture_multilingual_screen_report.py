@@ -8,7 +8,7 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'build/screen_report/i18n'
+OUT = ROOT / os.environ.get('REPORT_CAPTURE_OUTPUT', 'build/screen_report/i18n')
 LOG = ROOT / 'build/screen_report/capture_flutter_run.log'
 ADB = Path('/home/tnnhn/Android/Sdk/platform-tools/adb')
 DEVICE = 'LGH8708da5c4b'
@@ -62,12 +62,15 @@ def launch(scene: str, locale: str, tab: int) -> None:
         '--no-pub',
         '--no-resident',
     ]
+    build_mode = os.environ.get('REPORT_BUILD_MODE')
+    if build_mode:
+        command.insert(2, f'--{build_mode}')
     print(f'launch {locale}/{scene}/tab-{tab}', flush=True)
     LOG.parent.mkdir(parents=True, exist_ok=True)
     with LOG.open('a', encoding='utf-8') as log:
         log.write(f'\n=== {locale}/{scene}/tab-{tab} ===\n')
         subprocess.run(command, cwd=ROOT, check=True, stdout=log, stderr=subprocess.STDOUT)
-    time.sleep(25)
+    time.sleep(float(os.environ.get('REPORT_CAPTURE_WAIT_SECONDS', '25')))
 
 
 def is_probably_splash(path: Path) -> bool:
@@ -102,12 +105,16 @@ def main() -> None:
         raise SystemExit(f'adb not found: {ADB}')
     locale_filter = os.environ.get('REPORT_CAPTURE_LOCALES')
     scene_filter = os.environ.get('REPORT_CAPTURE_SCENES')
+    file_filter = os.environ.get('REPORT_CAPTURE_FILES')
     locales = tuple(locale_filter.split(',')) if locale_filter else LOCALES
     scenes = set(scene_filter.split(',')) if scene_filter else None
+    files = set(file_filter.split(',')) if file_filter else None
     for locale in locales:
         locale_dir = OUT / locale
         for scene, filename, tab in CAPTURES:
             if scenes is not None and scene not in scenes:
+                continue
+            if files is not None and filename not in files:
                 continue
             launch(scene, locale, tab)
             screenshot(locale_dir / filename)

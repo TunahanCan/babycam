@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../core/media/adaptive_media_profile.dart';
 import '../../../core/protocol/alert_event_dto.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../services/monetization/broadcast_access_service.dart';
-import '../../shared/presentation/localized_measurement_text.dart';
 import '../../shared/presentation/media_profile_text.dart';
 import '../client_runtime.dart';
 import '../controls/room_controls_panel.dart';
@@ -21,10 +21,18 @@ import 'webrtc/webrtc_client_connector.dart';
 import 'webrtc/webrtc_client_media_supervisor.dart';
 
 class WatchScreen extends StatefulWidget {
-  const WatchScreen({super.key, required this.runtime, this.initialTab = 0});
+  const WatchScreen({
+    super.key,
+    required this.runtime,
+    this.initialTab = 0,
+    this.keepScreenAwake = true,
+    this.onKeepScreenAwakeChanged,
+  });
 
   final ClientRuntime runtime;
   final int initialTab;
+  final bool keepScreenAwake;
+  final ValueChanged<bool>? onKeepScreenAwakeChanged;
 
   @override
   State<WatchScreen> createState() => _WatchScreenState();
@@ -36,6 +44,7 @@ class _WatchScreenState extends State<WatchScreen> {
   bool _fullscreen = false;
   bool _nightClock = false;
   bool _purchaseBusy = false;
+  late bool _keepScreenAwake;
   BoxFit _videoFit = BoxFit.cover;
   DateTime _clockNow = DateTime.now();
   Timer? _clockTimer;
@@ -48,6 +57,8 @@ class _WatchScreenState extends State<WatchScreen> {
     super.initState();
     _presentationToken = widget.runtime.claimWatchPresentation();
     _tab = widget.initialTab.clamp(0, 2);
+    _keepScreenAwake = widget.keepScreenAwake;
+    unawaited(_applyWakelock(_keepScreenAwake));
     _startLiveWatch();
   }
 
@@ -59,6 +70,7 @@ class _WatchScreenState extends State<WatchScreen> {
       unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     }
     _clockTimer?.cancel();
+    if (_keepScreenAwake) unawaited(_applyWakelock(false));
     unawaited(widget.runtime
         .releaseWatchPresentation(_presentationToken)
         .catchError((Object _) {}));
@@ -77,6 +89,25 @@ class _WatchScreenState extends State<WatchScreen> {
         }
       } catch (_) {}
     }());
+  }
+
+  Future<void> _applyWakelock(bool enabled) async {
+    try {
+      if (enabled) {
+        await WakelockPlus.enable();
+      } else {
+        await WakelockPlus.disable();
+      }
+    } catch (_) {
+      // Widget tests and unsupported targets may not expose a wakelock plugin.
+    }
+  }
+
+  void _setKeepScreenAwake(bool enabled) {
+    if (_keepScreenAwake == enabled) return;
+    setState(() => _keepScreenAwake = enabled);
+    unawaited(_applyWakelock(enabled));
+    widget.onKeepScreenAwakeChanged?.call(enabled);
   }
 
   bool _isCurrentScreenOperation(int generation) =>
@@ -548,35 +579,65 @@ class _WatchScreenState extends State<WatchScreen> {
           const SizedBox(height: 18),
           _QualityPreferenceCard(profile: profile),
           const SizedBox(height: 12),
-          _SliderCard(
-              strings.ui('notificationCooldown'),
-              strings.ui('repeatedAlertsLimit'),
-              localizedSecondsLabel(strings, 60),
-              _pink,
-              .68),
-          const SizedBox(height: 12),
-          _SliderCard(strings.ui('cryThreshold'),
-              strings.ui('ambientCrySensitivity'), '%65', _mint, .65),
-          const SizedBox(height: 12),
-          _SliderCard(strings.ui('motionThreshold'),
-              strings.ui('cameraMotionSensitivity'), '%22', _amber, .22),
-          const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(18),
             decoration: _cardDecoration(dark: true),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(strings.ui('integrations'),
+                Text(strings.ui('watchPreferences'),
                     style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.w900)),
                 const SizedBox(height: 12),
-                _SwitchLine(strings.ui('keepDeviceAwake'),
-                    strings.ui('enabledInServerMode'), true),
                 _SwitchLine(
-                    strings.ui('language'), strings.ui('languageAuto'), true),
+                  strings.ui('enableNotifications'),
+                  strings.ui('watchNotificationsDescription'),
+                  state.alertsActive,
+                  onChanged: (_) => unawaited(_toggleNotifications(state)),
+                ),
+                _SwitchLine(
+                  strings.ui('keepDeviceAwake'),
+                  strings.ui('keepAwakeClientText'),
+                  _keepScreenAwake,
+                  onChanged: _setKeepScreenAwake,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: _cardDecoration(),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const CircleAvatar(
+                  backgroundColor: _mintSoft,
+                  child: Icon(Icons.tune_rounded, color: _navy),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(strings.ui('detectionSettingsOnServer'),
+                          style: const TextStyle(
+                            color: _navy,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          )),
+                      const SizedBox(height: 6),
+                      Text(strings.ui('detectionSettingsOnServerDescription'),
+                          style: const TextStyle(
+                            color: _slate,
+                            fontSize: 14,
+                            height: 1.3,
+                          )),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -1410,61 +1471,18 @@ class _QualityPreferenceCard extends StatelessWidget {
   }
 }
 
-class _SliderCard extends StatelessWidget {
-  const _SliderCard(
-      this.title, this.description, this.value, this.color, this.progress);
-
-  final String title;
-  final String description;
-  final String value;
-  final Color color;
-  final double progress;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                      color: _navy, fontSize: 18, fontWeight: FontWeight.w900),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(value,
-                  style: TextStyle(
-                      color: color, fontSize: 18, fontWeight: FontWeight.w900)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(description,
-              style: const TextStyle(color: _slate, fontSize: 14)),
-          const SizedBox(height: 14),
-          LinearProgressIndicator(
-              value: progress,
-              minHeight: 10,
-              color: color,
-              backgroundColor: const Color(0xFFECEFF4)),
-        ],
-      ),
-    );
-  }
-}
-
 class _SwitchLine extends StatelessWidget {
-  const _SwitchLine(this.title, this.description, this.on);
+  const _SwitchLine(
+    this.title,
+    this.description,
+    this.on, {
+    this.onChanged,
+  });
 
   final String title;
   final String description;
   final bool on;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1487,7 +1505,7 @@ class _SwitchLine extends StatelessWidget {
               ],
             ),
           ),
-          Switch(value: on, onChanged: null, activeThumbColor: _mint),
+          Switch(value: on, onChanged: onChanged, activeThumbColor: _mint),
         ],
       ),
     );

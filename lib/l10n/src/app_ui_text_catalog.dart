@@ -204,7 +204,7 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'SERVEUR'
   },
   'parentRoleSubtitle': {
-    'tr': 'EBEVEYN',
+    'tr': 'İZLEME CİHAZI',
     'en': 'PARENT',
     'zh': '家长',
     'hi': 'अभिभावक',
@@ -1158,16 +1158,16 @@ const appUiTextCatalog = <String, Map<String, String>>{
   },
   'watchSettingsSubtitle': {
     'tr':
-        'Gürültü, hareket, bildirim ve entegrasyonları sade kontrollerle yönet.',
+        'Canlı uyarıları ve ekran davranışını yönetin; algılama ayarları oda cihazında kalır.',
     'en':
-        'Manage noise, motion, notifications, and integrations with simple controls.',
-    'zh': '用简单控制管理噪声、活动、通知和集成。',
+        'Manage live alerts and screen behavior; detection stays on the room device.',
+    'zh': '管理实时提醒和屏幕行为；检测设置保留在房间设备上。',
     'hi':
-        'सरल नियंत्रणों से शोर, गतिविधि, सूचनाएँ और जोड़ विकल्प प्रबंधित करें।',
+        'लाइव अलर्ट और स्क्रीन व्यवहार संभालें; पहचान कमरे के डिवाइस पर रहती है।',
     'es':
-        'Gestiona ruido, movimiento, notificaciones e integraciones con controles simples.',
+        'Gestiona alertas y pantalla; la detección queda en el dispositivo de la habitación.',
     'fr':
-        'Gérez bruit, mouvement, notifications et intégrations avec des contrôles simples.'
+        'Gérez alertes et écran ; la détection reste sur l’appareil de la chambre.'
   },
   'notificationCooldown': {
     'tr': 'Bildirim aralığı',
@@ -1462,16 +1462,15 @@ const appUiTextCatalog = <String, Map<String, String>>{
   },
   'serverSettingsSubtitle': {
     'tr':
-        'Eşikler, bildirim aralığı ve teknik davranış yalnızca bebek odası cihazını etkiler.',
+        'Odanıza uygun hazır profili seçin; isterseniz ayrıntıları ileri ayarlardan düzenleyin.',
     'en':
-        'Thresholds, cooldown, and technical behavior affect only the baby room device.',
-    'zh': '阈值、冷却和技术行为只影响婴儿房设备。',
-    'hi':
-        'सीमाएँ, सूचना विराम और तकनीकी व्यवहार केवल बच्चे के कमरे के डिवाइस को प्रभावित करते हैं।',
+        'Choose a ready-made room profile, then fine-tune it in advanced settings if needed.',
+    'zh': '选择适合房间的预设配置；需要时可在高级设置中微调。',
+    'hi': 'कमरे के लिए तैयार प्रोफ़ाइल चुनें; जरूरत पर उन्नत सेटिंग में बदलें।',
     'es':
-        'Umbrales, pausas y comportamiento técnico solo afectan al dispositivo de la habitación.',
+        'Elige un perfil para la habitación y ajústalo en opciones avanzadas si hace falta.',
     'fr':
-        'Seuils, pause de notifications et comportement technique n’affectent que l’appareil de la chambre.'
+        'Choisissez un profil de chambre, puis affinez-le dans les réglages avancés si besoin.'
   },
   'phaseStopped': {
     'tr': 'Durdu',
@@ -2670,5 +2669,169 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'hi': 'जुड़ें',
     'es': 'Conectar',
     'fr': 'Connecter',
+  },
+  'chooseLanguage': {
+    'tr': 'Uygulama dili',
+    'en': 'App language',
+    'zh': '应用语言',
+    'hi': 'ऐप की भाषा',
+    'es': 'Idioma de la aplicación',
+    'fr': 'Langue de l’application',
+  },
+  'systemLanguage': {
+    'tr': 'Telefon dilini kullan',
+    'en': 'Use phone language',
+    'zh': '使用手机语言',
+    'hi': 'फ़ोन की भाषा इस्तेमाल करें',
+    'es': 'Usar idioma del teléfono',
+    'fr': 'Utiliser la langue du téléphone',
+  },
+  'systemLanguageShort': {
+    'tr': 'Telefon dili',
+    'en': 'Phone language',
+    'zh': '手机语言',
+    'hi': 'फ़ोन भाषा',
+    'es': 'Idioma del teléfono',
+    'fr': 'Langue du téléphone',
+  },
+  'systemLanguageDescription': {
+    'tr': 'Telefonun dil ayarı değişince MimiCam da değişir.',
+    'en': 'MimiCam follows changes to the phone language.',
+    'zh': 'MimiCam 会跟随手机语言变化。',
+    'hi': 'MimiCam फ़ोन की भाषा के साथ बदलता है।',
+    'es': 'MimiCam sigue el idioma del teléfono.',
+    'fr': 'MimiCam suit la langue du téléphone.',
+  },
+  'watchPreferences': {
+    'tr': 'İzleme tercihleri',
+    'en': 'Watch preferences',
+    'zh': '观看偏好',
+    'hi': 'देखने की प्राथमिकताएँ',
+    'es': 'Preferencias de visualización',
+    'fr': 'Préférences de visionnage',
+  },
+  'watchNotificationsDescription': {
+    'tr': 'Bu oda için canlı uyarıları dinle.',
+    'en': 'Listen for live alerts from this room.',
+    'zh': '接收此房间的实时提醒。',
+    'hi': 'इस कमरे से लाइव अलर्ट पाएँ।',
+    'es': 'Recibe alertas en vivo de esta habitación.',
+    'fr': 'Recevez les alertes en direct de cette chambre.',
+  },
+  'detectionSettingsOnServer': {
+    'tr': 'Algılama ayarları oda cihazında',
+    'en': 'Detection settings are on the room device',
+    'zh': '检测设置位于房间设备上',
+    'hi': 'पहचान सेटिंग कमरे के डिवाइस पर हैं',
+    'es': 'La detección se configura en el dispositivo de la habitación',
+    'fr': 'La détection se règle sur l’appareil de la chambre',
+  },
+  'detectionSettingsOnServerDescription': {
+    'tr':
+        'Ağlama ve hareket hassasiyetini bebek odası telefonundaki Ayarlar bölümünden değiştirin.',
+    'en':
+        'Change cry and motion sensitivity from Settings on the baby-room phone.',
+    'zh': '请在婴儿房手机的设置中更改哭声和活动灵敏度。',
+    'hi': 'रोने और गतिविधि की संवेदनशीलता कमरे के फ़ोन की सेटिंग में बदलें।',
+    'es':
+        'Cambia la sensibilidad de llanto y movimiento en el teléfono de la habitación.',
+    'fr':
+        'Réglez les pleurs et mouvements dans les paramètres du téléphone de la chambre.',
+  },
+  'quickSetup': {
+    'tr': 'Hızlı kurulum',
+    'en': 'Quick setup',
+    'zh': '快速设置',
+    'hi': 'त्वरित सेटअप',
+    'es': 'Configuración rápida',
+    'fr': 'Réglage rapide',
+  },
+  'sensitivePreset': {
+    'tr': 'Hassas',
+    'en': 'Sensitive',
+    'zh': '灵敏',
+    'hi': 'संवेदनशील',
+    'es': 'Sensible',
+    'fr': 'Sensible',
+  },
+  'balancedPreset': {
+    'tr': 'Dengeli',
+    'en': 'Balanced',
+    'zh': '平衡',
+    'hi': 'संतुलित',
+    'es': 'Equilibrado',
+    'fr': 'Équilibré',
+  },
+  'fewerAlertsPreset': {
+    'tr': 'Daha az uyarı',
+    'en': 'Fewer alerts',
+    'zh': '较少提醒',
+    'hi': 'कम अलर्ट',
+    'es': 'Menos alertas',
+    'fr': 'Moins d’alertes',
+  },
+  'sensitivePresetDescription': {
+    'tr': 'Sessiz odalarda küçük ses ve hareketleri daha erken bildirir.',
+    'en': 'Reports quieter sounds and smaller movements sooner.',
+    'zh': '更早提醒较轻的声音和动作。',
+    'hi': 'हल्की आवाज़ और गतिविधि की जल्दी सूचना देता है।',
+    'es': 'Avisa antes de sonidos y movimientos leves.',
+    'fr': 'Signale plus tôt les sons et mouvements faibles.',
+  },
+  'balancedPresetDescription': {
+    'tr': 'Çoğu oda için önerilen dengeli başlangıç ayarı.',
+    'en': 'Recommended balanced starting point for most rooms.',
+    'zh': '适合大多数房间的推荐平衡设置。',
+    'hi': 'अधिकांश कमरों के लिए सुझाई गई संतुलित सेटिंग।',
+    'es': 'Ajuste inicial recomendado para la mayoría de habitaciones.',
+    'fr': 'Réglage équilibré conseillé pour la plupart des chambres.',
+  },
+  'fewerAlertsPresetDescription': {
+    'tr': 'Hareketli veya gürültülü odalarda gereksiz uyarıları azaltır.',
+    'en': 'Reduces unnecessary alerts in active or noisy rooms.',
+    'zh': '减少活跃或嘈杂房间中的不必要提醒。',
+    'hi': 'व्यस्त या शोर वाले कमरे में अनावश्यक अलर्ट घटाता है।',
+    'es': 'Reduce alertas innecesarias en habitaciones ruidosas.',
+    'fr': 'Réduit les alertes inutiles dans les chambres animées.',
+  },
+  'customDetectionPresetDescription': {
+    'tr': 'İleri ayarlarda size özel değerler kullanılıyor.',
+    'en': 'Custom values are active in advanced settings.',
+    'zh': '高级设置中正在使用自定义值。',
+    'hi': 'उन्नत सेटिंग में कस्टम मान सक्रिय हैं।',
+    'es': 'Hay valores personalizados activos en ajustes avanzados.',
+    'fr': 'Des valeurs personnalisées sont actives dans les réglages avancés.',
+  },
+  'advancedSettings': {
+    'tr': 'İleri ayarlar',
+    'en': 'Advanced settings',
+    'zh': '高级设置',
+    'hi': 'उन्नत सेटिंग',
+    'es': 'Ajustes avanzados',
+    'fr': 'Réglages avancés',
+  },
+  'advancedSettingsDescription': {
+    'tr': 'Eşik ve süreleri tek tek düzenleyin.',
+    'en': 'Fine-tune thresholds and durations.',
+    'zh': '逐项调整阈值和持续时间。',
+    'hi': 'सीमा और अवधि को अलग-अलग बदलें।',
+    'es': 'Ajusta umbrales y duraciones.',
+    'fr': 'Ajustez précisément seuils et durées.',
+  },
+  'resetSettingsTitle': {
+    'tr': 'Ayarlar sıfırlansın mı?',
+    'en': 'Reset settings?',
+    'zh': '重置设置？',
+    'hi': 'सेटिंग रीसेट करें?',
+    'es': '¿Restablecer ajustes?',
+    'fr': 'Réinitialiser les réglages ?',
+  },
+  'resetSettingsDescription': {
+    'tr': 'Algılama ayarları önerilen Dengeli profile döner.',
+    'en': 'Detection returns to the recommended Balanced profile.',
+    'zh': '检测设置将恢复为推荐的平衡模式。',
+    'hi': 'पहचान सुझाई गई संतुलित प्रोफ़ाइल पर लौटेगी।',
+    'es': 'La detección volverá al perfil Equilibrado recomendado.',
+    'fr': 'La détection reviendra au profil Équilibré conseillé.',
   },
 };

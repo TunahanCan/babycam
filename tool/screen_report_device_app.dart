@@ -87,6 +87,8 @@ Future<Widget> _buildScene(String scene) async {
       return const _QrScannerReportScene();
     case 'server':
       final preferences = await SharedPreferences.getInstance();
+      final config = ConfigurationService(preferences);
+      await config.resetToDefaults();
       final runtime = ServerRuntime(
         mediaRuntime: MediaRuntimeController(),
         onStartPairing: () async => _qrPayload,
@@ -102,7 +104,7 @@ Future<Widget> _buildScene(String scene) async {
         theme: MimiCamTheme.serverTheme(),
         child: ServerHomeScreen(
           runtime: runtime,
-          config: ConfigurationService(preferences),
+          config: config,
           activeRole: AppRole.server,
           onRoleSelected: (_) {},
           initialTab: _reportTab,

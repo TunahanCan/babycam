@@ -55,6 +55,9 @@ void main() {
     expect(capabilities['videoPreferred'], 'mjpeg');
     expect(capabilities['audio'], 'pcm16le');
     expect(capabilities['audioPreferred'], 'pcm16le');
+    expect(capabilities.containsKey('freeBroadcastLimitMs'), isFalse);
+    expect(capabilities.containsKey('oneTimeUnlockPrice'), isFalse);
+    expect(capabilities.containsKey('oneTimeUnlockProductId'), isFalse);
 
     server.stopPairingMode();
     final inactiveRequest = await client.getUrl(Uri(

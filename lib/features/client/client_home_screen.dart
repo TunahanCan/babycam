@@ -10,6 +10,7 @@ import '../../core/protocol/alert_event_dto.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../l10n/app_strings.dart';
 import '../../services/discovery/mimicam_service_discovery.dart';
+import '../../services/client_preferences_service.dart';
 import '../shared/presentation/mimicam_design_tokens.dart';
 import '../shared/presentation/mimicam_shells.dart';
 import 'client_runtime.dart';
@@ -25,6 +26,9 @@ class ClientHomeScreen extends StatefulWidget {
     required this.onRoleSelected,
     this.switchingRole = false,
     this.initialTab = 0,
+    this.preferences,
+    this.selectedLocale,
+    this.onLocaleChanged,
   });
 
   final ClientRuntime runtime;
@@ -32,6 +36,9 @@ class ClientHomeScreen extends StatefulWidget {
   final ValueChanged<AppRole> onRoleSelected;
   final bool switchingRole;
   final int initialTab;
+  final ClientPreferencesService? preferences;
+  final Locale? selectedLocale;
+  final ValueChanged<Locale?>? onLocaleChanged;
 
   @override
   State<ClientHomeScreen> createState() => _ClientHomeScreenState();
@@ -40,11 +47,15 @@ class ClientHomeScreen extends StatefulWidget {
 class _ClientHomeScreenState extends State<ClientHomeScreen> {
   final _manualIpController = TextEditingController();
   late int _tab;
+  late bool _keepScreenAwake;
+  Locale? _selectedLocale;
 
   @override
   void initState() {
     super.initState();
     _tab = widget.initialTab.clamp(0, 3);
+    _keepScreenAwake = widget.preferences?.keepScreenAwake ?? true;
+    _selectedLocale = widget.selectedLocale ?? widget.preferences?.locale;
   }
 
   @override
@@ -181,7 +192,13 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
               subtitle: strings.ui('noServerControlsText'),
             ),
             const SizedBox(height: 18),
-            const _ClientSettingsList(),
+            _ClientSettingsList(
+              onNotificationsTap: () => setState(() => _tab = 2),
+              onLanguageTap: _showLanguagePicker,
+              languageLabel: _languageLabel(context),
+              keepScreenAwake: _keepScreenAwake,
+              onKeepScreenAwakeChanged: _setKeepScreenAwake,
+            ),
           ],
         ),
     };
@@ -347,8 +364,91 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       return;
     }
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => WatchScreen(runtime: widget.runtime)),
+      MaterialPageRoute(
+        builder: (_) => WatchScreen(
+          runtime: widget.runtime,
+          keepScreenAwake: _keepScreenAwake,
+          onKeepScreenAwakeChanged: _setKeepScreenAwake,
+        ),
+      ),
     );
+  }
+
+  Future<void> _setKeepScreenAwake(bool enabled) async {
+    if (_keepScreenAwake == enabled) return;
+    setState(() => _keepScreenAwake = enabled);
+    await widget.preferences?.setKeepScreenAwake(enabled);
+  }
+
+  String _languageLabel(BuildContext context) {
+    final strings = AppStrings.of(context);
+    if (_selectedLocale == null) return strings.ui('systemLanguageShort');
+    return _localeName(_selectedLocale!);
+  }
+
+  Future<void> _showLanguagePicker() async {
+    final strings = AppStrings.of(context);
+    final selectedTag = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+          children: [
+            Text(strings.ui('chooseLanguage'),
+                style: MimiCamDesignTokens.cardTitle),
+            const SizedBox(height: 8),
+            ListTile(
+              title: Text(strings.ui('systemLanguage')),
+              subtitle: Text(strings.ui('systemLanguageDescription')),
+              trailing: _selectedLocale == null
+                  ? const Icon(Icons.check_circle_rounded)
+                  : null,
+              onTap: () => Navigator.of(context).pop('system'),
+            ),
+            for (final locale in AppStrings.supportedLocales)
+              ListTile(
+                title: Text(_localeName(locale)),
+                trailing:
+                    _selectedLocale?.toLanguageTag() == locale.toLanguageTag()
+                        ? const Icon(Icons.check_circle_rounded)
+                        : null,
+                onTap: () => Navigator.of(context).pop(locale.toLanguageTag()),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || selectedTag == null) return;
+    final selected = selectedTag == 'system'
+        ? null
+        : AppStrings.supportedLocales.firstWhere(
+            (locale) => locale.toLanguageTag() == selectedTag,
+          );
+    if (selected == _selectedLocale) return;
+    setState(() => _selectedLocale = selected);
+    await widget.preferences?.setLocale(selected);
+    if (!mounted) return;
+    widget.onLocaleChanged?.call(selected);
+  }
+
+  static String _localeName(Locale locale) {
+    if (locale.languageCode == 'ar') {
+      return locale.countryCode == 'QA'
+          ? 'العربية (قطر)'
+          : 'العربية (السعودية)';
+    }
+    return switch (locale.languageCode) {
+      'tr' => 'Türkçe',
+      'en' => 'English',
+      'zh' => '中文',
+      'hi' => 'हिन्दी',
+      'es' => 'Español',
+      'fr' => 'Français',
+      'de' => 'Deutsch',
+      _ => locale.toLanguageTag(),
+    };
   }
 
   void _showMessage(BuildContext context, String message) {
@@ -1505,7 +1605,19 @@ class _NotificationCard extends StatelessWidget {
 }
 
 class _ClientSettingsList extends StatelessWidget {
-  const _ClientSettingsList();
+  const _ClientSettingsList({
+    required this.onNotificationsTap,
+    required this.onLanguageTap,
+    required this.languageLabel,
+    required this.keepScreenAwake,
+    required this.onKeepScreenAwakeChanged,
+  });
+
+  final VoidCallback onNotificationsTap;
+  final VoidCallback onLanguageTap;
+  final String languageLabel;
+  final bool keepScreenAwake;
+  final ValueChanged<bool> onKeepScreenAwakeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1518,6 +1630,7 @@ class _ClientSettingsList extends StatelessWidget {
           text: strings.ui('notificationsManageText'),
           backgroundColor: MimiCamDesignTokens.blushSoft,
           trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: onNotificationsTap,
         ),
         const SizedBox(height: 12),
         _SettingsRow(
@@ -1525,13 +1638,20 @@ class _ClientSettingsList extends StatelessWidget {
           title: strings.ui('language'),
           text: strings.ui('languageSelectText'),
           backgroundColor: MimiCamDesignTokens.mintSoft,
-          trailing: Text(
-            strings.ui('turkishShort'),
-            style: const TextStyle(
-              color: Color(0xFF4CB89E),
-              fontWeight: FontWeight.w900,
+          trailing: SizedBox(
+            width: 92,
+            child: Text(
+              languageLabel,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
+              style: const TextStyle(
+                color: Color(0xFF4CB89E),
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
+          onTap: onLanguageTap,
         ),
         const SizedBox(height: 12),
         _SettingsRow(
@@ -1540,11 +1660,12 @@ class _ClientSettingsList extends StatelessWidget {
           text: strings.ui('keepAwakeClientText'),
           backgroundColor: MimiCamDesignTokens.lavenderSoft,
           trailing: Switch(
-            value: true,
+            value: keepScreenAwake,
             activeThumbColor: Colors.white,
             activeTrackColor: const Color(0xFF51C796),
-            onChanged: (_) {},
+            onChanged: onKeepScreenAwakeChanged,
           ),
+          onTap: () => onKeepScreenAwakeChanged(!keepScreenAwake),
         ),
         const SizedBox(height: 28),
         _PrivacyNote(text: strings.ui('serverSettingsHiddenText')),
@@ -1560,6 +1681,7 @@ class _SettingsRow extends StatelessWidget {
     required this.text,
     required this.backgroundColor,
     required this.trailing,
+    this.onTap,
   });
 
   final IconData icon;
@@ -1567,42 +1689,50 @@ class _SettingsRow extends StatelessWidget {
   final String text;
   final Color backgroundColor;
   final Widget trailing;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: MimiCamDesignTokens.cardDecoration().copyWith(
-        color: backgroundColor,
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 28,
-            backgroundColor: Colors.white.withValues(alpha: .72),
-            child: Icon(icon, color: MimiCamDesignTokens.nightPlum),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Ink(
+          padding: const EdgeInsets.all(18),
+          decoration: MimiCamDesignTokens.cardDecoration().copyWith(
+            color: backgroundColor,
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: MimiCamDesignTokens.cardTitle),
-                const SizedBox(height: 6),
-                Text(
-                  text,
-                  style: const TextStyle(
-                    color: MimiCamDesignTokens.slate,
-                    fontSize: 13.5,
-                    height: 1.25,
-                  ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: Colors.white.withValues(alpha: .72),
+                child: Icon(icon, color: MimiCamDesignTokens.nightPlum),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: MimiCamDesignTokens.cardTitle),
+                    const SizedBox(height: 6),
+                    Text(
+                      text,
+                      style: const TextStyle(
+                        color: MimiCamDesignTokens.slate,
+                        fontSize: 13.5,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 10),
+              trailing,
+            ],
           ),
-          const SizedBox(width: 10),
-          trailing,
-        ],
+        ),
       ),
     );
   }

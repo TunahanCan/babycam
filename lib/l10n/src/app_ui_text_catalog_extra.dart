@@ -184,7 +184,7 @@ const _deUiText = <String, String>{
   'dailySummary': 'Tagesübersicht',
   'todayEventSummary': 'Heute gab es kurze Ereignisse; der Stream ist stabil.',
   'watchSettingsSubtitle':
-      'Qualität, Warnschwellen und Verhalten der Live-Ansicht.',
+      'Live-Warnungen und Bildschirmverhalten; die Erkennung bleibt am Babyzimmer-Gerät.',
   'notificationCooldown': 'Benachrichtigungs-Pause',
   'repeatedAlertsLimit': 'Begrenzt wiederholte Warnungen.',
   'cryThreshold': 'Wein-Schwelle',
@@ -225,7 +225,7 @@ const _deUiText = <String, String>{
       'Kamera, Mikrofon und WebSocket werden im Server-Bereich überwacht.',
   'serverSettings': 'Server-Einstellungen',
   'serverSettingsSubtitle':
-      'Schwellen, Pausen und technisches Verhalten betreffen nur das Babyzimmer-Gerät.',
+      'Wähle ein Raumprofil und passe es bei Bedarf in den erweiterten Einstellungen an.',
   'phaseStopped': 'Gestoppt',
   'phasePairingIdle': 'Wartet auf Kopplung',
   'phasePairingActive': 'Kopplung aktiv',
@@ -395,6 +395,32 @@ const _deUiText = <String, String>{
       'Noch kein Raum gefunden; die lokale Suche läuft weiter.',
   'refreshDiscovery': 'Lokale Suche aktualisieren',
   'connectDiscoveredRoom': 'Verbinden',
+  'chooseLanguage': 'App-Sprache',
+  'systemLanguage': 'Telefonsprache verwenden',
+  'systemLanguageShort': 'Telefonsprache',
+  'systemLanguageDescription': 'MimiCam folgt der Telefonsprache.',
+  'watchPreferences': 'Anzeige-Einstellungen',
+  'watchNotificationsDescription': 'Live-Warnungen aus diesem Raum empfangen.',
+  'detectionSettingsOnServer': 'Erkennung wird am Babyzimmer-Gerät eingestellt',
+  'detectionSettingsOnServerDescription':
+      'Ändere Geräusch- und Bewegungsempfindlichkeit am Babyzimmer-Telefon.',
+  'quickSetup': 'Schnelle Einrichtung',
+  'sensitivePreset': 'Empfindlich',
+  'balancedPreset': 'Ausgewogen',
+  'fewerAlertsPreset': 'Weniger Warnungen',
+  'sensitivePresetDescription':
+      'Meldet leisere Geräusche und kleinere Bewegungen früher.',
+  'balancedPresetDescription':
+      'Empfohlene ausgewogene Einstellung für die meisten Räume.',
+  'fewerAlertsPresetDescription':
+      'Reduziert unnötige Warnungen in lauten oder aktiven Räumen.',
+  'customDetectionPresetDescription':
+      'In den erweiterten Einstellungen sind eigene Werte aktiv.',
+  'advancedSettings': 'Erweiterte Einstellungen',
+  'advancedSettingsDescription': 'Schwellen und Zeiträume fein einstellen.',
+  'resetSettingsTitle': 'Einstellungen zurücksetzen?',
+  'resetSettingsDescription':
+      'Die Erkennung kehrt zum empfohlenen Profil Ausgewogen zurück.',
 };
 
 const _arUiText = <String, String>{
@@ -547,7 +573,8 @@ const _arUiText = <String, String>{
   'system': 'النظام',
   'dailySummary': 'ملخص اليوم',
   'todayEventSummary': 'اليوم كانت الأحداث قصيرة والبث مستقر.',
-  'watchSettingsSubtitle': 'الجودة وعتبات التنبيه وسلوك المشاهدة المباشرة.',
+  'watchSettingsSubtitle':
+      'إدارة التنبيهات المباشرة وسلوك الشاشة؛ يبقى الاكتشاف على جهاز الغرفة.',
   'notificationCooldown': 'فاصل الإشعارات',
   'repeatedAlertsLimit': 'يحد من التنبيهات المتكررة.',
   'cryThreshold': 'عتبة البكاء',
@@ -586,7 +613,7 @@ const _arUiText = <String, String>{
       'تتم مراقبة الكاميرا والميكروفون وWebSocket في منطقة الخادم.',
   'serverSettings': 'إعدادات الخادم',
   'serverSettingsSubtitle':
-      'العتبات والفواصل والسلوك التقني تؤثر فقط على جهاز غرفة الطفل.',
+      'اختر ملفاً جاهزاً للغرفة وعدّله من الإعدادات المتقدمة عند الحاجة.',
   'phaseStopped': 'متوقف',
   'phasePairingIdle': 'بانتظار الإقران',
   'phasePairingActive': 'الإقران نشط',
@@ -742,4 +769,27 @@ const _arUiText = <String, String>{
   'noRoomsDiscovered': 'لم يتم العثور على غرفة بعد؛ يستمر البحث المحلي.',
   'refreshDiscovery': 'تحديث البحث المحلي',
   'connectDiscoveredRoom': 'اتصال',
+  'chooseLanguage': 'لغة التطبيق',
+  'systemLanguage': 'استخدام لغة الهاتف',
+  'systemLanguageShort': 'لغة الهاتف',
+  'systemLanguageDescription': 'يتبع MimiCam تغييرات لغة الهاتف.',
+  'watchPreferences': 'تفضيلات المشاهدة',
+  'watchNotificationsDescription': 'استقبال التنبيهات المباشرة من هذه الغرفة.',
+  'detectionSettingsOnServer': 'إعدادات الاكتشاف على جهاز الغرفة',
+  'detectionSettingsOnServerDescription':
+      'غيّر حساسية البكاء والحركة من إعدادات هاتف غرفة الطفل.',
+  'quickSetup': 'إعداد سريع',
+  'sensitivePreset': 'حساس',
+  'balancedPreset': 'متوازن',
+  'fewerAlertsPreset': 'تنبيهات أقل',
+  'sensitivePresetDescription': 'يبلغ مبكراً عن الأصوات والحركات الخفيفة.',
+  'balancedPresetDescription': 'إعداد متوازن موصى به لمعظم الغرف.',
+  'fewerAlertsPresetDescription':
+      'يقلل التنبيهات غير الضرورية في الغرف النشطة أو الصاخبة.',
+  'customDetectionPresetDescription':
+      'هناك قيم مخصصة مفعلة في الإعدادات المتقدمة.',
+  'advancedSettings': 'إعدادات متقدمة',
+  'advancedSettingsDescription': 'ضبط الحدود والمدد بدقة.',
+  'resetSettingsTitle': 'إعادة ضبط الإعدادات؟',
+  'resetSettingsDescription': 'سيعود الاكتشاف إلى الملف المتوازن الموصى به.',
 };
