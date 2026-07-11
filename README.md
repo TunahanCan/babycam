@@ -1,73 +1,132 @@
-# MimiCam
+<div align="center">
+  <img src="assets/branding/mimicam_icon_wordmark.png" width="190" alt="MimiCam uygulama ikonu" />
+  <br />
+  <img src="assets/branding/mimicam_wordmark.png" width="430" alt="MimiCam" />
 
-MimiCam is a local-first Flutter baby monitor. One phone runs in **Server**
-mode in the baby room; another phone runs in **Client** mode for the parent.
-The app is designed around local Wi-Fi, explicit pairing, real audio/video
-delivery, and runtime diagnostics that can prove whether media actually moves.
+  <h3>Eski telefonunu güvenli ve yerel bir bebek kamerasına dönüştür.</h3>
 
-The current product intentionally does not include cloud relay, accounts,
-internet-wide access, Apple Watch, HTTPS/WSS, or mobile-data relay. Local media
-uses MJPEG/WAV by default and now has an opt-in, one-peer WebRTC H.264 + Opus
-pilot. A failed or unsupported pilot negotiation falls back to MJPEG/WAV.
+  <p>
+    MimiCam, iki telefonu aynı Wi-Fi ağı üzerinden birbirine bağlayan<br />
+    yerel öncelikli bir Flutter bebek monitörüdür.
+  </p>
 
-## Current Status
+  <p>
+    <img src="https://img.shields.io/badge/Flutter-Mobile-02569B?logo=flutter&logoColor=white" alt="Flutter" />
+    <img src="https://img.shields.io/badge/Platform-Android%20%2B%20iOS-16213E" alt="Android ve iOS" />
+    <img src="https://img.shields.io/badge/Network-LAN%20Only-21B6A8" alt="Yalnız yerel ağ" />
+    <img src="https://img.shields.io/badge/Cloud-Not%20Required-FF6B81" alt="Cloud gerektirmez" />
+  </p>
 
-| Area | Implementation |
-| --- | --- |
-| Roles | One active role at a time: Server or Client |
-| Pairing and discovery | QR/manual `IP:port`, plus `_mimicam._tcp` DNS-SD/NSD discovery |
-| Transport | Local HTTP/WebSocket; opt-in WebRTC pilot for media |
-| Video | MJPEG over `GET /video`; H.264 in the WebRTC pilot |
-| Audio | PCM16LE/WAV over `GET /audio`; Opus in the WebRTC pilot |
-| Events | JSON alert events over `GET /ws/events` WebSocket |
-| Auth | Trusted Bearer token plus short-lived stream token |
-| Monitoring | Client live watch with audio, alerts, night clock, and full screen controls |
-| Publishing | Server live preview with full screen controls |
-| Monetization | Hidden and unenforced by default; opt-in paywall build flag |
-| Diagnostics | Browser `/test` panel and JSON `/test/*` endpoints |
-| Resource policy | Demand-owned legacy/analyzer camera/microphone plus thermal, power and backpressure governor |
-| Platform lifecycle | Android service-owned engine; iOS foreground-camera pause/recovery contract |
-| Audio lifecycle | Android audio focus/noisy-route handling; iOS interruption/route recovery |
-| Telemetry | Bounded session counters and p50/p95/p99 latency distributions |
-| Feature controls | Generated comfort sounds, night light, and parent-to-room PCM talk audio |
-| Out of scope | Cloud relay, accounts, push backend, Apple Watch, direct Bluetooth media |
+  <p>
+    <strong>İnternet yoksa da çalışır.</strong> Hesap, cloud relay, APNs veya FCM gerekmez.
+  </p>
+</div>
 
-## Product Rules
+---
 
-- Media is local network only.
-- Bluetooth must not be treated as a video/audio transport.
-- Stream tokens are for media endpoints only.
-- Control endpoints require trusted Bearer auth.
-- Slow video/audio clients skip data instead of building unbounded queues.
-- Audio and alerts have priority over video quality.
-- Runtime docs must describe shipped code, not planned marketing copy.
+## MimiCam Nedir?
 
-## Quick Start
+MimiCam, bir telefonu bebeğin odasında **Server**, diğer telefonu ebeveynin
+elinde **Client** olarak çalıştırır. Cihazlar QR kod, otomatik yerel ağ keşfi
+veya manuel IP ile eşleşir; görüntü, ses ve uyarılar doğrudan aynı yerel ağda
+taşınır.
+
+| | Oda Telefonu | Ebeveyn Telefonu |
+| --- | --- | --- |
+| **Rol** | Server | Client |
+| **Görev** | Kamera, mikrofon ve analiz | Canlı izleme ve bildirim |
+| **Bağlantı** | Yerel HTTP, WebSocket ve opsiyonel WebRTC | Aynı Wi-Fi üzerinden doğrudan bağlantı |
+| **Veri** | Cloud'a yüklenmez | Doğrudan oda telefonundan alınır |
+
+```mermaid
+flowchart LR
+    S["Oda Telefonu<br/><b>SERVER</b>"]
+    W(("Yerel Wi-Fi<br/>İnternet gerekmez"))
+    C["Ebeveyn Telefonu<br/><b>CLIENT</b>"]
+
+    S -->|"Video + Ses"| W
+    W -->|"Canlı yayın"| C
+    S -->|"Hareket + Ağlama"| W
+    W -->|"LAN uyarısı"| C
+    C -->|"Konuşma + Kontrol"| W
+    W --> S
+```
+
+## Neden MimiCam?
+
+| Yerel ve özel | Gerçek zamanlı | Akıllı uyarılar | Esnek bağlantı |
+| --- | --- | --- | --- |
+| Medya ev ağından çıkmaz | Düşük gecikmeli ses ve video | Ağlama, yüksek ses ve hareket analizi | QR, Bonjour/NSD ve manuel IP |
+| Hesap zorunluluğu yok | Ses öncelikli adaptif kalite | Uygulama içi geçmiş ve yerel bildirim | IPv4, IPv6 ve hotspot desteği |
+
+### Öne Çıkanlar
+
+- Aynı Wi-Fi üzerinde internetsiz çalışma
+- Android ve iOS için ayrı Server/Client rolleri
+- QR kod ile hızlı ve güvenli eşleşme
+- MJPEG video ve canlı PCM16LE/WAV ses
+- Opsiyonel tek eşli H.264 + Opus WebRTC pilotu
+- Ağlama, yüksek ses, hareket ve ışık değişimi analizi
+- `Ses`, `Hareket` ve `Sistem` filtreli bildirim geçmişi
+- Tam ekran izleme, gece saati ve `cover` / `contain` görüntü seçenekleri
+- Ebeveynden odaya bas-konuş sesi
+- Beyaz gürültü, pembe gürültü, yağmur ve yumuşak ninni
+- Gece ışığı ve oda konfor kontrolleri
+- Zayıf ağ, sıcaklık ve düşük güç durumlarında adaptif kalite
+- Tarayıcıdan açılan canlı test ve tanılama paneli
+
+## Nasıl Çalışır?
+
+1. Oda telefonunda MimiCam açılır ve **Server** rolü seçilir.
+2. Uygulama bir QR kod ve yerel bağlantı adresi üretir.
+3. Ebeveyn telefonunda **Client** rolü seçilir.
+4. QR kod taranır, yerel odalar listesinden seçim yapılır veya IP girilir.
+5. Tek kullanımlık eşleşme anahtarı doğrulanır ve güvenilir cihaz kaydedilir.
+6. Canlı izleme açıldığında video, ses ve uyarı akışları doğrudan LAN üzerinden başlar.
+
+Rol değiştirildiğinde aktif çalışma grafiği tamamen kapatılır ve yeni rol temiz
+bir runtime ile açılır. MimiCam aynı cihazda Server ve Client rollerini eş
+zamanlı çalıştırmaz.
+
+## Platform Davranışı
+
+MimiCam platform sınırlarını gizlemez. Özellikle iOS kamera erişimi için
+uygulanan davranış aşağıdaki gibidir:
+
+| Durum | Android Server | iOS Server |
+| --- | --- | --- |
+| Uygulama açık | Video, ses, analiz ve LAN uyarıları | Video, ses, analiz ve LAN uyarıları |
+| Ekran kilitli | Foreground service ile yayın devam eder | Audio-only moda geçer |
+| Kilitte ses/ağlama analizi | Devam eder | Devam eder |
+| Kilitte video/hareket analizi | Devam eder | iOS tarafından durdurulur |
+| Ön plana dönüş | Yayın korunur | Kamera ve hareket analizi otomatik geri gelir |
+
+iOS Client tarafında oda sesi aktif olarak dinlenirken background audio,
+uygulamanın LAN bağlantısını ve yerel bildirim yolunu kilit ekranında korur.
+Bu davranış için internet veya push servisi kullanılmaz.
+
+## Hızlı Başlangıç
+
+### Gereksinimler
+
+- Flutter SDK
+- Dart `>=3.4.0 <4.0.0`
+- Android Studio veya Xcode
+- Aynı yerel ağda iki fiziksel cihaz
+- Kamera, mikrofon, yerel ağ ve bildirim izinleri
+
+### Çalıştırma
 
 ```bash
 flutter pub get
 flutter run
 ```
 
-The WebRTC pilot is off by default. Enable it on the room/server build with:
+Server ve Client cihazlarını aynı Wi-Fi ağına bağlayın. Ağın internet
+bağlantısı olması gerekmez; cihazların birbirini görebilmesi yeterlidir. Guest
+network veya AP/client isolation açıksa cihazlar birbirine bağlanamaz.
 
-```bash
-flutter run --dart-define=MIMICAM_WEBRTC_PILOT=true
-```
-
-The server advertises WebRTC only after both H.264 and Opus capability probes
-succeed. The client performs its own capability probe and automatically starts
-a new MJPEG/WAV session if WebRTC negotiation fails.
-
-The broadcast paywall is also off by default so development and device tests
-never show a price card or purchase prompt. Enable it only for an explicit
-store/paywall verification build:
-
-```bash
-flutter run --dart-define=MIMICAM_BROADCAST_PAYWALL_ENABLED=true
-```
-
-Common verification gate:
+### Doğrulama
 
 ```bash
 dart format .
@@ -76,489 +135,197 @@ flutter test
 flutter build apk --debug
 ```
 
-Android debug APK output:
+Android debug APK:
 
 ```text
 build/app/outputs/flutter-apk/app-debug.apk
 ```
 
-Linux can run analysis, tests, and Android debug builds. iOS builds require a
-Mac or a macOS CI runner.
+iOS derlemesi macOS ve Xcode gerektirir:
 
-## User Flow
-
-```text
-Open MimiCam
-  -> choose Server or Client
-  -> Server shows QR/IP pairing details
-  -> Client scans QR or enters IP:port manually
-  -> Client confirms pairing with one-time nonce
-  -> Server issues trusted token
-  -> Client stores token securely
-  -> Client starts live watch
-  -> Server issues short-lived stream token and selected media transport
-  -> Client opens WebRTC or MJPEG/WAV media plus the event socket
-  -> Client posts quality reports
-  -> Server adapts media quality and device resource policy
+```bash
+flutter build ios --debug
 ```
 
-Changing role disposes the active runtime graph and mounts the new role. The app
-does not run Server and Client graphs at the same time.
+## Mimari
 
-## Pricing Model
+```text
+lib/
+├── analysis/                 # Ses, hareket ve uyarı motorları
+├── app/                      # Rol seçimi ve uygulama yaşam döngüsü
+├── core/                     # Protokol, güvenlik, ağ ve medya modelleri
+├── features/
+│   ├── client/               # Ebeveyn cihazı runtime ve ekranları
+│   ├── server/               # Oda cihazı runtime ve ekranları
+│   └── shared/               # Ortak tasarım ve sunum bileşenleri
+├── l10n/                     # Çok dilli metinler
+└── services/                 # LAN server, keşif, bildirim ve platform servisleri
+```
 
-The pricing implementation is behind
-`MIMICAM_BROADCAST_PAYWALL_ENABLED`, which defaults to `false`. With the flag
-off, no purchase service is created, no trial timer is enforced, price fields
-are not advertised, and Server/Client screens do not render purchase UI.
+### Medya Yolu
 
-When the flag is explicitly enabled, MimiCam uses this local one-time unlock
-model:
+Varsayılan ve uyumluluk odaklı medya yolu:
 
-- First 2 hours of live broadcast/watch time are free.
-- After the free limit is exhausted, live streaming is locked.
-- Unlock is a one-time purchase shown as `300 TL`.
-- Store product id: `mimicam_lifetime_unlock_try_300`.
-- Only a verified unlock result is stored locally on the device.
+- Video: `GET /video` üzerinden MJPEG
+- Ses: `GET /audio` üzerinden PCM16LE/WAV
+- Uyarılar: `GET /ws/events` üzerinden JSON WebSocket
+- Kontroller: Yetkili yerel HTTP endpoint'leri
 
-The code uses `in_app_purchase` and expects the App Store / Play Console product
-to be configured as a non-consumable item with the product id above. The code
-cannot create the store product or price by itself.
+MJPEG tarafında her client için tek elemanlı “en yeni kare” kutusu kullanılır.
+Yavaş client'lar eski kareleri biriktirmek yerine atlar. Ses tarafında sabit
+20 ms PCM frame'leri, sınırlı gönderim kuyruğu ve adaptif jitter buffer bulunur.
+Zayıf bağlantıda ses ve uyarılar video kalitesinden önce korunur.
 
-Enforcement happens in runtime code, not only in UI:
+### WebRTC Pilotu
 
-- Client `startWatching` refuses to start after the free limit.
-- Server `/session/start` returns `402 Payment Required` without issuing a
-  stream token after the free limit.
-- Server status/capabilities expose free limit, unlock price, and product id.
+WebRTC pilotu varsayılan olarak kapalıdır:
 
-`StorePayloadPurchaseVerifier` rejects the wrong product, unknown store source,
-non-deliverable state, or missing local/server verification data. It persists a
-SHA-256 fingerprint and verification metadata, never the raw receipt or purchase
-token. This is a fail-closed local envelope check, not Apple/Google server-side
-receipt authenticity validation; a production backend verifier is still needed
-for that stronger guarantee.
+```bash
+flutter run --dart-define=MIMICAM_WEBRTC_PILOT=true
+```
 
-## Server Role
+Pilot yalnız yerel ağda host ICE ile çalışır ve tek aktif peer destekler. Server
+ve Client tarafında H.264 ile Opus capability kontrolü başarılı olmazsa MimiCam
+otomatik olarak MJPEG/WAV yoluna geri döner.
 
-Server responsibilities:
+## Güvenlik ve Eşleşme
 
-- Bind the local HTTP server.
-- Prefer a dual-stack IPv6 bind and fall back to IPv4 when unavailable.
-- Advertise the active room as `_mimicam._tcp` through Bonjour/NSD.
-- Generate QR payloads and public pairing status.
-- Validate pairing nonce and issue trusted client tokens.
-- Reconcile legacy MJPEG/WAV camera and microphone independently from actual
-  video/audio and analyzer demand.
-- Apply the native background contract: Android foreground-service ownership
-  and controlled iOS camera pause/recovery.
-- Encode camera frames to JPEG and broadcast them as MJPEG.
-- Capture PCM audio and broadcast it as a WAV stream.
-- Offer one-peer H.264 + Opus WebRTC when the pilot is enabled and available.
-- Run motion/audio analysis and emit alerts.
-- Track active watch clients and attached stream sockets.
-- Apply adaptive media quality based on client health reports.
-- Apply thermal, low-power, battery, encode and backpressure degradation policy.
-- Play generated comfort audio and parent talk PCM through native room output.
-- Expose diagnostics under `/test`.
-- Enforce the free broadcast limit for incoming watch sessions.
+MimiCam medya trafiğini yerel ağda tutar ancak aynı ağdaki her cihazı güvenilir
+kabul etmez.
 
-Important files:
+```text
+QR / IP eşleşmesi
+  -> tek kullanımlık ve süreli nonce
+  -> güvenilir Client token'ı
+  -> kısa ömürlü stream token'ı
+  -> video ve ses endpoint'lerine yetkili erişim
+```
 
-- `lib/services/mimicam_server.dart`
-- `lib/features/server/server_runtime.dart`
-- `lib/features/server/server_composition_root.dart`
-- `lib/features/server/media/mjpeg_stream_service.dart`
-- `lib/features/server/media/wav_audio_stream_service.dart`
-- `lib/features/server/media/microphone_capture_service.dart`
-- `lib/features/server/media/media_runtime_controller.dart`
-- `lib/features/server/media/webrtc/flutter_webrtc_server_gateway.dart`
-- `lib/features/server/pairing/pairing_token_service.dart`
-- `lib/services/server/active_client_registry.dart`
-- `lib/services/server/media_quality_selector.dart`
-- `lib/services/server/media_resource_governor.dart`
-- `lib/services/server/baby_monitor_feature_controller.dart`
-- `lib/services/discovery/mimicam_service_discovery.dart`
-- `lib/services/monetization/broadcast_access_service.dart`
-
-## Client Role
-
-Client responsibilities:
-
-- Scan QR with `mobile_scanner`.
-- Discover rooms through DNS-SD/NSD, including IPv6 endpoints.
-- Pair through `/pair/confirm`.
-- Store trusted token in secure storage.
-- Restore saved sessions on launch.
-- Renew trusted tokens when needed.
-- Start and stop live watch sessions.
-- Negotiate WebRTC and fall back to MJPEG/WAV without leaving a pilot session
-  active.
-- Read MJPEG video.
-- Read WAV audio and write PCM to native playback.
-- Listen to alert WebSocket events.
-- Store in-app alert history.
-- Show local notifications when permission is granted.
-- Report network, stream, and battery health.
-- Capture push-to-talk microphone PCM and control room comfort audio.
-- Enforce the free watch limit before opening streams.
-
-Important files:
-
-- `lib/features/client/client_runtime.dart`
-- `lib/features/client/client_composition_root.dart`
-- `lib/features/client/media/watch_screen.dart`
-- `lib/features/client/media/stream_session_controller.dart`
-- `lib/features/client/media/client_media_stream_supervisor.dart`
-- `lib/features/client/media/client_video_viewer.dart`
-- `lib/features/client/media/client_live_audio_pipeline.dart`
-- `lib/features/client/media/network_quality_monitor.dart`
-- `lib/features/client/media/webrtc/flutter_webrtc_client_connector.dart`
-- `lib/features/client/controls/client_room_controls.dart`
-- `lib/features/client/alerts/client_alert_listener.dart`
-- `lib/features/client/pairing/pairing_session_store.dart`
-
-## Pairing and Storage
-
-The QR payload carries address, nonce, expiry, transport, and capability
-metadata. It does not carry the trusted token.
-
-Client storage split:
-
-| Data | Storage |
+| Veri | Saklama Alanı |
 | --- | --- |
-| Trusted token | `flutter_secure_storage` |
-| Pairing metadata | `SharedPreferences` |
-| Server trusted-client token hashes | `SharedPreferences` |
-| Child profiles | `SharedPreferences` plus secure per-child token keys |
-| Client identity | Secure storage |
-| Alert history | `SharedPreferences` |
-| Broadcast unlock and free-time usage | `SharedPreferences` |
+| Güvenilir Client token'ı | `flutter_secure_storage` |
+| Eşleşme bilgileri | `SharedPreferences` |
+| Server token hash'leri | `SharedPreferences` |
+| Bildirim geçmişi | `SharedPreferences` |
+| Cihaz kimliği | Güvenli depolama |
 
-Legacy `pairing_session` records are migrated on load. Corrupt records are
-cleared instead of crashing startup.
+Trusted token özel ve durum değiştiren endpoint'lerde Bearer auth olarak
+kullanılır. `/video` ve `/audio` ayrıca kısa ömürlü stream token'ı ister.
 
-## Auth Model
+## Uyarılar ve Bildirimler
 
-Trusted token:
+Server analiz motoru şu olayları üretebilir:
 
-- Issued by `/pair/confirm`.
-- Renewed by `/auth/renew`.
-- Sent as `Authorization: Bearer <token>`.
-- Stored on the server as a hash.
-- Required for private state-changing endpoints.
+- Ağlama ve yüksek ses
+- Hareket ve genel ışık değişimi
+- Batarya ve sistem uyarıları
 
-Stream token:
+Client olayları hem uygulama içi geçmişe kaydeder hem de izin verildiğinde yerel
+OS bildirimi gösterir. Geçmiş ekranındaki filtreler gerçek event tiplerine göre
+`Ses`, `Hareket` ve `Sistem` olarak çalışır.
 
-- Issued by `/session/start`.
-- Short lived.
-- Required by `/video` and `/audio`; a trusted Bearer token alone cannot bypass
-  it.
-- Passed as `?streamToken=...`.
-- Not accepted by status, quality, auth, comfort, night-light, or talk control
-  routes.
+MimiCam varsayılan yapıda APNs, FCM veya push backend kullanmaz. İnternetsiz
+Wi-Fi'da bildirim alınabilmesi için iOS Client'ın aktif background audio
+oturumuyla LAN event socket'ini koruması gerekir.
 
-The WebSocket event route accepts trusted auth through Bearer headers or the
-`token` query parameter, matching the current client path.
+## Oda Kontrolleri
 
-## Media Lifecycle
-
-```text
-ClientRuntime.startWatching
-  -> BroadcastAccessService.beginSession
-  -> StreamSessionController.start
-  -> POST /session/start
-  -> MimiCamServer checks BroadcastAccessService
-  -> ActiveClientRegistry creates active watch slot
-  -> Server returns streamToken and accepted mediaTransport
-  -> WebRTC: HTTP signaling opens H.264/Opus peer media
-  -> fallback: ClientMediaStreamSupervisor opens /video and /audio
-```
-
-Watch sessions are separate from transient media sockets:
-
-- `/session/start` marks the active watch session.
-- `/video` and `/audio` attach stream sockets.
-- A media socket disconnect does not immediately delete the watch session.
-- Reconnect can reuse the same valid stream token.
-- `/session/stop`, token expiry, or explicit cleanup clears the active slot.
-
-Legacy MJPEG/WAV camera and microphone ownership is demand based. Video-only
-operation does not request the microphone; audio-only operation does not
-request the camera. `MediaRuntimeController` serializes transitions so late
-starts and stops cannot leave a privacy-sensitive resource active. Analyzer
-demand is folded into the same resource decision. The WebRTC pilot owns its
-`getUserMedia` tracks inside the gateway; its session demand is merged into the
-native service contract, legacy capture is suspended while the peer owns the
-hardware, and platform pause closes pilot tracks. Physical-device validation is
-still required for codec, thermal and background behavior.
-
-Platform lifecycle is explicit:
-
-- Android keeps the existing Flutter engine under foreground-service ownership
-  for active media demand. The service is `START_NOT_STICKY`; after process
-  death it does not silently reacquire while-in-use camera/microphone access.
-- iOS does not claim background camera capture. Entering background emits a
-  controlled media-pause request; returning active restores retained demand.
-
-## Video
-
-The default/fallback video path is MJPEG over HTTP.
-
-- Server keeps the latest JPEG frame.
-- Server broadcasts frames to attached MJPEG responses.
-- There is no per-client camera encode.
-- Active media profile dimensions are applied during JPEG conversion and JPEG
-  uses 4:2:0 chroma sampling.
-- Each client has a one-slot latest-frame mailbox; stale pending frames are
-  overwritten instead of queued.
-- Client decoding is one-in-flight plus one-latest-pending; live frames stay
-  outside Flutter's global `ImageCache` and replaced `ui.Image` handles are
-  disposed.
-- Camera capture uses a device-tier FPS ceiling and active-profile frame pacing.
-  iOS NV12/BGRA plane layouts are handled explicitly.
-- JPEG conversion runs in one persistent worker isolate with one in-flight
-  encode and one replaceable pending frame.
-- Multipart frames include sequence, capture-time, and send-time metadata.
-- Client rendering keeps only the newest complete frame in a network burst and
-  reports sequence gaps, relative queue delay, and RFC-style jitter.
-- If no frame exists, a zero-length multipart keepalive opens the response.
-- Client parser ignores keepalive parts.
-- Client validates host and port against the paired server.
-- Client supports full screen and `cover` / `contain` fit modes.
-
-Key tests:
-
-- `test/features/server/mjpeg_stream_service_test.dart`
-- `test/features/client/client_video_viewer_test.dart`
-- `test/features/client/mjpeg_stream_parser_test.dart`
-- `test/features/server/media_stream_end_to_end_test.dart`
-
-## WebRTC H.264 + Opus Pilot
-
-The pilot is deliberately additive to the legacy path:
-
-- Off by default; enable with `MIMICAM_WEBRTC_PILOT=true`.
-- Server and client both require H.264 and Opus runtime capabilities.
-- HTTP signaling uses `/webrtc/offer`, `/webrtc/ice`, and `/webrtc/close`.
-- The pilot currently allows one active peer and uses host ICE only on the
-  local LAN (`iceServers` is empty).
-- If capability probing or negotiation fails, the client closes the pilot
-  session and starts a fresh `mjpeg_wav` session.
-- MJPEG/WAV remains the compatibility and diagnostic path.
-
-Focused tests:
-
-- `test/features/server/webrtc_signaling_endpoints_test.dart`
-- `test/features/client/stream_session_controller_test.dart`
-
-## Audio
-
-The default/fallback audio path is PCM16LE wrapped in a live WAV stream.
-
-- Server writes a WAV header first.
-- Server converts arbitrary recorder chunks to fixed 20 ms PCM frames.
-- Every client has a bounded 160 ms sender queue. Overflow or a stalled flush
-  closes that stream so the client reconnects with a clean timeline.
-- Client parses WAV in Dart.
-- Client uses fixed 20 ms frames, an adaptive 60-220 ms jitter target, and an
-  80-100 ms native high-water pump; its hard Dart buffer limit is 320 ms.
-- Client writes fixed PCM frames to native output.
-- Android output uses `AudioTrack`.
-- iOS output uses `AVAudioEngine` and `AVAudioPlayerNode`.
-- Android requests audio focus, pauses on focus loss or becoming-noisy events,
-  observes device-route changes, and reports focus/interrupt metrics.
-- iOS reacts to AVAudioSession interruption, route change and media-services
-  reset notifications and reports those events through the platform runtime.
-- Client health tracks underruns, reconnects, and native write failures.
-
-The research and parameter rationale are recorded in
-`docs/media_transport_algorithms.md`.
-
-Key tests:
-
-- `test/features/client/client_live_audio_pipeline_test.dart`
-- `test/features/client/wav_pcm_stream_parser_test.dart`
-- `test/services/server/wav_pcm16_test.dart`
-- `test/features/server/media/microphone_capture_service_test.dart`
-
-## Alerts and Notifications
-
-Server analysis emits alert events for audio, motion, battery, and system
-conditions. Client alert handling has two surfaces:
-
-- In-app alert history.
-- Local OS notifications where permission allows.
-
-Alerts are transported as JSON DTOs. Optional fields such as `battery`,
-`transport`, `childId`, and `snapshotAvailable` are backward-compatible.
-
-## Adaptive Quality
-
-The client sends `/quality/report` updates that combine:
-
-- RTT.
-- Network tier.
-- Video frame health.
-- Audio chunk health.
-- Reconnect state.
-- Battery snapshot.
-- Active watch state.
-
-The server uses those reports, bounded session telemetry, device thermal/power
-state, encoder pressure and stream backpressure to choose an effective media
-profile. The governor moves through `normal`, `constrained`, `survival`, and
-audio-first modes. Audio and alerts remain preferred when the connection or
-device gets weak.
-
-## Diagnostics
-
-Diagnostic surfaces are part of the runtime, not only tests:
-
-| Route | Purpose |
+| Özellik | Açıklama |
 | --- | --- |
-| `/test` | Browser dashboard |
-| `/test/status` | Runtime diagnostics JSON |
-| `/test/probe` | Loopback media probe |
-| `/test/alert` | Test alert emission |
-| `/test/audio-tone` | Test audio response |
+| Bas-konuş | Ebeveyn mikrofonunu PCM olarak oda telefonuna gönderir |
+| Konfor sesi | Beyaz/pembe gürültü, yağmur ve prosedürel ninni üretir |
+| Gece ışığı | Oda cihazındaki ışık durumunu yerel ağdan kontrol eder |
+| Kalite raporu | RTT, video, ses, batarya ve reconnect verilerini Server'a yollar |
 
-`/test/status` also exposes `sessionTelemetry`, `deviceResources`,
-`resourceGovernor`, room-audio status, transport state and stream health.
-Telemetry sample windows are bounded and publish counters plus p50/p95/p99
-durations, so long-running sessions do not create an unbounded metric buffer.
+Bas-konuş başladığında konfor sesi geçici olarak durur; konuşma bitince önceki
+konfor sesi devam eder. Ebeveynden odaya video aktarımı henüz desteklenmez.
 
-The high-value media proof is:
+## Tanılama Paneli
 
-```text
-/session/start
-  -> /video first MJPEG payload
-  -> /audio first PCM payload
-  -> /test/probe loopback status
+Server çalışırken tarayıcıdan aşağıdaki yerel endpoint'ler kullanılabilir:
+
+| Route | Amaç |
+| --- | --- |
+| `/test` | Canlı tanılama paneli |
+| `/test/status` | Runtime ve kaynak durumu |
+| `/test/probe` | Loopback video/ses kanıtı |
+| `/test/alert` | Test uyarısı üretme |
+| `/test/audio-tone` | Test ses akışı |
+
+Tanılama çıktısı aktif session'ları, medya profilini, cihaz kaynaklarını,
+backpressure durumunu ve p50/p95/p99 sürelerini içerir. Telemetri pencereleri
+sınırlıdır; uzun yayınlarda belleği sınırsız büyütmez.
+
+## Opsiyonel Özellikler
+
+### Tek Seferlik Yayın Kilidi
+
+Paywall normal geliştirme ve test build'lerinde kapalıdır:
+
+```bash
+flutter run --dart-define=MIMICAM_BROADCAST_PAYWALL_ENABLED=true
 ```
 
-## Feature Controls
+Flag açıldığında mevcut model ilk 2 saat ücretsiz yayın ve ardından tek seferlik
+kilit açma sunar. Store ürün kimliği `mimicam_lifetime_unlock_try_300`, yerel
+fiyat etiketi `300 TL` olarak tanımlıdır. Store ürünü App Store Connect veya
+Play Console üzerinde ayrıca oluşturulmalıdır.
 
-These local control surfaces exist:
+Yerel receipt envelope doğrulaması ham receipt saklamaz; SHA-256 fingerprint ve
+doğrulama metadata'sı tutar. Üretim seviyesinde dolandırıcılık direnci için
+Apple/Google server-side receipt doğrulaması ayrıca gerekir.
 
-- `/comfort/state`
-- `/comfort/command`
-- `/night-light/state`
-- `/night-light/command`
-- `/talk/start`
-- `/talk/stop`
-- `/talk/audio`
-- `/talk/video`
+## Testler
 
-Comfort playback generates 16 kHz mono PCM for white noise, pink noise, rain,
-and a procedural soft lullaby, then writes it through the same native PCM sink
-used by client playback. Push-to-talk captures parent microphone PCM and streams
-it to the room device; talk temporarily preempts comfort playback and comfort
-resumes after talk ends. Talk video is intentionally reported as unsupported:
-`/talk/video` remains a compatibility ingest route, but there is no parent-video
-overlay.
-
-## Local Discovery and IPv6
-
-- The room advertises `_mimicam._tcp` while pairing is active.
-- The client starts an NSD/Bonjour browser with automatic resolution and
-  IPv4/IPv6 lookup.
-- The HTTP server first attempts an IPv6 dual-stack bind (`v6Only: false`) and
-  falls back to IPv4.
-- URI construction uses IPv6-safe authorities.
-- Discovery failure does not remove QR or manual `IP:port` fallback.
-
-This is service discovery only. Media is still local IP traffic, not Bluetooth.
-
-## Bluetooth and Hotspot
-
-Media does not travel over Bluetooth. The current media runtime uses local-IP
-HTTP/WS or the opt-in WebRTC pilot. Hotspot support is therefore OS/user-managed:
-if both phones are on the same local network or hotspot network, local media can
-work. Direct Bluetooth video/audio is out of scope.
-
-The dependency set includes `bluetooth_low_energy`, but docs and product copy
-must not claim production Bluetooth media streaming.
-
-## Known Gaps
-
-- No cloud relay or mobile-data relay.
-- No account system.
-- No Apple Watch companion.
-- No HTTPS/WSS transport.
-- No direct Bluetooth media.
-- WebRTC is an opt-in, one-peer LAN pilot, not the default or a relay/NAT
-  traversal solution.
-- Parent-to-room talk is audio-only; parent video overlay is not implemented.
-- Purchase verification is local-envelope validation; release-grade App
-  Store/Google Play server verification is not implemented.
-- Physical-device test scenarios and release gates are defined in
-  `docs/physical_device_test_matrix.md`, but simulator/unit tests do not count
-  as completed physical-device evidence.
-- The requested security bundle was intentionally excluded for this local-LAN
-  scope: public pairing-nonce redesign, centralized request-body limits,
-  socket lease/revoke, and secure session tickets are not implemented here.
-- Multi-child storage exists, but default server identity still needs careful
-  real-device validation.
-
-## Test Checklist
-
-Recommended local gate:
+Tam regresyon kapısı:
 
 ```bash
 flutter analyze
 flutter test
-flutter build apk --debug
 ```
 
-Focused media gate:
+Yüksek değerli odak testleri:
 
 ```bash
 flutter test test/features/server/media_stream_end_to_end_test.dart
 flutter test test/features/client/client_live_audio_pipeline_test.dart
 flutter test test/features/client/client_media_stream_supervisor_test.dart
-flutter test test/features/client/stream_session_controller_test.dart
-flutter test test/features/server/webrtc_signaling_endpoints_test.dart
-flutter test test/features/server/media_runtime_controller_test.dart
-flutter test test/services/server/media_resource_governor_test.dart
-flutter test test/core/media/media_session_telemetry_test.dart
+flutter test test/features/server/server_runtime_lifecycle_test.dart
 flutter test test/services/platform/platform_runtime_contract_test.dart
-flutter test test/services/discovery/mimicam_service_discovery_test.dart
-flutter test test/services/server/room_audio_coordinator_test.dart
-flutter test test/features/client/client_room_controls_test.dart
-```
-
-Focused monetization gate:
-
-```bash
-flutter test test/services/monetization/broadcast_access_service_test.dart
-flutter test test/features/client/client_runtime_lifecycle_test.dart
-flutter test test/features/server/feature_control_endpoints_test.dart
-```
-
-UI regression gate:
-
-```bash
 flutter test test/features/performance/screen_render_budget_test.dart
 ```
 
-## Release Notes for Stores
+Fiziksel cihaz senaryoları için
+[test matrisi](docs/physical_device_test_matrix.md), medya kararlarının teknik
+arka planı için [transport notları](docs/media_transport_algorithms.md)
+kullanılabilir.
 
-Before shipping paid unlock:
+## Bilinen Sınırlar
 
-1. Create non-consumable product `mimicam_lifetime_unlock_try_300`.
-2. Set price to 300 TL or the matching local tier.
-3. Test purchase and restore on Android and iOS sandbox accounts.
-4. Confirm the app handles unavailable store state.
-5. Confirm verification failures do not grant or persist entitlement.
-6. Integrate an Apple/Google server-side receipt verifier before treating local
-   receipt-envelope validation as fraud-resistant.
-7. Confirm unlock survives app restart on the same device.
+- Cloud relay, hesap sistemi ve internet üzerinden uzaktan erişim yoktur.
+- HTTPS/WSS henüz yoktur; uygulama güvenilir yerel ağ kapsamındadır.
+- iOS ekran kilidinde kamera ve hareket analizi çalışmaz; ses yolu korunur.
+- APNs/FCM olmadığı için iOS'ta audio oturumu olmayan tamamen askıya alınmış
+  Client'a anlık LAN bildirimi ulaştırılamaz.
+- WebRTC pilotu tek peer ile sınırlıdır ve TURN/NAT traversal sunmaz.
+- Doğrudan Bluetooth medya aktarımı desteklenmez.
+- Ebeveynden odaya konuşma seslidir; video overlay yoktur.
+- Store doğrulaması release-grade server receipt doğrulaması içermez.
+- Fiziksel cihaz, sıcaklık ve uzun süreli yayın testleri release öncesi ayrıca
+  tamamlanmalıdır.
 
-Before shipping iOS:
+## Teknik Belgeler
 
-1. Build on macOS.
-2. Check camera, microphone, local network, and notification permissions.
-3. Check native PCM playback.
-4. Check QR scan permission fallback.
-5. Check purchase/restore on sandbox.
+- [Fiziksel cihaz test matrisi](docs/physical_device_test_matrix.md)
+- [Medya transport algoritmaları](docs/media_transport_algorithms.md)
+- [Flutter porting matrisi](docs/kotlin_to_flutter_porting_matrix.md)
+- [Kod inceleme notları](docs/code_review_2026-07-10.md)
+- [Ekranlar ve kullanım akışları raporu](docs/reports/mimicam_ekranlar_akislar_usecase_raporu.pdf)
+- [Çok dilli ekranlar raporu](docs/reports/mimicam_cok_dilli_ekranlar_usecase_raporu.pdf)
+
+---
+
+<div align="center">
+  <img src="assets/branding/mimicam_launcher_icon.png" width="96" alt="MimiCam launcher icon" />
+  <p><strong>MimiCam</strong><br />Yakında, yerel ve senin kontrolünde.</p>
+</div>

@@ -88,6 +88,7 @@ class ServerRuntime {
     PlatformMediaLifecycleCoordinator? platformLifecycle,
     Future<void> Function(MediaResourceDemand demand)? onMediaDemandChanged,
     Future<void> Function(String reason)? onPauseExternalMedia,
+    Future<void> Function(String reason)? onRecoverExternalMedia,
   })  : _mediaRuntime = mediaRuntime,
         _onStartPairing = onStartPairing,
         _onStopPairing = onStopPairing,
@@ -98,7 +99,8 @@ class ServerRuntime {
         _broadcastAccess = broadcastAccess,
         _platformLifecycle = platformLifecycle,
         _onMediaDemandChanged = onMediaDemandChanged,
-        _onPauseExternalMedia = onPauseExternalMedia {
+        _onPauseExternalMedia = onPauseExternalMedia,
+        _onRecoverExternalMedia = onRecoverExternalMedia {
     _platformLifecycle?.start();
   }
 
@@ -114,10 +116,10 @@ class ServerRuntime {
   final Future<void> Function(MediaResourceDemand demand)?
       _onMediaDemandChanged;
   final Future<void> Function(String reason)? _onPauseExternalMedia;
+  final Future<void> Function(String reason)? _onRecoverExternalMedia;
   final _states = StreamController<ServerRuntimeState>.broadcast();
   final _activeSessions = <String, StreamSessionOptions>{};
   final _externalCaptureOwners = <String>{};
-  final _legacyMediaSuspensions = <String>{};
   final _notificationClients = <String, ({bool cry, bool motion})>{};
   final _resources = MediaResourceCounter();
   ServerRuntimeState _state =
@@ -127,6 +129,7 @@ class ServerRuntime {
   Future<void> _mutationTail = Future<void>.value();
   Future<void> _pairingMutationTail = Future<void>.value();
   bool _disposed = false;
+  bool _platformAudioOnly = false;
 
   Stream<ServerRuntimeState> get states => _states.stream;
   ServerRuntimeState get currentState => _state;
@@ -374,6 +377,9 @@ class ServerRuntime {
     if (session == null || session.transport != ServerStreamTransport.webRtc) {
       throw const WebRtcPeerNotFoundException();
     }
+    if (_platformAudioOnly && session.video) {
+      throw const WebRtcPilotCapacityException();
+    }
     if (_externalCaptureOwners.contains(clientId)) return;
     _refreshResourceCounts();
     if (_hasCompetingLegacyDemand(clientId, session)) {
@@ -500,12 +506,11 @@ class ServerRuntime {
     _activeSessions.clear();
     _externalCaptureOwners.clear();
     _notificationClients.clear();
+    _platformAudioOnly = false;
     _resources.localPreviewActive = false;
     _refreshResourceCounts();
     await _broadcastAccess?.endAllSessions();
     await _mediaRuntime.reconcile(MediaResourceDemand.none);
-    _legacyMediaSuspensions.clear();
-    if (_mediaRuntime.isSuspended) await _mediaRuntime.resume();
     await _publishMediaDemand();
     _emit(ServerRuntimeState(
       phase: ServerRuntimePhase.stopped,
@@ -530,11 +535,15 @@ class ServerRuntime {
 
   Future<void> _pauseMediaForPlatformLocked(String reason) async {
     if (_disposed) return;
-    await _addLegacyMediaSuspension('platform');
+    _platformAudioOnly = true;
     await _onPauseExternalMedia?.call(reason);
-    await _publishMediaDemand(forceNone: true);
+    await _mediaRuntime.reconcile(_resourceDemand());
+    await _publishMediaDemand();
     if (_disposed) return;
-    _emit(_stateForPhase(ServerRuntimePhase.mediaIdle));
+    _emit(_stateForPhase(
+        _mediaRuntime.audioActive || _resources.externalAudioClients > 0
+            ? ServerRuntimePhase.mediaActive
+            : ServerRuntimePhase.mediaIdle));
   }
 
   Future<void> recoverMediaForPlatform(String reason) =>
@@ -542,8 +551,12 @@ class ServerRuntime {
 
   Future<void> _recoverMediaForPlatformLocked(String reason) async {
     if (_disposed) return;
-    await _removeLegacyMediaSuspension('platform');
-    await _publishMediaDemand();
+    _platformAudioOnly = false;
+    await _onRecoverExternalMedia?.call(reason);
+    await _recomputeResources(
+      startMediaIfNeeded: true,
+      phase: ServerRuntimePhase.mediaActive,
+    );
     if (_disposed) return;
     _emit(_stateForPhase(
       _mediaRuntime.isActive
@@ -613,7 +626,7 @@ class ServerRuntime {
   }
 
   MediaResourceDemand _resourceDemand() => MediaResourceDemand(
-        video: _resources.needsVideoCapture,
+        video: !_platformAudioOnly && _resources.needsVideoCapture,
         audio: _resources.needsAudioCapture,
       );
 
@@ -637,11 +650,9 @@ class ServerRuntime {
       activeAudioClients: _resources.activeAudioClients,
       activeEventClients: _resources.activeEventClients,
       cameraActive: _mediaRuntime.videoActive ||
-          (_resources.externalVideoClients > 0 &&
-              !_legacyMediaSuspensions.contains('platform')),
-      microphoneActive: _mediaRuntime.audioActive ||
-          (_resources.externalAudioClients > 0 &&
-              !_legacyMediaSuspensions.contains('platform')),
+          (_resources.externalVideoClients > 0 && !_platformAudioOnly),
+      microphoneActive:
+          _mediaRuntime.audioActive || _resources.externalAudioClients > 0,
       motionAnalyzerActive:
           _mediaRuntime.videoActive && _resources.wantsMotionDetection,
       cryAnalyzerActive:
@@ -772,10 +783,9 @@ class ServerRuntime {
     _activeSessions.clear();
     _externalCaptureOwners.clear();
     _notificationClients.clear();
+    _platformAudioOnly = false;
     _resources.localPreviewActive = false;
     _refreshResourceCounts();
-    _legacyMediaSuspensions.clear();
-    if (_mediaRuntime.isSuspended) await _mediaRuntime.resume();
     await _publishMediaDemand();
     final snapshot = await access.endAllSessions();
     if (_disposed || !snapshot.isLocked) return;
@@ -812,16 +822,6 @@ class ServerRuntime {
     await stop();
     await _broadcastAccess?.dispose();
     await _states.close();
-  }
-
-  Future<void> _addLegacyMediaSuspension(String owner) async {
-    if (!_legacyMediaSuspensions.add(owner)) return;
-    if (_legacyMediaSuspensions.length == 1) await _mediaRuntime.suspend();
-  }
-
-  Future<void> _removeLegacyMediaSuspension(String owner) async {
-    if (!_legacyMediaSuspensions.remove(owner)) return;
-    if (_legacyMediaSuspensions.isEmpty) await _mediaRuntime.resume();
   }
 
   Future<void> _publishMediaDemand({

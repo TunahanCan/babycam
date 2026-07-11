@@ -175,6 +175,7 @@ class ServerCompositionRoot {
       broadcastAccess: broadcastAccess,
       onMediaDemandChanged: publishRuntimeDemand,
       onPauseExternalMedia: server.pauseExternalMediaForPlatform,
+      onRecoverExternalMedia: server.recoverExternalMediaForPlatform,
       onStartPairing: startPairingOverride ??
           () async {
             // Start the Android host lease while the Activity is visible. It

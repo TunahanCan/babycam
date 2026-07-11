@@ -11,7 +11,8 @@ class FlutterWebRtcServerGateway
     implements
         WebRtcServerGateway,
         WebRtcPeerLifecycleSource,
-        WebRtcMediaPolicyController {
+        WebRtcMediaPolicyController,
+        WebRtcBackgroundMediaController {
   FlutterWebRtcServerGateway({
     this.maxPeers = 1,
     this.onLog,
@@ -265,6 +266,30 @@ class FlutterWebRtcServerGateway
           onLog?.call('WebRTC sender policy could not be applied: $error');
         }
       }
+    }
+  }
+
+  @override
+  Future<void> suspendVideoForBackground() async {
+    for (final peer in _peers.values.toList(growable: false)) {
+      for (final track in peer.localStream.getVideoTracks()) {
+        try {
+          await track.stop();
+        } catch (error) {
+          onLog?.call('WebRTC background video stop failed: $error');
+        }
+      }
+    }
+  }
+
+  @override
+  Future<void> reconnectPeersForForeground() async {
+    final peers = _peers.values.toList(growable: false);
+    for (final peer in peers) {
+      await _closeEntry(
+        peer,
+        reason: WebRtcPeerCloseReason.platformPause,
+      );
     }
   }
 

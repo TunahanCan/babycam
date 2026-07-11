@@ -52,6 +52,18 @@ import UserNotifications
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
+  override func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    if #available(iOS 14.0, *) {
+      completionHandler([.banner, .list, .sound, .badge])
+    } else {
+      completionHandler([.alert, .sound, .badge])
+    }
+  }
+
   private func registerPlatformRuntimeChannels() {
     guard let registrar = registrar(forPlugin: "MimiCamPlatformRuntime") else {
       return
@@ -305,14 +317,15 @@ final class PlatformRuntimeBridge: NSObject, FlutterStreamHandler {
       "microphoneDemand": currentMicrophoneDemand,
       "playbackDemand": currentPlaybackDemand,
       "audioOutputActive": currentAudioOutputActive,
-      "supportsServerInBackground": false,
-      "supportsAudioOutputInBackground": false,
+      "supportsServerInBackground": true,
+      "supportsAudioOutputInBackground": true,
+      "supportsMicrophoneInBackground": true,
       "serviceOwnsMediaHardware": false,
       "activityAttached": state == "foregroundActive" || state == "foreground",
       "serviceOwnsEngine": false,
       "engineAvailable": true,
       "contractMessage":
-        "iOS oda sunucusu, kamera ve oda sesi yalnız uygulama ön plandayken desteklenir."
+        "iOS kilitliyken oda sesi ve LAN uyarıları sürer; kamera ön planda otomatik geri gelir."
     ]
   }
 
@@ -371,8 +384,10 @@ final class PlatformRuntimeBridge: NSObject, FlutterStreamHandler {
             ? "ios_application_inactive"
             : "ios_application_backgrounded",
           "cameraBackgroundSupported": false,
-          "serverBackgroundSupported": false,
-          "audioOutputBackgroundSupported": false
+          "serverBackgroundSupported": true,
+          "microphoneBackgroundSupported": true,
+          "audioOutputBackgroundSupported": true,
+          "preserveAudioInBackground": true
         ]
       )
     } else if shouldRecover {
@@ -546,7 +561,6 @@ private final class SharedAudioSessionPolicy {
 private enum PcmAudioPlayerError: LocalizedError {
   case invalidFormat(sampleRate: Int, channels: Int)
   case testToneWriteRejected
-  case outputRequiresForeground
 
   var errorDescription: String? {
     switch self {
@@ -554,8 +568,6 @@ private enum PcmAudioPlayerError: LocalizedError {
       return "Could not create PCM format for \(sampleRate) Hz / \(channels) channel(s)"
     case .testToneWriteRejected:
       return "PCM test tone could not be queued"
-    case .outputRequiresForeground:
-      return "Room audio output requires MimiCam to be active in the foreground"
     }
   }
 }
@@ -601,9 +613,6 @@ private final class PcmAudioPlayer {
   }
 
   func start(sampleRate: Int, channels: Int) throws {
-    guard PlatformRuntimeBridge.shared.isApplicationForeground else {
-      throw PcmAudioPlayerError.outputRequiresForeground
-    }
     let safeSampleRate = min(max(sampleRate, 8000), 48000)
     let safeChannels = max(1, min(channels, 2))
     try queue.sync {
@@ -844,20 +853,6 @@ private final class PcmAudioPlayer {
     ) { [weak self] _ in
       self?.handleMediaServicesReset()
     })
-    observers.append(center.addObserver(
-      forName: UIApplication.willResignActiveNotification,
-      object: nil,
-      queue: nil
-    ) { [weak self] _ in
-      self?.suspendOutputForBackground()
-    })
-    observers.append(center.addObserver(
-      forName: UIApplication.didBecomeActiveNotification,
-      object: nil,
-      queue: nil
-    ) { [weak self] _ in
-      self?.recoverOutputFromBackground()
-    })
   }
 
   private func handleInterruption(_ notification: Notification) {
@@ -956,46 +951,6 @@ private final class PcmAudioPlayer {
           "recovered": recovered,
           "outputActive": recovered && !shouldRemainBackgroundSuspended
         ]
-      )
-    }
-  }
-
-  private func suspendOutputForBackground() {
-    queue.async { [weak self] in
-      guard let self, self.playerNode != nil, !self.backgroundSuspended else {
-        return
-      }
-      self.backgroundSuspended = true
-      self.playerNode?.pause()
-      self.eventEmitter(
-        "audioOutputSuspendedForBackground",
-        ["backgroundOutputSupported": false]
-      )
-    }
-  }
-
-  private func recoverOutputFromBackground() {
-    queue.async { [weak self] in
-      guard let self, self.backgroundSuspended, self.playerNode != nil else {
-        return
-      }
-      var recovered = false
-      do {
-        try self.audioSessionPolicy.recoverOutputIfNeeded()
-        if let engine = self.engine, !engine.isRunning {
-          try engine.start()
-        }
-        self.playerNode?.play()
-        self.backgroundSuspended = false
-        self.interrupted = false
-        recovered = true
-      } catch {
-        self.writeErrors += 1
-        self.lastError = "background recovery: \(error.localizedDescription)"
-      }
-      self.eventEmitter(
-        "audioOutputResumedFromBackground",
-        ["recovered": recovered]
       )
     }
   }

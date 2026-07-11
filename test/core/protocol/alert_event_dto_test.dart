@@ -10,6 +10,20 @@ import 'package:mimicam/l10n/app_strings.dart';
 import 'package:mimicam/services/server/alert_protocol_adapter.dart';
 
 void main() {
+  test('alert kategorileri event tipinden kesin olarak belirlenir', () {
+    expect(_categoryOf('cryDetected', 'parentCryAlert'), AlertCategory.audio);
+    expect(
+        _categoryOf('loudSound', 'parentLoudSoundAlert'), AlertCategory.audio);
+    expect(_categoryOf('motionDetected', 'parentMotionAlert'),
+        AlertCategory.motion);
+    expect(
+      _categoryOf('globalLightChange', 'parentLightChangeAlert'),
+      AlertCategory.motion,
+    );
+    expect(_categoryOf('systemWarning', 'legacyAlert'), AlertCategory.system);
+    expect(_categoryOf('batteryLow', 'batteryLow'), AlertCategory.system);
+  });
+
   test('toJson transport şemasını korur', () {
     const dto = AlertEventDto(
       id: 'alert-1',
@@ -135,3 +149,14 @@ void main() {
     expect((json['metadata'] as Map)['confidencePercent'], 91);
   });
 }
+
+AlertCategory _categoryOf(String type, String messageKey) => AlertEventDto(
+      id: 'category-test',
+      type: type,
+      severity: 'info',
+      messageKey: messageKey,
+      message: 'test',
+      score: 0,
+      timestampMs: 0,
+      sourceDeviceId: 'server',
+    ).category;

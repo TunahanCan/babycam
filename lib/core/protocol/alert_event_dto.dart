@@ -1,6 +1,8 @@
 import '../media/adaptive_media_profile.dart';
 import '../../l10n/app_strings.dart';
 
+enum AlertCategory { audio, motion, system }
+
 class AlertEventDto {
   const AlertEventDto(
       {required this.id,
@@ -29,6 +31,48 @@ class AlertEventDto {
   final String? transport;
   final String? childId;
   final Map<String, Object?> metadata;
+
+  AlertCategory get category {
+    final normalizedType = type.trim().toLowerCase();
+    final normalizedMessageKey = messageKey.trim().toLowerCase();
+
+    if (const {
+          'motiondetected',
+          'globallightchange',
+        }.contains(normalizedType) ||
+        const {
+          'parentmotionalert',
+          'parentlightchangealert',
+        }.contains(normalizedMessageKey)) {
+      return AlertCategory.motion;
+    }
+
+    if (const {
+      'systemwarning',
+      'batterylow',
+    }.contains(normalizedType)) {
+      return AlertCategory.system;
+    }
+
+    if (const {
+          'crydetected',
+          'loudsound',
+          'legacyalert',
+        }.contains(normalizedType) ||
+        const {
+          'parentcryalert',
+          'parentloudsoundalert',
+          'parentepisodehighcryalert',
+          'parentepisodeshortsoundalert',
+          'parentepisodecryalert',
+          'legacyalert',
+        }.contains(normalizedMessageKey)) {
+      return AlertCategory.audio;
+    }
+
+    return AlertCategory.system;
+  }
+
   Map<String, Object?> toJson() => {
         'schemaVersion': 1,
         'id': id,

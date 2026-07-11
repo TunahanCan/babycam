@@ -1305,12 +1305,11 @@ class _NotificationList extends StatelessWidget {
 
 bool _matchesAlertFilter(AlertEventDto alert, _AlertFilter filter) {
   if (filter == _AlertFilter.all) return true;
-  final family = _alertFamily(alert);
   return switch (filter) {
     _AlertFilter.all => true,
-    _AlertFilter.motion => family == _AlertFamily.motion,
-    _AlertFilter.audio => family == _AlertFamily.audio,
-    _AlertFilter.system => family == _AlertFamily.system,
+    _AlertFilter.motion => alert.category == AlertCategory.motion,
+    _AlertFilter.audio => alert.category == AlertCategory.audio,
+    _AlertFilter.system => alert.category == AlertCategory.system,
   };
 }
 
@@ -1328,43 +1327,27 @@ _NotificationSpec _notificationSpecFromAlert(
   AppStrings strings,
   AlertEventDto alert,
 ) {
-  final family = _alertFamily(alert);
+  final family = alert.category;
   return _NotificationSpec(
     switch (family) {
-      _AlertFamily.motion => Icons.directions_run_rounded,
-      _AlertFamily.audio => Icons.notifications_active_outlined,
-      _AlertFamily.system => Icons.wifi_rounded,
+      AlertCategory.motion => Icons.directions_run_rounded,
+      AlertCategory.audio => Icons.notifications_active_outlined,
+      AlertCategory.system => Icons.wifi_rounded,
     },
     switch (family) {
-      _AlertFamily.motion => strings.ui('motionDetectedTitle'),
-      _AlertFamily.audio => strings.ui('cryDetectedTitle'),
-      _AlertFamily.system => strings.notificationTitle,
+      AlertCategory.motion => strings.ui('motionDetectedTitle'),
+      AlertCategory.audio => strings.ui('cryDetectedTitle'),
+      AlertCategory.system => strings.notificationTitle,
     },
     alert.localizedMessage(strings),
     _formatAlertTime(alert.timestampMs),
     _severityLabel(strings, alert.severity),
     switch (family) {
-      _AlertFamily.motion => const Color(0xFFEFFAF5),
-      _AlertFamily.audio => MimiCamDesignTokens.blushSoft,
-      _AlertFamily.system => const Color(0xFFF1F5FB),
+      AlertCategory.motion => const Color(0xFFEFFAF5),
+      AlertCategory.audio => MimiCamDesignTokens.blushSoft,
+      AlertCategory.system => const Color(0xFFF1F5FB),
     },
   );
-}
-
-enum _AlertFamily { audio, motion, system }
-
-_AlertFamily _alertFamily(AlertEventDto alert) {
-  final signature = '${alert.type} ${alert.messageKey}'.toLowerCase();
-  if (signature.contains('motion') || signature.contains('light')) {
-    return _AlertFamily.motion;
-  }
-  if (signature.contains('cry') ||
-      signature.contains('sound') ||
-      signature.contains('audio') ||
-      signature.contains('legacy')) {
-    return _AlertFamily.audio;
-  }
-  return _AlertFamily.system;
 }
 
 String _severityLabel(AppStrings strings, String severity) {

@@ -75,6 +75,11 @@ abstract interface class WebRtcMediaPolicyController {
   Future<void> applyMediaPolicy(WebRtcMediaPolicy policy);
 }
 
+abstract interface class WebRtcBackgroundMediaController {
+  Future<void> suspendVideoForBackground();
+  Future<void> reconnectPeersForForeground();
+}
+
 class WebRtcPilotUnavailableException implements Exception {
   const WebRtcPilotUnavailableException([
     this.message = 'WebRTC H.264/Opus pilot is unavailable.',

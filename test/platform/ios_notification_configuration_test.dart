@@ -11,6 +11,9 @@ void main() {
       appDelegate,
       contains('UNUserNotificationCenter.current().delegate = self'),
     );
+    expect(appDelegate, contains('willPresent notification: UNNotification'));
+    expect(appDelegate, contains('[.banner, .list, .sound, .badge]'));
+    expect(appDelegate, contains('[.alert, .sound, .badge]'));
   });
 
   test('iOS notification permission implementation is compiled in', () {

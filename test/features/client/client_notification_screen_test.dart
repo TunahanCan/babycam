@@ -32,6 +32,57 @@ void main() {
     expect(find.text('Son durum bekleniyor'), findsNothing);
   });
 
+  testWidgets('bildirim filtreleri ses hareket ve sistem kayitlarini ayirir',
+      (tester) async {
+    final runtime = ClientRuntime(pair: (_) => throw UnimplementedError());
+    addTearDown(runtime.dispose);
+    await runtime.recordAlert(_typedAlert(
+      'audio-1',
+      'Ses kaydi',
+      type: 'cryDetected',
+      messageKey: 'testMessage',
+    ));
+    await runtime.recordAlert(_typedAlert(
+      'motion-1',
+      'Hareket kaydi',
+      type: 'motionDetected',
+      messageKey: 'testMessage',
+    ));
+    await runtime.recordAlert(_typedAlert(
+      'system-1',
+      'Sistem kaydi',
+      type: 'batteryLow',
+      messageKey: 'batteryLow',
+    ));
+
+    await tester.pumpWidget(_App(
+      home: ClientHomeScreen(
+        runtime: runtime,
+        activeRole: AppRole.client,
+        onRoleSelected: (_) {},
+        initialTab: 2,
+      ),
+    ));
+
+    await tester.tap(find.text('Hareket').first);
+    await tester.pump();
+    expect(find.text('Hareket kaydi'), findsOneWidget);
+    expect(find.text('Ses kaydi'), findsNothing);
+    expect(find.text('Sistem kaydi'), findsNothing);
+
+    await tester.tap(find.text('Ses').first);
+    await tester.pump();
+    expect(find.text('Ses kaydi'), findsOneWidget);
+    expect(find.text('Hareket kaydi'), findsNothing);
+    expect(find.text('Sistem kaydi'), findsNothing);
+
+    await tester.tap(find.text('Sistem').first);
+    await tester.pump();
+    expect(find.text('Sistem kaydi'), findsOneWidget);
+    expect(find.text('Ses kaydi'), findsNothing);
+    expect(find.text('Hareket kaydi'), findsNothing);
+  });
+
   testWidgets('gelen alert watch gecmis ekranina duser', (tester) async {
     final session = PairingSession(payload: _payload(), sessionToken: 'token');
     final runtime = ClientRuntime(
@@ -110,6 +161,23 @@ AlertEventDto _alert(String id, String message) => AlertEventDto(
       type: 'legacyAlert',
       severity: 'info',
       messageKey: 'legacyAlert',
+      message: message,
+      score: 0,
+      timestampMs: DateTime(2026, 6, 29, 12, 30).millisecondsSinceEpoch,
+      sourceDeviceId: 'server',
+    );
+
+AlertEventDto _typedAlert(
+  String id,
+  String message, {
+  required String type,
+  required String messageKey,
+}) =>
+    AlertEventDto(
+      id: id,
+      type: type,
+      severity: 'info',
+      messageKey: messageKey,
       message: message,
       score: 0,
       timestampMs: DateTime(2026, 6, 29, 12, 30).millisecondsSinceEpoch,

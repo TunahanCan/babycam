@@ -1565,37 +1565,21 @@ class _AlertTimeline extends StatelessWidget {
 }
 
 String _alertTitle(AppStrings strings, AlertEventDto alert) {
-  final family = _alertFamily(alert);
+  final family = alert.category;
   return switch (family) {
-    _AlertFamily.motion => strings.ui('motionDetectedTitle'),
-    _AlertFamily.audio => strings.ui('cryDetectedTitle'),
-    _AlertFamily.system => strings.notificationTitle,
+    AlertCategory.motion => strings.ui('motionDetectedTitle'),
+    AlertCategory.audio => strings.ui('cryDetectedTitle'),
+    AlertCategory.system => strings.notificationTitle,
   };
 }
 
 Color _alertColor(AlertEventDto alert) {
-  final family = _alertFamily(alert);
+  final family = alert.category;
   return switch (family) {
-    _AlertFamily.motion => _amber,
-    _AlertFamily.audio => _pink,
-    _AlertFamily.system => _mint,
+    AlertCategory.motion => _amber,
+    AlertCategory.audio => _pink,
+    AlertCategory.system => _mint,
   };
-}
-
-enum _AlertFamily { audio, motion, system }
-
-_AlertFamily _alertFamily(AlertEventDto alert) {
-  final signature = '${alert.type} ${alert.messageKey}'.toLowerCase();
-  if (signature.contains('motion') || signature.contains('light')) {
-    return _AlertFamily.motion;
-  }
-  if (signature.contains('cry') ||
-      signature.contains('sound') ||
-      signature.contains('audio') ||
-      signature.contains('legacy')) {
-    return _AlertFamily.audio;
-  }
-  return _AlertFamily.system;
 }
 
 String _formatAlertTime(int timestampMs) {

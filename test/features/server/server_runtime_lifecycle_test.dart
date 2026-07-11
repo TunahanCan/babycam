@@ -8,6 +8,65 @@ import 'package:mimicam/services/monetization/broadcast_access_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('iOS background keeps audio active and restores video in foreground',
+      () async {
+    final calls = <String>[];
+    final media = MediaRuntimeController(
+      onStartVideo: () async => calls.add('video:start'),
+      onStopVideo: () async => calls.add('video:stop'),
+      onStartAudio: () async => calls.add('audio:start'),
+      onStopAudio: () async => calls.add('audio:stop'),
+    );
+    final runtime = ServerRuntime(mediaRuntime: media);
+    addTearDown(runtime.dispose);
+
+    await runtime.startStreamSession(
+      'parent',
+      const StreamSessionOptions(video: true, audio: true),
+    );
+    expect(media.activeDemand, MediaResourceDemand.all);
+
+    await runtime.pauseMediaForPlatform('ios_application_backgrounded');
+
+    expect(media.videoActive, isFalse);
+    expect(media.audioActive, isTrue);
+    expect(runtime.currentState.cameraActive, isFalse);
+    expect(runtime.currentState.microphoneActive, isTrue);
+    expect(calls, ['video:start', 'audio:start', 'video:stop']);
+
+    await runtime.recoverMediaForPlatform('application_foregrounded');
+
+    expect(media.activeDemand, MediaResourceDemand.all);
+    expect(runtime.currentState.cameraActive, isTrue);
+    expect(runtime.currentState.microphoneActive, isTrue);
+    expect(calls, [
+      'video:start',
+      'audio:start',
+      'video:stop',
+      'video:start',
+    ]);
+  });
+
+  test('iOS background rejects a new video WebRTC capture for LAN fallback',
+      () async {
+    final runtime = ServerRuntime(mediaRuntime: MediaRuntimeController());
+    addTearDown(runtime.dispose);
+    await runtime.pauseMediaForPlatform('ios_application_backgrounded');
+    await runtime.startStreamSession(
+      'webrtc-parent',
+      const StreamSessionOptions(
+        video: true,
+        audio: true,
+        transport: ServerStreamTransport.webRtc,
+      ),
+    );
+
+    await expectLater(
+      runtime.activateExternalCapture('webrtc-parent'),
+      throwsA(isA<WebRtcPilotCapacityException>()),
+    );
+  });
+
   test('Server startPairingMode sadece pairing açar, medya oturumla başlar',
       () async {
     var startCount = 0;

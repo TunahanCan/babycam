@@ -1928,10 +1928,27 @@ class MimiCamServer {
   Future<void> pauseExternalMediaForPlatform(String reason) async {
     final gateway = webRtcGateway;
     if (gateway == null || gateway.activePeerCount == 0) return;
-    for (final clientId in _activeClientRegistry.activeClientIds) {
-      await gateway.closeClient(clientId);
+    if (gateway is WebRtcBackgroundMediaController) {
+      await (gateway as WebRtcBackgroundMediaController)
+          .suspendVideoForBackground();
+    } else {
+      for (final clientId in _activeClientRegistry.activeClientIds) {
+        await gateway.closeClient(clientId);
+      }
     }
-    onLog('WebRTC media paused for platform lifecycle: $reason');
+    onLog('WebRTC video paused; background audio preserved: $reason');
+  }
+
+  Future<void> recoverExternalMediaForPlatform(String reason) async {
+    final gateway = webRtcGateway;
+    if (gateway == null ||
+        gateway is! WebRtcBackgroundMediaController ||
+        gateway.activePeerCount == 0) {
+      return;
+    }
+    await (gateway as WebRtcBackgroundMediaController)
+        .reconnectPeersForForeground();
+    onLog('WebRTC peers reconnecting after foreground recovery: $reason');
   }
 
   void _handleWebRtcPeerLifecycleEvent(WebRtcPeerLifecycleEvent event) {
@@ -2743,7 +2760,11 @@ class MimiCamServer {
         _microphoneCapture.isActive;
     if (hasCapture) {
       _updateResourceWatchdog();
-      if (!_wakelockEnabled) {
+      if (defaultTargetPlatform == TargetPlatform.iOS && _wakelockEnabled) {
+        await WakelockPlus.disable();
+        _wakelockEnabled = false;
+      } else if (defaultTargetPlatform != TargetPlatform.iOS &&
+          !_wakelockEnabled) {
         await WakelockPlus.enable();
         _wakelockEnabled = true;
       }
