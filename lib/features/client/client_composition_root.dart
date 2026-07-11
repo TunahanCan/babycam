@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'alerts/client_alert_background_service.dart';
 import 'alerts/client_alert_listener.dart';
 import 'alerts/client_alert_history.dart';
 import 'alerts/client_notification_service.dart';
@@ -44,18 +45,38 @@ class ClientCompositionRoot {
     final remoteBroadcastAccess = RemoteBroadcastAccessClient();
     final alertHistory = ClientAlertHistory(preferences: preferences);
     final notifications = ClientNotificationService();
+    const alertBackground = ClientAlertBackgroundService();
     final roomControls = ClientRoomControls();
     final serviceBrowser = MimiCamServiceBrowser();
     final endpointResolver = TrustedSessionEndpointResolver(
       browser: serviceBrowser,
     );
+    var alertDeliveryTail = Future<void>.value();
     final alerts = ClientAlertListener(
       healthState: streamHealth,
       onAlert: (alert) {
-        unawaited(alertHistory.add(alert).catchError((_) {}));
-        unawaited(notifications.showAlert(alert).catchError((_) {}));
+        alertDeliveryTail = alertDeliveryTail.then<void>((_) async {
+          try {
+            await alertHistory.add(alert);
+          } catch (_) {
+            // A storage failure must not suppress the phone notification.
+          }
+          await notifications.showAlert(alert);
+        }).catchError((_) {
+          // Keep processing later alerts if the platform rejects one post.
+        });
       },
     );
+
+    Future<void> stopAlerts() async {
+      try {
+        await alerts.stop();
+      } finally {
+        await alertBackground.stop();
+      }
+      await alertDeliveryTail;
+    }
+
     final runtime = ClientRuntime(
       pair: (payload) async {
         final session = await pairingClient.pair(payload);
@@ -71,13 +92,22 @@ class ClientCompositionRoot {
       stopStream: streams.stop,
       watchNetworkQuality: networkQuality.watch,
       startAlerts: (session) async {
-        unawaited(
-          notifications.initialize(strings: strings).catchError((_) => false),
-        );
-        await alerts.start(session, waitForFirstConnection: false);
-        return true;
+        final notificationsEnabled =
+            await notifications.initialize(strings: strings);
+        if (!notificationsEnabled) {
+          await stopAlerts();
+          return false;
+        }
+        try {
+          await alertBackground.start();
+          await alerts.start(session, waitForFirstConnection: false);
+          return alerts.isListening;
+        } catch (_) {
+          await stopAlerts();
+          rethrow;
+        }
       },
-      stopAlerts: alerts.stop,
+      stopAlerts: stopAlerts,
       clearStore: store.clear,
       watchSessionEndpoints: endpointResolver.watch,
       persistReboundSession: store.save,

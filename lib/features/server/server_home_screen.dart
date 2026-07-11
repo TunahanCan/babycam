@@ -49,6 +49,9 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
   late double _cryDurationSeconds;
   bool _savingSettings = false;
   bool _fullscreenPreview = false;
+  bool _localPreviewWanted = true;
+  bool _previewActionBusy = false;
+  bool? _previewActionTargetEnabled;
   bool _purchaseBusy = false;
   BoxFit _previewFit = BoxFit.cover;
   late int _tab;
@@ -63,7 +66,7 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
       if (_tab == 1) {
         unawaited(widget.runtime.startPairingMode());
       } else if (_tab == 0) {
-        _startLocalPreview();
+        _activatePreviewTab();
       }
     });
   }
@@ -241,7 +244,7 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
       await widget.runtime.unlockBroadcastAccess();
       if (!mounted) return;
       _showMessage(strings.ui('broadcastAccessUnlocked'));
-      _startLocalPreview();
+      _retryLocalPreview();
     } catch (error) {
       if (!mounted) return;
       _showMessage(_purchaseMessage(strings, error));
@@ -258,7 +261,7 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
       await widget.runtime.restoreBroadcastAccessPurchase();
       if (!mounted) return;
       _showMessage(strings.ui('broadcastAccessUnlocked'));
-      _startLocalPreview();
+      _retryLocalPreview();
     } catch (error) {
       if (!mounted) return;
       _showMessage(_purchaseMessage(strings, error));
@@ -350,13 +353,62 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
     if (index == 1) {
       unawaited(widget.runtime.startPairingMode());
     } else if (index == 0) {
-      _startLocalPreview();
+      _activatePreviewTab();
     }
   }
 
-  void _startLocalPreview() {
+  void _activatePreviewTab() {
     unawaited(widget.runtime.startPairingMode());
-    unawaited(widget.runtime.startLocalPreview().catchError((_) {}));
+    if (_localPreviewWanted) {
+      unawaited(
+        _changeLocalPreview(
+          true,
+          showFailureMessage: false,
+        ),
+      );
+    }
+  }
+
+  void _retryLocalPreview() {
+    _localPreviewWanted = true;
+    _activatePreviewTab();
+  }
+
+  Future<void> _toggleLocalPreview(bool currentlyActive) => _changeLocalPreview(
+        !currentlyActive,
+        showFailureMessage: true,
+      );
+
+  Future<void> _changeLocalPreview(
+    bool enabled, {
+    required bool showFailureMessage,
+  }) async {
+    if (_previewActionBusy || !mounted) return;
+    final strings = AppStrings.of(context);
+    setState(() {
+      _localPreviewWanted = enabled;
+      _previewActionBusy = true;
+      _previewActionTargetEnabled = enabled;
+    });
+    try {
+      if (enabled) {
+        await widget.runtime.startLocalPreview();
+      } else {
+        await widget.runtime.stopLocalPreview();
+      }
+    } catch (_) {
+      if (enabled) _localPreviewWanted = false;
+      if (mounted && showFailureMessage) {
+        _showMessage(strings.ui('localPreviewChangeFailed'));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _previewActionBusy = false;
+          _previewActionTargetEnabled = null;
+        });
+      }
+    }
   }
 
   Widget _buildTab(BuildContext context, ServerRuntimeState state) {
@@ -372,14 +424,18 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
               state: state,
               previewSource: widget.runtime.previewSource,
               fit: _previewFit,
+              actionBusy: _previewActionBusy,
+              actionTargetEnabled: _previewActionTargetEnabled,
               onEnterFullscreen: _enterFullscreenPreview,
               onToggleFit: _togglePreviewFit,
+              onTogglePreview: () =>
+                  _toggleLocalPreview(state.localPreviewActive),
             ),
             const SizedBox(height: 12),
             _ServerLiveStatusCard(
               state: state,
               onConnectParent: () => _selectTab(1),
-              onRetry: _startLocalPreview,
+              onRetry: _retryLocalPreview,
               onRestart: widget.onRestartServer,
             ),
             if (state.broadcastAccess != null) ...[
@@ -591,7 +647,7 @@ class _ServerLiveStatusCard extends StatelessWidget {
     final preparing = !stopped &&
         !failed &&
         (state.phase == ServerRuntimePhase.mediaStarting ||
-            !state.cameraActive);
+            (state.localPreviewActive && !state.cameraActive));
     final title = failed
         ? strings.ui('streamStartFailed')
         : stopped
@@ -1591,15 +1647,21 @@ class _LivePreviewCard extends StatelessWidget {
     required this.state,
     required this.previewSource,
     required this.fit,
+    required this.actionBusy,
+    required this.actionTargetEnabled,
     required this.onEnterFullscreen,
     required this.onToggleFit,
+    required this.onTogglePreview,
   });
 
   final ServerRuntimeState state;
   final Object? previewSource;
   final BoxFit fit;
+  final bool actionBusy;
+  final bool? actionTargetEnabled;
   final VoidCallback onEnterFullscreen;
   final VoidCallback onToggleFit;
+  final VoidCallback onTogglePreview;
 
   @override
   Widget build(BuildContext context) {
@@ -1610,9 +1672,25 @@ class _LivePreviewCard extends StatelessWidget {
     final jpegSource = previewSource is ServerJpegPreviewSource
         ? previewSource as ServerJpegPreviewSource
         : null;
-    final showCamera = state.cameraActive &&
+    final stopped = state.phase == ServerRuntimePhase.stopped;
+    final previewActive = state.localPreviewActive;
+    final blockedByParentWatch =
+        state.externalCaptureActive && !state.localPreviewActive;
+    final showCamera = previewActive &&
+        state.cameraActive &&
         ((controller != null && controller.value.isInitialized) ||
             jpegSource != null);
+    final description = stopped
+        ? strings.ui('serverStreamStoppedBody')
+        : blockedByParentWatch
+            ? strings.ui('localPreviewUnavailableDuringParentWatch')
+            : !previewActive
+                ? strings.ui('localPreviewOffBody')
+                : showCamera
+                    ? strings.ui('cameraRoomCheckText')
+                    : state.cameraActive
+                        ? strings.ui('localPreviewPreparingText')
+                        : strings.ui('cameraPermissionPreviewText');
 
     return MimiCamCard(
       key: const ValueKey('server-live-preview-card'),
@@ -1620,29 +1698,43 @@ class _LivePreviewCard extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isCompact = constraints.maxWidth < 420;
+          final stackHeader = constraints.maxWidth < 240 ||
+              MediaQuery.textScalerOf(context).scale(16) > 20;
+          final title = Row(
+            children: [
+              const Icon(
+                Icons.videocam_rounded,
+                color: MimiCamDesignTokens.serverCyan,
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  strings.ui('roomCamera'),
+                  style: const TextStyle(
+                    color: MimiCamDesignTokens.serverText,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          );
+          final toggle = _LocalPreviewToggleButton(
+            active: previewActive,
+            busy: actionBusy,
+            targetEnabled: actionTargetEnabled,
+            enabled: !blockedByParentWatch,
+            onPressed: onTogglePreview,
+          );
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.videocam_rounded,
-                    color: MimiCamDesignTokens.serverCyan,
-                    size: 22,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      strings.ui('roomCamera'),
-                      style: const TextStyle(
-                        color: MimiCamDesignTokens.serverText,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              title,
+              if (!stopped && stackHeader) ...[
+                const SizedBox(height: 10),
+                SizedBox(width: double.infinity, child: toggle),
+              ],
               const SizedBox(height: 12),
               ConstrainedBox(
                 constraints: BoxConstraints(maxHeight: isCompact ? 190 : 280),
@@ -1658,9 +1750,23 @@ class _LivePreviewCard extends StatelessWidget {
                         _CameraPreviewSurface(
                           previewSource: previewSource,
                           showCamera: showCamera,
+                          localPreviewActive: previewActive,
                           fit: fit,
                           borderRadius: BorderRadius.circular(20),
                         ),
+                        if (!stopped && !stackHeader)
+                          Positioned(
+                            top: 8,
+                            left: 8,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: showCamera
+                                    ? constraints.maxWidth - 122
+                                    : constraints.maxWidth - 16,
+                              ),
+                              child: toggle,
+                            ),
+                          ),
                         if (showCamera)
                           Positioned(
                             bottom: 10,
@@ -1670,29 +1776,31 @@ class _LivePreviewCard extends StatelessWidget {
                               color: MimiCamDesignTokens.serverSuccess,
                             ),
                           ),
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: Row(
-                            children: [
-                              _PreviewIconButton(
-                                icon: fit == BoxFit.cover
-                                    ? Icons.fit_screen_rounded
-                                    : Icons.crop_free_rounded,
-                                tooltip: fit == BoxFit.cover
-                                    ? strings.ui('videoFitContain')
-                                    : strings.ui('videoFitCover'),
-                                onTap: onToggleFit,
-                              ),
-                              const SizedBox(width: 4),
-                              _PreviewIconButton(
-                                icon: Icons.fullscreen_rounded,
-                                tooltip: strings.ui('serverPreviewFullScreen'),
-                                onTap: onEnterFullscreen,
-                              ),
-                            ],
+                        if (showCamera)
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Row(
+                              children: [
+                                _PreviewIconButton(
+                                  icon: fit == BoxFit.cover
+                                      ? Icons.fit_screen_rounded
+                                      : Icons.crop_free_rounded,
+                                  tooltip: fit == BoxFit.cover
+                                      ? strings.ui('videoFitContain')
+                                      : strings.ui('videoFitCover'),
+                                  onTap: onToggleFit,
+                                ),
+                                const SizedBox(width: 4),
+                                _PreviewIconButton(
+                                  icon: Icons.fullscreen_rounded,
+                                  tooltip:
+                                      strings.ui('serverPreviewFullScreen'),
+                                  onTap: onEnterFullscreen,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -1700,11 +1808,7 @@ class _LivePreviewCard extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text(
-                showCamera
-                    ? strings.ui('cameraRoomCheckText')
-                    : state.cameraActive
-                        ? strings.ui('localPreviewPreparingText')
-                        : strings.ui('cameraPermissionPreviewText'),
+                description,
                 style: const TextStyle(
                   color: MimiCamDesignTokens.serverTextMuted,
                   fontSize: 14,
@@ -1713,6 +1817,117 @@ class _LivePreviewCard extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _LocalPreviewToggleButton extends StatelessWidget {
+  const _LocalPreviewToggleButton({
+    required this.active,
+    required this.busy,
+    required this.targetEnabled,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  final bool active;
+  final bool busy;
+  final bool? targetEnabled;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final target = targetEnabled ?? active;
+    final semanticLabel = busy
+        ? strings.ui(
+            target ? 'localPreviewTurningOn' : 'localPreviewTurningOff',
+          )
+        : strings.ui(
+            active ? 'turnOffLocalPreview' : 'turnOnLocalPreview',
+          );
+    final label = strings.ui(
+      active ? 'hideLocalPreviewAction' : 'showLocalPreviewAction',
+    );
+    final icon = busy
+        ? SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.2,
+              color: active
+                  ? MimiCamDesignTokens.serverCyan
+                  : MimiCamDesignTokens.serverInk,
+            ),
+          )
+        : Icon(
+            active ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+            size: 19,
+          );
+    final callback = busy || !enabled ? null : onPressed;
+    final sharedStyle = ButtonStyle(
+      minimumSize: const WidgetStatePropertyAll(Size(0, 48)),
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: 12),
+      ),
+      textStyle: const WidgetStatePropertyAll(
+        TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+      ),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
+
+    final button = active
+        ? OutlinedButton.icon(
+            key: const ValueKey('server-local-preview-toggle'),
+            onPressed: callback,
+            style: sharedStyle.copyWith(
+              backgroundColor: WidgetStatePropertyAll(
+                MimiCamDesignTokens.serverSurfaceRaised.withValues(alpha: .94),
+              ),
+              foregroundColor: const WidgetStatePropertyAll(
+                MimiCamDesignTokens.serverCyan,
+              ),
+              side: WidgetStatePropertyAll(
+                BorderSide(
+                  color: enabled
+                      ? MimiCamDesignTokens.serverCyan
+                      : MimiCamDesignTokens.serverDisabled,
+                ),
+              ),
+            ),
+            icon: icon,
+            label: Text(label),
+          )
+        : FilledButton.icon(
+            key: const ValueKey('server-local-preview-toggle'),
+            onPressed: callback,
+            style: sharedStyle.copyWith(
+              backgroundColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.disabled)
+                    ? MimiCamDesignTokens.serverDisabled
+                    : MimiCamDesignTokens.serverCyan,
+              ),
+              foregroundColor: const WidgetStatePropertyAll(
+                MimiCamDesignTokens.serverInk,
+              ),
+            ),
+            icon: icon,
+            label: Text(label),
+          );
+
+    return Tooltip(
+      message: semanticLabel,
+      child: Semantics(
+        button: true,
+        label: semanticLabel,
+        toggled: active,
+        enabled: callback != null,
+        liveRegion: busy,
+        onTap: callback,
+        child: ExcludeSemantics(child: button),
       ),
     );
   }
@@ -1928,12 +2143,14 @@ class _CameraPreviewSurface extends StatelessWidget {
   const _CameraPreviewSurface({
     required this.previewSource,
     required this.showCamera,
+    required this.localPreviewActive,
     required this.fit,
     this.borderRadius = BorderRadius.zero,
   });
 
   final Object? previewSource;
   final bool showCamera;
+  final bool localPreviewActive;
   final BoxFit fit;
   final BorderRadius borderRadius;
 
@@ -1945,6 +2162,9 @@ class _CameraPreviewSurface extends StatelessWidget {
         color: Colors.black,
         child: LayoutBuilder(
           builder: (context, constraints) {
+            if (!localPreviewActive) {
+              return const _PreviewOffContent();
+            }
             if (!showCamera) {
               return const _PreviewWaitingContent();
             }
@@ -2019,7 +2239,8 @@ class _FullscreenPreview extends StatelessWidget {
     final jpegSource = previewSource is ServerJpegPreviewSource
         ? previewSource as ServerJpegPreviewSource
         : null;
-    final showCamera = state.cameraActive &&
+    final showCamera = state.localPreviewActive &&
+        state.cameraActive &&
         ((controller != null && controller.value.isInitialized) ||
             jpegSource != null);
     return SafeArea(
@@ -2029,6 +2250,7 @@ class _FullscreenPreview extends StatelessWidget {
           _CameraPreviewSurface(
             previewSource: previewSource,
             showCamera: showCamera,
+            localPreviewActive: state.localPreviewActive,
             fit: fit,
           ),
           Positioned(
@@ -2059,10 +2281,45 @@ class _FullscreenPreview extends StatelessWidget {
             child: _PreviewStatusChip(
               label: showCamera
                   ? strings.ui('livePreview')
-                  : strings.ui('cameraStarting'),
+                  : state.localPreviewActive
+                      ? strings.ui('cameraStarting')
+                      : strings.ui('localPreviewOff'),
               color: showCamera
                   ? MimiCamDesignTokens.serverSuccess
-                  : MimiCamDesignTokens.serverBlue,
+                  : state.localPreviewActive
+                      ? MimiCamDesignTokens.serverBlue
+                      : MimiCamDesignTokens.serverDisabled,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewOffContent extends StatelessWidget {
+  const _PreviewOffContent();
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    return Center(
+      key: const ValueKey('server-local-preview-off'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.visibility_off_rounded,
+            color: MimiCamDesignTokens.serverDisabled,
+            size: 36,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            strings.ui('localPreviewOff'),
+            style: const TextStyle(
+              color: MimiCamDesignTokens.serverTextMuted,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],

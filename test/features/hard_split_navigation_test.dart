@@ -215,6 +215,99 @@ void main() {
     expect(find.byType(QrImageView), findsOneWidget);
   });
 
+  testWidgets('Server yerel önizleme açılıp kapanır, ebeveyn yayını etkilenmez',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    var mediaStarts = 0;
+    var mediaStops = 0;
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(
+        onStart: () async => mediaStarts++,
+        onStop: () async => mediaStops++,
+      ),
+      onStartPairing: () async => 'mimicam://pair?payload=x',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ServerHomeScreen(
+          runtime: runtime,
+          config: ConfigurationService(preferences),
+          activeRole: AppRole.server,
+          onRoleSelected: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(runtime.currentState.localPreviewActive, isTrue);
+    expect(mediaStarts, 1);
+    expect(find.text('Gizle'), findsOneWidget);
+    expect(find.byTooltip('Önizlemeyi kapat'), findsOneWidget);
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey('server-local-preview-toggle')),
+          )
+          .height,
+      greaterThanOrEqualTo(48),
+    );
+
+    await runtime.startStreamSession(
+      'parent-video',
+      const StreamSessionOptions(video: true, audio: false),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('server-local-preview-toggle')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(runtime.currentState.localPreviewActive, isFalse);
+    expect(runtime.currentState.cameraActive, isTrue);
+    expect(runtime.currentState.activeVideoClients, 1);
+    expect(mediaStops, 0, reason: 'ebeveyn video yayını açık kalmalı');
+    expect(find.text('Göster'), findsOneWidget);
+    expect(find.byTooltip('Önizlemeyi aç'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('server-local-preview-off')), findsOneWidget);
+    expect(
+      find.text(
+        'Bu telefondaki önizleme kapalı. Ebeveyn bağlantısı etkilenmez.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('QR/IP'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Yayın'));
+    await tester.pumpAndSettle();
+
+    expect(runtime.currentState.localPreviewActive, isFalse);
+    expect(find.text('Göster'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('server-local-preview-toggle')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(runtime.currentState.localPreviewActive, isTrue);
+    expect(runtime.currentState.cameraActive, isTrue);
+    expect(mediaStarts, 1,
+        reason: 'çalışan ebeveyn kamerası yeniden açılmamalı');
+    expect(find.text('Gizle'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await runtime.dispose();
+  });
+
   testWidgets('Server eşleşmiş veya uyarıya bağlı ebeveyni bağlı gösterir',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));

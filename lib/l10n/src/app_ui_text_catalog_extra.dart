@@ -27,6 +27,8 @@ String _localizedFallback(
 }
 
 const _deUiText = <String, String>{
+  'notificationChannelDescription':
+      'Wein-, Bewegungs- und Verbindungswarnungen aus dem Babyzimmer.',
   'bootstrapPreparing': 'MimiCam wird vorbereitet...',
   'roleSwitching': 'Rolle wird gewechselt...',
   'confirmLeaveServerTitle': 'Server-Modus verlassen?',
@@ -307,6 +309,19 @@ const _deUiText = <String, String>{
   'roomReady': 'Zimmer bereit',
   'roomCamera': 'Zimmerkamera',
   'livePreview': 'Live-Vorschau',
+  'turnOnLocalPreview': 'Vorschau einschalten',
+  'turnOffLocalPreview': 'Vorschau ausschalten',
+  'showLocalPreviewAction': 'Anzeigen',
+  'hideLocalPreviewAction': 'Ausblenden',
+  'localPreviewOff': 'Vorschau aus',
+  'localPreviewOffBody':
+      'Die Vorschau auf diesem Telefon ist aus. Die Elternverbindung bleibt bestehen.',
+  'localPreviewTurningOn': 'Vorschau wird eingeschaltet',
+  'localPreviewTurningOff': 'Vorschau wird ausgeschaltet',
+  'localPreviewUnavailableDuringParentWatch':
+      'Während der Live-Ansicht auf dem Elterngerät ist die lokale Vorschau nicht verfügbar.',
+  'localPreviewChangeFailed':
+      'Vorschau konnte nicht geändert werden. Bitte erneut versuchen.',
   'streamStartFailed': 'Stream konnte nicht starten',
   'cameraStarting': 'Kamera startet',
   'cameraRoomCheckText': 'Prüfe Bildausschnitt und Beleuchtung.',
@@ -455,6 +470,8 @@ const _deUiText = <String, String>{
 };
 
 const _arUiText = <String, String>{
+  'notificationChannelDescription':
+      'تنبيهات البكاء والحركة والاتصال من غرفة الطفل.',
   'bootstrapPreparing': 'يتم تجهيز MimiCam...',
   'roleSwitching': 'يتم تبديل الدور...',
   'confirmLeaveServerTitle': 'مغادرة وضع الخادم؟',
@@ -716,6 +733,18 @@ const _arUiText = <String, String>{
   'roomReady': 'الغرفة جاهزة',
   'roomCamera': 'كاميرا الغرفة',
   'livePreview': 'معاينة مباشرة',
+  'turnOnLocalPreview': 'تشغيل المعاينة',
+  'turnOffLocalPreview': 'إيقاف المعاينة',
+  'showLocalPreviewAction': 'إظهار',
+  'hideLocalPreviewAction': 'إخفاء',
+  'localPreviewOff': 'المعاينة متوقفة',
+  'localPreviewOffBody':
+      'المعاينة على هذا الهاتف متوقفة. لا يتأثر اتصال جهاز الوالدين.',
+  'localPreviewTurningOn': 'جارٍ تشغيل المعاينة',
+  'localPreviewTurningOff': 'جارٍ إيقاف المعاينة',
+  'localPreviewUnavailableDuringParentWatch':
+      'لا تتوفر المعاينة المحلية أثناء المشاهدة المباشرة على جهاز الوالدين.',
+  'localPreviewChangeFailed': 'تعذر تغيير المعاينة. حاول مرة أخرى.',
   'streamStartFailed': 'تعذر بدء البث',
   'cameraStarting': 'تشغيل الكاميرا',
   'cameraRoomCheckText': 'تحقق من زاوية الصورة والإضاءة.',

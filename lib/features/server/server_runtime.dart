@@ -20,6 +20,8 @@ class ServerRuntimeState {
     this.microphoneActive = false,
     this.motionAnalyzerActive = false,
     this.cryAnalyzerActive = false,
+    this.localPreviewActive = false,
+    this.externalCaptureActive = false,
     this.qrPayload,
     this.lastAlert,
     this.errorMessage,
@@ -37,6 +39,8 @@ class ServerRuntimeState {
   final bool microphoneActive;
   final bool motionAnalyzerActive;
   final bool cryAnalyzerActive;
+  final bool localPreviewActive;
+  final bool externalCaptureActive;
   final String? qrPayload;
   final String? lastAlert;
   final String? errorMessage;
@@ -210,6 +214,9 @@ class ServerRuntime {
 
   Future<void> _startLocalPreviewLocked() async {
     if (_disposed) return;
+    if (_externalCaptureOwners.isNotEmpty) {
+      throw const WebRtcPilotCapacityException();
+    }
     final access = _broadcastAccess;
     BroadcastAccessSnapshot? accessSnapshot;
     const accessSessionId = 'server.localPreview';
@@ -632,6 +639,8 @@ class ServerRuntime {
           _mediaRuntime.videoActive && _resources.wantsMotionDetection,
       cryAnalyzerActive:
           _mediaRuntime.audioActive && _resources.wantsCryDetection,
+      localPreviewActive: _resources.localPreviewActive,
+      externalCaptureActive: _externalCaptureOwners.isNotEmpty,
       qrPayload: qrPayload ?? _state.qrPayload,
       lastAlert: _state.lastAlert,
       errorMessage: preserveErrorMessage ? _state.errorMessage : errorMessage,
@@ -669,6 +678,8 @@ class ServerRuntime {
         microphoneActive: false,
         motionAnalyzerActive: false,
         cryAnalyzerActive: false,
+        localPreviewActive: _resources.localPreviewActive,
+        externalCaptureActive: _externalCaptureOwners.isNotEmpty,
         qrPayload: _state.qrPayload,
         lastAlert: _state.lastAlert,
         errorMessage: error.toString(),

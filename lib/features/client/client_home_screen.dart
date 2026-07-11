@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -9,8 +10,9 @@ import '../../core/protocol/mimicam_protocol.dart';
 import '../../core/protocol/alert_event_dto.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../l10n/app_strings.dart';
-import '../../services/discovery/mimicam_service_discovery.dart';
 import '../../services/client_preferences_service.dart';
+import '../../services/discovery/mimicam_service_discovery.dart';
+import '../../services/notification_service.dart';
 import '../shared/presentation/mimicam_design_tokens.dart';
 import '../shared/presentation/mimicam_shells.dart';
 import 'client_runtime.dart';
@@ -29,6 +31,7 @@ class ClientHomeScreen extends StatefulWidget {
     this.preferences,
     this.selectedLocale,
     this.onLocaleChanged,
+    this.notificationTapStream,
   });
 
   final ClientRuntime runtime;
@@ -39,27 +42,57 @@ class ClientHomeScreen extends StatefulWidget {
   final ClientPreferencesService? preferences;
   final Locale? selectedLocale;
   final ValueChanged<Locale?>? onLocaleChanged;
+  final Stream<String>? notificationTapStream;
 
   @override
   State<ClientHomeScreen> createState() => _ClientHomeScreenState();
 }
 
-class _ClientHomeScreenState extends State<ClientHomeScreen> {
+class _ClientHomeScreenState extends State<ClientHomeScreen>
+    with WidgetsBindingObserver {
   final _manualIpController = TextEditingController();
   late int _tab;
   late bool _keepScreenAwake;
   Locale? _selectedLocale;
+  StreamSubscription<String>? _notificationTapSubscription;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tab = widget.initialTab.clamp(0, 3);
     _keepScreenAwake = widget.preferences?.keepScreenAwake ?? true;
     _selectedLocale = widget.selectedLocale ?? widget.preferences?.locale;
+    _notificationTapSubscription =
+        (widget.notificationTapStream ?? NotificationService.notificationTaps)
+            .listen(_openNotificationTab);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await NotificationService.refreshLaunchTap();
+      if (!mounted) return;
+      final pendingTap = NotificationService.takePendingTap();
+      if (pendingTap != null) _openNotificationTab(pendingTap);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(NotificationService.refreshLaunchTap());
+    }
+  }
+
+  void _openNotificationTab(String payload) {
+    if (!payload.startsWith(NotificationService.alertsPayload)) return;
+    NotificationService.takePendingTap();
+    if (!mounted) return;
+    Navigator.maybeOf(context)?.popUntil((route) => route.isFirst);
+    if (_tab != 2) setState(() => _tab = 2);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _notificationTapSubscription?.cancel();
     _manualIpController.dispose();
     super.dispose();
   }

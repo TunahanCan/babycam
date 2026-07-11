@@ -19,6 +19,7 @@ class MimiCamForegroundService : LifecycleService() {
     private var cameraDemand = false
     private var microphoneDemand = false
     private var playbackDemand = false
+    private var alertDemand = false
     private var nativeCameraCaptureDemand = false
     private var nativeMicrophoneCaptureDemand = false
     private var foregroundStarted = false
@@ -44,9 +45,13 @@ class MimiCamForegroundService : LifecycleService() {
             }
         }
 
+        val requestedCameraDemand = intent.getBooleanExtra(EXTRA_CAMERA, cameraDemand)
+        val requestedMicrophoneDemand =
+            intent.getBooleanExtra(EXTRA_MICROPHONE, microphoneDemand)
         if (
             action == ACTION_UPDATE &&
             !foregroundStarted &&
+            (requestedCameraDemand || requestedMicrophoneDemand) &&
             !MimiCamPlatformRuntime.canStartWhileInUseForegroundService
         ) {
             MimiCamPlatformRuntime.setForegroundServiceFailure(
@@ -63,9 +68,10 @@ class MimiCamForegroundService : LifecycleService() {
         }
         ownedEngine = engine
         runtimeReleased = false
-        cameraDemand = intent.getBooleanExtra(EXTRA_CAMERA, cameraDemand)
-        microphoneDemand = intent.getBooleanExtra(EXTRA_MICROPHONE, microphoneDemand)
+        cameraDemand = requestedCameraDemand
+        microphoneDemand = requestedMicrophoneDemand
         playbackDemand = intent.getBooleanExtra(EXTRA_PLAYBACK, playbackDemand)
+        alertDemand = intent.getBooleanExtra(EXTRA_ALERT, alertDemand)
         nativeCameraCaptureDemand = cameraDemand && intent.getBooleanExtra(
             EXTRA_NATIVE_CAMERA_CAPTURE,
             cameraDemand
@@ -74,8 +80,8 @@ class MimiCamForegroundService : LifecycleService() {
             EXTRA_NATIVE_MICROPHONE_CAPTURE,
             microphoneDemand
         )
-        if (!cameraDemand && !microphoneDemand && !playbackDemand) {
-            stopRuntime("media_demand_empty")
+        if (!cameraDemand && !microphoneDemand && !playbackDemand && !alertDemand) {
+            stopRuntime("runtime_demand_empty")
             return START_NOT_STICKY
         }
 
@@ -87,6 +93,7 @@ class MimiCamForegroundService : LifecycleService() {
                 camera = cameraDemand,
                 microphone = microphoneDemand,
                 playback = playbackDemand,
+                alert = alertDemand,
                 nativeCameraCapture = nativeCameraCaptureDemand,
                 nativeMicrophoneCapture = nativeMicrophoneCaptureDemand
             )
@@ -125,6 +132,13 @@ class MimiCamForegroundService : LifecycleService() {
             if (playbackDemand) {
                 serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
             }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && alertDemand) {
+                serviceType = serviceType or
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING
+            }
+            // Pass NONE explicitly for alert-only service runs before API 34.
+            // The two-argument overload would inherit every media type declared
+            // in the manifest and could incorrectly require while-in-use access.
             startForeground(NOTIFICATION_ID, notification, serviceType)
         } else {
             startForeground(NOTIFICATION_ID, notification)
@@ -156,12 +170,14 @@ class MimiCamForegroundService : LifecycleService() {
         ownedEngine = null
         nativeCameraCaptureDemand = false
         nativeMicrophoneCaptureDemand = false
+        alertDemand = false
         MimiCamEngineOwner.releaseService()
         MimiCamPlatformRuntime.setForegroundServiceState(
             active = false,
             camera = false,
             microphone = false,
             playback = false,
+            alert = false,
             stopReason = reason
         )
     }
@@ -209,12 +225,19 @@ class MimiCamForegroundService : LifecycleService() {
 
     private fun buildNotification(): Notification {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channelId = if (hasMediaDemand()) SERVER_CHANNEL_ID else ALERT_CHANNEL_ID
             val channel = NotificationChannel(
-                CHANNEL_ID,
-                "MimiCam Server",
+                channelId,
+                if (hasMediaDemand()) "MimiCam Server" else "MimiCam Bildirim Bağlantısı",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "MimiCam kamera ve ses yayını çalışma durumu"
+                description = if (hasMediaDemand()) {
+                    "MimiCam kamera ve ses yayını çalışma durumu"
+                } else {
+                    "Bebek odası uyarılarını arka planda dinlemek için bağlantı durumu"
+                }
+                setSound(null, null)
+                enableVibration(false)
                 setShowBadge(false)
             }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
@@ -241,17 +264,29 @@ class MimiCamForegroundService : LifecycleService() {
             cameraDemand -> "Kamera için arka plan koruması açık."
             microphoneDemand -> "Mikrofon için arka plan koruması açık."
             playbackDemand -> "Oda sesi için arka plan koruması açık."
-            else -> "Medya servisi durduruluyor."
+            alertDemand -> "Bebek odası bildirimleri arka planda dinleniyor."
+            else -> "Arka plan servisi durduruluyor."
         }
+        val channelId = if (hasMediaDemand()) SERVER_CHANNEL_ID else ALERT_CHANNEL_ID
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CHANNEL_ID)
+            Notification.Builder(this, channelId)
         } else {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
         }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            @Suppress("DEPRECATION")
+            builder.setPriority(Notification.PRIORITY_LOW)
+        }
         return builder
-            .setSmallIcon(R.drawable.ic_launcher)
-            .setContentTitle("MimiCam oda yayını korunuyor")
+            .setSmallIcon(R.drawable.ic_stat_mimicam)
+            .setContentTitle(
+                if (hasMediaDemand()) {
+                    "MimiCam oda yayını korunuyor"
+                } else {
+                    "MimiCam uyarıları açık"
+                }
+            )
             .setContentText(text)
             .setContentIntent(pendingIntent)
             .setCategory(Notification.CATEGORY_SERVICE)
@@ -260,6 +295,9 @@ class MimiCamForegroundService : LifecycleService() {
             .build()
     }
 
+    private fun hasMediaDemand(): Boolean =
+        cameraDemand || microphoneDemand || playbackDemand
+
     companion object {
         private const val ACTION_START = "com.example.mimicam.action.START_SERVER"
         private const val ACTION_UPDATE = "com.example.mimicam.action.UPDATE_SERVER"
@@ -267,9 +305,11 @@ class MimiCamForegroundService : LifecycleService() {
         private const val EXTRA_CAMERA = "camera"
         private const val EXTRA_MICROPHONE = "microphone"
         private const val EXTRA_PLAYBACK = "playback"
+        private const val EXTRA_ALERT = "alert"
         private const val EXTRA_NATIVE_CAMERA_CAPTURE = "nativeCameraCapture"
         private const val EXTRA_NATIVE_MICROPHONE_CAPTURE = "nativeMicrophoneCapture"
-        private const val CHANNEL_ID = "mimicam_server_runtime"
+        private const val SERVER_CHANNEL_ID = "mimicam_server_runtime"
+        private const val ALERT_CHANNEL_ID = "mimicam_client_alert_runtime"
         private const val NOTIFICATION_ID = 4101
 
         fun startIntent(
@@ -277,6 +317,7 @@ class MimiCamForegroundService : LifecycleService() {
             camera: Boolean,
             microphone: Boolean,
             playback: Boolean,
+            alert: Boolean = false,
             nativeCameraCapture: Boolean = camera,
             nativeMicrophoneCapture: Boolean = microphone
         ): Intent = Intent(context, MimiCamForegroundService::class.java).apply {
@@ -284,6 +325,7 @@ class MimiCamForegroundService : LifecycleService() {
             putExtra(EXTRA_CAMERA, camera)
             putExtra(EXTRA_MICROPHONE, microphone)
             putExtra(EXTRA_PLAYBACK, playback)
+            putExtra(EXTRA_ALERT, alert)
             putExtra(EXTRA_NATIVE_CAMERA_CAPTURE, camera && nativeCameraCapture)
             putExtra(
                 EXTRA_NATIVE_MICROPHONE_CAPTURE,
@@ -296,6 +338,7 @@ class MimiCamForegroundService : LifecycleService() {
             camera: Boolean,
             microphone: Boolean,
             playback: Boolean,
+            alert: Boolean = false,
             nativeCameraCapture: Boolean = camera,
             nativeMicrophoneCapture: Boolean = microphone
         ): Intent = Intent(context, MimiCamForegroundService::class.java).apply {
@@ -303,6 +346,7 @@ class MimiCamForegroundService : LifecycleService() {
             putExtra(EXTRA_CAMERA, camera)
             putExtra(EXTRA_MICROPHONE, microphone)
             putExtra(EXTRA_PLAYBACK, playback)
+            putExtra(EXTRA_ALERT, alert)
             putExtra(EXTRA_NATIVE_CAMERA_CAPTURE, camera && nativeCameraCapture)
             putExtra(
                 EXTRA_NATIVE_MICROPHONE_CAPTURE,

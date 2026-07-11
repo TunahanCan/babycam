@@ -2,6 +2,15 @@
 // Kept separate so AppStrings stays a small localization facade.
 
 const appUiTextCatalog = <String, Map<String, String>>{
+  'notificationChannelDescription': {
+    'tr': 'Bebek odasındaki ağlama, hareket ve bağlantı uyarıları.',
+    'en': 'Cry, motion, and connection alerts from the baby room.',
+    'zh': '来自婴儿房的哭声、移动和连接提醒。',
+    'hi': 'बच्चे के कमरे से रोने, हलचल और कनेक्शन के अलर्ट।',
+    'es': 'Alertas de llanto, movimiento y conexión de la habitación del bebé.',
+    'fr':
+        'Alertes de pleurs, de mouvement et de connexion de la chambre du bébé.',
+  },
   'bootstrapPreparing': {
     'tr': 'MimiCam hazırlanıyor...',
     'en': 'Preparing MimiCam...',
@@ -2025,6 +2034,90 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'hi': 'लाइव पूर्वावलोकन',
     'es': 'Vista previa en directo',
     'fr': 'Aperçu en direct'
+  },
+  'turnOnLocalPreview': {
+    'tr': 'Önizlemeyi aç',
+    'en': 'Turn on preview',
+    'zh': '开启预览',
+    'hi': 'पूर्वावलोकन चालू करें',
+    'es': 'Activar vista previa',
+    'fr': 'Activer l’aperçu'
+  },
+  'turnOffLocalPreview': {
+    'tr': 'Önizlemeyi kapat',
+    'en': 'Turn off preview',
+    'zh': '关闭预览',
+    'hi': 'पूर्वावलोकन बंद करें',
+    'es': 'Desactivar vista previa',
+    'fr': 'Désactiver l’aperçu'
+  },
+  'showLocalPreviewAction': {
+    'tr': 'Göster',
+    'en': 'Show',
+    'zh': '显示',
+    'hi': 'दिखाएँ',
+    'es': 'Mostrar',
+    'fr': 'Afficher'
+  },
+  'hideLocalPreviewAction': {
+    'tr': 'Gizle',
+    'en': 'Hide',
+    'zh': '隐藏',
+    'hi': 'छिपाएँ',
+    'es': 'Ocultar',
+    'fr': 'Masquer'
+  },
+  'localPreviewOff': {
+    'tr': 'Önizleme kapalı',
+    'en': 'Preview off',
+    'zh': '预览已关闭',
+    'hi': 'पूर्वावलोकन बंद है',
+    'es': 'Vista previa desactivada',
+    'fr': 'Aperçu désactivé'
+  },
+  'localPreviewOffBody': {
+    'tr': 'Bu telefondaki önizleme kapalı. Ebeveyn bağlantısı etkilenmez.',
+    'en':
+        'The preview on this phone is off. The parent connection is not affected.',
+    'zh': '此手机上的预览已关闭。家长端连接不受影响。',
+    'hi': 'इस फ़ोन पर पूर्वावलोकन बंद है। अभिभावक कनेक्शन प्रभावित नहीं होगा।',
+    'es':
+        'La vista previa de este teléfono está desactivada. La conexión parental no se ve afectada.',
+    'fr':
+        'L’aperçu est désactivé sur ce téléphone. La connexion parent n’est pas affectée.'
+  },
+  'localPreviewTurningOn': {
+    'tr': 'Önizleme açılıyor',
+    'en': 'Turning on preview',
+    'zh': '正在开启预览',
+    'hi': 'पूर्वावलोकन चालू हो रहा है',
+    'es': 'Activando vista previa',
+    'fr': 'Activation de l’aperçu'
+  },
+  'localPreviewTurningOff': {
+    'tr': 'Önizleme kapatılıyor',
+    'en': 'Turning off preview',
+    'zh': '正在关闭预览',
+    'hi': 'पूर्वावलोकन बंद हो रहा है',
+    'es': 'Desactivando vista previa',
+    'fr': 'Désactivation de l’aperçu'
+  },
+  'localPreviewUnavailableDuringParentWatch': {
+    'tr': 'Ebeveyn canlı izlerken yerel önizleme kullanılamaz.',
+    'en': 'Local preview is unavailable while the parent is watching live.',
+    'zh': '家长正在实时观看时，无法使用本地预览。',
+    'hi': 'अभिभावक के लाइव देखने के दौरान स्थानीय पूर्वावलोकन उपलब्ध नहीं है।',
+    'es':
+        'La vista previa local no está disponible durante la visualización en directo.',
+    'fr': 'L’aperçu local est indisponible pendant le visionnage en direct.'
+  },
+  'localPreviewChangeFailed': {
+    'tr': 'Önizleme değiştirilemedi. Tekrar dene.',
+    'en': 'Could not change the preview. Try again.',
+    'zh': '无法更改预览，请重试。',
+    'hi': 'पूर्वावलोकन बदला नहीं जा सका। फिर कोशिश करें।',
+    'es': 'No se pudo cambiar la vista previa. Inténtalo de nuevo.',
+    'fr': 'Impossible de modifier l’aperçu. Réessayez.'
   },
   'streamStartFailed': {
     'tr': 'Yayın başlatılamadı',

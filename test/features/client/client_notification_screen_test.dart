@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +11,7 @@ import 'package:mimicam/features/client/client_home_screen.dart';
 import 'package:mimicam/features/client/client_runtime.dart';
 import 'package:mimicam/features/client/media/watch_screen.dart';
 import 'package:mimicam/l10n/app_strings.dart';
+import 'package:mimicam/services/notification_service.dart';
 
 void main() {
   testWidgets('gelen alert ana bildirim ekranina duser', (tester) async {
@@ -49,6 +52,42 @@ void main() {
 
     expect(find.text('Watch gecmis bildirimi'), findsOneWidget);
     expect(find.text('Son durum bekleniyor'), findsNothing);
+  });
+
+  testWidgets('telefon bildirimine dokunmak Bildirimler sekmesini acar',
+      (tester) async {
+    final taps = StreamController<String>.broadcast();
+    addTearDown(taps.close);
+    final runtime = ClientRuntime(pair: (_) => throw UnimplementedError());
+    addTearDown(runtime.dispose);
+    await runtime.recordAlert(_alert('alert-tap', 'Dokunulan bildirim'));
+
+    await tester.pumpWidget(_App(
+      home: ClientHomeScreen(
+        runtime: runtime,
+        activeRole: AppRole.client,
+        onRoleSelected: (_) {},
+        notificationTapStream: taps.stream,
+      ),
+    ));
+    final navigator = Navigator.of(
+      tester.element(find.byType(ClientHomeScreen)),
+    );
+    navigator.push<void>(
+      MaterialPageRoute(
+        builder: (_) => const Scaffold(body: Text('Canli izleme rotasi')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dokunulan bildirim'), findsNothing);
+    expect(find.text('Canli izleme rotasi'), findsOneWidget);
+
+    taps.add('${NotificationService.alertsPayload}?alertId=alert-tap');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Canli izleme rotasi'), findsNothing);
+    expect(find.text('Dokunulan bildirim'), findsOneWidget);
   });
 }
 

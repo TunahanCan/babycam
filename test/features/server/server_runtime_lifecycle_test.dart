@@ -343,11 +343,40 @@ void main() {
     final runtime = ServerRuntime(mediaRuntime: media);
     await runtime.startLocalPreview();
 
+    expect(runtime.currentState.localPreviewActive, isTrue);
+
     await runtime.stopLocalPreview();
 
     expect(media.isActive, isFalse);
     expect(runtime.currentState.cameraActive, isFalse);
+    expect(runtime.currentState.localPreviewActive, isFalse);
     expect(runtime.currentState.phase, ServerRuntimePhase.mediaIdle);
+  });
+
+  test('external WebRTC capture aktifken yerel önizleme güvenle reddedilir',
+      () async {
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(),
+    );
+    addTearDown(runtime.dispose);
+    await runtime.startStreamSession(
+      'webrtc-parent',
+      const StreamSessionOptions(
+        video: true,
+        audio: false,
+        transport: ServerStreamTransport.webRtc,
+      ),
+    );
+    await runtime.activateExternalCapture('webrtc-parent');
+
+    expect(runtime.currentState.externalCaptureActive, isTrue);
+    expect(runtime.currentState.localPreviewActive, isFalse);
+    await expectLater(
+      runtime.startLocalPreview(),
+      throwsA(isA<WebRtcPilotCapacityException>()),
+    );
+    expect(runtime.currentState.externalCaptureActive, isTrue);
+    expect(runtime.currentState.localPreviewActive, isFalse);
   });
 
   test('inactive authoritative access snapshot stale timeri durdurur',

@@ -117,6 +117,47 @@ void main() {
     expect(stopwatch.elapsedMilliseconds, lessThan(100));
     await listener.stop().timeout(const Duration(milliseconds: 250));
   });
+
+  test('yeni pairing oturumu eski websocket yerine yeni servera baglanir',
+      () async {
+    final firstServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final secondServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => firstServer.close(force: true));
+    addTearDown(() => secondServer.close(force: true));
+    final firstConnected = Completer<void>();
+    final secondConnected = Completer<void>();
+    firstServer.listen((request) async {
+      final socket = await WebSocketTransformer.upgrade(request);
+      if (!firstConnected.isCompleted) firstConnected.complete();
+      await socket.done;
+    });
+    secondServer.listen((request) async {
+      final socket = await WebSocketTransformer.upgrade(request);
+      if (!secondConnected.isCompleted) secondConnected.complete();
+      socket.add(_alertJson('new-session-alert'));
+    });
+    final received = <String>[];
+    final listener = ClientAlertListener(
+      reconnectDelay: const Duration(milliseconds: 20),
+      maxReconnectDelay: const Duration(milliseconds: 40),
+      onAlert: (alert) => received.add(alert.id),
+    );
+    addTearDown(listener.stop);
+
+    await listener.start(_session(firstServer.port));
+    await firstConnected.future.timeout(const Duration(seconds: 2));
+    await listener.start(_session(secondServer.port));
+    await secondConnected.future.timeout(const Duration(seconds: 2));
+    final deadline = DateTime.now().add(const Duration(seconds: 2));
+    while (!received.contains('new-session-alert') &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+
+    expect(received, contains('new-session-alert'));
+    expect(listener.isListening, isTrue);
+    expect(listener.isConnected, isTrue);
+  });
 }
 
 String _alertJson(String id) => jsonEncode({

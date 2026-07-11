@@ -43,17 +43,23 @@ class ClientAlertListener {
   Timer? _retryTimer;
   var _generation = 0;
   var _intentionalStop = false;
+  String? _sessionKey;
 
   Future<void> start(
     PairingSession session, {
     bool waitForFirstConnection = true,
   }) async {
+    final sessionKey = _keyForSession(session);
     if (isListening) {
-      if (!waitForFirstConnection) return;
-      return _firstConnection?.future ?? Future<void>.value();
+      if (_sessionKey == sessionKey) {
+        if (!waitForFirstConnection) return;
+        return _firstConnection?.future ?? Future<void>.value();
+      }
+      await stop();
     }
     _intentionalStop = false;
     isListening = true;
+    _sessionKey = sessionKey;
     _firstConnection = Completer<void>();
     final generation = ++_generation;
     _loop = _listenLoop(generation, session);
@@ -68,6 +74,7 @@ class ClientAlertListener {
     _intentionalStop = true;
     isListening = false;
     isConnected = false;
+    _sessionKey = null;
     _generation++;
     final socket = _socket;
     _socket = null;
@@ -146,6 +153,10 @@ class ClientAlertListener {
 
   bool _isCurrent(int generation) =>
       generation == _generation && isListening && !_intentionalStop;
+
+  String _keyForSession(PairingSession session) =>
+      '${session.payload.transport}|${session.payload.host}|'
+      '${session.payload.port}|${session.clientId}|${session.sessionToken}';
 
   Future<void> _waitBeforeReconnect(Duration delay) {
     final completer = Completer<void>();
