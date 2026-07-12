@@ -45,7 +45,10 @@ class _WatchScreenState extends State<WatchScreen> {
   bool _fullscreen = false;
   bool _nightClock = false;
   bool _purchaseBusy = false;
+  bool _notificationsBusy = false;
+  bool _streamRetryBusy = false;
   late bool _keepScreenAwake;
+  _WatchAlertFilter _historyFilter = _WatchAlertFilter.all;
   BoxFit _videoFit = BoxFit.cover;
   DateTime _clockNow = DateTime.now();
   Timer? _clockTimer;
@@ -183,24 +186,32 @@ class _WatchScreenState extends State<WatchScreen> {
   }
 
   Future<void> _toggleNotifications(ClientRuntimeState state) async {
-    if (state.alertsActive) {
-      await widget.runtime.stopAlertListening();
-      return;
-    }
-    final started = await widget.runtime.startAlertListening();
-    if (!started && mounted) {
-      final strings = AppStrings.of(context);
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(strings.ui('notificationOff')),
-            action: SnackBarAction(
-              label: strings.ui('openAppSettings'),
-              onPressed: openAppSettings,
+    if (_notificationsBusy) return;
+    final strings = AppStrings.of(context);
+    setState(() => _notificationsBusy = true);
+    try {
+      if (state.alertsActive) {
+        await widget.runtime.stopAlertListening();
+        return;
+      }
+      final started = await widget.runtime.startAlertListening();
+      if (!started && mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(strings.ui('notificationOff')),
+              action: SnackBarAction(
+                label: strings.ui('openAppSettings'),
+                onPressed: openAppSettings,
+              ),
             ),
-          ),
-        );
+          );
+      }
+    } catch (_) {
+      if (mounted) _showSnack(strings.ui('clientSubtitleError'));
+    } finally {
+      if (mounted) setState(() => _notificationsBusy = false);
     }
   }
 
@@ -291,6 +302,7 @@ class _WatchScreenState extends State<WatchScreen> {
 
   Widget _fullscreenWatch(BuildContext context, ClientRuntimeState state) {
     final strings = AppStrings.of(context);
+    final connection = _WatchConnectionPresentation.fromState(state, strings);
     return SafeArea(
       child: Stack(
         fit: StackFit.expand,
@@ -304,6 +316,8 @@ class _WatchScreenState extends State<WatchScreen> {
             error: state.error,
             onSessionRefreshRequired: _refreshStreamSession,
             onFatalError: widget.runtime.reportStreamFailure,
+            connection: connection,
+            retryBusy: _streamRetryBusy,
           ),
           Positioned(
             top: 12,
@@ -327,6 +341,7 @@ class _WatchScreenState extends State<WatchScreen> {
                       ? strings.ui('videoFitContain')
                       : strings.ui('videoFitCover'),
                   onTap: _toggleVideoFit,
+                  toggled: _videoFit == BoxFit.contain,
                 ),
                 const SizedBox(width: 8),
                 _RoundIconButton(
@@ -337,6 +352,7 @@ class _WatchScreenState extends State<WatchScreen> {
                       ? strings.ui('muteAudio')
                       : strings.ui('unmuteAudio'),
                   onTap: _toggleAudio,
+                  toggled: _audioEnabled,
                 ),
               ],
             ),
@@ -350,7 +366,7 @@ class _WatchScreenState extends State<WatchScreen> {
     final strings = AppStrings.of(context);
     final quality = state.networkQuality?.tier ?? NetworkQualityTier.unknown;
     final alert =
-        widget.runtime.alerts.isEmpty ? null : widget.runtime.alerts.last;
+        widget.runtime.alerts.isEmpty ? null : widget.runtime.alerts.first;
     final time = '${_clockNow.hour.toString().padLeft(2, '0')}:'
         '${_clockNow.minute.toString().padLeft(2, '0')}';
     return SafeArea(
@@ -384,7 +400,11 @@ class _WatchScreenState extends State<WatchScreen> {
             ),
             const SizedBox(height: 10),
             Text(
-              strings.ui('nightClockAudioAlertsOn'),
+              !state.alertsActive
+                  ? strings.ui('notificationsOff')
+                  : widget.runtime.alertTransportConnected
+                      ? strings.ui('nightClockAudioAlertsOn')
+                      : strings.ui('clientTitleReconnecting'),
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: Colors.white70,
@@ -437,21 +457,25 @@ class _WatchScreenState extends State<WatchScreen> {
     final strings = AppStrings.of(context);
     final quality = state.networkQuality;
     final profile = state.mediaProfile;
+    final connection = _WatchConnectionPresentation.fromState(state, strings);
+    final roomName = state.session?.deviceName.trim();
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 88),
         children: [
           _Top(
+            title: roomName?.isNotEmpty == true
+                ? roomName!
+                : strings.ui('liveWatching'),
             trailing: _ConnectedBadge(
-              text: state.activeStream == null
-                  ? strings.ui('measuring')
-                  : strings.ui('connected'),
+              text: connection.label,
+              icon: connection.icon,
+              color: connection.color,
+              backgroundColor: connection.backgroundColor,
             ),
           ),
           const SizedBox(height: 14),
-          _LiveOverviewCard(session: state.session, state: state),
           if (state.broadcastAccess != null) ...[
-            const SizedBox(height: 14),
             _BroadcastAccessCard(
               snapshot: state.broadcastAccess!,
               busy: _purchaseBusy,
@@ -476,12 +500,26 @@ class _WatchScreenState extends State<WatchScreen> {
             onEnterFullscreen: _enterFullscreen,
             onSessionRefreshRequired: _refreshStreamSession,
             onFatalError: widget.runtime.reportStreamFailure,
+            connection: connection,
+            retryBusy: _streamRetryBusy,
+          ),
+          const SizedBox(height: 12),
+          StreamBuilder<List<AlertEventDto>>(
+            stream: widget.runtime.alertUpdates,
+            initialData: widget.runtime.alerts,
+            builder: (context, snapshot) {
+              final alerts = snapshot.data ?? const <AlertEventDto>[];
+              return _LatestAlertCard(
+                alert: alerts.isEmpty ? null : alerts.first,
+                onOpenHistory: () => setState(() => _tab = 1),
+              );
+            },
           ),
           const SizedBox(height: 16),
           _SectionLabel(
             icon: Icons.insights_rounded,
             title: strings.ui('roomStatus'),
-            subtitle: strings.ui('liveStreamConnectedSubtitle'),
+            subtitle: connection.subtitle,
           ),
           const SizedBox(height: 10),
           _LiveMetricGrid(
@@ -494,7 +532,7 @@ class _WatchScreenState extends State<WatchScreen> {
           const SizedBox(height: 18),
           _SectionLabel(
             icon: Icons.tune_rounded,
-            title: strings.ui('watchPreferences'),
+            title: strings.ui('quickActions'),
             subtitle: strings.ui('liveWatching'),
           ),
           const SizedBox(height: 10),
@@ -506,7 +544,7 @@ class _WatchScreenState extends State<WatchScreen> {
             RoomControlsPanel(
               controls: widget.runtime.roomControls!,
               session: state.session!,
-              onError: (error) => _showSnack(error.toString()),
+              onError: (_) => _showSnack(strings.ui('roomControlFailed')),
             ),
           ],
           const SizedBox(height: 22),
@@ -551,13 +589,37 @@ class _WatchScreenState extends State<WatchScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _Filter(strings.ui('all'), true),
+                _Filter(
+                  strings.ui('all'),
+                  _historyFilter == _WatchAlertFilter.all,
+                  onTap: () => setState(
+                    () => _historyFilter = _WatchAlertFilter.all,
+                  ),
+                ),
                 const SizedBox(width: 10),
-                _Filter(strings.ui('audio'), false),
+                _Filter(
+                  strings.ui('audio'),
+                  _historyFilter == _WatchAlertFilter.audio,
+                  onTap: () => setState(
+                    () => _historyFilter = _WatchAlertFilter.audio,
+                  ),
+                ),
                 const SizedBox(width: 10),
-                _Filter(strings.ui('motion'), false),
+                _Filter(
+                  strings.ui('motion'),
+                  _historyFilter == _WatchAlertFilter.motion,
+                  onTap: () => setState(
+                    () => _historyFilter = _WatchAlertFilter.motion,
+                  ),
+                ),
                 const SizedBox(width: 10),
-                _Filter(strings.ui('system'), false),
+                _Filter(
+                  strings.ui('system'),
+                  _historyFilter == _WatchAlertFilter.system,
+                  onTap: () => setState(
+                    () => _historyFilter = _WatchAlertFilter.system,
+                  ),
+                ),
               ],
             ),
           ),
@@ -566,7 +628,7 @@ class _WatchScreenState extends State<WatchScreen> {
             stream: widget.runtime.alertUpdates,
             initialData: widget.runtime.alerts,
             builder: (context, snapshot) => _AlertTimeline(
-              alerts: snapshot.data ?? const [],
+              alerts: _filterHistory(snapshot.data ?? const []),
             ),
           ),
         ],
@@ -605,7 +667,9 @@ class _WatchScreenState extends State<WatchScreen> {
                   strings.ui('enableNotifications'),
                   strings.ui('watchNotificationsDescription'),
                   state.alertsActive,
-                  onChanged: (_) => unawaited(_toggleNotifications(state)),
+                  onChanged: _notificationsBusy
+                      ? null
+                      : (_) => unawaited(_toggleNotifications(state)),
                 ),
                 _SwitchLine(
                   strings.ui('keepDeviceAwake'),
@@ -678,6 +742,7 @@ class _WatchScreenState extends State<WatchScreen> {
             : strings.ui('enableNotifications'),
         _mintSoft,
         () => unawaited(_toggleNotifications(state)),
+        busy: _notificationsBusy,
       ),
       _ActionSpec(
         Icons.fullscreen_rounded,
@@ -694,13 +759,135 @@ class _WatchScreenState extends State<WatchScreen> {
     ];
   }
 
-  Future<void> _refreshStreamSession() =>
-      _restartLiveWatch(audioEnabled: _audioEnabled);
+  Future<void> _refreshStreamSession() async {
+    if (_streamRetryBusy || _screenDisposed) return;
+    final strings = AppStrings.of(context);
+    setState(() => _streamRetryBusy = true);
+    try {
+      await _restartLiveWatch(audioEnabled: _audioEnabled);
+    } catch (_) {
+      if (mounted) _showSnack(strings.ui('streamStartFailed'));
+    } finally {
+      if (mounted) setState(() => _streamRetryBusy = false);
+    }
+  }
+
+  List<AlertEventDto> _filterHistory(List<AlertEventDto> alerts) =>
+      switch (_historyFilter) {
+        _WatchAlertFilter.all => alerts,
+        _WatchAlertFilter.audio => alerts
+            .where((alert) => alert.category == AlertCategory.audio)
+            .toList(growable: false),
+        _WatchAlertFilter.motion => alerts
+            .where((alert) => alert.category == AlertCategory.motion)
+            .toList(growable: false),
+        _WatchAlertFilter.system => alerts
+            .where((alert) => alert.category == AlertCategory.system)
+            .toList(growable: false),
+      };
 
   Future<void> _restartLiveWatch({required bool audioEnabled}) async {
     final operationGeneration = ++_screenOperationGeneration;
     await widget.runtime.restartWatching(audioEnabled: audioEnabled);
     if (!_isCurrentScreenOperation(operationGeneration)) return;
+  }
+}
+
+enum _WatchAlertFilter { all, audio, motion, system }
+
+class _WatchConnectionPresentation {
+  const _WatchConnectionPresentation({
+    required this.label,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.backgroundColor,
+    required this.isLive,
+    required this.canRetry,
+  });
+
+  final String label;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final Color backgroundColor;
+  final bool isLive;
+  final bool canRetry;
+
+  factory _WatchConnectionPresentation.fromState(
+    ClientRuntimeState state,
+    AppStrings strings,
+  ) {
+    if (state.error != null || state.phase == ClientRuntimePhase.error) {
+      return _WatchConnectionPresentation(
+        label: strings.ui('clientTitleError'),
+        subtitle: strings.ui('watchConnectionErrorSubtitle'),
+        icon: Icons.error_outline_rounded,
+        color: const Color(0xFFB63D5B),
+        backgroundColor: const Color(0xFFFFE8EE),
+        isLive: false,
+        canRetry: true,
+      );
+    }
+    if (state.phase == ClientRuntimePhase.revoked) {
+      return _WatchConnectionPresentation(
+        label: strings.ui('clientTitleRevoked'),
+        subtitle: strings.ui('clientSubtitleError'),
+        icon: Icons.link_off_rounded,
+        color: const Color(0xFFB63D5B),
+        backgroundColor: const Color(0xFFFFE8EE),
+        isLive: false,
+        canRetry: false,
+      );
+    }
+    final offline = state.phase == ClientRuntimePhase.offline ||
+        state.networkQuality?.tier == NetworkQualityTier.offline;
+    if (offline) {
+      return _WatchConnectionPresentation(
+        label: strings.ui('clientTitleOffline'),
+        subtitle: strings.ui('clientSubtitleOffline'),
+        icon: Icons.cloud_off_rounded,
+        color: const Color(0xFF9A681C),
+        backgroundColor: const Color(0xFFFFF2D9),
+        isLive: false,
+        canRetry: true,
+      );
+    }
+    if (state.phase == ClientRuntimePhase.reconnecting ||
+        state.phase == ClientRuntimePhase.renewingToken) {
+      return _WatchConnectionPresentation(
+        label: state.phase == ClientRuntimePhase.renewingToken
+            ? strings.ui('clientTitleRenewingToken')
+            : strings.ui('clientTitleReconnecting'),
+        subtitle: strings.ui('watchReconnectingSubtitle'),
+        icon: Icons.sync_rounded,
+        color: const Color(0xFF6257C8),
+        backgroundColor: const Color(0xFFEEEAFE),
+        isLive: false,
+        canRetry: true,
+      );
+    }
+    if (state.phase == ClientRuntimePhase.watching &&
+        state.activeStream != null) {
+      return _WatchConnectionPresentation(
+        label: strings.ui('connected'),
+        subtitle: strings.ui('liveStreamConnectedSubtitle'),
+        icon: Icons.check_circle_rounded,
+        color: const Color(0xFF278565),
+        backgroundColor: _mintSoft,
+        isLive: true,
+        canRetry: false,
+      );
+    }
+    return _WatchConnectionPresentation(
+      label: strings.ui('cameraStarting'),
+      subtitle: strings.ui('watchStartingSubtitle'),
+      icon: Icons.hourglass_top_rounded,
+      color: const Color(0xFF6257C8),
+      backgroundColor: const Color(0xFFEEEAFE),
+      isLive: false,
+      canRetry: false,
+    );
   }
 }
 
@@ -839,109 +1026,6 @@ class _BroadcastAccessCard extends StatelessWidget {
   }
 }
 
-class _LiveOverviewCard extends StatelessWidget {
-  const _LiveOverviewCard({required this.session, required this.state});
-
-  final PairingSession? session;
-  final ClientRuntimeState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = AppStrings.of(context);
-    final isLive = state.activeStream != null;
-    final title = session?.deviceName.trim().isNotEmpty == true
-        ? session!.deviceName
-        : strings.ui('liveWatching');
-    return Container(
-      padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF162B4A), Color(0xFF264D68)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x24162B4A),
-            blurRadius: 18,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: .14),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(
-              isLive ? Icons.videocam_rounded : Icons.videocam_off_rounded,
-              color: isLive ? _mint : Colors.white70,
-              size: 25,
-            ),
-          ),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isLive ? _mint : Colors.white54,
-                      ),
-                    ),
-                    const SizedBox(width: 7),
-                    Flexible(
-                      child: Text(
-                        isLive
-                            ? strings.ui('liveStreamConnectedSubtitle')
-                            : strings.ui('measuring'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Icon(
-            isLive ? Icons.check_circle_rounded : Icons.sync_rounded,
-            color: isLive ? _mint : Colors.white70,
-            size: 22,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel(
       {required this.icon, required this.title, required this.subtitle});
@@ -974,6 +1058,89 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
+class _LatestAlertCard extends StatelessWidget {
+  const _LatestAlertCard({required this.alert, required this.onOpenHistory});
+
+  final AlertEventDto? alert;
+  final VoidCallback onOpenHistory;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final item = alert;
+    final color = item == null ? _mint : _alertColor(item);
+    final icon = switch (item?.category) {
+      AlertCategory.audio => Icons.graphic_eq_rounded,
+      AlertCategory.motion => Icons.directions_run_rounded,
+      AlertCategory.system => Icons.info_outline_rounded,
+      null => Icons.notifications_none_rounded,
+    };
+    return Semantics(
+      button: true,
+      label: strings.ui('openHistory'),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onOpenHistory,
+          child: Ink(
+            padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+            decoration: _cardDecoration().copyWith(color: Colors.white),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: color.withValues(alpha: .18),
+                  child: Icon(icon, color: color, size: 21),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item == null
+                            ? strings.ui('lastAlert')
+                            : '${strings.ui('lastAlert')} · '
+                                '${_formatAlertTime(item.timestampMs)}',
+                        style: const TextStyle(
+                          color: _navy,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        item == null
+                            ? strings.ui('waitingLatestStatus')
+                            : item.localizedMessage(strings),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _slate,
+                          fontSize: 12.5,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  color: _slate,
+                  size: 16,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _VideoPanel extends StatelessWidget {
   const _VideoPanel({
     required this.session,
@@ -987,6 +1154,8 @@ class _VideoPanel extends StatelessWidget {
     required this.onEnterFullscreen,
     required this.onSessionRefreshRequired,
     required this.onFatalError,
+    required this.connection,
+    required this.retryBusy,
   });
 
   final PairingSession? session;
@@ -1000,12 +1169,17 @@ class _VideoPanel extends StatelessWidget {
   final VoidCallback onEnterFullscreen;
   final Future<void> Function() onSessionRefreshRequired;
   final ValueChanged<Object> onFatalError;
+  final _WatchConnectionPresentation connection;
+  final bool retryBusy;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     return AspectRatio(
-      aspectRatio: 16 / 9,
+      // Bağlantı kurulurken açıklama ve yeniden dene eylemi videodan daha
+      // fazla dikey alana ihtiyaç duyar. 5:4 alan, dar ekranlarda ve büyük
+      // yazıda durum metninin kesilmesini önler; canlı görüntü 16:9 kalır.
+      aspectRatio: connection.isLive ? 16 / 9 : 5 / 4,
       child: Container(
         decoration: BoxDecoration(
           color: const Color(0xFF162B4A),
@@ -1026,41 +1200,51 @@ class _VideoPanel extends StatelessWidget {
               error: error,
               onSessionRefreshRequired: onSessionRefreshRequired,
               onFatalError: onFatalError,
+              connection: connection,
+              retryBusy: retryBusy,
             ),
-            const Positioned(top: 10, left: 12, child: _LiveBadge()),
-            Positioned(
-              right: 10,
-              bottom: 10,
-              child: Row(
-                children: [
-                  _RoundIconButton(
-                    icon: fit == BoxFit.cover
-                        ? Icons.fit_screen_rounded
-                        : Icons.crop_free_rounded,
-                    tooltip: fit == BoxFit.cover
-                        ? strings.ui('videoFitContain')
-                        : strings.ui('videoFitCover'),
-                    onTap: onToggleFit,
-                  ),
-                  const SizedBox(width: 8),
-                  _RoundIconButton(
-                    icon: audioEnabled
-                        ? Icons.volume_up_rounded
-                        : Icons.volume_off_rounded,
-                    tooltip: audioEnabled
-                        ? strings.ui('muteAudio')
-                        : strings.ui('unmuteAudio'),
-                    onTap: onToggleAudio,
-                  ),
-                  const SizedBox(width: 8),
-                  _RoundIconButton(
-                    icon: Icons.fullscreen_rounded,
-                    tooltip: strings.ui('fullScreen'),
-                    onTap: onEnterFullscreen,
-                  ),
-                ],
+            if (connection.isLive)
+              const Positioned(
+                top: 10,
+                left: 12,
+                child: _LiveBadge(),
               ),
-            ),
+            if (connection.isLive)
+              Positioned(
+                right: 10,
+                bottom: 10,
+                child: Row(
+                  children: [
+                    _RoundIconButton(
+                      icon: fit == BoxFit.cover
+                          ? Icons.fit_screen_rounded
+                          : Icons.crop_free_rounded,
+                      tooltip: fit == BoxFit.cover
+                          ? strings.ui('videoFitContain')
+                          : strings.ui('videoFitCover'),
+                      onTap: onToggleFit,
+                      toggled: fit == BoxFit.contain,
+                    ),
+                    const SizedBox(width: 8),
+                    _RoundIconButton(
+                      icon: audioEnabled
+                          ? Icons.volume_up_rounded
+                          : Icons.volume_off_rounded,
+                      tooltip: audioEnabled
+                          ? strings.ui('muteAudio')
+                          : strings.ui('unmuteAudio'),
+                      onTap: onToggleAudio,
+                      toggled: audioEnabled,
+                    ),
+                    const SizedBox(width: 8),
+                    _RoundIconButton(
+                      icon: Icons.fullscreen_rounded,
+                      tooltip: strings.ui('fullScreen'),
+                      onTap: onEnterFullscreen,
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -1088,6 +1272,8 @@ class _StreamSurface extends StatefulWidget {
     required this.error,
     required this.onSessionRefreshRequired,
     required this.onFatalError,
+    required this.connection,
+    required this.retryBusy,
   });
 
   final PairingSession? session;
@@ -1098,6 +1284,8 @@ class _StreamSurface extends StatefulWidget {
   final Object? error;
   final Future<void> Function() onSessionRefreshRequired;
   final ValueChanged<Object> onFatalError;
+  final _WatchConnectionPresentation connection;
+  final bool retryBusy;
 
   @override
   State<_StreamSurface> createState() => _StreamSurfaceState();
@@ -1137,22 +1325,51 @@ class _StreamSurfaceState extends State<_StreamSurface> {
   Widget build(BuildContext context) {
     if (widget.session == null || widget.activeStream == null) {
       final error = widget.error;
-      if (error != null) return _StreamErrorPanel(message: error.toString());
-      return const _StreamPlaceholder();
+      if (error != null) {
+        return _StreamErrorPanel(
+          connection: widget.connection,
+          retryBusy: widget.retryBusy,
+          onRetry: widget.onSessionRefreshRequired,
+        );
+      }
+      return _StreamPlaceholder(
+        connection: widget.connection,
+        retryBusy: widget.retryBusy,
+        onRetry: widget.onSessionRefreshRequired,
+      );
     }
     final webRtc = widget.activeStream?.webRtc;
     if (widget.activeStream?.usesWebRtc == true && webRtc != null) {
-      return RTCVideoView(
-        webRtc.videoRenderer,
-        objectFit: widget.fit == BoxFit.cover
-            ? RTCVideoViewObjectFit.RTCVideoViewObjectFitCover
-            : RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
-        placeholderBuilder: (_) => const _StreamPlaceholder(),
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          RTCVideoView(
+            webRtc.videoRenderer,
+            objectFit: widget.fit == BoxFit.cover
+                ? RTCVideoViewObjectFit.RTCVideoViewObjectFitCover
+                : RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+            placeholderBuilder: (_) => _StreamPlaceholder(
+              connection: widget.connection,
+              retryBusy: widget.retryBusy,
+              onRetry: widget.onSessionRefreshRequired,
+            ),
+          ),
+          if (!widget.connection.isLive)
+            _StreamConnectionOverlay(
+              connection: widget.connection,
+              retryBusy: widget.retryBusy,
+              onRetry: widget.onSessionRefreshRequired,
+            ),
+        ],
       );
     }
     final streamError = _streamError;
-    if (_latestFrame == null && streamError != null) {
-      return _StreamErrorPanel(message: streamError.toString());
+    if (streamError != null) {
+      return _StreamErrorPanel(
+        connection: widget.connection,
+        retryBusy: widget.retryBusy,
+        onRetry: widget.onSessionRefreshRequired,
+      );
     }
     return Stack(
       fit: StackFit.expand,
@@ -1162,6 +1379,12 @@ class _StreamSurfaceState extends State<_StreamSurface> {
           error: streamError ?? widget.error,
           fit: widget.fit,
         ),
+        if (!widget.connection.isLive)
+          _StreamConnectionOverlay(
+            connection: widget.connection,
+            retryBusy: widget.retryBusy,
+            onRetry: widget.onSessionRefreshRequired,
+          ),
       ],
     );
   }
@@ -1282,47 +1505,139 @@ class _StreamSurfaceState extends State<_StreamSurface> {
 }
 
 class _StreamPlaceholder extends StatelessWidget {
-  const _StreamPlaceholder();
+  const _StreamPlaceholder({
+    required this.connection,
+    required this.retryBusy,
+    required this.onRetry,
+  });
+
+  final _WatchConnectionPresentation connection;
+  final bool retryBusy;
+  final Future<void> Function() onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        for (final left in [22.0, 82.0, 142.0, 202.0, 262.0])
-          Positioned(
-            left: left,
-            top: 22,
-            bottom: 22,
-            child: Container(width: 1, color: Colors.white54),
+    return Container(
+      color: const Color(0xFF162B4A),
+      padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 18),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(connection.icon, color: connection.color, size: 30),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      connection.label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      connection.subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        height: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        const Align(alignment: Alignment.center, child: _CribSketch()),
-        Positioned(
-          left: 14,
-          bottom: 12,
-          child: CircleAvatar(
-            radius: 16,
-            backgroundColor: Colors.black.withValues(alpha: .78),
-            child: const Icon(
-              Icons.nights_stay_rounded,
-              color: _mint,
-              size: 18,
+          if (connection.canRetry) ...[
+            const SizedBox(height: 12),
+            _StreamRetryButton(
+              key: const ValueKey('watch-placeholder-retry'),
+              busy: retryBusy,
+              onRetry: onRetry,
+              filled: false,
             ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _StreamConnectionOverlay extends StatelessWidget {
+  const _StreamConnectionOverlay({
+    required this.connection,
+    required this.retryBusy,
+    required this.onRetry,
+  });
+
+  final _WatchConnectionPresentation connection;
+  final bool retryBusy;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: Colors.black.withValues(alpha: .72),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(connection.icon, color: connection.color, size: 30),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          connection.label,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          connection.subtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12.5,
+                            height: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (connection.canRetry) ...[
+                const SizedBox(height: 12),
+                _StreamRetryButton(
+                  key: const ValueKey('watch-overlay-retry'),
+                  busy: retryBusy,
+                  onRetry: onRetry,
+                ),
+              ],
+            ],
           ),
         ),
-        Positioned(
-          right: 14,
-          bottom: 12,
-          child: CircleAvatar(
-            radius: 16,
-            backgroundColor: Colors.black.withValues(alpha: .78),
-            child: const Icon(
-              Icons.settings_suggest_rounded,
-              color: _pink,
-              size: 18,
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -1332,26 +1647,34 @@ class _RoundIconButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.toggled,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+  final bool? toggled;
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.black.withValues(alpha: .68),
-        shape: const CircleBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: Icon(icon, color: Colors.white, size: 22),
+    return Semantics(
+      button: true,
+      toggled: toggled,
+      label: tooltip,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: tooltip,
+        child: Material(
+          color: Colors.black.withValues(alpha: .68),
+          shape: const CircleBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: SizedBox(
+              width: 48,
+              height: 48,
+              child: Icon(icon, color: Colors.white, size: 22),
+            ),
           ),
         ),
       ),
@@ -1360,47 +1683,116 @@ class _RoundIconButton extends StatelessWidget {
 }
 
 class _StreamErrorPanel extends StatelessWidget {
-  const _StreamErrorPanel({required this.message});
+  const _StreamErrorPanel({
+    required this.connection,
+    required this.retryBusy,
+    required this.onRetry,
+  });
 
-  final String message;
+  final _WatchConnectionPresentation connection;
+  final bool retryBusy;
+  final Future<void> Function() onRetry;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       color: const Color(0xFF1D1420),
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       alignment: Alignment.center,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.videocam_off_rounded,
-            color: Colors.white,
-            size: 34,
+          Row(
+            children: [
+              const Icon(
+                Icons.videocam_off_rounded,
+                color: Colors.white,
+                size: 34,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      AppStrings.of(context).ui('watchStreamUnavailableTitle'),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      connection.subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12.5,
+                        height: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
-          Text(
-            AppStrings.of(context).ui('streamStartFailed'),
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
+          if (connection.canRetry)
+            _StreamRetryButton(
+              key: const ValueKey('watch-stream-retry'),
+              busy: retryBusy,
+              onRetry: onRetry,
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12.5,
-              height: 1.25,
-            ),
-          ),
         ],
+      ),
+    );
+  }
+}
+
+class _StreamRetryButton extends StatelessWidget {
+  const _StreamRetryButton({
+    super.key,
+    required this.busy,
+    required this.onRetry,
+    this.filled = true,
+  });
+
+  final bool busy;
+  final Future<void> Function() onRetry;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final icon = busy
+        ? const SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : const Icon(Icons.refresh_rounded, size: 18);
+    final onPressed = busy ? null : () => unawaited(onRetry());
+    if (!filled) {
+      return TextButton.icon(
+        onPressed: onPressed,
+        icon: icon,
+        label: Text(strings.ui('reconnect')),
+        style: TextButton.styleFrom(foregroundColor: Colors.white),
+      );
+    }
+    return FilledButton.icon(
+      onPressed: onPressed,
+      icon: icon,
+      label: Text(strings.ui('reconnect')),
+      style: FilledButton.styleFrom(
+        backgroundColor: Colors.white,
+        foregroundColor: _navy,
+        disabledBackgroundColor: Colors.white70,
+        disabledForegroundColor: _navy,
       ),
     );
   }
@@ -1435,45 +1827,46 @@ class _LiveMetricGrid extends StatelessWidget {
             ? strings.ui('audioPriority')
             : strings.ui('audioOn')
         : strings.ui('audioMuted');
-    return Row(
-      children: [
-        Expanded(
-          child: _MetricTile(
+    final notificationLabel = !alertsActive
+        ? strings.ui('notificationsOff')
+        : alertsConnected
+            ? strings.ui('notificationsOn')
+            : strings.ui('clientTitleReconnecting');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: _cardDecoration().copyWith(color: Colors.white),
+      child: Column(
+        children: [
+          _StatusRow(
             icon: Icons.mic_rounded,
             title: strings.ui('audio'),
             value: audioLabel,
-            color: _mintSoft,
+            color: _mint,
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _MetricTile(
+          const Divider(height: 1, color: Color(0xFFE7EAF0)),
+          _StatusRow(
             icon: Icons.notifications_active_rounded,
             title: strings.ui('navNotifications'),
-            value: !alertsActive
-                ? strings.ui('notificationsOff')
-                : alertsConnected
-                    ? strings.ui('notificationsOn')
-                    : strings.ui('clientTitleReconnecting'),
-            color: const Color(0xFFFFE3EA),
+            value: notificationLabel,
+            color: alertsActive ? _pink : _slate,
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _MetricTile(
+          const Divider(height: 1, color: Color(0xFFE7EAF0)),
+          _StatusRow(
             icon: Icons.wifi_tethering_rounded,
             title: strings.ui('latency'),
             value: '$networkLabel · $latencyLabel',
-            color: const Color(0xFFF8FFF9),
+            color: quality?.tier == NetworkQualityTier.offline
+                ? const Color(0xFFB63D5B)
+                : const Color(0xFF6257C8),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-class _MetricTile extends StatelessWidget {
-  const _MetricTile({
+class _StatusRow extends StatelessWidget {
+  const _StatusRow({
     required this.icon,
     required this.title,
     required this.value,
@@ -1487,33 +1880,44 @@ class _MetricTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 116,
-      padding: const EdgeInsets.all(10),
-      decoration: _cardDecoration().copyWith(color: Colors.white),
-      child: Column(
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 52),
+      child: Row(
         children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: color,
-            child: Icon(icon, color: _navy, size: 18),
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: .14),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 18),
           ),
-          const SizedBox(height: 6),
-          Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: _slate, fontSize: 11),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _slate,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
-          const SizedBox(height: 3),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: _navy,
-              fontSize: 12.5,
-              fontWeight: FontWeight.w900,
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              value,
+              maxLines: 2,
+              textAlign: TextAlign.end,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _navy,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
         ],
@@ -1540,70 +1944,6 @@ class _LiveBadge extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w900,
         ),
-      ),
-    );
-  }
-}
-
-class _CribSketch extends StatelessWidget {
-  const _CribSketch();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 220,
-      height: 116,
-      child: Stack(
-        children: [
-          Positioned(
-            left: 34,
-            right: 22,
-            top: 44,
-            child: Container(
-              height: 62,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFDCCD),
-                borderRadius: BorderRadius.circular(50),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 84,
-            top: 22,
-            child: Container(
-              width: 70,
-              height: 42,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0BFAE),
-                borderRadius: BorderRadius.circular(32),
-              ),
-            ),
-          ),
-          const Positioned(
-            right: 20,
-            top: 42,
-            child: CircleAvatar(
-              radius: 18,
-              backgroundColor: Color(0xFFC4A08E),
-            ),
-          ),
-          const Positioned(
-            right: 0,
-            top: 58,
-            child: CircleAvatar(
-              radius: 13,
-              backgroundColor: Color(0xFFC4A08E),
-            ),
-          ),
-          const Positioned(
-            left: 104,
-            top: 48,
-            child: SizedBox(
-              width: 28,
-              child: Divider(color: _navy, thickness: 1),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1833,12 +2173,19 @@ class _ActionGroup extends StatelessWidget {
 }
 
 class _ActionSpec {
-  const _ActionSpec(this.icon, this.text, this.backgroundColor, this.onTap);
+  const _ActionSpec(
+    this.icon,
+    this.text,
+    this.backgroundColor,
+    this.onTap, {
+    this.busy = false,
+  });
 
   final IconData icon;
   final String text;
   final Color backgroundColor;
   final VoidCallback onTap;
+  final bool busy;
 }
 
 class _Action extends StatelessWidget {
@@ -1852,7 +2199,7 @@ class _Action extends StatelessWidget {
       height: 76,
       width: double.infinity,
       child: FilledButton(
-        onPressed: spec.onTap,
+        onPressed: spec.busy ? null : spec.onTap,
         style: FilledButton.styleFrom(
           backgroundColor: spec.backgroundColor,
           foregroundColor: _navy,
@@ -1864,11 +2211,18 @@ class _Action extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircleAvatar(
-              radius: 13,
-              backgroundColor: Colors.white,
-              child: Icon(spec.icon, color: _navy, size: 20),
-            ),
+            if (spec.busy)
+              const SizedBox(
+                width: 26,
+                height: 26,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              CircleAvatar(
+                radius: 13,
+                backgroundColor: Colors.white,
+                child: Icon(spec.icon, color: _navy, size: 20),
+              ),
             const SizedBox(height: 3),
             Flexible(
               child: Text(
@@ -1891,23 +2245,35 @@ class _Action extends StatelessWidget {
 }
 
 class _Filter extends StatelessWidget {
-  const _Filter(this.text, this.active);
+  const _Filter(this.text, this.active, {required this.onTap});
 
   final String text;
   final bool active;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-      decoration: ShapeDecoration(
-          color: active ? _navy : Colors.white, shape: const StadiumBorder()),
-      child: Text(
-        text,
-        style: TextStyle(
-            color: active ? Colors.white : _slate,
-            fontSize: 14,
-            fontWeight: FontWeight.w900),
+    return Semantics(
+      button: true,
+      selected: active,
+      child: Material(
+        color: active ? _navy : Colors.white,
+        shape: const StadiumBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Text(
+              text,
+              style: TextStyle(
+                color: active ? Colors.white : _slate,
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1995,37 +2361,34 @@ class _PinnedNav extends StatelessWidget {
 }
 
 class _Top extends StatelessWidget {
-  const _Top({this.trailing});
+  const _Top({this.trailing, this.title});
 
   final Widget? trailing;
+  final String? title;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         IconButton(
+          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
           padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+          constraints: const BoxConstraints.tightFor(width: 48, height: 48),
           onPressed: () => Navigator.maybePop(context),
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           color: _navy,
         ),
-        const Expanded(
+        Expanded(
           child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.circle, color: _pink, size: 9),
-                SizedBox(width: 6),
-                Text(
-                  'MimiCam',
-                  style: TextStyle(
-                    color: _pink,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
+            child: Text(
+              title ?? 'MimiCam',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _navy,
+                fontWeight: FontWeight.w900,
+                fontSize: 14.5,
+              ),
             ),
           ),
         ),
@@ -2044,32 +2407,41 @@ class _Top extends StatelessWidget {
 }
 
 class _ConnectedBadge extends StatelessWidget {
-  const _ConnectedBadge({required this.text, this.dark = false});
+  const _ConnectedBadge({
+    required this.text,
+    this.dark = false,
+    this.icon = Icons.circle,
+    this.color = const Color(0xFF2A9474),
+    this.backgroundColor = _mintSoft,
+  });
 
   final String text;
   final bool dark;
+  final IconData icon;
+  final Color color;
+  final Color backgroundColor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: ShapeDecoration(
-        color: dark ? Colors.white.withValues(alpha: .10) : _mintSoft,
+        color: dark ? Colors.white.withValues(alpha: .10) : backgroundColor,
         shape: StadiumBorder(
           side: BorderSide(
-            color: dark ? Colors.white24 : _mint.withValues(alpha: .45),
+            color: dark ? Colors.white24 : color.withValues(alpha: .36),
           ),
         ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.circle, color: Color(0xFF42B883), size: 7),
+          Icon(icon, color: dark ? Colors.white : color, size: 13),
           const SizedBox(width: 6),
           Text(
             text,
             style: TextStyle(
-              color: dark ? Colors.white : const Color(0xFF2A9474),
+              color: dark ? Colors.white : color,
               fontWeight: FontWeight.w900,
               fontSize: 12,
             ),

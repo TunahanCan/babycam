@@ -97,6 +97,41 @@ void main() {
     }
   });
 
+  testWidgets('canlı izleme büyük yazı ve dar ekranda okunabilir kalır',
+      (tester) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.binding.setSurfaceSize(const Size(320, 844));
+    final runtime = await _pairedRuntime();
+    addTearDown(runtime.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: const TextScaler.linear(1.5),
+          ),
+          child: child!,
+        ),
+        home: WatchScreen(runtime: runtime),
+      ),
+    );
+    await tester.pumpAndSettle();
+    _expectNoFlutterException(tester);
+
+    runtime.reportStreamFailure(StateError('render budget failure'));
+    await tester.pumpAndSettle();
+    _expectNoFlutterException(tester);
+
+    for (final label in ['Geçmiş', 'Ayarlar', 'İzle']) {
+      await tester.tap(find.text(label).last);
+      await tester.pumpAndSettle();
+      _expectNoFlutterException(tester);
+    }
+  });
+
   testWidgets('server tab geçişleri kompakt ekranda overflow üretmez',
       (tester) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));

@@ -416,6 +416,15 @@ const _deUiText = <String, String>{
   'comfortAudio': 'Beruhigender Raumklang',
   'comfortAudioDescription':
       'Wähle den Ton, der auf dem Babyzimmer-Gerät abgespielt wird.',
+  'roomControlFailed':
+      'Die Raumsteuerung konnte nicht angewendet werden. Prüfe die Verbindung und versuche es erneut.',
+  'watchReconnectingSubtitle':
+      'Die Live-Ansicht wird wiederhergestellt. Sie läuft in wenigen Sekunden weiter.',
+  'watchStartingSubtitle':
+      'Eine sichere Verbindung zur Babyzimmer-Kamera wird hergestellt.',
+  'watchStreamUnavailableTitle': 'Video unterbrochen',
+  'watchConnectionErrorSubtitle':
+      'Prüfe das Babyzimmer-Telefon und seine WLAN-Verbindung und versuche es erneut.',
   'whiteNoise': 'Weißes Rauschen',
   'pinkNoise': 'Rosa Rauschen',
   'rainSound': 'Regen',
@@ -834,6 +843,14 @@ const _arUiText = <String, String>{
   'purchaseFailed': 'تعذر إكمال الشراء.',
   'comfortAudio': 'صوت مهدئ للغرفة',
   'comfortAudioDescription': 'اختر الصوت الذي سيعمل على جهاز غرفة الطفل.',
+  'roomControlFailed':
+      'تعذر تنفيذ التحكم بالغرفة. تحقق من الاتصال وحاول مرة أخرى.',
+  'watchReconnectingSubtitle':
+      'تتم استعادة العرض المباشر. سيستمر خلال بضع ثوانٍ.',
+  'watchStartingSubtitle': 'جارٍ إنشاء اتصال آمن بكاميرا غرفة الطفل.',
+  'watchStreamUnavailableTitle': 'انقطع الفيديو',
+  'watchConnectionErrorSubtitle':
+      'تحقق من هاتف غرفة الطفل واتصال Wi-Fi الخاص به ثم حاول مرة أخرى.',
   'whiteNoise': 'ضوضاء بيضاء',
   'pinkNoise': 'ضوضاء وردية',
   'rainSound': 'مطر',

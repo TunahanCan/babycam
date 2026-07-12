@@ -128,7 +128,7 @@ bildirim geçmişi, Server operasyonu ve ayar akışlarını kapsar.
     <strong>Çok Dilli Ekran Görüntüleri ve Use-Case Raporunu Aç</strong>
   </a>
   <br /><br />
-  <strong>9 locale</strong> · <strong>126 ekran</strong> · <strong>5 ana use-case</strong>
+  <strong>9 locale</strong> · <strong>153 ekran</strong> · <strong>9 ana use-case</strong>
 </div>
 
 Desteklenen arayüz dilleri Türkçe, İngilizce, Çince, İspanyolca, Fransızca,

@@ -2764,6 +2764,54 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'Elige el sonido que se reproducirá en el dispositivo del bebé.',
     'fr': 'Choisissez le son diffusé sur l’appareil de la chambre.',
   },
+  'roomControlFailed': {
+    'tr': 'Oda kontrolü uygulanamadı. Bağlantıyı kontrol edip tekrar dene.',
+    'en':
+        'The room control could not be applied. Check the connection and try again.',
+    'zh': '无法应用房间控制。请检查连接后重试。',
+    'hi':
+        'कमरे का नियंत्रण लागू नहीं हो सका। कनेक्शन जाँचें और फिर कोशिश करें।',
+    'es':
+        'No se pudo aplicar el control de la habitación. Revisa la conexión e inténtalo de nuevo.',
+    'fr':
+        'La commande de la chambre n’a pas pu être appliquée. Vérifiez la connexion et réessayez.',
+  },
+  'watchReconnectingSubtitle': {
+    'tr': 'Canlı görüntü yeniden kuruluyor. Birkaç saniye içinde devam edecek.',
+    'en': 'Restoring the live view. It should continue in a few seconds.',
+    'zh': '正在恢复实时画面，预计几秒后继续。',
+    'hi': 'लाइव दृश्य फिर से जोड़ा जा रहा है। यह कुछ सेकंड में जारी होगा।',
+    'es': 'Restableciendo la vista en directo. Continuará en unos segundos.',
+    'fr':
+        'Rétablissement de la vue en direct. Elle reprendra dans quelques secondes.',
+  },
+  'watchStartingSubtitle': {
+    'tr': 'Bebek odası kamerasıyla güvenli bağlantı kuruluyor.',
+    'en': 'Establishing a secure connection to the baby-room camera.',
+    'zh': '正在与婴儿房摄像头建立安全连接。',
+    'hi': 'बच्चे के कमरे के कैमरे से सुरक्षित कनेक्शन बनाया जा रहा है।',
+    'es': 'Estableciendo una conexión segura con la cámara de la habitación.',
+    'fr': 'Connexion sécurisée à la caméra de la chambre en cours.',
+  },
+  'watchStreamUnavailableTitle': {
+    'tr': 'Görüntü kesildi',
+    'en': 'Video interrupted',
+    'zh': '画面已中断',
+    'hi': 'वीडियो रुक गया',
+    'es': 'Vídeo interrumpido',
+    'fr': 'Vidéo interrompue',
+  },
+  'watchConnectionErrorSubtitle': {
+    'tr':
+        'Bebek odası telefonunu ve Wi-Fi bağlantısını kontrol edip tekrar dene.',
+    'en': 'Check the baby-room phone and its Wi-Fi connection, then try again.',
+    'zh': '请检查婴儿房手机及其 Wi-Fi 连接，然后重试。',
+    'hi': 'बच्चे के कमरे का फ़ोन और उसका Wi-Fi कनेक्शन जाँचकर फिर कोशिश करें।',
+    'es':
+        'Revisa el teléfono de la habitación y su conexión Wi-Fi e inténtalo de nuevo.',
+    'fr':
+        'Vérifiez le téléphone de la chambre et sa connexion Wi-Fi, puis réessayez.',
+  },
   'whiteNoise': {
     'tr': 'Beyaz gürültü',
     'en': 'White noise',

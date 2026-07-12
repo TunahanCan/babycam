@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 from pathlib import Path
 from datetime import date
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
-SCREENS = ROOT / 'build/screen_report/i18n'
+SCREENS = ROOT / os.environ.get('REPORT_CAPTURE_OUTPUT', 'build/screen_report/i18n')
+MANIFEST = SCREENS / 'manifest.json'
 OUT = ROOT / 'docs/reports/mimicam_cok_dilli_ekranlar_usecase_raporu.pdf'
 OUT.parent.mkdir(parents=True, exist_ok=True)
 
@@ -19,12 +23,12 @@ BLUE = (78, 133, 255)
 VIOLET = (184, 108, 255)
 CARD = (255, 255, 255)
 LINE = (211, 226, 240)
-FONT = '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc'
-BOLD = '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc'
+FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
 
 LOCALES = [
     ('tr', 'Türkçe', 'Türkçe ekran görüntüleri'),
-    ('zh', '中文', '中文界面截图'),
+    ('zh', 'Çince', 'Çince ekran görüntüleri'),
     ('en', 'English', 'English screenshots'),
     ('es', 'Español', 'Capturas en español'),
     ('fr', 'Français', 'Captures en français'),
@@ -45,10 +49,13 @@ SCREEN_META = [
     ('08_watch_live.png', '08', 'Canlı izleme ve oda kontrolleri', 'UC-04/06'),
     ('09_watch_history.png', '09', 'Uyarı geçmişi', 'UC-05'),
     ('10_watch_settings.png', '10', 'İzleme, kalite ve bildirim ayarları', 'UC-07'),
-    ('11_server_stream.png', '11', 'Server canlı yayın ve ön izleme', 'UC-03'),
-    ('12_server_qr_ip.png', '12', 'Server QR/IP eşleşme bileti', 'UC-02/03'),
-    ('13_server_services.png', '13', 'Server servis ve yayın durumu', 'UC-03'),
-    ('14_server_settings.png', '14', 'Server algılama ve yayın ayarları', 'UC-03/07'),
+    ('11_watch_room_controls.png', '11', 'Piş piş, rahatlatıcı ses ve bas-konuş', 'UC-06'),
+    ('12_watch_connection_error.png', '12', 'Bağlantı hatası ve güvenli yeniden deneme', 'UC-09'),
+    ('13_server_preview_off.png', '13', 'Server yayın ve enerji dostu ön izleme kapalı', 'UC-03'),
+    ('14_server_preview_on.png', '14', 'Server yerel kamera ön izlemesi', 'UC-03'),
+    ('15_server_qr_ip.png', '15', 'Server QR/IP eşleşme bileti', 'UC-02/03'),
+    ('16_server_services.png', '16', 'Server servis ve yayın durumu', 'UC-03'),
+    ('17_server_settings.png', '17', 'Server algılama ve yayın ayarları', 'UC-03/07'),
 ]
 
 USE_CASES = [
@@ -59,13 +66,13 @@ USE_CASES = [
     ),
     (
         'UC-02 Oda bulma ve eşleşme',
-        'Client otomatik keşif, QR tarama veya IP:port ile Server’a bağlanır. Pairing bileti trusted session oluşturur ve sonraki bağlantıyı hızlandırır.',
-        'Screens 02, 03, 07, 12',
+        'Client otomatik keşif, QR tarama veya IP:port ile Server’a bağlanır. Pairing bileti trusted session oluşturur. Altyapı dört oda profili saklayabilir; güncel arayüz yalnız aktif odayı gösterir.',
+        'Screens 02, 03, 07, 15',
     ),
     (
         'UC-03 Server yayın operasyonu',
-        'Bebek odası telefonu kamera/mikrofonu yönetir; yayın ön izlemesi, durdurma-başlatma, QR/IP bileti, servis durumu ve algılama ayarları tek akışta sunulur.',
-        'Screens 11, 12, 13, 14',
+        'Bebek odası telefonu kamera/mikrofonu yönetir; enerji dostu kapalı ön izleme, isteğe bağlı kadraj kontrolü, QR/IP bileti, servis durumu ve algılama ayarları tek akışta sunulur.',
+        'Screens 13-17',
     ),
     (
         'UC-04 Client canlı takip',
@@ -74,23 +81,28 @@ USE_CASES = [
     ),
     (
         'UC-05 Uyarıdan telefona güvenilir bildirim',
-        'Server kalibrasyonlu ses/hareket analizinden olay üretir; episode/cooldown katmanı tekrarları azaltır; WebSocket ile Client’a ulaştırır ve yerel telefon bildirimine dönüştürür.',
+        'Server kalibrasyonlu ses/hareket analizinden olay üretir; episode/cooldown katmanı tekrarları azaltır; aynı yerel ağdaki Client’a WebSocket ile ulaştırıp telefon bildirimine dönüştürür.',
         'Screens 04, 09 + Alert contract',
     ),
     (
         'UC-06 Odaya uzaktan yanıt',
-        'Ebeveyn bas-konuş ile ses gönderebilir; beyaz/pembe gürültü, yağmur, ninni ve “şşş” rahatlatma seslerini; gece ışığını yönetebilir.',
-        'Screen 08',
+        'Ebeveyn bas-konuş ile ses gönderebilir; beyaz/pembe gürültü, yağmur, ninni ve “şşş” rahatlatma seslerini yönetebilir.',
+        'Screens 08, 11',
     ),
     (
         'UC-07 Tercih, izin ve kalite yönetimi',
         'Bildirim izni, ekranı uyanık tutma, kalite profili, adaptif yayın ve Server tarafı algılama ayarları kullanıcı dilinde açıklanır.',
-        'Screens 05, 10, 14',
+        'Screens 05, 10, 17',
     ),
     (
         'UC-08 Çok dilli ve dar ekran doğrulaması',
         'Ana akışlar dokuz locale ve kompakt Android ekranında taşma/yanlış fallback üretmeden doğrulanır.',
         'All localized pages',
+    ),
+    (
+        'UC-09 Bağlantı hatası ve güvenli kurtarma',
+        'Donmuş son kare canlıymış gibi gösterilmez. Client açık bağlantı durumunu, kullanıcı dilinde kontrol önerisini ve tek işlem korumalı yeniden denemeyi sunar.',
+        'Screen 12',
     ),
 ]
 
@@ -168,6 +180,58 @@ def paste_screen(target: Image.Image, path: Path, box: tuple[int, int, int, int]
     target.paste(image, (x, y))
 
 
+def verify_capture_manifest() -> dict:
+    if not MANIFEST.exists():
+        raise FileNotFoundError(
+            f'Capture manifest missing: {MANIFEST}. Run capture_multilingual_screen_report.py first.'
+        )
+    manifest = json.loads(MANIFEST.read_text(encoding='utf-8'))
+    expected_locales = [item[0] for item in LOCALES]
+    expected_count = len(expected_locales) * len(SCREEN_META)
+    if manifest.get('schemaVersion') != 1:
+        raise RuntimeError('Unsupported capture manifest schema.')
+    if manifest.get('locales') != expected_locales:
+        raise RuntimeError('Capture manifest locale list does not match the report.')
+    if manifest.get('screensPerLocale') != len(SCREEN_META):
+        raise RuntimeError('Capture manifest screen count does not match the report.')
+    if manifest.get('expectedFileCount') != expected_count:
+        raise RuntimeError('Capture manifest total file count is invalid.')
+    entries = manifest.get('files')
+    if not isinstance(entries, dict) or len(entries) != expected_count:
+        raise RuntimeError('Capture manifest file list is incomplete.')
+    for locale in expected_locales:
+        for filename, _, _, _ in SCREEN_META:
+            relative = f'{locale}/{filename}'
+            metadata = entries.get(relative)
+            path = SCREENS / relative
+            if not isinstance(metadata, dict) or not path.exists():
+                raise FileNotFoundError(path)
+            with path.open('rb') as source:
+                digest = hashlib.sha256(source.read()).hexdigest()
+            if digest != metadata.get('sha256'):
+                raise RuntimeError(f'Capture hash mismatch: {relative}')
+            with Image.open(path) as image:
+                if [image.width, image.height] != [
+                    metadata.get('width'),
+                    metadata.get('height'),
+                ]:
+                    raise RuntimeError(f'Capture dimensions changed: {relative}')
+    return manifest
+
+
+CAPTURE_MANIFEST = verify_capture_manifest()
+CAPTURE_DEVICE_MODEL = CAPTURE_MANIFEST.get('deviceModel')
+if not isinstance(CAPTURE_DEVICE_MODEL, str) or not CAPTURE_DEVICE_MODEL.strip():
+    CAPTURE_DEVICE_MODEL = 'Android cihazı'
+if os.environ.get('REPORT_VALIDATE_ONLY') == '1':
+    print(
+        f'capture manifest valid: '
+        f'{CAPTURE_MANIFEST["expectedFileCount"]} files, '
+        f'device model={CAPTURE_DEVICE_MODEL}'
+    )
+    raise SystemExit(0)
+
+
 pages: list[Image.Image] = []
 
 
@@ -194,13 +258,18 @@ draw_text(
 draw_text(
     draw,
     (M, 650),
-    f'Ürün ekranları, gerçek kullanıcı akışları ve güncel Client/Server deneyimi. Ekran görüntüleri LG H870 Android cihazından alınmıştır. Rapor tarihi: {date.today().isoformat()}.',
+    f'Ürün ekranları, gerçek kullanıcı akışları ve güncel Client/Server deneyimi. Ekran görüntüleri {CAPTURE_DEVICE_MODEL} cihazından tek çalışmada alınmıştır. Rapor tarihi: {date.today().isoformat()}.',
     F['body'],
     (210, 226, 242),
     W - 2 * M,
 )
 y = 820
-for label, color in [('9 locale', CYAN), ('126 ekran', BLUE), ('8 use-case', VIOLET), ('Client + Server', CYAN)]:
+for label, color in [
+    (f'{len(LOCALES)} locale', CYAN),
+    (f'{len(LOCALES) * len(SCREEN_META)} ekran', BLUE),
+    (f'{len(USE_CASES)} use-case', VIOLET),
+    ('Client + Server', CYAN),
+]:
     width = int(draw.textlength(label, font=F['smallb'])) + 44
     rounded(draw, (M, y, M + width, y + 48), 24, color)
     draw.text((M + 22, y + 12), label, font=F['smallb'], fill=INK)
@@ -212,14 +281,20 @@ add(cover)
 # product handout as well as an engineering appendix.
 p = page(INK)
 draw = ImageDraw.Draw(p)
-draw.text((M, 72), 'MimiCam', font=F['smallb'], fill=CYAN)
+wordmark_path = ROOT / 'assets/branding/mimicam_wordmark_v2.png'
+if wordmark_path.exists():
+    wordmark = Image.open(wordmark_path).convert('RGBA')
+    wordmark.thumbnail((420, 120), Image.Resampling.LANCZOS)
+    p.paste(wordmark, (M, 58), wordmark)
+else:
+    draw.text((M, 72), 'MimiCam', font=F['smallb'], fill=CYAN)
 draw_text(draw, (M, 170), 'İki telefon. Tek Wi-Fi. Daha sakin bir bebek odası.', F['cover'], (255, 255, 255), W - 2 * M, 10)
 draw_text(draw, (M, 370), 'Eski telefonunu bebek odası kamerasına dönüştür. Görüntüyü, sesi, uyarıları ve oda kontrollerini ebeveyn telefonundan takip et.', F['h2'], (210, 226, 242), W - 2 * M, 8)
 benefits = [
     ('Yerel ve özel', 'Bulut hesabı veya zorunlu internet olmadan aynı Wi-Fi üzerinde çalışır.'),
     ('Canlı takip', 'Video, oda sesi, kalite bilgisi ve hızlı kontrol aksiyonları tek Client ekranında.'),
     ('Daha anlamlı uyarı', 'Kalibrasyon, episode ve cooldown katmanlarıyla gereksiz tekrarlar azaltılır.'),
-    ('Odaya yanıt ver', 'Bas-konuş, beyaz/pembe gürültü, yağmur, ninni, şşş sesi ve gece ışığı.'),
+    ('Odaya yanıt ver', 'Bas-konuş, beyaz/pembe gürültü, yağmur, ninni ve piş piş sesi.'),
 ]
 yy = 650
 for title, body in benefits:
@@ -246,18 +321,33 @@ for start in range(0, len(USE_CASES), 4):
     add(p)
 
 for locale, language, subtitle in LOCALES:
-    p = page()
-    draw = ImageDraw.Draw(p)
-    y = header(draw, language, subtitle)
-    for idx, (_, number, title, uc) in enumerate(SCREEN_META):
-        yy = y + idx * 93
-        rounded(draw, (M, yy, W - M, yy + 74), 20, CARD, LINE)
-        rounded(draw, (M + 18, yy + 15, M + 74, yy + 59), 16, [CYAN, BLUE, VIOLET][idx % 3])
-        draw.text((M + 34, yy + 27), number, font=F['tiny'], fill=INK)
-        draw.text((M + 92, yy + 13), title, font=F['smallb'], fill=INK)
-        draw.text((M + 92, yy + 42), uc, font=F['tiny'], fill=SLATE)
-    footer(draw, len(pages) + 1)
-    add(p)
+    index_page_size = 14
+    index_page_count = (len(SCREEN_META) + index_page_size - 1) // index_page_size
+    for index_start in range(0, len(SCREEN_META), index_page_size):
+        p = page()
+        draw = ImageDraw.Draw(p)
+        index_page = index_start // index_page_size + 1
+        y = header(
+            draw,
+            language,
+            f'{subtitle} · Ekran dizini {index_page}/{index_page_count}',
+        )
+        chunk = SCREEN_META[index_start:index_start + index_page_size]
+        for slot, (_, number, title, uc) in enumerate(chunk):
+            idx = index_start + slot
+            yy = y + slot * 93
+            rounded(draw, (M, yy, W - M, yy + 74), 20, CARD, LINE)
+            rounded(
+                draw,
+                (M + 18, yy + 15, M + 74, yy + 59),
+                16,
+                [CYAN, BLUE, VIOLET][idx % 3],
+            )
+            draw.text((M + 34, yy + 27), number, font=F['tiny'], fill=INK)
+            draw.text((M + 92, yy + 13), title, font=F['smallb'], fill=INK)
+            draw.text((M + 92, yy + 42), uc, font=F['tiny'], fill=SLATE)
+        footer(draw, len(pages) + 1)
+        add(p)
 
     for filename, number, title, uc in SCREEN_META:
         path = SCREENS / locale / filename

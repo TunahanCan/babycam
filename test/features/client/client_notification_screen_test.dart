@@ -105,6 +105,119 @@ void main() {
     expect(find.text('Son durum bekleniyor'), findsNothing);
   });
 
+  testWidgets('watch son uyaridan geçmişe geçer ve filtreler gerçekten çalışır',
+      (tester) async {
+    final session = PairingSession(payload: _payload(), sessionToken: 'token');
+    final runtime = ClientRuntime(
+      pair: (_) async => session,
+      startStream: (_, {bool audioEnabled = false}) async => null,
+      stopStream: (_) async {},
+    );
+    addTearDown(runtime.dispose);
+    await runtime.pairWithServer(session.payload);
+    await runtime.recordAlert(_typedAlert(
+      'audio-watch',
+      'Watch ses kaydı',
+      type: 'cryDetected',
+      messageKey: 'testMessage',
+    ));
+    await runtime.recordAlert(_typedAlert(
+      'motion-watch',
+      'Watch hareket kaydı',
+      type: 'motionDetected',
+      messageKey: 'testMessage',
+    ));
+
+    await tester.pumpWidget(_App(home: WatchScreen(runtime: runtime)));
+    await tester.pumpAndSettle();
+    final latestAlert = find.text('Watch hareket kaydı', skipOffstage: false);
+    expect(latestAlert, findsOneWidget);
+
+    await tester.drag(
+      find.byType(ListView).first,
+      const Offset(0, -420),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Watch hareket kaydı'));
+    await tester.pumpAndSettle();
+    expect(find.text('Uyarı geçmişi'), findsOneWidget);
+
+    await tester.tap(find.text('Ses').first);
+    await tester.pump();
+    expect(find.text('Watch ses kaydı'), findsOneWidget);
+    expect(find.text('Watch hareket kaydı'), findsNothing);
+
+    await tester.tap(find.text('Hareket').first);
+    await tester.pump();
+    expect(find.text('Watch hareket kaydı'), findsOneWidget);
+    expect(find.text('Watch ses kaydı'), findsNothing);
+  });
+
+  testWidgets('watch hata ekranı teknik ayrıntı sızdırmaz ve retry sunar',
+      (tester) async {
+    final session = PairingSession(payload: _payload(), sessionToken: 'token');
+    final runtime = ClientRuntime(
+      pair: (_) async => session,
+      startStream: (_, {bool audioEnabled = false}) async =>
+          throw StateError('INTERNAL_SECRET_STREAM_FAILURE'),
+      stopStream: (_) async {},
+    );
+    addTearDown(runtime.dispose);
+    await runtime.pairWithServer(session.payload);
+
+    await tester.pumpWidget(_App(home: WatchScreen(runtime: runtime)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Görüntü kesildi'), findsOneWidget);
+    expect(find.text('Yeniden bağlan'), findsWidgets);
+    expect(find.textContaining('INTERNAL_SECRET_STREAM_FAILURE'), findsNothing);
+    expect(find.text('CANLI'), findsNothing);
+    expect(find.byKey(const ValueKey('watch-stream-retry')), findsOneWidget);
+  });
+
+  testWidgets('watch yeniden bağlan işlemini tek seferde çalıştırır',
+      (tester) async {
+    final session = PairingSession(payload: _payload(), sessionToken: 'token');
+    final retryGate = Completer<void>();
+    var starts = 0;
+    final runtime = ClientRuntime(
+      pair: (_) async => session,
+      startStream: (_, {bool audioEnabled = false}) async {
+        starts++;
+        if (starts == 1) throw StateError('first attempt failed');
+        await retryGate.future;
+        throw StateError('retry attempt failed');
+      },
+      stopStream: (_) async {},
+    );
+    addTearDown(runtime.dispose);
+    await runtime.pairWithServer(session.payload);
+
+    await tester.pumpWidget(_App(home: WatchScreen(runtime: runtime)));
+    await tester.pumpAndSettle();
+    final retry = find.byKey(const ValueKey('watch-stream-retry'));
+
+    await tester.tap(retry);
+    await tester.pump();
+    expect(starts, 2);
+    final busyRetry = find.byKey(const ValueKey('watch-placeholder-retry'));
+    expect(busyRetry, findsOneWidget);
+    final busyButtonFinder = find.descendant(
+      of: busyRetry,
+      matching: find.byType(TextButton),
+    );
+    final button = tester.widget<TextButton>(busyButtonFinder);
+    expect(button.onPressed, isNull);
+
+    await tester.tap(busyButtonFinder);
+    await tester.pump();
+    expect(starts, 2);
+
+    retryGate.complete();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('watch-stream-retry')), findsOneWidget);
+  });
+
   testWidgets('eşleşmiş odadaki bildirime dokunmak canlı izlemeyi açar',
       (tester) async {
     final session = PairingSession(payload: _payload(), sessionToken: 'token');

@@ -25,9 +25,7 @@ class RoleSelectionScreen extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
                 children: [
                   const _BrandHeader(),
-                  const SizedBox(height: 12),
-                  const _MascotHero(),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 14),
                   Text(
                     strings.ui('roleSelectionTitle'),
                     textAlign: TextAlign.center,
@@ -39,7 +37,12 @@ class RoleSelectionScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: _subtitleStyle,
                   ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 18),
+                  _DeviceFlow(
+                    roomRole: serverRole,
+                    parentRole: clientRole,
+                  ),
+                  const SizedBox(height: 18),
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final cards = [
@@ -98,9 +101,10 @@ class _BrandHeader extends StatelessWidget {
         label: 'MimiCam',
         image: true,
         child: Image.asset(
-          'assets/branding/mimicam_wordmark.png',
-          width: 164,
-          height: 44,
+          'assets/branding/mimicam_wordmark_v2.png',
+          key: const ValueKey('role-wordmark'),
+          width: 210,
+          height: 40,
           fit: BoxFit.contain,
           filterQuality: FilterQuality.high,
         ),
@@ -109,72 +113,61 @@ class _BrandHeader extends StatelessWidget {
   }
 }
 
-class _MascotHero extends StatelessWidget {
-  const _MascotHero();
+class _DeviceFlow extends StatelessWidget {
+  const _DeviceFlow({required this.roomRole, required this.parentRole});
+
+  final MimiCamRolePresentation roomRole;
+  final MimiCamRolePresentation parentRole;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 174,
-      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFE3DF), Color(0xFFFFF4E9), Color(0xFFDDF8F0)],
-        ),
-        borderRadius: BorderRadius.circular(36),
-        border: Border.all(color: Colors.white, width: 2),
+        color: Colors.white.withValues(alpha: .66),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFD8D5F2)),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x1A8C6F68),
-            blurRadius: 28,
-            offset: Offset(0, 12),
+            color: Color(0x146257C8),
+            blurRadius: 18,
+            offset: Offset(0, 7),
           ),
         ],
       ),
-      child: Stack(
-        alignment: Alignment.center,
+      child: Row(
         children: [
-          const Positioned(
-            left: 28,
-            top: 30,
-            child: _SoftBubble(
-              icon: Icons.favorite_rounded,
-              color: Color(0xFFFF8D96),
-              size: 42,
+          Expanded(
+            child: _DeviceFlowNode(
+              icon: roomRole.choiceIcon,
+              color: MimiCamDesignTokens.mint,
             ),
           ),
-          const Positioned(
-            right: 30,
-            top: 24,
-            child: _SoftBubble(
-              icon: Icons.wifi_rounded,
-              color: Color(0xFF45BFA6),
-              size: 48,
+          Expanded(
+            child: Row(
+              children: [
+                const Expanded(child: Divider(color: Color(0xFFC9C4E9))),
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE4E0FF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.wifi_rounded,
+                    color: MimiCamDesignTokens.pink,
+                    size: 19,
+                  ),
+                ),
+                const Expanded(child: Divider(color: Color(0xFFC9C4E9))),
+              ],
             ),
           ),
-          const Positioned(
-            right: 76,
-            bottom: 24,
-            child: Icon(
-              Icons.star_rounded,
-              color: Color(0xFFFFBE68),
-              size: 28,
-            ),
-          ),
-          Positioned(
-            bottom: -24,
-            child: Semantics(
-              label: 'MimiCam',
-              image: true,
-              child: Image.asset(
-                'assets/branding/mimicam_bear_mascot.png',
-                width: 192,
-                height: 192,
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.high,
-              ),
+          Expanded(
+            child: _DeviceFlowNode(
+              icon: parentRole.choiceIcon,
+              color: MimiCamDesignTokens.pink,
             ),
           ),
         ],
@@ -183,27 +176,27 @@ class _MascotHero extends StatelessWidget {
   }
 }
 
-class _SoftBubble extends StatelessWidget {
-  const _SoftBubble({
+class _DeviceFlowNode extends StatelessWidget {
+  const _DeviceFlowNode({
     required this.icon,
     required this.color,
-    required this.size,
   });
 
   final IconData icon;
   final Color color;
-  final double size;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: .72),
-        shape: BoxShape.circle,
+    return Center(
+      child: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .12),
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Icon(icon, color: color, size: 23),
       ),
-      child: Icon(icon, color: color, size: size * .48),
     );
   }
 }
@@ -221,12 +214,12 @@ class _RoleChoiceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final roomDevice = role.role == AppRole.server;
     final background =
-        roomDevice ? const Color(0xFFFFEFEC) : const Color(0xFFE5F8F2);
+        roomDevice ? const Color(0xFFECF7F4) : const Color(0xFFEDEAFF);
     final accent =
-        roomDevice ? const Color(0xFFFF7F88) : const Color(0xFF39B99E);
+        roomDevice ? MimiCamDesignTokens.mint : MimiCamDesignTokens.pink;
     return Semantics(
       button: true,
-      label: role.choiceTitle,
+      label: '${role.choiceTitle}. ${role.choiceDescription}',
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -263,6 +256,26 @@ class _RoleChoiceCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: .74),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          role.badgeSubtitle,
+                          style: TextStyle(
+                            color: accent,
+                            fontSize: 10.5,
+                            letterSpacing: .35,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       Text(
                         role.choiceTitle,
                         style: const TextStyle(
@@ -316,18 +329,18 @@ class _InfoStrip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: .78),
+        color: const Color(0xFFF1EFFF).withValues(alpha: .9),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE9DED6)),
+        border: Border.all(color: const Color(0xFFD9D4F7)),
       ),
       child: Row(
         children: [
           const CircleAvatar(
             radius: 21,
-            backgroundColor: Color(0xFFFFE9B9),
+            backgroundColor: Color(0xFFE0DCFF),
             child: Icon(
               Icons.wifi_rounded,
-              color: Color(0xFF9A6921),
+              color: MimiCamDesignTokens.pink,
               size: 23,
             ),
           ),
@@ -372,9 +385,9 @@ class _WelcomeShell extends StatelessWidget {
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFFFFFBF8), Color(0xFFF7FBFA), Color(0xFFFFF8F4)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFF7F5FF), Color(0xFFEEF0FF), Color(0xFFF8F9FF)],
         ),
       ),
       child: Stack(
@@ -382,12 +395,17 @@ class _WelcomeShell extends StatelessWidget {
           const Positioned(
             left: -90,
             top: -110,
-            child: _BackgroundGlow(color: Color(0xFFFFD8D3), size: 250),
+            child: _BackgroundGlow(color: Color(0xFFBFB7FF), size: 250),
           ),
           const Positioned(
             right: -110,
             top: 110,
-            child: _BackgroundGlow(color: Color(0xFFCFF4E9), size: 280),
+            child: _BackgroundGlow(color: Color(0xFFCDEEE6), size: 280),
+          ),
+          const Positioned(
+            left: -120,
+            bottom: -150,
+            child: _BackgroundGlow(color: Color(0xFFDAD4FF), size: 300),
           ),
           Positioned.fill(child: child),
         ],

@@ -40,13 +40,24 @@ void main() {
     expect(find.text('MimiCam’i nasıl kullanacaksınız?'), findsOneWidget);
     expect(find.text('Bebek odasına kur'), findsOneWidget);
     expect(find.text('Yanımda kullan'), findsOneWidget);
-    expect(find.byIcon(Icons.child_care), findsOneWidget);
-    expect(find.byIcon(Icons.monitor_heart), findsOneWidget);
-    expect(find.byIcon(Icons.wifi_rounded), findsOneWidget);
+    expect(find.text('BEBEK ODASI'), findsOneWidget);
+    expect(find.text('İZLEME CİHAZI'), findsOneWidget);
+    expect(find.byIcon(Icons.child_care), findsWidgets);
+    expect(find.byIcon(Icons.monitor_heart), findsWidgets);
+    expect(find.byIcon(Icons.wifi_rounded), findsWidgets);
+
+    final wordmark = tester.widget<Image>(
+      find.byKey(const ValueKey('role-wordmark')),
+    );
+    expect(
+      (wordmark.image as AssetImage).assetName,
+      'assets/branding/mimicam_wordmark_v2.png',
+    );
 
     for (final asset in [
       'assets/branding/mimicam_wordmark.png',
       'assets/branding/mimicam_bear_mascot.png',
+      'assets/branding/mimicam_wordmark_v2.png',
     ]) {
       final data = await rootBundle.load(asset);
       expect(data.lengthInBytes, greaterThan(0));
