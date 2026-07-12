@@ -1,4 +1,4 @@
-package com.example.mimicam
+package com.mimicam.app
 
 import android.os.Handler
 import android.os.Looper

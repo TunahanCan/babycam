@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/async/serialized_async_executor.dart';
 import 'alerts/client_alert_background_service.dart';
 import 'alerts/client_alert_listener.dart';
 import 'alerts/client_alert_history.dart';
@@ -61,12 +62,12 @@ class ClientCompositionRoot {
     final endpointResolver = TrustedSessionEndpointResolver(
       browser: serviceBrowser,
     );
-    var alertDeliveryTail = Future<void>.value();
+    final alertDeliveryOperations = SerializedAsyncExecutor();
     final alerts = alertListener ??
         ClientAlertListener(
           healthState: streamHealth,
           onAlert: (alert) {
-            alertDeliveryTail = alertDeliveryTail.then<void>((_) async {
+            unawaited(alertDeliveryOperations.run(() async {
               try {
                 await alertHistory.add(alert);
               } catch (_) {
@@ -75,7 +76,7 @@ class ClientCompositionRoot {
               await notifications.showAlert(alert);
             }).catchError((_) {
               // Keep processing later alerts if the platform rejects one post.
-            });
+            }));
           },
         );
 
@@ -85,7 +86,7 @@ class ClientCompositionRoot {
       } finally {
         await alertBackground.stop();
       }
-      await alertDeliveryTail;
+      await alertDeliveryOperations.drain();
     }
 
     final runtime = ClientRuntime(

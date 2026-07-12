@@ -16,9 +16,12 @@ import '../l10n/app_strings.dart';
 import '../services/configuration_service.dart';
 import '../services/client_preferences_service.dart';
 import 'app_role.dart';
+import 'app_runtime.dart';
+import 'install_integrity_guard.dart';
 import 'role_permission_coordinator.dart';
 import 'role_repository.dart';
 import 'role_resolver.dart';
+import 'role_switch_transaction.dart';
 
 class AppBootstrap extends StatefulWidget {
   const AppBootstrap({super.key, this.onLocaleChanged});
@@ -33,11 +36,12 @@ class _AppBootstrapState extends State<AppBootstrap> {
   SharedPreferences? _prefs;
   RoleRepository? _roles;
   AppRole? _role;
-  Object? _runtime;
+  AppRuntime? _runtime;
   bool _loaded = false;
   bool _switchingRole = false;
   int _roleSwitchGeneration = 0;
   final _permissionCoordinator = const RolePermissionCoordinator();
+  final _roleSwitchTransaction = const RoleSwitchTransaction();
 
   @override
   void initState() {
@@ -47,6 +51,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    await const InstallIntegrityGuard().prepare(prefs);
     final roles = SharedPreferencesRoleRepository(prefs);
     final role = await RoleResolver(roles).resolve();
     if (!mounted) return;
@@ -129,30 +134,46 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
     final generation = ++_roleSwitchGeneration;
     final runtime = _runtime;
+    final previousRole = _role;
     setState(() {
       _switchingRole = true;
       _role = null;
       _runtime = null;
     });
 
-    await _disposeRuntime(runtime);
-    if (_prefs != null) await PairingSessionStore(_prefs!).clear();
-    if (role == null) {
-      await _roles!.clearRole();
-    } else {
-      await _roles!.saveRole(role);
+    Object? switchError;
+    StackTrace? switchStackTrace;
+    try {
+      await _roleSwitchTransaction.execute(
+        runtime: runtime,
+        previousRole: previousRole,
+        nextRole: role,
+        roles: _roles!,
+        clearPairingSession: () async {
+          final prefs = _prefs;
+          if (prefs != null) await PairingSessionStore(prefs).clear();
+        },
+      );
+    } catch (error, stackTrace) {
+      switchError = error;
+      switchStackTrace = stackTrace;
     }
 
     if (!mounted || generation != _roleSwitchGeneration) return;
     setState(() {
-      _role = role;
+      _role = switchError == null ? role : previousRole;
       _switchingRole = false;
     });
-  }
-
-  Future<void> _disposeRuntime(Object? runtime) async {
-    if (runtime is ServerRuntime) await runtime.dispose();
-    if (runtime is ClientRuntime) await runtime.dispose();
+    if (switchError != null) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: switchError,
+          stack: switchStackTrace,
+          library: 'MimiCam bootstrap',
+          context: ErrorDescription('while switching application roles'),
+        ),
+      );
+    }
   }
 
   @override
@@ -160,7 +181,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
     _roleSwitchGeneration++;
     final runtime = _runtime;
     _runtime = null;
-    unawaited(_disposeRuntime(runtime));
+    unawaited(runtime?.dispose());
     super.dispose();
   }
 

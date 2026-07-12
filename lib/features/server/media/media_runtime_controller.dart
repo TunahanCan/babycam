@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import '../../../core/async/serialized_async_executor.dart';
+
 class MediaResourceDemand {
   const MediaResourceDemand({
     required this.video,
@@ -76,7 +78,7 @@ class MediaRuntimeController {
   final Future<void> Function(MediaResourceDemand demand)? _onDemandChanged;
   final bool _usesIndependentResources;
 
-  Future<void> _tail = Future<void>.value();
+  final _operations = SerializedAsyncExecutor();
   MediaResourceDemand _activeDemand = MediaResourceDemand.none;
   MediaResourceDemand _requestedDemand = MediaResourceDemand.none;
   bool _suspended = false;
@@ -108,14 +110,7 @@ class MediaRuntimeController {
   }
 
   Future<void> _enqueue(MediaResourceDemand demand) {
-    final operation = _tail.then<void>(
-      (_) => _apply(demand),
-      onError: (_) => _apply(demand),
-    );
-    // Keep a non-throwing queue tail so one platform error does not prevent a
-    // later stop/retry. The caller still receives [operation]'s real error.
-    _tail = operation.then<void>((_) {}, onError: (_) {});
-    return operation;
+    return _operations.run(() => _apply(demand));
   }
 
   Future<void> _apply(MediaResourceDemand target) async {

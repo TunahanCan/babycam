@@ -1,4 +1,4 @@
-package com.example.mimicam
+package com.mimicam.app
 
 import android.Manifest
 import android.content.Context

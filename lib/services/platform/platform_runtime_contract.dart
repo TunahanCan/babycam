@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/async/serialized_async_executor.dart';
+
 enum PlatformRuntimeKind { android, ios, other }
 
 class PlatformRuntimeSnapshot {
@@ -319,7 +321,7 @@ class PlatformMediaLifecycleCoordinator {
   final Future<void> Function(PlatformRuntimeEvent event)? _onAudioOutputLost;
   final void Function(PlatformRuntimeEvent event)? _onTelemetry;
   StreamSubscription<PlatformRuntimeEvent>? _subscription;
-  Future<void> _pending = Future.value();
+  final _operations = SerializedAsyncExecutor();
   bool _pausedByPlatform = false;
   bool _disposed = false;
 
@@ -343,13 +345,11 @@ class PlatformMediaLifecycleCoordinator {
     } catch (_) {
       // Telemetry must never block the resource lifecycle state machine.
     }
-    final operation = _pending.then<void>(
-      (_) => _handle(event),
-      // A failed native pause/recovery must not poison the lifecycle queue.
-      // The next event is still allowed to retry or release resources.
-      onError: (_) => _handle(event),
+    unawaited(
+      _operations.run(() => _handle(event)).catchError((_) {
+        // Native lifecycle failures are retried by later platform events.
+      }),
     );
-    _pending = operation.then<void>((_) {}, onError: (_) {});
   }
 
   Future<void> _handle(PlatformRuntimeEvent event) async {
@@ -373,6 +373,6 @@ class PlatformMediaLifecycleCoordinator {
     if (_disposed) return;
     _disposed = true;
     await _subscription?.cancel();
-    await _pending;
+    await _operations.drain();
   }
 }

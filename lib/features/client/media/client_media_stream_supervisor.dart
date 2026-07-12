@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/bytes/byte_chunk.dart';
+import '../../../core/async/serialized_async_executor.dart';
 import '../../../core/media/media_session_telemetry.dart';
 import '../../../core/network/retry_policy.dart';
 import '../../../core/protocol/mimicam_protocol.dart';
@@ -75,7 +76,7 @@ class ClientMediaStreamSupervisor {
   ClientMediaStreamSupervisor({
     required this.session,
     required this.activeStream,
-    required this.audioEnabled,
+    required bool audioEnabled,
     required this.onVideoFrame,
     this.healthState,
     this.audioOutput = const PcmAudioOutput(),
@@ -89,7 +90,8 @@ class ClientMediaStreamSupervisor {
     this.onStatus,
     this.onSessionRefreshRequired,
     this.onFatalError,
-  }) : _retryPolicy = retryPolicy ??
+  })  : _audioEnabled = audioEnabled,
+        _retryPolicy = retryPolicy ??
             ExponentialBackoffPolicy(
               initialDelay: retryDelay,
               maxDelay: maxRetryDelay,
@@ -97,7 +99,6 @@ class ClientMediaStreamSupervisor {
 
   final PairingSession session;
   final ActiveStreamSession activeStream;
-  final bool audioEnabled;
   final ValueChanged<Uint8List> onVideoFrame;
   final ClientStreamHealthState? healthState;
   final PcmAudioSink audioOutput;
@@ -113,9 +114,11 @@ class ClientMediaStreamSupervisor {
   final Future<void> Function(ClientMediaStreamFailure failure)?
       onSessionRefreshRequired;
   final ValueChanged<ClientMediaStreamFailure>? onFatalError;
+  final _audioOperations = SerializedAsyncExecutor();
 
   HttpClient? _videoClient;
   ClientLiveAudioPipeline? _audioPipeline;
+  bool _audioEnabled;
   bool _started = false;
   bool _terminalHandled = false;
   int _generation = 0;
@@ -126,52 +129,80 @@ class ClientMediaStreamSupervisor {
   int? _lastVideoSequence;
   final _videoTransitEstimator = VideoTransitEstimator();
 
+  bool get audioEnabled => _audioEnabled;
+
   Future<void> start() async {
     if (_started) return;
     _started = true;
     final generation = ++_generation;
     _lastVideoSequence = null;
     healthState?.setWatchActive(true);
+    healthState?.setAudioExpected(_audioEnabled);
     _emit('connecting');
     unawaited(_videoLoop(generation));
-    if (audioEnabled) {
-      final pipeline = _createAudioPipeline();
-      _audioPipeline = pipeline;
-      await pipeline.start(
-        uri: _audioUri(),
-        pairedServerHost: session.host,
-        pairedServerPort: session.port,
-        bearerToken: session.sessionToken,
-        shouldRetry: (error) {
-          if (!_isCurrentAudioPipeline(generation, pipeline)) return false;
-          return _shouldRetryAudio(error);
-        },
-        onAudioChunkWritten: () {
-          if (!_isCurrentAudioPipeline(generation, pipeline)) return;
-          _markAudioChunkWritten();
-        },
-        onStatus: (status) {
-          if (!_isCurrentAudioPipeline(generation, pipeline)) return;
-          healthState?.updateAudioPipelineStatus(status.toJson());
-          if (status.event == 'error') _audioReconnects = status.reconnects;
-          _emit('audio_${status.event}');
-        },
-        onError: (error) {
-          if (!_isCurrentAudioPipeline(generation, pipeline)) return;
-          _handleAudioError(error);
-        },
-      );
+    if (_audioEnabled) {
+      await _audioOperations.run(() => _startAudioPipeline(generation));
     }
+  }
+
+  Future<void> setAudioEnabled(bool enabled) => _audioOperations.run(() async {
+        if (_audioEnabled == enabled &&
+            (enabled ? _audioPipeline != null : _audioPipeline == null)) {
+          return;
+        }
+        _audioEnabled = enabled;
+        healthState?.setAudioExpected(enabled);
+        if (!_started) return;
+        if (enabled) {
+          await _startAudioPipeline(_generation);
+        } else {
+          await _stopAudioPipeline();
+        }
+      });
+
+  Future<void> _startAudioPipeline(int generation) async {
+    if (!_isCurrent(generation) || _audioPipeline != null) return;
+    final pipeline = _createAudioPipeline();
+    _audioPipeline = pipeline;
+    await pipeline.start(
+      uri: _audioUri(),
+      pairedServerHost: session.host,
+      pairedServerPort: session.port,
+      bearerToken: session.sessionToken,
+      shouldRetry: (error) {
+        if (!_isCurrentAudioPipeline(generation, pipeline)) return false;
+        return _shouldRetryAudio(error);
+      },
+      onAudioChunkWritten: () {
+        if (!_isCurrentAudioPipeline(generation, pipeline)) return;
+        _markAudioChunkWritten();
+      },
+      onStatus: (status) {
+        if (!_isCurrentAudioPipeline(generation, pipeline)) return;
+        healthState?.updateAudioPipelineStatus(status.toJson());
+        if (status.event == 'error') _audioReconnects = status.reconnects;
+        _emit('audio_${status.event}');
+      },
+      onError: (error) {
+        if (!_isCurrentAudioPipeline(generation, pipeline)) return;
+        _handleAudioError(error);
+      },
+    );
+  }
+
+  Future<void> _stopAudioPipeline() async {
+    final audio = _audioPipeline;
+    _audioPipeline = null;
+    await audio?.stop();
   }
 
   Future<void> stop() async {
     if (!_started && _videoClient == null && _audioPipeline == null) return;
     _started = false;
     _generation++;
+    healthState?.setAudioExpected(false);
     _closeVideoClient();
-    final audio = _audioPipeline;
-    _audioPipeline = null;
-    await audio?.stop();
+    await _audioOperations.run(_stopAudioPipeline);
   }
 
   Future<void> _videoLoop(int generation) async {

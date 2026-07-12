@@ -22,6 +22,7 @@ import '../analysis/video/motion_analysis_result.dart';
 import '../analysis/video/luma_frame.dart';
 import '../analysis/video/motion_analysis_config.dart';
 import '../analysis/video/motion_analyzer_v2.dart';
+import '../core/async/serialized_async_executor.dart';
 import '../core/media/camera_permission_gateway.dart';
 import '../core/media/adaptive_media_profile.dart';
 import '../core/media/client_quality_tracker.dart';
@@ -61,6 +62,7 @@ import 'server/room_audio_coordinator.dart';
 import 'server/server_device_identity_resolver.dart';
 import 'server/server_resource_policy_coordinator.dart';
 import 'server/server_session_operation_queue.dart';
+import 'server/server_session_registry.dart';
 import 'server/stream_backpressure_gate.dart';
 import 'server/test_dashboard_assets.dart';
 import 'server/wav_pcm16.dart';
@@ -282,10 +284,7 @@ class MimiCamServer {
   bool _wakelockEnabled = false;
   Future<void>? _mediaStart;
   bool _videoCaptureDesired = false;
-  final _standaloneSessionDemands = <String, ({bool video, bool audio})>{};
-  final _sessionMediaDemands = <String, ({bool video, bool audio})>{};
-  final _sessionMediaTransports = <String, String>{};
-  final _runtimeSessionClients = <String>{};
+  final _sessions = ServerSessionRegistry();
   Uint8List? _latestJpeg;
   int? _lastCameraFrameAtMs;
   int? _lastVideoFrameEncodedAtMs;
@@ -543,7 +542,7 @@ class MimiCamServer {
 
   bool _injectedVideoDemand = false;
   bool _injectedAudioDemand = false;
-  Future<void> _injectedMediaTail = Future<void>.value();
+  final _injectedMediaOperations = SerializedAsyncExecutor();
 
   Future<void> _reconcileInjectedMediaSource(
     ServerMediaSource source, {
@@ -552,12 +551,9 @@ class MimiCamServer {
   }) {
     if (video != null) _injectedVideoDemand = video;
     if (audio != null) _injectedAudioDemand = audio;
-    final operation = _injectedMediaTail.then<void>(
-      (_) => _applyInjectedMediaDemand(source),
-      onError: (_) => _applyInjectedMediaDemand(source),
+    return _injectedMediaOperations.run(
+      () => _applyInjectedMediaDemand(source),
     );
-    _injectedMediaTail = operation.then<void>((_) {}, onError: (_) {});
-    return operation;
   }
 
   Future<void> _applyInjectedMediaDemand(ServerMediaSource source) async {
@@ -1667,17 +1663,21 @@ class MimiCamServer {
     }
     final sessionClientId = startResult.clientId;
     final hadExistingSession = !startResult.createdActiveSlot;
-    final hadRuntimeSession = _runtimeSessionClients.contains(sessionClientId);
-    final previousDemand = _sessionMediaDemands[sessionClientId];
-    final previousTransport = _sessionMediaTransports[sessionClientId];
-    final previousStandaloneDemand = _standaloneSessionDemands[sessionClientId];
+    final previousSession = _sessions.snapshot(sessionClientId);
+    final hadRuntimeSession = previousSession?.runtimeOwned ?? false;
     final sameRuntimeRequest = hadExistingSession &&
-        previousDemand == demand &&
-        previousTransport == mediaTransport;
+        _sessions.requestMatches(
+          sessionClientId,
+          demand: demand,
+          mediaTransport: mediaTransport,
+        );
     var runtimeMutationApplied = false;
     try {
-      _sessionMediaDemands[sessionClientId] = demand;
-      _sessionMediaTransports[sessionClientId] = mediaTransport;
+      _sessions.recordRequest(
+        sessionClientId,
+        demand: demand,
+        mediaTransport: mediaTransport,
+      );
       await _applyMediaProfileForCurrentDemand();
       final callback = onStreamSessionStarted;
       if (callback != null) {
@@ -1690,14 +1690,14 @@ class MimiCamServer {
           );
           runtimeMutationApplied = true;
         }
-        _runtimeSessionClients.add(sessionClientId);
+        _sessions.markRuntimeOwned(sessionClientId, owned: true);
       } else if (startMediaOnSessionStart) {
         if (!sameRuntimeRequest) {
-          _standaloneSessionDemands[sessionClientId] = runtimeDemand;
+          _sessions.setStandaloneDemand(sessionClientId, runtimeDemand);
           await _reconcileStandaloneSessionDemand();
           runtimeMutationApplied = true;
         }
-        _runtimeSessionClients.add(sessionClientId);
+        _sessions.markRuntimeOwned(sessionClientId, owned: true);
       }
       await _writeJson(request.response, {
         'ok': true,
@@ -1712,34 +1712,19 @@ class MimiCamServer {
       });
     } catch (error) {
       if (hadExistingSession) {
-        if (previousDemand == null) {
-          _sessionMediaDemands.remove(sessionClientId);
-        } else {
-          _sessionMediaDemands[sessionClientId] = previousDemand;
-        }
-        if (previousTransport == null) {
-          _sessionMediaTransports.remove(sessionClientId);
-        } else {
-          _sessionMediaTransports[sessionClientId] = previousTransport;
-        }
-        if (previousStandaloneDemand == null) {
-          _standaloneSessionDemands.remove(sessionClientId);
-        } else {
-          _standaloneSessionDemands[sessionClientId] = previousStandaloneDemand;
-        }
+        _sessions.restore(sessionClientId, previousSession);
 
         if (runtimeMutationApplied) {
           try {
             final callback = onStreamSessionStarted;
             if (hadRuntimeSession &&
                 callback != null &&
-                previousDemand != null &&
-                previousTransport != null) {
+                previousSession != null) {
               await callback(
                 sessionClientId,
-                video: previousDemand.video,
-                audio: previousDemand.audio,
-                mediaTransport: previousTransport,
+                video: previousSession.demand.video,
+                audio: previousSession.demand.audio,
+                mediaTransport: previousSession.mediaTransport,
               );
             } else if (hadRuntimeSession && startMediaOnSessionStart) {
               await _reconcileStandaloneSessionDemand();
@@ -1755,11 +1740,6 @@ class MimiCamServer {
             onLog('Session replacement rollback failed: $rollbackError');
           }
         }
-        if (hadRuntimeSession) {
-          _runtimeSessionClients.add(sessionClientId);
-        } else {
-          _runtimeSessionClients.remove(sessionClientId);
-        }
         try {
           await _applyMediaProfileForCurrentDemand();
         } catch (rollbackError) {
@@ -1767,13 +1747,13 @@ class MimiCamServer {
         }
         _activeClientRegistry.rollbackSessionStart(startResult);
       } else if (runtimeMutationApplied) {
-        _runtimeSessionClients.remove(sessionClientId);
+        _sessions.markRuntimeOwned(sessionClientId, owned: false);
         try {
           final callback = onStreamSessionStopped;
           if (callback != null) {
             await callback(sessionClientId);
           } else {
-            _standaloneSessionDemands.remove(sessionClientId);
+            _sessions.setStandaloneDemand(sessionClientId, null);
             await _reconcileStandaloneSessionDemand();
           }
         } catch (rollbackError) {
@@ -1781,9 +1761,7 @@ class MimiCamServer {
         }
       }
       if (!hadExistingSession) {
-        _standaloneSessionDemands.remove(sessionClientId);
-        _sessionMediaDemands.remove(sessionClientId);
-        _sessionMediaTransports.remove(sessionClientId);
+        _sessions.remove(sessionClientId);
         _activeClientRegistry.rollbackSessionStart(startResult);
         try {
           accessSnapshot = await _broadcastAccess?.endSession(
@@ -2059,7 +2037,7 @@ class MimiCamServer {
   void _handleWebRtcPeerLifecycleEvent(WebRtcPeerLifecycleEvent event) {
     if (_disposed) return;
     unawaited(_sessionOperations.run(() async {
-      if (!_runtimeSessionClients.contains(event.clientId) &&
+      if (!_sessions.ownsRuntime(event.clientId) &&
           !_activeClientRegistry.activeClientIds.contains(event.clientId)) {
         return;
       }
@@ -2097,24 +2075,19 @@ class MimiCamServer {
       () => _audioStreamService.closeClient(clientId),
     );
     _activeClientRegistry.stopSession(clientId);
-    _sessionMediaDemands.remove(clientId);
-    _sessionMediaTransports.remove(clientId);
-
-    final ownedRuntimeSession = _runtimeSessionClients.remove(clientId);
+    final session = _sessions.remove(clientId);
+    final ownedRuntimeSession = session?.runtimeOwned ?? false;
     if (ownedRuntimeSession) {
       final callback = onStreamSessionStopped;
       if (callback != null) {
         await cleanup.attempt(
             'media runtime session', () => callback(clientId));
       } else {
-        _standaloneSessionDemands.remove(clientId);
         await cleanup.attempt(
           'standalone media demand',
           _reconcileStandaloneSessionDemand,
         );
       }
-    } else {
-      _standaloneSessionDemands.remove(clientId);
     }
 
     await cleanup.attempt('broadcast access session', () async {
@@ -2283,8 +2256,8 @@ class MimiCamServer {
         audioDemandAvailable: _microphoneCapture.isActive ||
             _audioStreamService.hasClients ||
             _injectedAudioDemand ||
-            _sessionMediaDemands.values.any((value) => value.audio) ||
-            _standaloneSessionDemands.values.any((value) => value.audio),
+            _sessions.requestedDemands.any((value) => value.audio) ||
+            _sessions.standaloneDemands.any((value) => value.audio),
       ),
     );
   }
@@ -2720,8 +2693,8 @@ class MimiCamServer {
   }
 
   Future<void> _reconcileStandaloneSessionDemand() async {
-    final video = _standaloneSessionDemands.values.any((value) => value.video);
-    final audio = _standaloneSessionDemands.values.any((value) => value.audio);
+    final video = _sessions.standaloneDemands.any((value) => value.video);
+    final audio = _sessions.standaloneDemands.any((value) => value.audio);
     if (video) {
       await startVideoRuntime();
     } else {
@@ -3074,10 +3047,7 @@ class MimiCamServer {
     _analysisMetrics?.reset();
     _frameBudget.reset();
     _activeClientRegistry.clear();
-    _runtimeSessionClients.clear();
-    _standaloneSessionDemands.clear();
-    _sessionMediaDemands.clear();
-    _sessionMediaTransports.clear();
+    _sessions.clear();
     await cleanup.attempt('room features', _features.dispose);
     await cleanup.attempt('native playback demand', () async {
       await onPlaybackDemandChanged?.call(false);

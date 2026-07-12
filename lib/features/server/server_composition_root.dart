@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/async/serialized_async_executor.dart';
 import '../../core/feature_flags.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../core/security/transport_config.dart';
@@ -49,10 +50,10 @@ class ServerCompositionRoot {
     const platformContract = PlatformRuntimeContract();
     var nativeMediaDemand = MediaResourceDemand.none;
     var nativePlaybackDemand = false;
-    Future<void> nativeDemandTail = Future<void>.value();
+    final nativeDemandOperations = SerializedAsyncExecutor();
 
     Future<void> publishNativeDemand() {
-      final operation = nativeDemandTail.then<void>((_) async {
+      return nativeDemandOperations.run(() async {
         final demand = nativeMediaDemand;
         final playback = nativePlaybackDemand;
         try {
@@ -68,8 +69,6 @@ class ServerCompositionRoot {
           // Unsupported/test targets intentionally have no native channel.
         }
       });
-      nativeDemandTail = operation.then<void>((_) {}, onError: (_) {});
-      return operation;
     }
 
     Future<void> publishRuntimeDemand(MediaResourceDemand demand) {

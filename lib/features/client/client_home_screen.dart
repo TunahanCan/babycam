@@ -1,13 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../app/app_role.dart';
 import '../../core/network/lan_endpoint.dart';
-import '../../core/protocol/mimicam_protocol.dart';
 import '../../core/protocol/alert_event_dto.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../l10n/app_strings.dart';
@@ -20,6 +17,7 @@ import 'client_runtime.dart';
 import 'media/watch_screen.dart';
 import 'pairing/client_pairing_flow.dart';
 import 'pairing/pairing_failure.dart';
+import 'pairing/pairing_payload_gateway.dart';
 import 'pairing/qr_scan_screen.dart';
 
 class ClientHomeScreen extends StatefulWidget {
@@ -34,6 +32,7 @@ class ClientHomeScreen extends StatefulWidget {
     this.selectedLocale,
     this.onLocaleChanged,
     this.notificationTapStream,
+    this.pairingPayloadGateway = const HttpPairingPayloadGateway(),
   });
 
   final ClientRuntime runtime;
@@ -45,6 +44,7 @@ class ClientHomeScreen extends StatefulWidget {
   final Locale? selectedLocale;
   final ValueChanged<Locale?>? onLocaleChanged;
   final Stream<String>? notificationTapStream;
+  final PairingPayloadGateway pairingPayloadGateway;
 
   @override
   State<ClientHomeScreen> createState() => _ClientHomeScreenState();
@@ -294,7 +294,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
       return;
     }
     try {
-      final payload = await _fetchManualPairingPayload(strings, parsed);
+      final payload = await _fetchManualPairingPayload(parsed);
       await ClientPairingFlow(widget.runtime).pairAndArmAlerts(payload);
       if (!context.mounted) return;
       setState(() => _tab = 0);
@@ -313,7 +313,6 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
     final strings = AppStrings.of(context);
     try {
       final payload = await _fetchManualPairingPayload(
-        strings,
         (host: service.host, port: service.port),
       );
       await ClientPairingFlow(widget.runtime).pairAndArmAlerts(payload);
@@ -337,72 +336,12 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
   }
 
   Future<PairingPayload> _fetchManualPairingPayload(
-      AppStrings strings, ({String host, int port}) address) async {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
-    try {
-      return await _fetchManualPairingPayloadWithClient(
-        strings,
-        address,
-        client: client,
+    ({String host, int port}) address,
+  ) =>
+      widget.pairingPayloadGateway.fetch(
+        host: address.host,
+        port: address.port,
       );
-    } finally {
-      client.close(force: true);
-    }
-  }
-
-  Future<PairingPayload> _fetchManualPairingPayloadWithClient(
-    AppStrings strings,
-    ({String host, int port}) address, {
-    required HttpClient client,
-  }) async {
-    final request = await client
-        .getUrl(
-          Uri(
-            scheme: 'http',
-            host: address.host,
-            port: address.port,
-            path: MimiCamProtocolV2.statusPublic,
-          ),
-        )
-        .timeout(const Duration(seconds: 5));
-    final response = await request.close().timeout(const Duration(seconds: 5));
-    if (response.statusCode != HttpStatus.ok) {
-      throw StateError(
-          strings.uiFormat('serverNotFound', {'code': response.statusCode}));
-    }
-    final body = await utf8.decoder
-        .bind(response)
-        .join()
-        .timeout(const Duration(seconds: 5));
-    final json = jsonDecode(body);
-    if (json is! Map) {
-      throw StateError(strings.ui('invalidServerResponse'));
-    }
-    final nonce = json['pairingNonce']?.toString();
-    if (nonce == null || nonce.isEmpty) {
-      throw StateError(strings.ui('missingPairingNonce'));
-    }
-    final capabilities = json['capabilities'] is Map
-        ? Map<String, Object?>.from(json['capabilities'] as Map)
-        : <String, Object?>{
-            'video': 'mjpeg',
-            'audio': 'pcm16le',
-            'events': 'json',
-            'maxClients': 5,
-          };
-    return PairingPayload(
-      schemaVersion: MimiCamProtocolV2.schemaVersion,
-      host: address.host,
-      port: address.port,
-      deviceId: json['serverDeviceId']?.toString() ?? 'manual_server',
-      deviceName: json['serverName']?.toString() ?? 'Manual IP Server',
-      pairingNonce: nonce,
-      expiresAtMs:
-          DateTime.now().add(const Duration(minutes: 2)).millisecondsSinceEpoch,
-      transport: json['transport']?.toString() ?? 'http_ws',
-      capabilities: capabilities,
-    );
-  }
 
   ({String host, int port})? _parseManualAddress(String value) {
     final endpoint = LanEndpoint.parse(value);

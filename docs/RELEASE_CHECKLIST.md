@@ -1,0 +1,84 @@
+# MimiCam Production Release Checklist
+
+Bu belge mağaza yüklemesinden önce tamamlanması gereken teknik ve operasyonel
+kapıları tanımlar.
+
+## Otomatik kapılar
+
+Her pull request ve `master/main` güncellemesinde GitHub Actions şunları
+çalıştırır:
+
+1. `dart format --output=none --set-exit-if-changed lib test`
+2. `flutter analyze`
+3. `flutter test`
+4. `flutter build appbundle --release`
+5. `flutter build ios --release --no-codesign`
+
+Yerel iOS release doğrulaması:
+
+```bash
+/Users/tunahan.can/flutter_develop/flutter/bin/flutter build ios \
+  --release --no-codesign
+```
+
+## Yayın kimliği
+
+- Android `applicationId/namespace`, Kotlin paket yolları ve iOS
+  `PRODUCT_BUNDLE_IDENTIFIER` production kimliği olarak `com.mimicam.app`
+  kullanır.
+- Kimlik ilk Google Play veya App Store kaydından sonra değiştirilmemelidir.
+- Her yüklemede `pubspec.yaml` içindeki build number artırılmalıdır.
+
+## İmzalama
+
+Android için `android/key.properties.example`, `android/key.properties` olarak
+kopyalanır ve gerçek upload key bilgileri girilir. Key ve parola dosyaları git'e
+eklenmez. Google Play App Signing etkinleştirilmeli ve upload key güvenli bir
+parola kasasında yedeklenmelidir.
+
+iOS için Apple Developer Team, App ID, Distribution Certificate ve App Store
+provisioning profile Xcode/App Store Connect üzerinde yapılandırılmalıdır.
+
+## Mağaza ve politika
+
+- Gizlilik politikası HTTPS üzerinden yayınlanmalı, URL hem mağaza metadata'sına
+  hem uygulamanın Ayarlar/Hakkında alanına eklenmelidir. `PRIVACY.md` yayınlanacak
+  metnin kaynak taslağıdır.
+- Kamera ve mikrofon kullanılırken uygulama görünür durum ve sistem gizlilik
+  göstergelerini korumalıdır.
+- Android foreground service türleri Play Console App Content alanında kamera,
+  mikrofon, medya oynatma ve bağlı cihaz kullanım amacıyla beyan edilmelidir.
+- Google Play Data Safety ve Apple App Privacy cevapları gerçek release
+  konfigürasyonuyla eşleşmelidir.
+- iOS server modunda kamera arka planda devam edemez. Arka plan audio modu kamera
+  kısıtını aşmak için kullanılmamalı; mağaza açıklaması bu platform sınırını açık
+  söylemelidir.
+
+## Opsiyonel satın alma
+
+Yayın kilidi etkinleştirilecekse iki define birlikte verilmelidir:
+
+```bash
+--dart-define=MIMICAM_BROADCAST_PAYWALL_ENABLED=true
+--dart-define=MIMICAM_PURCHASE_VERIFIER_URL=https://example.com/verify
+```
+
+Store product ID, fiyat ve trusted backend doğrulaması production değerleriyle
+hazır değilse paywall kapalı bırakılmalıdır.
+
+## Cihaz kabul testi
+
+- En az bir güncel ve bir eski desteklenen iPhone/iPad.
+- Android 13, 14, 15 ve 16 üzerinde gerçek cihaz testi.
+- Ekran kilidi, Wi-Fi internet yok, Wi-Fi değişimi ve zayıf sinyal senaryoları.
+- Aynı Client'ın tekrarlı bağlanması, ses aç/kapat ve uygulama rol değişimi.
+- Kamera/mikrofon/bildirim izni reddetme ve Ayarlar'dan sonradan açma.
+- 30 dakika kesintisiz yayın, termal yük ve pil tüketimi kaydı.
+
+## Dış bağımlı blockerlar
+
+- Production bundle/application ID kararı.
+- Apple Developer Team ve Google Play Console sahipliği.
+- Android upload key ve iOS dağıtım sertifikaları.
+- HTTPS gizlilik/support URL'si ve destek e-postası.
+- Paywall açılacaksa mağaza ürünleri ve trusted verifier backend'i.

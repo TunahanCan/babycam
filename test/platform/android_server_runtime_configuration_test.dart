@@ -5,10 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('Android LAN server owns an independent foreground-service lease', () {
     final activity = File(
-      'android/app/src/main/kotlin/com/example/mimicam/MainActivity.kt',
+      'android/app/src/main/kotlin/com/mimicam/app/MainActivity.kt',
     ).readAsStringSync();
     final service = File(
-      'android/app/src/main/kotlin/com/example/mimicam/'
+      'android/app/src/main/kotlin/com/mimicam/app/'
       'MimiCamForegroundService.kt',
     ).readAsStringSync();
     final manifest =

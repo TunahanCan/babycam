@@ -254,6 +254,54 @@ void main() {
     expect(snapshot.skippedAudioChunks, 1);
     expect(snapshot.lastAudioChunkAtMs, 1000);
   });
+
+  test('ses ac kapa video baglantisini yeniden baslatmaz', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final release = Completer<void>();
+    addTearDown(() async {
+      if (!release.isCompleted) release.complete();
+      await server.close(force: true);
+    });
+    var videoRequests = 0;
+    server.listen((request) async {
+      videoRequests++;
+      request.response.headers.set(
+        HttpHeaders.contentTypeHeader,
+        'multipart/x-mixed-replace; boundary=frame',
+      );
+      request.response.add(
+        '--frame\r\nContent-Length: 0\r\n\r\n\r\n'.codeUnits,
+      );
+      await request.response.flush();
+      await release.future;
+    });
+    final pipelines = <_ControlledAudioPipeline>[];
+    final supervisor = ClientMediaStreamSupervisor(
+      session: _session(server.port),
+      activeStream: const ActiveStreamSession(streamToken: 'stream'),
+      audioEnabled: true,
+      onVideoFrame: (_) {},
+      audioPipelineFactory: (audioOutput) {
+        final pipeline = _ControlledAudioPipeline(audioOutput);
+        pipelines.add(pipeline);
+        return pipeline;
+      },
+    );
+    addTearDown(supervisor.stop);
+
+    await supervisor.start();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(videoRequests, 1);
+    expect(pipelines, hasLength(1));
+
+    await supervisor.setAudioEnabled(false);
+    expect(pipelines.single.stopCount, 1);
+    expect(videoRequests, 1);
+
+    await supervisor.setAudioEnabled(true);
+    expect(pipelines, hasLength(2));
+    expect(videoRequests, 1);
+  });
 }
 
 class _ControlledAudioPipeline extends ClientLiveAudioPipeline {
@@ -262,6 +310,7 @@ class _ControlledAudioPipeline extends ClientLiveAudioPipeline {
 
   VoidCallback? _onAudioChunkWritten;
   ValueChanged<ClientLiveAudioStatus>? _onStatus;
+  int stopCount = 0;
 
   @override
   Future<void> start({
@@ -279,7 +328,7 @@ class _ControlledAudioPipeline extends ClientLiveAudioPipeline {
   }
 
   @override
-  Future<void> stop() async {}
+  Future<void> stop() async => stopCount++;
 
   void emitAudioChunk() => _onAudioChunkWritten?.call();
 

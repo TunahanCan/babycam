@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import '../../app/app_runtime.dart';
+import '../../core/async/serialized_async_executor.dart';
 import '../../core/media/adaptive_media_profile.dart';
 import '../../services/monetization/broadcast_access_service.dart';
 import '../../services/platform/platform_runtime_contract.dart';
@@ -85,7 +87,7 @@ class StreamSessionOptions {
   int get hashCode => Object.hash(video, audio, transport);
 }
 
-class ServerRuntime {
+class ServerRuntime implements AppRuntime {
   ServerRuntime({
     required MediaRuntimeController mediaRuntime,
     Future<String> Function()? onStartPairing,
@@ -136,8 +138,8 @@ class ServerRuntime {
       const ServerRuntimeState(phase: ServerRuntimePhase.stopped);
   Timer? _broadcastAccessTimer;
   int _broadcastAccessTimerGeneration = 0;
-  Future<void> _mutationTail = Future<void>.value();
-  Future<void> _pairingMutationTail = Future<void>.value();
+  final _mutations = SerializedAsyncExecutor();
+  final _pairingMutations = SerializedAsyncExecutor();
   bool _disposed = false;
   bool _platformAudioOnly = false;
 
@@ -811,25 +813,14 @@ class ServerRuntime {
   }
 
   Future<void> _serializeMutation(Future<void> Function() operation) {
-    final next = _mutationTail.then<void>(
-      (_) => operation(),
-      onError: (_) => operation(),
-    );
-    // Callers still receive their own failure, while a rejected mutation does
-    // not poison later stop/recovery work.
-    _mutationTail = next.then<void>((_) {}, onError: (_) {});
-    return next;
+    return _mutations.run(operation);
   }
 
   Future<void> _serializePairingMutation(Future<void> Function() operation) {
-    final next = _pairingMutationTail.then<void>(
-      (_) => operation(),
-      onError: (_) => operation(),
-    );
-    _pairingMutationTail = next.then<void>((_) {}, onError: (_) {});
-    return next;
+    return _pairingMutations.run(operation);
   }
 
+  @override
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;

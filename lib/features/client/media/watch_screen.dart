@@ -115,13 +115,7 @@ class _WatchScreenState extends State<WatchScreen> {
   void _toggleAudio() {
     final next = !_audioEnabled;
     setState(() => _audioEnabled = next);
-    if (widget.runtime.currentState.activeStream != null) {
-      unawaited(
-        _restartLiveWatch(audioEnabled: next).catchError(
-          (Object error) => widget.runtime.reportStreamFailure(error),
-        ),
-      );
-    } else if (next) {
+    if (widget.runtime.currentState.activeStream == null && next) {
       _startLiveWatch();
     }
   }
@@ -1179,8 +1173,11 @@ class _StreamSurfaceState extends State<_StreamSurface> {
         ? null
         : '${session.httpScheme}://${session.host}:${session.port}'
             '|${session.sessionToken}|${activeStream.streamToken}'
-            '|${widget.audioEnabled}|${activeStream.transport.name}';
-    if (nextKey == _streamKey) return;
+            '|${activeStream.transport.name}';
+    if (nextKey == _streamKey) {
+      _updateAudioPlayback(activeStream);
+      return;
+    }
     _streamKey = nextKey;
     final previous = _supervisor;
     _supervisor = null;
@@ -1196,10 +1193,7 @@ class _StreamSurfaceState extends State<_StreamSurface> {
     }
     if (activeStream.usesWebRtc) {
       final handle = activeStream.webRtc!;
-      if (handle is WebRtcClientAudioController) {
-        final audioController = handle as WebRtcClientAudioController;
-        unawaited(audioController.setAudioEnabled(widget.audioEnabled));
-      }
+      _updateAudioPlayback(activeStream);
       late final WebRtcClientMediaSupervisor supervisor;
       supervisor = WebRtcClientMediaSupervisor(
         handle: handle,
@@ -1258,6 +1252,32 @@ class _StreamSurfaceState extends State<_StreamSurface> {
       widget.onFatalError(error);
     }));
     if (mounted) setState(() {});
+  }
+
+  void _updateAudioPlayback(ActiveStreamSession? activeStream) {
+    if (activeStream?.usesWebRtc == true) {
+      widget.streamHealthState?.setAudioExpected(
+        widget.audioEnabled && (activeStream?.audioEnabled ?? false),
+      );
+      final handle = activeStream?.webRtc;
+      if (handle is WebRtcClientAudioController) {
+        final audioController = handle as WebRtcClientAudioController;
+        unawaited(
+          audioController
+              .setAudioEnabled(widget.audioEnabled)
+              .catchError((Object _) {}),
+        );
+      }
+      return;
+    }
+    final supervisor = _supervisor;
+    if (supervisor != null) {
+      unawaited(
+        supervisor
+            .setAudioEnabled(widget.audioEnabled)
+            .catchError((Object _) {}),
+      );
+    }
   }
 }
 

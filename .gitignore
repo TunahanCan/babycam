@@ -16,6 +16,9 @@ build/
 android/.gradle/
 android/.kotlin/
 android/local.properties
+android/key.properties
+*.jks
+*.keystore
 android/app/src/main/java/io/flutter/plugins/
 *.hprof
 

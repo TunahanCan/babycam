@@ -1,4 +1,4 @@
-package com.example.mimicam
+package com.mimicam.app
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -389,9 +389,9 @@ class MimiCamForegroundService : LifecycleService() {
         cameraDemand || microphoneDemand || playbackDemand
 
     companion object {
-        private const val ACTION_START = "com.example.mimicam.action.START_SERVER"
-        private const val ACTION_UPDATE = "com.example.mimicam.action.UPDATE_SERVER"
-        private const val ACTION_STOP = "com.example.mimicam.action.STOP_SERVER"
+        private const val ACTION_START = "com.mimicam.app.action.START_SERVER"
+        private const val ACTION_UPDATE = "com.mimicam.app.action.UPDATE_SERVER"
+        private const val ACTION_STOP = "com.mimicam.app.action.STOP_SERVER"
         private const val EXTRA_CAMERA = "camera"
         private const val EXTRA_MICROPHONE = "microphone"
         private const val EXTRA_PLAYBACK = "playback"

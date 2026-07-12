@@ -142,6 +142,7 @@ class ClientStreamHealthState {
   final _audioSkipEvents = <({int atMs, int count})>[];
   var _streamTimedOut = false;
   var _audioUnderrun = false;
+  var _audioExpected = true;
   var _watchActive = false;
   Map<String, Object?> _audioPipeline = const {};
   Map<String, Object?> _transportTelemetry = const {};
@@ -163,8 +164,10 @@ class ClientStreamHealthState {
       _watchStartedAtMs ??= _nowMs();
     } else {
       _watchStartedAtMs = null;
+      _lastAudioChunkAtMs = null;
       _streamTimedOut = false;
       _audioUnderrun = false;
+      _audioExpected = false;
       _audioPipeline = const {};
       _transportTelemetry = const {};
       _resetAudioDropTracking();
@@ -205,6 +208,15 @@ class ClientStreamHealthState {
     _audioUnderrun = false;
   }
 
+  void setAudioExpected(bool expected) {
+    if (_audioExpected == expected) return;
+    _audioExpected = expected;
+    _lastAudioChunkAtMs = null;
+    _audioUnderrun = false;
+    _audioPipeline = const {};
+    _resetAudioDropTracking();
+  }
+
   void markWsConnected() {}
 
   void markWsDisconnected() {
@@ -222,7 +234,7 @@ class ClientStreamHealthState {
   }
 
   void markAudioUnderrun() {
-    _audioUnderrun = true;
+    if (_audioExpected) _audioUnderrun = true;
   }
 
   void updateAudioPipelineStatus(Map<String, Object?> status) {
@@ -260,8 +272,9 @@ class ClientStreamHealthState {
       lastEventAtMs: _lastVideoFrameAtMs,
       fallbackStartedAtMs: _watchStartedAtMs,
     );
-    final audioGapMs =
-        _lastAudioChunkAtMs == null ? null : nowMs - _lastAudioChunkAtMs!;
+    final audioGapMs = !_audioExpected || _lastAudioChunkAtMs == null
+        ? null
+        : nowMs - _lastAudioChunkAtMs!;
     final streamTimedOut =
         _streamTimedOut || _atLeast(videoGapMs, videoCriticalGap);
     final audioUnderrun =
@@ -315,6 +328,7 @@ class ClientStreamHealthState {
     _audioSkipEvents.clear();
     _streamTimedOut = false;
     _audioUnderrun = false;
+    _audioExpected = true;
     _audioPipeline = const {};
     _transportTelemetry = const {};
     _resetAudioDropTracking();

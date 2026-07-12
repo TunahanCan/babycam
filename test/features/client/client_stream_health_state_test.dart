@@ -70,6 +70,25 @@ void main() {
     expect(snapshot.audioGapMs, 0);
   });
 
+  test('mute edilen audio eski gap nedeniyle underrun üretmez', () {
+    var nowMs = 1000;
+    final state = ClientStreamHealthState(nowMs: () => nowMs)
+      ..resetForNewWatchSession()
+      ..markAudioChunkReceived();
+
+    state.setAudioExpected(false);
+    nowMs += 5000;
+
+    final muted = state.snapshot();
+    expect(muted.audioGapMs, isNull);
+    expect(muted.audioUnderrun, isFalse);
+
+    state.setAudioExpected(true);
+    final enabledAgain = state.snapshot();
+    expect(enabledAgain.audioGapMs, isNull);
+    expect(enabledAgain.audioUnderrun, isFalse);
+  });
+
   test('ws disconnect sayaç artırır', () {
     final state = ClientStreamHealthState(nowMs: () => 1000)
       ..resetForNewWatchSession();

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 import '../../analysis/video/luma_frame.dart';
+import '../../core/async/serialized_async_executor.dart';
 import '../../features/server/media/server_media_source.dart';
 
 /// Testable port around the Android service-owned media platform channels.
@@ -161,7 +162,7 @@ class AndroidServiceMediaSource extends ServerMediaSource
       StreamController<Uint8List>.broadcast(sync: true);
   final StreamController<LumaFrame> _lumaFrames =
       StreamController<LumaFrame>.broadcast(sync: true);
-  Future<void> _tail = Future<void>.value();
+  final _operations = SerializedAsyncExecutor();
   ServerVideoFrameSink? _videoSink;
   ServerAudioChunkSink? _audioSink;
   ServerMediaErrorSink? _errorSink;
@@ -216,12 +217,7 @@ class AndroidServiceMediaSource extends ServerMediaSource
   }) {
     final quality = jpegQuality.clamp(35, this.jpegQuality).toInt();
     final fps = maxVideoFps.clamp(1, this.maxVideoFps).toInt();
-    final operation = _tail.then<void>(
-      (_) => _applyMediaPolicy(quality, fps),
-      onError: (_) => _applyMediaPolicy(quality, fps),
-    );
-    _tail = operation.then<void>((_) {}, onError: (_) {});
-    return operation;
+    return _operations.run(() => _applyMediaPolicy(quality, fps));
   }
 
   Future<void> _applyMediaPolicy(int jpegQuality, int maxVideoFps) async {
@@ -243,15 +239,8 @@ class AndroidServiceMediaSource extends ServerMediaSource
     required ServerAudioChunkSink onAudioChunk,
     ServerMediaErrorSink? onError,
   }) {
-    final operation = _tail.then<void>(
-      (_) => _applyDemand(
-        video: video,
-        audio: audio,
-        onVideoFrame: onVideoFrame,
-        onAudioChunk: onAudioChunk,
-        onError: onError,
-      ),
-      onError: (_) => _applyDemand(
+    return _operations.run(
+      () => _applyDemand(
         video: video,
         audio: audio,
         onVideoFrame: onVideoFrame,
@@ -259,18 +248,11 @@ class AndroidServiceMediaSource extends ServerMediaSource
         onError: onError,
       ),
     );
-    _tail = operation.then<void>((_) {}, onError: (_) {});
-    return operation;
   }
 
   @override
   Future<void> stop() {
-    final operation = _tail.then<void>(
-      (_) => _stopConsumer(),
-      onError: (_) => _stopConsumer(),
-    );
-    _tail = operation.then<void>((_) {}, onError: (_) {});
-    return operation;
+    return _operations.run(_stopConsumer);
   }
 
   @override

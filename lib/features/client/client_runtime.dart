@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import '../../app/app_runtime.dart';
+import '../../core/async/serialized_async_executor.dart';
 import '../../core/media/adaptive_media_profile.dart';
 import '../../core/protocol/alert_event_dto.dart';
 import '../../core/protocol/pairing_payload.dart';
@@ -48,7 +50,7 @@ enum ClientRuntimePhase {
   error,
 }
 
-class ClientRuntime {
+class ClientRuntime implements AppRuntime {
   ClientRuntime({
     required Future<PairingSession> Function(PairingPayload payload) pair,
     Future<PairingSession?> Function(PairingSession session)? renew,
@@ -121,8 +123,8 @@ class ClientRuntime {
   Timer? _broadcastAccessTimer;
   PairingSession? _activeStreamOwnerSession;
   Future<void>? _pairingOperation;
-  Future<void> _watchTail = Future<void>.value();
-  Future<void> _endpointRebindTail = Future<void>.value();
+  final _watchOperations = SerializedAsyncExecutor();
+  final _endpointRebindOperations = SerializedAsyncExecutor();
   int _endpointGeneration = 0;
   int _broadcastAccessTimerGeneration = 0;
   int _watchPresentationGeneration = 0;
@@ -646,6 +648,7 @@ class ClientRuntime {
     ));
   }
 
+  @override
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
@@ -662,7 +665,7 @@ class ClientRuntime {
       }
     }
 
-    await attempt(() => _watchTail);
+    await attempt(_watchOperations.drain);
     await attempt(() async => _networkQualitySubscription?.cancel());
     await attempt(() async => _alertConnectionSubscription?.cancel());
     await attempt(_cancelEndpointResolution);
@@ -718,20 +721,23 @@ class ClientRuntime {
     final previous = _endpointSubscription;
     _endpointSubscription = null;
     await previous?.cancel();
-    await _endpointRebindTail;
+    await _endpointRebindOperations.drain();
     if (_disposed || generation != _endpointGeneration) return;
     try {
       _endpointSubscription = watch(session).listen(
         (rebound) {
-          final operation = _endpointRebindTail.then<void>(
-            (_) => _enqueueWatch(
-              () => _applyEndpointRebind(generation, rebound),
-            ),
-            onError: (_) => _enqueueWatch(
-              () => _applyEndpointRebind(generation, rebound),
-            ),
+          unawaited(
+            _endpointRebindOperations
+                .run(
+              () => _enqueueWatch(
+                () => _applyEndpointRebind(generation, rebound),
+              ),
+            )
+                .catchError((_) {
+              // Discovery rebinding remains advisory. A later endpoint update
+              // must still be allowed through the serialized executor.
+            }),
           );
-          _endpointRebindTail = operation.then<void>((_) {}, onError: (_) {});
         },
         onError: (Object _) {},
       );
@@ -745,7 +751,7 @@ class ClientRuntime {
     final subscription = _endpointSubscription;
     _endpointSubscription = null;
     await subscription?.cancel();
-    await _endpointRebindTail;
+    await _endpointRebindOperations.drain();
   }
 
   Future<void> _applyEndpointRebind(
@@ -905,11 +911,6 @@ class ClientRuntime {
   }
 
   Future<void> _enqueueWatch(Future<void> Function() operation) {
-    final next = _watchTail.then<void>(
-      (_) => operation(),
-      onError: (_) => operation(),
-    );
-    _watchTail = next.then<void>((_) {}, onError: (_) {});
-    return next;
+    return _watchOperations.run(operation);
   }
 }

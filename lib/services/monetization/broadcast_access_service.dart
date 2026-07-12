@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/async/serialized_async_executor.dart';
 import 'purchase_verification.dart';
 
 export 'purchase_verification.dart';
@@ -317,7 +318,7 @@ class InAppBroadcastPurchaseGateway
   final _offers = <String, ProductDetails>{};
   StreamSubscription<List<PurchaseDetails>>? _subscription;
   Completer<BroadcastPurchaseResult>? _active;
-  Future<void> _eventTail = Future<void>.value();
+  final _events = SerializedAsyncExecutor();
   Future<BroadcastProductOffer?>? _offerLoad;
   bool _disposed = false;
 
@@ -466,23 +467,17 @@ class InAppBroadcastPurchaseGateway
       );
 
   void _enqueuePurchases(List<PurchaseDetails> purchases) {
-    _eventTail = _eventTail.then<void>(
-      (_) => _handlePurchases(purchases),
-      onError: (_) => _handlePurchases(purchases),
-    );
+    unawaited(
+        _events.run(() => _handlePurchases(purchases)).catchError((_) {}));
   }
 
   void _enqueueStreamError(Object error) {
-    _eventTail = _eventTail.then<void>(
-      (_) async => _publishAndComplete(BroadcastPurchaseResult(
+    unawaited(_events.run(() async {
+      _publishAndComplete(BroadcastPurchaseResult(
         status: BroadcastPurchaseStatus.error,
         message: 'Purchase stream failed: $error',
-      )),
-      onError: (_) async => _publishAndComplete(BroadcastPurchaseResult(
-        status: BroadcastPurchaseStatus.error,
-        message: 'Purchase stream failed: $error',
-      )),
-    );
+      ));
+    }).catchError((_) {}));
   }
 
   Future<void> _handlePurchases(List<PurchaseDetails> purchases) async {
@@ -597,7 +592,7 @@ class InAppBroadcastPurchaseGateway
     if (active != null && !active.isCompleted) active.complete(_disposedResult);
     await _subscription?.cancel();
     _subscription = null;
-    await _eventTail.catchError((_) {});
+    await _events.drain();
     await _updates.close();
   }
 
@@ -684,7 +679,7 @@ class BroadcastAccessService {
   late final Future<void> _initialization;
   late final StreamSubscription<BroadcastPurchaseResult> _purchaseUpdates;
   late final Future<void> _offerLoad;
-  Future<void> _mutationTail = Future<void>.value();
+  final _mutations = SerializedAsyncExecutor();
   Timer? _checkpointTimer;
   int? _activeStartedAtMonoMs;
   String? _localizedPriceLabel;
@@ -697,7 +692,7 @@ class BroadcastAccessService {
   Future<BroadcastAccessSnapshot> snapshot() async {
     await _initialization;
     await _offerLoad;
-    await _mutationTail;
+    await _mutations.drain();
     return _snapshot();
   }
 
@@ -958,12 +953,7 @@ class BroadcastAccessService {
   }
 
   Future<T> _serialize<T>(Future<T> Function() operation) {
-    final next = _mutationTail.then<T>(
-      (_) => operation(),
-      onError: (_) => operation(),
-    );
-    _mutationTail = next.then<void>((_) {}, onError: (_) {});
-    return next;
+    return _mutations.run(operation);
   }
 
   int _nowMs() => _now().millisecondsSinceEpoch;

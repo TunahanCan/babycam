@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 
+import '../../core/async/serialized_async_executor.dart';
 import '../platform/pcm_audio_output.dart';
 
 enum RoomAudioMode { idle, comfort, talk }
@@ -25,7 +26,7 @@ class RoomAudioCoordinator {
   final Duration frameDuration;
   FutureOr<void> Function(bool active)? _onOutputDemandChanged;
 
-  Future<void> _operations = Future<void>.value();
+  final _operations = SerializedAsyncExecutor();
   Timer? _comfortTimer;
   RoomAudioMode _mode = RoomAudioMode.idle;
   String? _comfortTrackId;
@@ -309,14 +310,7 @@ class RoomAudioCoordinator {
       }
     }
 
-    final next = _operations.then<void>(
-      (_) => run(),
-      onError: (_) => run(),
-    );
-    // A failed native start/write must reach its caller, but must not poison
-    // the serialized lifecycle queue. Later stop/retry commands still run.
-    _operations = next.then<void>((_) {}, onError: (_) {});
-    return next;
+    return _operations.run(run);
   }
 }
 

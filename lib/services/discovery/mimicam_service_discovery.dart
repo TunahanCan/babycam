@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:nsd/nsd.dart' as nsd;
 
+import '../../core/async/serialized_async_executor.dart';
 import '../../core/network/lan_endpoint.dart';
 import '../../core/network/retry_policy.dart';
 import '../network_address_provider.dart';
@@ -90,7 +91,7 @@ class MimiCamServiceAdvertiser {
   final RetryPolicy _retryPolicy;
   final int maxAttempts;
   nsd.Registration? _registration;
-  Future<void> _operations = Future<void>.value();
+  final _operations = SerializedAsyncExecutor();
   _AdvertisementSpec? _activeSpec;
   bool _disposed = false;
 
@@ -165,10 +166,7 @@ class MimiCamServiceAdvertiser {
   }
 
   Future<void> _serialize(Future<void> Function() operation) {
-    final next =
-        _operations.then((_) => operation(), onError: (_) => operation());
-    _operations = next.then<void>((_) {}, onError: (_) {});
-    return next;
+    return _operations.run(operation);
   }
 
   static Uint8List _bytes(String value) =>
@@ -236,7 +234,7 @@ class MimiCamServiceBrowser {
   final _servicesByInstance = <String, MimiCamDiscoveredService>{};
   final _canonicalKeysByInstance = <String, String>{};
   final _updates = StreamController<List<MimiCamDiscoveredService>>.broadcast();
-  Future<void> _operations = Future<void>.value();
+  final _operations = SerializedAsyncExecutor();
   nsd.Discovery? _discovery;
   nsd.ServiceListener? _listener;
   Object? _lastError;
@@ -427,12 +425,7 @@ class MimiCamServiceBrowser {
       );
 
   Future<void> _serialize(Future<void> Function() operation) {
-    final next = _operations.then(
-      (_) => operation(),
-      onError: (_) => operation(),
-    );
-    _operations = next.then<void>((_) {}, onError: (_) {});
-    return next;
+    return _operations.run(operation);
   }
 
   static String _instanceKey(nsd.Service service) =>

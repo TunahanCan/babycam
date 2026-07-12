@@ -223,6 +223,8 @@ flutter run \
 ## Dokümantasyon
 
 - [Güncel mimari ve runtime sözleşmesi](ARCHITECT.md)
+- [Production release checklist](docs/RELEASE_CHECKLIST.md)
+- [Gizlilik bildirimi taslağı](PRIVACY.md)
 - [Çok dilli ekran görüntüleri ve use-case raporu](docs/reports/mimicam_cok_dilli_ekranlar_usecase_raporu.pdf)
 
 ---
