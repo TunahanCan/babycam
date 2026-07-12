@@ -137,9 +137,13 @@ class ClientCompositionRoot {
       roomControls: roomControls,
       serviceBrowser: serviceBrowser,
     );
-    unawaited(runtime.loadAlertHistory());
+    unawaited(runtime.loadAlertHistory().catchError((Object error) {
+      runtime.reportStartupFailure(error);
+    }));
     unawaited(runtime.startDiscovery().catchError((_) {}));
-    unawaited(_restoreSavedSession(runtime, store));
+    unawaited(_restoreSavedSession(runtime, store).catchError((Object error) {
+      runtime.reportStartupFailure(error);
+    }));
     return runtime;
   }
 

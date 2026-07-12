@@ -24,9 +24,14 @@ import 'role_resolver.dart';
 import 'role_switch_transaction.dart';
 
 class AppBootstrap extends StatefulWidget {
-  const AppBootstrap({super.key, this.onLocaleChanged});
+  const AppBootstrap({
+    super.key,
+    this.onLocaleChanged,
+    this.preferencesLoader,
+  });
 
   final ValueChanged<Locale?>? onLocaleChanged;
+  final Future<SharedPreferences> Function()? preferencesLoader;
 
   @override
   State<AppBootstrap> createState() => _AppBootstrapState();
@@ -38,6 +43,8 @@ class _AppBootstrapState extends State<AppBootstrap> {
   AppRole? _role;
   AppRuntime? _runtime;
   bool _loaded = false;
+  bool _loading = true;
+  Object? _loadError;
   bool _switchingRole = false;
   int _roleSwitchGeneration = 0;
   final _permissionCoordinator = const RolePermissionCoordinator();
@@ -46,22 +53,48 @@ class _AppBootstrapState extends State<AppBootstrap> {
   @override
   void initState() {
     super.initState();
-    _load();
+    unawaited(_load());
   }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    await const InstallIntegrityGuard().prepare(prefs);
-    final roles = SharedPreferencesRoleRepository(prefs);
-    final role = await RoleResolver(roles).resolve();
-    if (!mounted) return;
-    widget.onLocaleChanged?.call(ClientPreferencesService(prefs).locale);
-    setState(() {
-      _prefs = prefs;
-      _roles = roles;
-      _role = role;
-      _loaded = true;
-    });
+    if (!_loading && mounted) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
+    try {
+      final prefs = await (widget.preferencesLoader?.call() ??
+          SharedPreferences.getInstance());
+      await const InstallIntegrityGuard().prepare(prefs);
+      final roles = SharedPreferencesRoleRepository(prefs);
+      final role = await RoleResolver(roles).resolve();
+      if (!mounted) return;
+      widget.onLocaleChanged?.call(ClientPreferencesService(prefs).locale);
+      setState(() {
+        _prefs = prefs;
+        _roles = roles;
+        _role = role;
+        _loaded = true;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'MimiCam bootstrap',
+          context: ErrorDescription('while loading application state'),
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _loaded = false;
+        _loading = false;
+        _loadError = error;
+      });
+    }
   }
 
   Future<void> _select(AppRole role) async {
@@ -188,7 +221,10 @@ class _AppBootstrapState extends State<AppBootstrap> {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    if (!_loaded) {
+    if (_loadError != null) {
+      return _BootstrapError(onRetry: () => unawaited(_load()));
+    }
+    if (_loading || !_loaded) {
       return _BootstrapProgress(message: strings.ui('bootstrapPreparing'));
     }
     if (_switchingRole) {
@@ -226,6 +262,55 @@ class _AppBootstrapState extends State<AppBootstrap> {
           child: RoleSelectionScreen(onRoleSelected: _select),
         ),
     };
+  }
+}
+
+class _BootstrapError extends StatelessWidget {
+  const _BootstrapError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    return Theme(
+      data: MimiCamTheme.neutralTheme(),
+      child: Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.sync_problem_rounded, size: 54),
+                  const SizedBox(height: 18),
+                  Text(
+                    strings.ui('bootstrapFailedTitle'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 23,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    strings.ui('bootstrapFailedText'),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 22),
+                  FilledButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: Text(strings.ui('tryAgain')),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

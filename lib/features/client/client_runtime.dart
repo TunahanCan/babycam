@@ -187,6 +187,14 @@ class ClientRuntime implements AppRuntime {
   Future<void> loadAlertHistory() => alertHistory.load();
   Future<void> clearAlertHistory() => alertHistory.clear();
 
+  void reportStartupFailure(Object error) {
+    if (_disposed) return;
+    _emit(_copyState(
+      phase: _state.session == null ? ClientRuntimePhase.error : _state.phase,
+      error: error,
+    ));
+  }
+
   Future<void> refreshBroadcastAccess() async {
     final access = _broadcastAccess;
     if (access == null || _disposed) return;

@@ -51,6 +51,17 @@ class TrustedClientLimitException implements Exception {
   String toString() => '$code: $userMessage';
 }
 
+class TrustedClientPersistenceException implements Exception {
+  const TrustedClientPersistenceException(this.cause);
+
+  final Object cause;
+
+  static const code = 'TRUSTED_CLIENT_PERSISTENCE_FAILED';
+
+  @override
+  String toString() => '$code: $cause';
+}
+
 class PairingTokenService {
   PairingTokenService(
       {DateTime Function()? now,
@@ -301,7 +312,11 @@ class PairingTokenService {
     _streamTokens.clear();
   }
 
-  Future<void> flushPersistence() => _persistenceQueue;
+  Future<void> flushPersistence() async {
+    await _persistenceQueue;
+    final error = _lastPersistenceError;
+    if (error != null) throw TrustedClientPersistenceException(error);
+  }
 
   void _persistTrustedClients() {
     final snapshot = List<TrustedClientRecord>.of(

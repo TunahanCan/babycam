@@ -97,17 +97,23 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
 
   Future<void> _persistSettings(Future<void> Function() save) async {
     setState(() => _savingSettings = true);
-    await save();
-    await widget.runtime.reloadAnalysisSettings();
-    if (mounted) setState(() => _savingSettings = false);
+    try {
+      await save();
+      await widget.runtime.reloadAnalysisSettings();
+    } finally {
+      if (mounted) setState(() => _savingSettings = false);
+    }
   }
 
   Future<void> _resetSettings() async {
     setState(() => _savingSettings = true);
-    await widget.config.resetToDefaults();
-    _loadSettings();
-    await widget.runtime.reloadAnalysisSettings();
-    if (mounted) setState(() => _savingSettings = false);
+    try {
+      await widget.config.resetToDefaults();
+      _loadSettings();
+      await widget.runtime.reloadAnalysisSettings();
+    } finally {
+      if (mounted) setState(() => _savingSettings = false);
+    }
   }
 
   Future<void> _confirmResetSettings() async {
@@ -194,18 +200,21 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
       _motionDurationSeconds = values.motionDurationSeconds;
       _cryDurationSeconds = values.cryDurationSeconds;
     });
-    await Future.wait<void>([
-      widget.config.setMotionThreshold(values.motionThreshold),
-      widget.config.setCryScoreThreshold(values.cryScoreThreshold),
-      widget.config
-          .setNotifyCooldownMs((values.notifyCooldownSeconds * 1000).round()),
-      widget.config.setMotionMinDurationMs(
-          (values.motionDurationSeconds * 1000).round()),
-      widget.config
-          .setCryMinDurationMs((values.cryDurationSeconds * 1000).round()),
-    ]);
-    await widget.runtime.reloadAnalysisSettings();
-    if (mounted) setState(() => _savingSettings = false);
+    try {
+      await Future.wait<void>([
+        widget.config.setMotionThreshold(values.motionThreshold),
+        widget.config.setCryScoreThreshold(values.cryScoreThreshold),
+        widget.config
+            .setNotifyCooldownMs((values.notifyCooldownSeconds * 1000).round()),
+        widget.config.setMotionMinDurationMs(
+            (values.motionDurationSeconds * 1000).round()),
+        widget.config
+            .setCryMinDurationMs((values.cryDurationSeconds * 1000).round()),
+      ]);
+      await widget.runtime.reloadAnalysisSettings();
+    } finally {
+      if (mounted) setState(() => _savingSettings = false);
+    }
   }
 
   _DetectionPreset? get _activeDetectionPreset {
@@ -348,7 +357,7 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
     final leavingPreviewTab = _tab == 0 && index != 0;
     setState(() => _tab = index);
     if (leavingPairingTab) {
-      widget.runtime.stopPairingMode();
+      unawaited(widget.runtime.stopPairingMode());
     }
     if (leavingPreviewTab) {
       unawaited(widget.runtime.stopLocalPreview().catchError((_) {}));

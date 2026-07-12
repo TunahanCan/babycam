@@ -30,30 +30,33 @@ const _deUiText = <String, String>{
   'notificationChannelDescription':
       'Wein-, Bewegungs- und Verbindungswarnungen aus dem Babyzimmer.',
   'bootstrapPreparing': 'MimiCam wird vorbereitet...',
+  'bootstrapFailedTitle': 'MimiCam konnte nicht gestartet werden',
+  'bootstrapFailedText':
+      'Beim Vorbereiten der App-Daten ist ein Fehler aufgetreten. Versuche es erneut.',
   'roleSwitching': 'Rolle wird gewechselt...',
   'confirmLeaveServerTitle': 'Server-Modus verlassen?',
   'confirmLeaveServerBody':
       'Wenn du in den Client-Modus wechselst, werden der Babyzimmer-Stream und lokale Dienste beendet.',
   'cancel': 'Abbrechen',
   'switchToClient': 'Zu Client wechseln',
-  'roleSelectionTitle': 'Welche Rolle hat dieses Gerät?',
+  'roleSelectionTitle': 'Wie möchtest du MimiCam nutzen?',
   'roleSelectionSubtitle':
-      'Diese Auswahl wird meist einmal getroffen; der Rollenwechsel bleibt als kleines Badge in den Einstellungen.',
-  'babyRoomDeviceTitle': 'Babyzimmer-Gerät',
+      'Lass ein Telefon beim Baby und schau auf dem anderen nach.',
+  'babyRoomDeviceTitle': 'Im Babyzimmer aufstellen',
   'babyRoomName': 'Babyzimmer',
   'babyRoomDeviceDescription':
-      'Kamera und Mikrofon laufen auf diesem Telefon. Der Stream wird per QR-Code geteilt.',
+      'Dieses Telefon sieht dein Baby, hört Geräusche und sendet Warnungen.',
   'recommended': 'Empfohlen',
-  'parentDeviceTitle': 'Eltern-Gerät',
+  'parentDeviceTitle': 'Bei mir verwenden',
   'parentDeviceDescription':
-      'Der Server wird im selben WLAN gefunden, Live-Video wird angesehen und Warnungen werden Benachrichtigungen.',
+      'Sieh live zu, höre den Ton und erhalte Warnungen auf diesem Telefon.',
   'viewer': 'Zuschauer',
   'setupPermissionsTitle': 'Berechtigungen bei der Einrichtung',
   'setupPermissionsText':
       'Nach der Auswahl werden Kamera-, Mikrofon-, Benachrichtigungs- und Akku-/Hintergrundberechtigungen angefragt.',
-  'securityNoteTitle': 'Sicherheitshinweis',
+  'securityNoteTitle': 'Kein Internet nötig',
   'securityNoteText':
-      'Diese App ist für die Nutzung im selben WLAN/LAN gedacht.',
+      'Beide Telefone brauchen nur dasselbe WLAN. Der Stream bleibt zu Hause.',
   'changeRole': 'Rolle wechseln',
   'clientRoleTitle': 'ELTERN',
   'serverRoleTitle': 'SERVERGERÄT',
@@ -474,29 +477,32 @@ const _arUiText = <String, String>{
   'notificationChannelDescription':
       'تنبيهات البكاء والحركة والاتصال من غرفة الطفل.',
   'bootstrapPreparing': 'يتم تجهيز MimiCam...',
+  'bootstrapFailedTitle': 'تعذر بدء MimiCam',
+  'bootstrapFailedText':
+      'حدثت مشكلة أثناء تجهيز بيانات التطبيق. يمكنك المحاولة مرة أخرى.',
   'roleSwitching': 'يتم تبديل الدور...',
   'confirmLeaveServerTitle': 'مغادرة وضع الخادم؟',
   'confirmLeaveServerBody':
       'إذا انتقلت إلى وضع العميل، سيتوقف بث غرفة الطفل والخدمات المحلية.',
   'cancel': 'إلغاء',
   'switchToClient': 'التبديل إلى العميل',
-  'roleSelectionTitle': 'ما دور هذا الجهاز؟',
-  'roleSelectionSubtitle':
-      'عادة يتم اختيار هذا مرة واحدة؛ ويبقى تبديل الدور كشارة صغيرة في الإعدادات.',
-  'babyRoomDeviceTitle': 'جهاز غرفة الطفل',
+  'roleSelectionTitle': 'كيف ستستخدم MimiCam؟',
+  'roleSelectionSubtitle': 'اترك هاتفاً بجانب طفلك وشاهد من الهاتف الآخر.',
+  'babyRoomDeviceTitle': 'ضعه في غرفة الطفل',
   'babyRoomName': 'غرفة الطفل',
   'babyRoomDeviceDescription':
-      'تعمل الكاميرا والميكروفون على هذا الهاتف. تتم مشاركة البث عبر رمز QR.',
+      'يراقب هذا الهاتف طفلك ويستمع للأصوات ويرسل التنبيهات.',
   'recommended': 'موصى به',
-  'parentDeviceTitle': 'جهاز الوالدين',
+  'parentDeviceTitle': 'احتفظ به معي',
   'parentDeviceDescription':
-      'يتم العثور على الخادم على نفس شبكة Wi‑Fi، وتشاهد البث المباشر وتصل التنبيهات كإشعارات.',
+      'شاهد البث المباشر واستمع للصوت واستقبل التنبيهات على هذا الهاتف.',
   'viewer': 'مشاهد',
   'setupPermissionsTitle': 'أذونات الإعداد الأول',
   'setupPermissionsText':
       'بعد الاختيار، يتم طلب أذونات الكاميرا والميكروفون والإشعارات والبطارية/الخلفية.',
-  'securityNoteTitle': 'ملاحظة أمان',
-  'securityNoteText': 'هذا التطبيق مصمم للاستخدام داخل نفس شبكة Wi‑Fi/LAN.',
+  'securityNoteTitle': 'لا حاجة إلى الإنترنت',
+  'securityNoteText':
+      'يكفي اتصال الهاتفين بشبكة Wi‑Fi نفسها. يبقى البث داخل منزلك.',
   'changeRole': 'تغيير الدور',
   'clientRoleTitle': 'العميل',
   'serverRoleTitle': 'الخادم',

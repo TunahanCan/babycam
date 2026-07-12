@@ -206,6 +206,29 @@ void main() {
     expect(received?.arguments, {'active': true});
   });
 
+  test('setServerDemand publishes iOS room ownership for capability reporting',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    const channel = MethodChannel('mimicam/platform_runtime_ios_server_test');
+    MethodCall? received;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      received = call;
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    await const PlatformRuntimeContract(methodChannel: channel)
+        .setServerDemand(active: true);
+
+    expect(received?.method, 'setServerDemand');
+    expect(received?.arguments, {'active': true});
+  });
+
   test('coordinator serializes one pause and one recovery', () async {
     final events = StreamController<PlatformRuntimeEvent>();
     final calls = <String>[];

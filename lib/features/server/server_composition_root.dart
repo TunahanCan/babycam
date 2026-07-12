@@ -177,9 +177,9 @@ class ServerCompositionRoot {
       onRecoverExternalMedia: server.recoverExternalMediaForPlatform,
       onStartPairing: startPairingOverride ??
           () async {
-            // Start the Android host lease while the Activity is visible. It
-            // owns the Flutter engine and Wi-Fi lock before any client/media
-            // demand exists, preventing a discoverable but unreachable room.
+            // Publish server ownership before advertising. Android acquires its
+            // host lease; iOS combines this with microphone demand when
+            // reporting whether background service can actually continue.
             await platformContract.setServerDemand(active: true);
             try {
               final url = await server.startPairingMode();

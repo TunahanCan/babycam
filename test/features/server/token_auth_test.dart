@@ -12,6 +12,47 @@ import 'package:mimicam/services/mimicam_server.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('pairing kalıcı token yazılamadan başarılı cevap dönmez', () async {
+    final tokenService = PairingTokenService(
+      trustedClientRepository: _RejectingTrustedClientRepository(),
+    );
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    final statusRequest = await client.getUrl(Uri(
+      scheme: 'http',
+      host: InternetAddress.loopbackIPv4.address,
+      port: base.port,
+      path: MimiCamProtocolV2.statusPublic,
+    ));
+    final status = jsonDecode(
+      await utf8.decoder.bind(await statusRequest.close()).join(),
+    ) as Map;
+    final pairRequest = await client.postUrl(Uri(
+      scheme: 'http',
+      host: InternetAddress.loopbackIPv4.address,
+      port: base.port,
+      path: MimiCamProtocolV2.pairConfirm,
+    ));
+    pairRequest.headers.contentType = ContentType.json;
+    pairRequest.write(jsonEncode({
+      'pairingNonce': status['pairingNonce'],
+      'clientName': 'Anne',
+      'deviceId': 'client-1',
+    }));
+    final pairResponse = await pairRequest.close();
+    final body =
+        jsonDecode(await utf8.decoder.bind(pairResponse).join()) as Map;
+
+    expect(pairResponse.statusCode, HttpStatus.serviceUnavailable);
+    expect(body['ok'], isFalse);
+    expect(body['code'], TrustedClientPersistenceException.code);
+    expect(body.containsKey('trustedClientToken'), isFalse);
+  });
+
   test('public status and pairing response use the same persistent device ID',
       () async {
     final tokenService = PairingTokenService();
@@ -434,6 +475,16 @@ void main() {
 
     expect(response.statusCode, HttpStatus.unauthorized);
   });
+}
+
+class _RejectingTrustedClientRepository implements TrustedClientRepository {
+  @override
+  List<TrustedClientRecord> readAll() => const [];
+
+  @override
+  Future<void> replaceAll(List<TrustedClientRecord> clients) {
+    return Future<void>.error(StateError('disk unavailable'));
+  }
 }
 
 Future<MimiCamServer> _testServer(

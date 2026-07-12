@@ -252,14 +252,16 @@ class PlatformRuntimeContract {
     });
   }
 
-  /// Keeps the Android room HTTP/WebSocket host and its Wi-Fi lock alive even
-  /// before a media or alert client has connected.
+  /// Publishes room-server ownership to the native lifecycle layer.
   ///
-  /// This is intentionally independent from camera/microphone demand: without
-  /// it Android can suspend the Flutter engine while the native NSD record is
-  /// still visible, leaving a room that can be discovered but not reached.
+  /// Android uses it to own the foreground host lease. iOS uses it together
+  /// with active microphone demand to report its real background capability.
   Future<void> setServerDemand({required bool active}) async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    if (kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.android &&
+            defaultTargetPlatform != TargetPlatform.iOS)) {
+      return;
+    }
     try {
       await _methodChannel.invokeMethod<void>('setServerDemand', {
         'active': active,

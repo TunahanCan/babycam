@@ -328,29 +328,30 @@
     },
     {
       "id": "LIFE-iOS-01",
-      "title": "iOS foreground-only media lifecycle contract",
+      "title": "iOS background audio and foreground camera lifecycle contract",
       "platforms": ["ios"],
       "mediaLane": "legacy",
       "networkLane": "baseline",
       "estimatedMinutes": 10,
       "setup": ["Use a physical iPhone as the server with active video plus audio demand."],
       "steps": [
-        "Background the app, lock the screen, then wait 30 seconds.",
-        "Return to foreground-active and unlock.",
-        "Repeat during a client reconnect attempt."
+        "Background the app, lock the screen, then keep the client connected for 60 seconds.",
+        "Verify room audio and LAN alerts continue while camera frames pause.",
+        "Return to foreground-active and verify camera recovery.",
+        "Repeat without microphone demand and inspect the native capability snapshot."
       ],
       "checks": [
         {
-          "id": "controlled-pause",
-          "description": "Camera and microphone pause in background without crash or hidden capture."
+          "id": "camera-pause-audio-continue",
+          "description": "Camera pauses in background while active room audio and LAN alerts continue without reconnect churn."
         },
         {
           "id": "retained-demand",
-          "description": "Foreground-active recovery restores only the retained media demand."
+          "description": "Foreground-active recovery restores camera while preserving the existing audio session."
         },
         {
           "id": "contract-visible",
-          "description": "UI/native snapshot reports the foreground-only limitation accurately."
+          "description": "supportsServerInBackground is true only while server and microphone demand are both active."
         }
       ],
       "measurements": [
@@ -364,7 +365,7 @@
           "unit": "ms"
         }
       ],
-      "requiredArtifacts": ["privacy indicator recording", "platform lifecycle event log"]
+      "requiredArtifacts": ["privacy indicator recording", "60-second client audio log", "LAN alert receipt", "platform lifecycle event log"]
     },
     {
       "id": "LIFE-Android-01",

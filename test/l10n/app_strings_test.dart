@@ -71,13 +71,15 @@ void main() {
     expect(AppStrings(const Locale('fr')).ui('navSettings'), 'Réglages');
     expect(AppStrings(const Locale('de')).ui('scanQr'), 'QR scannen');
     expect(AppStrings(const Locale('ar', 'SA')).ui('scanQr'), 'مسح QR');
-    expect(AppStrings(const Locale('hi')).ui('parentDeviceTitle'),
-        'माता-पिता का डिवाइस');
+    expect(
+      AppStrings(const Locale('hi')).ui('parentDeviceTitle'),
+      'अपने पास रखें',
+    );
 
     final fallback = await delegate.load(const Locale('ru'));
 
     expect(fallback.ui('scanQr'), 'Scan QR');
-    expect(fallback.ui('roleSelectionTitle'), 'What will this device be?');
+    expect(fallback.ui('roleSelectionTitle'), 'How will you use MimiCam?');
   });
 
   test('UI catalog tüm desteklenen diller için değer taşır', () {

@@ -112,9 +112,29 @@ void main() {
     expect(urls[0], urls[1]);
     expect(Uri.parse(urls[0]).port, greaterThan(0));
   });
+
+  test('ikinci server aynı production portunu paylaşamaz', () async {
+    final reservation = await ServerSocket.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    final port = reservation.port;
+    await reservation.close();
+
+    final first = await _testServer(httpPort: port);
+    final second = await _testServer(httpPort: port);
+    addTearDown(first.dispose);
+    addTearDown(second.dispose);
+    await first.startPairingMode();
+
+    await expectLater(
+      second.startPairingMode(),
+      throwsA(isA<SocketException>()),
+    );
+  });
 }
 
-Future<MimiCamServer> _testServer() async {
+Future<MimiCamServer> _testServer({int httpPort = 0}) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
   return MimiCamServer(
@@ -122,7 +142,7 @@ Future<MimiCamServer> _testServer() async {
     strings: AppStrings(const Locale('tr')),
     onLog: (_) {},
     onAlert: (_) {},
-    httpPort: 0,
+    httpPort: httpPort,
     startMediaOnSessionStart: false,
   );
 }

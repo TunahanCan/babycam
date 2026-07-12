@@ -12,6 +12,18 @@ void main() {
     expect(appDelegate, contains('"supportsMicrophoneInBackground": true'));
     expect(appDelegate, contains('"supportsAudioOutputInBackground": true'));
     expect(appDelegate, contains('"preserveAudioInBackground": true'));
+    expect(
+      appDelegate,
+      contains('currentServerDemand && currentMicrophoneDemand'),
+    );
+    expect(
+      appDelegate,
+      contains('"supportsServerInBackground": serverBackgroundSupported'),
+    );
+    expect(
+      appDelegate,
+      isNot(contains('"supportsServerInBackground": true')),
+    );
   });
 
   test('iOS PCM playback is not paused merely because the screen locks', () {

@@ -13,6 +13,28 @@ import 'package:mimicam/services/mimicam_server.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('diagnostik rotalar kapatıldığında sunucuda hiç yayınlanmaz', () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(
+      tokenService,
+      enableTestEndpoints: false,
+    );
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    expect(
+      await _statusCode(client, base.port, MimiCamProtocolV2.testDashboard),
+      HttpStatus.notFound,
+    );
+    expect(
+      await _postStatusCode(client, base.port, MimiCamProtocolV2.testReset),
+      HttpStatus.notFound,
+    );
+    expect(await _getText(client, base.port, '/'), isNot(contains('/test')));
+  });
+
   test('/test tarayici test panelini dondurur', () async {
     final tokenService = PairingTokenService();
     final server = await _testServer(tokenService);
@@ -357,7 +379,10 @@ void main() {
   });
 }
 
-Future<MimiCamServer> _testServer(PairingTokenService tokenService) async {
+Future<MimiCamServer> _testServer(
+  PairingTokenService tokenService, {
+  bool enableTestEndpoints = true,
+}) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
   return MimiCamServer(
@@ -368,6 +393,7 @@ Future<MimiCamServer> _testServer(PairingTokenService tokenService) async {
     tokenService: tokenService,
     httpPort: 0,
     startMediaOnSessionStart: false,
+    enableTestEndpoints: enableTestEndpoints,
   );
 }
 

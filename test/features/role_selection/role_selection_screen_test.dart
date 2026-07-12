@@ -3,52 +3,93 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mimicam/app/app_role.dart';
-import 'package:mimicam/core/theme/mimicam_colors.dart';
 import 'package:mimicam/features/role_selection/role_selection_screen.dart';
 import 'package:mimicam/l10n/app_strings.dart';
 
 void main() {
-  testWidgets('RoleSelectionScreen iki kart ve mavi/pembe tema gösterir',
+  Future<void> pumpRoleSelection(
+    WidgetTester tester, {
+    required ValueChanged<AppRole> onRoleSelected,
+  }) {
+    return tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: RoleSelectionScreen(onRoleSelected: onRoleSelected),
+      ),
+    );
+  }
+
+  testWidgets('son kullanıcıya uygun iki kurulum seçeneği gösterir',
       (tester) async {
     AppRole? selected;
-    await tester.pumpWidget(MaterialApp(
-      locale: const Locale('tr'),
-      supportedLocales: AppStrings.supportedLocales,
-      localizationsDelegates: const [
-        AppStrings.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      home: RoleSelectionScreen(onRoleSelected: (role) => selected = role),
-    ));
-    expect(find.text('Ebeveyn Cihazı'), findsOneWidget);
-    expect(find.text('Bebek Odası Cihazı'), findsOneWidget);
-    expect(find.byIcon(Icons.monitor_heart), findsOneWidget);
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await pumpRoleSelection(
+      tester,
+      onRoleSelected: (role) => selected = role,
+    );
+
+    expect(find.text('MimiCam’i nasıl kullanacaksınız?'), findsOneWidget);
+    expect(find.text('Bebek odasına kur'), findsOneWidget);
+    expect(find.text('Yanımda kullan'), findsOneWidget);
     expect(find.byIcon(Icons.child_care), findsOneWidget);
-    expect(find.byIcon(Icons.wifi_tethering_rounded), findsOneWidget);
-    expect(find.text('Güvenlik notu'), findsOneWidget);
-    final wordmark = await rootBundle.load(
+    expect(find.byIcon(Icons.monitor_heart), findsOneWidget);
+    expect(find.byIcon(Icons.wifi_rounded), findsOneWidget);
+
+    for (final asset in [
       'assets/branding/mimicam_wordmark.png',
-    );
-    expect(wordmark.lengthInBytes, greaterThan(0));
-    expect(
-      tester.getTopLeft(find.text('Güvenlik notu')).dy,
-      lessThan(520),
-    );
-    expect(
-      tester
-          .getBottomLeft(
-            find.text(
-              'Bu uygulama aynı Wi-Fi/LAN içinde kullanım için tasarlandı.',
-            ),
-          )
-          .dy,
-      lessThan(600),
-    );
-    expect(MimiCamColors.brandBlue, const Color(0xFF5B5BD6));
-    expect(MimiCamColors.brandPink, const Color(0xFF7468D7));
-    await tester.tap(find.text('Ebeveyn Cihazı'));
+      'assets/branding/mimicam_bear_mascot.png',
+    ]) {
+      final data = await rootBundle.load(asset);
+      expect(data.lengthInBytes, greaterThan(0));
+    }
+
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Yanımda kullan'));
     expect(selected, AppRole.client);
+
+    await tester.scrollUntilVisible(
+      find.text('İnternet gerekmez'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('İnternet gerekmez'), findsOneWidget);
+  });
+
+  testWidgets('küçük ekranda tüm seçeneklere kaydırarak erişilir',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 568));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await pumpRoleSelection(tester, onRoleSelected: (_) {});
+    await tester.scrollUntilVisible(
+      find.text('İnternet gerekmez'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(find.text('İnternet gerekmez'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('geniş ekranda kurulum seçeneklerini yan yana gösterir',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(760, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await pumpRoleSelection(tester, onRoleSelected: (_) {});
+
+    final roomTop = tester.getTopLeft(find.text('Bebek odasına kur')).dy;
+    final parentTop = tester.getTopLeft(find.text('Yanımda kullan')).dy;
+    expect(roomTop, parentTop);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -23,6 +23,7 @@ import '../analysis/video/luma_frame.dart';
 import '../analysis/video/motion_analysis_config.dart';
 import '../analysis/video/motion_analyzer_v2.dart';
 import '../core/async/serialized_async_executor.dart';
+import '../core/feature_flags.dart';
 import '../core/media/camera_permission_gateway.dart';
 import '../core/media/adaptive_media_profile.dart';
 import '../core/media/client_quality_tracker.dart';
@@ -73,6 +74,7 @@ import 'platform/device_resource_snapshot_provider.dart';
 import 'network_address_provider.dart';
 
 part 'server/mimicam_server_test_endpoints.dart';
+part 'server/mimicam_server_routes.dart';
 
 class MimiCamServer {
   MimiCamServer({
@@ -112,6 +114,7 @@ class MimiCamServer {
     MediaSessionTelemetry? mediaTelemetry,
     this.webRtcGateway,
     this.onBroadcastAccessChanged,
+    this.enableTestEndpoints = MimiCamFeatureFlags.testEndpointsEnabled,
   })  : tokenService = tokenService ?? PairingTokenService(),
         mediaPermissions =
             mediaPermissions ?? const CameraMediaPermissionGateway(),
@@ -166,7 +169,7 @@ class MimiCamServer {
       onClientDetached: _activeClientRegistry.detachStream,
       telemetry: _mediaTelemetry,
     );
-    final routes = _buildRoutes();
+    final routes = _buildMimiCamRoutes(this);
     _routeTable = Map<String, _RouteSpec>.unmodifiable({
       for (final route in routes) route.path: route,
     });
@@ -203,6 +206,7 @@ class MimiCamServer {
 
   final bool enableLegacyWebSocketMediaPackets;
   final bool enableAudioAutoCalibration;
+  final bool enableTestEndpoints;
 
   final ConfigurationService config;
   final AppStrings strings;
@@ -360,14 +364,12 @@ class MimiCamServer {
         server = await HttpServer.bind(
           InternetAddress.anyIPv6,
           httpPort,
-          shared: true,
           v6Only: false,
         );
       } on SocketException {
         server = await HttpServer.bind(
           InternetAddress.anyIPv4,
           httpPort,
-          shared: true,
         );
       }
       if (_disposed) {
@@ -1007,177 +1009,6 @@ class MimiCamServer {
     }
   }
 
-  List<_RouteSpec> _buildRoutes() => [
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.pairConfirm,
-          _AuthMode.none,
-          const {HttpMethod.post},
-          (request, _) => _handlePairConfirm(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.authRenew,
-          _AuthMode.none,
-          const {HttpMethod.post},
-          (request, _) => _handleAuthRenew(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.sessionStart,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          (request, _) => _handleSessionStart(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.sessionStop,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          (request, _) => _handleSessionStop(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.webRtcOffer,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          _handleWebRtcOffer,
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.webRtcIce,
-          _AuthMode.bearer,
-          const {HttpMethod.get, HttpMethod.post},
-          _handleWebRtcIce,
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.webRtcClose,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          _handleWebRtcClose,
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.qualityReport,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          (request, _) => _handleQualityReport(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.comfortState,
-          _AuthMode.bearer,
-          const {HttpMethod.get},
-          (request, _) => _handleComfortState(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.comfortCommand,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          (request, _) => _handleComfortCommand(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.nightLightState,
-          _AuthMode.bearer,
-          const {HttpMethod.get},
-          (request, _) => _handleNightLightState(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.nightLightCommand,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          (request, _) => _handleNightLightCommand(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.talkStart,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          _handleTalkStart,
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.talkStop,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          _handleTalkStop,
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.talkAudio,
-          _AuthMode.none,
-          const {HttpMethod.post},
-          (request, _) => _handleTalkAudio(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.talkVideo,
-          _AuthMode.none,
-          const {HttpMethod.post},
-          (request, _) => _handleTalkVideo(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.statusPublic,
-          _AuthMode.none,
-          const {HttpMethod.get},
-          (request, _) => _handlePublicStatus(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testDashboard,
-          _AuthMode.testAccess,
-          const {HttpMethod.get},
-          (request, _) => _writeTestDashboard(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testDashboardScript,
-          _AuthMode.testAccess,
-          const {HttpMethod.get},
-          (request, _) => _writeTestDashboardScript(request),
-        ),
-        _RouteSpec(
-          '/video',
-          _AuthMode.streamToken,
-          const {HttpMethod.get},
-          _handleVideoRoute,
-        ),
-        _RouteSpec(
-          '/audio',
-          _AuthMode.streamToken,
-          const {HttpMethod.get},
-          _handleAudioRoute,
-        ),
-        _RouteSpec(
-          '/status',
-          _AuthMode.bearer,
-          const {HttpMethod.get},
-          (request, _) => _handlePrivateStatus(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testStatus,
-          _AuthMode.bearer,
-          const {HttpMethod.get},
-          (request, _) => _handleTestStatus(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testStart,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          (request, _) => _handleTestStart(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testReset,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          (request, _) => _handleTestReset(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testProbe,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          (request, _) => _handleTestProbe(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testAlert,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          (request, _) => _handleTestAlert(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testAudioTone,
-          _AuthMode.bearer,
-          const {HttpMethod.get},
-          (request, _) => _handleTestAudioTone(request),
-        ),
-      ];
-
   _RouteSpec? _routeFor(String path) => _routeTable[path];
 
   Future<({bool ok, String? clientId})> _authorizeRoute(
@@ -1565,6 +1396,7 @@ class MimiCamServer {
       final token = tokenService.issueTrustedClientToken(
           clientName: json['clientName']?.toString() ?? 'Client',
           deviceId: json['deviceId']?.toString() ?? 'client');
+      await tokenService.flushPersistence();
       await _writeJson(request.response, {
         'serverDeviceId': serverDeviceId,
         'serverName': 'Bebek Odası',
@@ -1580,6 +1412,13 @@ class MimiCamServer {
         'ok': false,
         'code': TrustedClientLimitException.code,
         'message': TrustedClientLimitException.userMessage,
+      });
+    } on TrustedClientPersistenceException {
+      request.response.statusCode = HttpStatus.serviceUnavailable;
+      await _writeJson(request.response, {
+        'ok': false,
+        'code': TrustedClientPersistenceException.code,
+        'message': 'Pairing could not be saved on this room device.',
       });
     } catch (_) {
       request.response.statusCode = HttpStatus.badRequest;
@@ -1605,6 +1444,17 @@ class MimiCamServer {
     if (renewed == null) {
       request.response.statusCode = HttpStatus.unauthorized;
       await request.response.close();
+      return;
+    }
+    try {
+      await tokenService.flushPersistence();
+    } on TrustedClientPersistenceException {
+      request.response.statusCode = HttpStatus.serviceUnavailable;
+      await _writeJson(request.response, {
+        'ok': false,
+        'code': TrustedClientPersistenceException.code,
+        'message': 'The renewed session could not be saved.',
+      });
       return;
     }
     await _writeJson(request.response, {
@@ -2929,11 +2779,14 @@ class MimiCamServer {
   }
 
   Future<void> _writeLandingPage(HttpResponse response) async {
+    final testDashboardLink = enableTestEndpoints
+        ? '<p><a style="color:#ff8ab3" href="${protocol_v2.MimiCamProtocolV2.testDashboard}">Canlı test panelini aç</a></p>'
+        : '';
     response.headers.contentType = ContentType.html;
     response.write('''<!doctype html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>MimiCam</title></head>
 <body style="margin:0;background:#111;color:white;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
-  <main style="padding:16px"><h1>${strings.appTitle}</h1><p>${strings.streamActiveHtml}</p><p><a style="color:#ff8ab3" href="${protocol_v2.MimiCamProtocolV2.testDashboard}">Canlı test panelini aç</a></p></main>
+  <main style="padding:16px"><h1>${strings.appTitle}</h1><p>${strings.streamActiveHtml}</p>$testDashboardLink</main>
 </body></html>''');
     await response.close();
   }

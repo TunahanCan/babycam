@@ -91,4 +91,31 @@ void main() {
     expect(token.clientId, 'new');
     expect(service.pairedClientCount, 1);
   });
+
+  test('kalıcı yazma hatası pairing başarısı gibi yutulmaz', () async {
+    final service = PairingTokenService(
+      trustedClientRepository: _FailingTrustedClientRepository(),
+    );
+
+    service.issueTrustedClientToken(
+      clientName: 'Parent',
+      deviceId: 'parent-1',
+    );
+
+    await expectLater(
+      service.flushPersistence(),
+      throwsA(isA<TrustedClientPersistenceException>()),
+    );
+    expect(service.lastPersistenceError, isNotNull);
+  });
+}
+
+class _FailingTrustedClientRepository implements TrustedClientRepository {
+  @override
+  List<TrustedClientRecord> readAll() => const [];
+
+  @override
+  Future<void> replaceAll(List<TrustedClientRecord> clients) {
+    return Future<void>.error(StateError('disk unavailable'));
+  }
 }

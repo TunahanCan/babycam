@@ -19,6 +19,24 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'Preparando MimiCam…',
     'fr': 'Préparation de MimiCam…',
   },
+  'bootstrapFailedTitle': {
+    'tr': 'MimiCam başlatılamadı',
+    'en': 'MimiCam could not start',
+    'zh': 'MimiCam 无法启动',
+    'hi': 'MimiCam शुरू नहीं हो सका',
+    'es': 'MimiCam no pudo iniciarse',
+    'fr': 'MimiCam n’a pas pu démarrer',
+  },
+  'bootstrapFailedText': {
+    'tr':
+        'Uygulama verileri hazırlanırken bir sorun oluştu. Tekrar deneyebilirsiniz.',
+    'en': 'Something went wrong while preparing app data. You can try again.',
+    'zh': '准备应用数据时出现问题。您可以重试。',
+    'hi': 'ऐप डेटा तैयार करते समय समस्या हुई। फिर कोशिश करें।',
+    'es': 'Hubo un problema al preparar los datos. Puedes intentarlo de nuevo.',
+    'fr':
+        'Un problème est survenu pendant la préparation des données. Réessayez.',
+  },
   'roleSwitching': {
     'tr': 'Rol değiştiriliyor...',
     'en': 'Switching role...',
@@ -65,33 +83,28 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Passer à Client'
   },
   'roleSelectionTitle': {
-    'tr': 'Bu cihaz ne olacak?',
-    'en': 'What will this device be?',
-    'zh': '这台设备要做什么？',
-    'hi': 'यह डिवाइस क्या बनेगा?',
-    'es': '¿Qué será este dispositivo?',
-    'fr': 'Quel sera le rôle de cet appareil ?',
+    'tr': 'MimiCam’i nasıl kullanacaksınız?',
+    'en': 'How will you use MimiCam?',
+    'zh': '您想如何使用 MimiCam？',
+    'hi': 'आप MimiCam का उपयोग कैसे करेंगे?',
+    'es': '¿Cómo usarás MimiCam?',
+    'fr': 'Comment allez-vous utiliser MimiCam ?',
   },
   'roleSelectionSubtitle': {
-    'tr':
-        'Bu cihaz genelde bir kez seçilir; değişim ayarlarda küçük bir rozet olarak kalır.',
-    'en':
-        'This is usually chosen once; role switching stays as a small badge in settings.',
-    'zh': '通常只需选择一次；角色切换会作为一个小徽章保留在设置中。',
-    'hi':
-        'आमतौर पर यह एक बार चुना जाता है; बदलाव सेटिंग में छोटे बैज की तरह रहता है।',
-    'es':
-        'Normalmente se elige una vez; el cambio queda como una pequeña insignia en ajustes.',
-    'fr':
-        'Ce choix se fait généralement une seule fois ; le changement reste dans un petit badge des réglages.',
+    'tr': 'Bir telefonu bebeğinizin yanına bırakın, diğerinden izleyin.',
+    'en': 'Leave one phone near your baby and watch from the other.',
+    'zh': '将一部手机放在宝宝身边，用另一部手机查看。',
+    'hi': 'एक फ़ोन बच्चे के पास रखें और दूसरे फ़ोन से देखें।',
+    'es': 'Deja un teléfono junto a tu bebé y mira desde el otro.',
+    'fr': 'Laissez un téléphone près de bébé et regardez depuis l’autre.',
   },
   'babyRoomDeviceTitle': {
-    'tr': 'Bebek Odası Cihazı',
-    'en': 'Baby Room Device',
-    'zh': '婴儿房设备',
-    'hi': 'बच्चे के कमरे का डिवाइस',
-    'es': 'Dispositivo de la habitación',
-    'fr': 'Appareil chambre bébé'
+    'tr': 'Bebek odasına kur',
+    'en': 'Set up in baby’s room',
+    'zh': '放在宝宝房间',
+    'hi': 'बच्चे के कमरे में रखें',
+    'es': 'Instalar en la habitación',
+    'fr': 'Installer dans la chambre'
   },
   'babyRoomName': {
     'tr': 'Bebek Odası',
@@ -102,17 +115,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Chambre bébé'
   },
   'babyRoomDeviceDescription': {
-    'tr':
-        'Kamera ve mikrofon bu telefonda açılır. Yayın QR kod ile paylaşılır.',
-    'en':
-        'Camera and microphone run on this phone. The stream is shared with a QR code.',
-    'zh': '摄像头和麦克风会在这部手机上运行。直播通过二维码分享。',
-    'hi':
-        'कैमरा और माइक्रोफ़ोन इसी फ़ोन पर चलेंगे। स्ट्रीम QR कोड से साझा होगी।',
-    'es':
-        'La cámara y el micrófono se abren en este teléfono. La transmisión se comparte con QR.',
-    'fr':
-        'La caméra et le micro tournent sur ce téléphone. Le flux se partage avec un QR code.',
+    'tr': 'Bu telefon bebeğinizi görüntüler, sesi dinler ve uyarı gönderir.',
+    'en': 'This phone watches your baby, listens for sound, and sends alerts.',
+    'zh': '这部手机用于查看宝宝、监听声音并发送提醒。',
+    'hi': 'यह फ़ोन बच्चे को देखेगा, आवाज़ सुनेगा और अलर्ट भेजेगा।',
+    'es': 'Este teléfono vigila al bebé, escucha sonidos y envía alertas.',
+    'fr': 'Ce téléphone surveille bébé, écoute les sons et envoie des alertes.',
   },
   'recommended': {
     'tr': 'Önerilen',
@@ -123,25 +131,20 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Recommandé'
   },
   'parentDeviceTitle': {
-    'tr': 'Ebeveyn Cihazı',
-    'en': 'Parent Device',
-    'zh': '家长设备',
-    'hi': 'माता-पिता का डिवाइस',
-    'es': 'Dispositivo del padre/madre',
-    'fr': 'Appareil parent'
+    'tr': 'Yanımda kullan',
+    'en': 'Keep with me',
+    'zh': '随身使用',
+    'hi': 'अपने पास रखें',
+    'es': 'Llevar conmigo',
+    'fr': 'Garder avec moi'
   },
   'parentDeviceDescription': {
-    'tr':
-        'Aynı Wi-Fi içinde bebek odası cihazı bulunur, canlı yayın izlenir ve uyarılar bildirim olur.',
-    'en':
-        'The server is found on the same Wi‑Fi, live video is watched, and alerts become notifications.',
-    'zh': '在同一 Wi‑Fi 中找到婴儿房设备，可观看直播，提醒会变成通知。',
-    'hi':
-        'उसी Wi‑Fi में बच्चे के कमरे का डिवाइस मिलता है, लाइव स्ट्रीम देखी जाती है और अलर्ट सूचना बनते हैं।',
-    'es':
-        'Encuentra el dispositivo de la habitación en el mismo Wi‑Fi, mira el directo y recibe las alertas como notificaciones.',
-    'fr':
-        'Trouve l’appareil de la chambre sur le même Wi‑Fi, regarde le direct et reçoit les alertes en notifications.',
+    'tr': 'Bu telefondan canlı izleyin, sesi açın ve bildirimleri alın.',
+    'en': 'Watch live video, hear audio, and receive alerts on this phone.',
+    'zh': '用这部手机观看直播、收听声音并接收提醒。',
+    'hi': 'इस फ़ोन पर लाइव वीडियो देखें, आवाज़ सुनें और अलर्ट पाएँ।',
+    'es': 'Mira el vídeo en directo, escucha el audio y recibe alertas.',
+    'fr': 'Regardez le direct, écoutez le son et recevez les alertes.',
   },
   'viewer': {
     'tr': 'İzleyici',
@@ -173,20 +176,23 @@ const appUiTextCatalog = <String, Map<String, String>>{
         'Après le choix, les autorisations caméra, micro, notifications et batterie/arrière-plan sont demandées.',
   },
   'securityNoteTitle': {
-    'tr': 'Güvenlik notu',
-    'en': 'Security note',
-    'zh': '安全说明',
-    'hi': 'सुरक्षा नोट',
-    'es': 'Nota de seguridad',
-    'fr': 'Note de sécurité'
+    'tr': 'İnternet gerekmez',
+    'en': 'No internet needed',
+    'zh': '无需互联网',
+    'hi': 'इंटरनेट की ज़रूरत नहीं',
+    'es': 'No necesita internet',
+    'fr': 'Pas besoin d’internet'
   },
   'securityNoteText': {
-    'tr': 'Bu uygulama aynı Wi-Fi/LAN içinde kullanım için tasarlandı.',
-    'en': 'This app is designed for use on the same Wi‑Fi/LAN.',
-    'zh': '此应用设计用于同一 Wi‑Fi/LAN 内。',
-    'hi': 'यह ऐप उसी Wi‑Fi/LAN में उपयोग के लिए बनाया गया है।',
-    'es': 'Esta app está diseñada para usarse en la misma Wi‑Fi/LAN.',
-    'fr': 'Cette app est conçue pour le même Wi‑Fi/LAN.'
+    'tr':
+        'İki telefonun aynı Wi-Fi’a bağlı olması yeterli. Yayın evinizde kalır.',
+    'en': 'Both phones only need the same Wi‑Fi. Your stream stays at home.',
+    'zh': '两部手机连接同一个 Wi‑Fi 即可，直播保留在家中。',
+    'hi': 'दोनों फ़ोन एक ही Wi‑Fi पर हों। आपकी स्ट्रीम घर में ही रहती है।',
+    'es':
+        'Solo deben estar en la misma Wi‑Fi. La transmisión se queda en casa.',
+    'fr':
+        'Les deux téléphones doivent partager le même Wi‑Fi. Le flux reste chez vous.'
   },
   'changeRole': {
     'tr': 'Rol değiştir',

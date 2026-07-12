@@ -90,6 +90,12 @@ import UserNotifications
           playback: args?["playback"] as? Bool ?? false
         )
         result(nil)
+      case "setServerDemand":
+        let args = call.arguments as? [String: Any]
+        self.platformRuntime.setServerDemand(
+          active: args?["active"] as? Bool ?? false
+        )
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -270,6 +276,7 @@ final class PlatformRuntimeBridge: NSObject, FlutterStreamHandler {
   private var cameraDemand = false
   private var microphoneDemand = false
   private var playbackDemand = false
+  private var serverDemand = false
   private var audioOutputActive = false
   private var mediaPauseIssued = false
 
@@ -304,8 +311,20 @@ final class PlatformRuntimeBridge: NSObject, FlutterStreamHandler {
     let currentCameraDemand = cameraDemand
     let currentMicrophoneDemand = microphoneDemand
     let currentPlaybackDemand = playbackDemand
+    let currentServerDemand = serverDemand
     let currentAudioOutputActive = audioOutputActive
     lock.unlock()
+    let serverBackgroundSupported = currentServerDemand && currentMicrophoneDemand
+    let contractMessage: String
+    if serverBackgroundSupported {
+      contractMessage =
+        "iOS kilitliyken oda sesi ve LAN uyarıları sürer; kamera ön planda otomatik geri gelir."
+    } else if currentServerDemand {
+      contractMessage =
+        "iOS arka planda yalnızca aktif oda sesi varken sunucuyu sürdürebilir; kamera durur."
+    } else {
+      contractMessage = "iOS arka plan sunucusu etkin değil."
+    }
     return [
       "platform": "ios",
       "applicationState": state,
@@ -316,16 +335,16 @@ final class PlatformRuntimeBridge: NSObject, FlutterStreamHandler {
       "cameraDemand": currentCameraDemand,
       "microphoneDemand": currentMicrophoneDemand,
       "playbackDemand": currentPlaybackDemand,
+      "serverDemand": currentServerDemand,
       "audioOutputActive": currentAudioOutputActive,
-      "supportsServerInBackground": true,
+      "supportsServerInBackground": serverBackgroundSupported,
       "supportsAudioOutputInBackground": true,
       "supportsMicrophoneInBackground": true,
       "serviceOwnsMediaHardware": false,
       "activityAttached": state == "foregroundActive" || state == "foreground",
       "serviceOwnsEngine": false,
       "engineAvailable": true,
-      "contractMessage":
-        "iOS kilitliyken oda sesi ve LAN uyarıları sürer; kamera ön planda otomatik geri gelir."
+      "contractMessage": contractMessage
     ]
   }
 
@@ -350,6 +369,20 @@ final class PlatformRuntimeBridge: NSObject, FlutterStreamHandler {
     emit("mediaDemandChanged", details: details)
   }
 
+  func setServerDemand(active: Bool) {
+    lock.lock()
+    serverDemand = active
+    let backgroundSupported = serverDemand && microphoneDemand
+    lock.unlock()
+    emit(
+      "serverDemandChanged",
+      details: [
+        "active": active,
+        "supportsServerInBackground": backgroundSupported
+      ]
+    )
+  }
+
   func setAudioOutputActive(_ active: Bool, reason: String) {
     lock.lock()
     let changed = audioOutputActive != active
@@ -368,6 +401,7 @@ final class PlatformRuntimeBridge: NSObject, FlutterStreamHandler {
     applicationState = state
     let shouldPause = (state == "inactive" || state == "background") && !mediaPauseIssued
     let shouldRecover = state == "foregroundActive" && mediaPauseIssued
+    let serverBackgroundSupported = serverDemand && microphoneDemand
     if shouldPause {
       mediaPauseIssued = true
     } else if shouldRecover {
@@ -384,7 +418,7 @@ final class PlatformRuntimeBridge: NSObject, FlutterStreamHandler {
             ? "ios_application_inactive"
             : "ios_application_backgrounded",
           "cameraBackgroundSupported": false,
-          "serverBackgroundSupported": true,
+          "serverBackgroundSupported": serverBackgroundSupported,
           "microphoneBackgroundSupported": true,
           "audioOutputBackgroundSupported": true,
           "preserveAudioInBackground": true
