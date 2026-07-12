@@ -56,6 +56,12 @@ class ComfortAudioService {
       assetPath: 'generated://soft_lullaby',
       kind: 'lullaby',
     ),
+    ComfortAudioTrack(
+      id: 'shushing',
+      title: 'Soft shushing',
+      assetPath: 'generated://shushing',
+      kind: 'shushing',
+    ),
   ];
 
   final DateTime Function() _now;

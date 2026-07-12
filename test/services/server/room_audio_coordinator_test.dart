@@ -101,6 +101,20 @@ void main() {
     expect(frame.any((value) => value != 0), isTrue);
   });
 
+  test('comfort catalog exposes the soft shushing track to Client', () {
+    final service = ComfortAudioService();
+
+    expect(
+      service.trackCatalog.map((track) => track['id']),
+      contains('shushing'),
+    );
+    expect(
+      service.applyCommand(
+          const {'action': 'play', 'trackId': 'shushing'}).trackId,
+      'shushing',
+    );
+  });
+
   test('native start failure does not poison later room audio commands',
       () async {
     final sink = _FailFirstStartPcmAudioSink();

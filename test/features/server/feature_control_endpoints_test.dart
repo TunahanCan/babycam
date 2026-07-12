@@ -98,6 +98,17 @@ void main() {
     expect(comfort.statusCode, HttpStatus.ok);
     expect((comfort.body['state'] as Map)['playing'], isTrue);
     expect((comfort.body['state'] as Map)['trackId'], 'rain');
+
+    final shushing = await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.comfortCommand,
+      {'action': 'play', 'trackId': 'shushing', 'volume': 0.35},
+      bearerToken: trusted.token,
+    );
+    expect(shushing.statusCode, HttpStatus.ok);
+    expect((shushing.body['state'] as Map)['trackId'], 'shushing');
+
     expect(nightLight.statusCode, HttpStatus.ok);
     expect((nightLight.body['state'] as Map)['enabled'], isTrue);
     expect((nightLight.body['state'] as Map)['mode'], 'screenGlow');
