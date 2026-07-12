@@ -19,6 +19,26 @@ void main() {
     expect(first.streamToken.token, isNot(second.streamToken.token));
   });
 
+  test('başarısız replacement yalnız yeni stream tokenini geri alır', () {
+    final tokenService = PairingTokenService();
+    final registry = ActiveClientRegistry(
+      tokenService: tokenService,
+      maxActiveClients: 5,
+    );
+
+    final first = registry.startSession('anne');
+    final replacement = registry.startSession('anne');
+    registry.rollbackSessionStart(replacement);
+
+    expect(registry.activeClientCount, 1);
+    expect(
+        tokenService.validateStreamToken(first.streamToken.token), isNotNull);
+    expect(
+      tokenService.validateStreamToken(replacement.streamToken.token),
+      isNull,
+    );
+  });
+
   test('medya disconnect aktif watch session ve tokeni düşürmez', () {
     final tokenService = PairingTokenService();
     final registry = ActiveClientRegistry(

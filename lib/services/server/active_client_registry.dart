@@ -82,6 +82,13 @@ class ActiveClientRegistry {
     cleanupClient(clientId);
   }
 
+  void rollbackSessionStart(ActiveSessionStartResult startResult) {
+    tokenService.revokeStreamToken(startResult.streamToken.token);
+    if (startResult.createdActiveSlot) {
+      cleanupClient(startResult.clientId);
+    }
+  }
+
   StreamAttachResult attachStream(String clientId) {
     final normalizedClientId = _normalizeClientId(clientId);
     pruneExpiredStreamTokens();

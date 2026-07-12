@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,7 +14,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   test('session/start aynı client için idempotent kalır', () async {
     final tokenService = PairingTokenService();
-    final server = await _testServer(tokenService);
+    var runtimeStarts = 0;
+    final server = await _testServer(
+      tokenService,
+      onStreamSessionStarted: (
+        _, {
+        required video,
+        required audio,
+        required mediaTransport,
+      }) {
+        runtimeStarts++;
+        if (runtimeStarts > 1) throw StateError('duplicate media start');
+      },
+    );
     addTearDown(server.dispose);
     final base = Uri.parse(await server.startPairingMode());
     final client = HttpClient();
@@ -30,12 +43,16 @@ void main() {
       trusted.token,
       {'clientId': trusted.clientId},
     );
+    final repaired = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
     final second = await _postJson(
       client,
       base.port,
       MimiCamProtocolV2.sessionStart,
-      trusted.token,
-      {'clientId': trusted.clientId},
+      repaired.token,
+      {'clientId': repaired.clientId},
     );
 
     expect(first.statusCode, HttpStatus.ok);
@@ -43,6 +60,64 @@ void main() {
     expect(first.body['activeStreamClients'], 1);
     expect(second.body['activeStreamClients'], 1);
     expect(first.body['streamToken'], isNot(second.body['streamToken']));
+    expect(runtimeStarts, 1);
+  });
+
+  test('başarısız replacement çalışan aynı-client oturumunu korur', () async {
+    final tokenService = PairingTokenService();
+    var runtimeStarts = 0;
+    final server = await _testServer(
+      tokenService,
+      onStreamSessionStarted: (
+        _, {
+        required video,
+        required audio,
+        required mediaTransport,
+      }) {
+        runtimeStarts++;
+        if (audio) throw StateError('audio replacement failed');
+      },
+    );
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+
+    final first = await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.sessionStart,
+      trusted.token,
+      {'clientId': trusted.clientId, 'video': true, 'audio': false},
+    );
+    final failedReplacement = await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.sessionStart,
+      trusted.token,
+      {'clientId': trusted.clientId, 'video': true, 'audio': true},
+    );
+    final recovered = await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.sessionStart,
+      trusted.token,
+      {'clientId': trusted.clientId, 'video': true, 'audio': false},
+    );
+
+    expect(first.statusCode, HttpStatus.ok);
+    expect(failedReplacement.statusCode, HttpStatus.internalServerError);
+    expect(recovered.statusCode, HttpStatus.ok);
+    expect(recovered.body['activeStreamClients'], 1);
+    expect(
+      tokenService.validateStreamToken(first.body['streamToken']! as String),
+      isNotNull,
+    );
+    expect(runtimeStarts, 2);
   });
 
   test('quality health ölçümü aynı client için active client sayısını artırmaz',
@@ -151,7 +226,15 @@ void main() {
   });
 }
 
-Future<MimiCamServer> _testServer(PairingTokenService tokenService) async {
+Future<MimiCamServer> _testServer(
+  PairingTokenService tokenService, {
+  FutureOr<void> Function(
+    String clientId, {
+    required bool video,
+    required bool audio,
+    required String mediaTransport,
+  })? onStreamSessionStarted,
+}) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
   return MimiCamServer(
@@ -159,6 +242,7 @@ Future<MimiCamServer> _testServer(PairingTokenService tokenService) async {
     strings: AppStrings(const Locale('tr')),
     onLog: (_) {},
     onAlert: (_) {},
+    onStreamSessionStarted: onStreamSessionStarted,
     tokenService: tokenService,
     httpPort: 0,
     startMediaOnSessionStart: false,

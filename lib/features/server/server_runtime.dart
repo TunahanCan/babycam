@@ -73,6 +73,16 @@ class StreamSessionOptions {
   final ServerStreamTransport transport;
 
   bool get ownsCaptureExternally => transport == ServerStreamTransport.webRtc;
+
+  @override
+  bool operator ==(Object other) =>
+      other is StreamSessionOptions &&
+      other.video == video &&
+      other.audio == audio &&
+      other.transport == transport;
+
+  @override
+  int get hashCode => Object.hash(video, audio, transport);
 }
 
 class ServerRuntime {
@@ -342,6 +352,11 @@ class ServerRuntime {
   ) async {
     if (_disposed) return;
     final previous = _activeSessions[clientId];
+    if (previous == options) {
+      _refreshResourceCounts();
+      _emit(_stateForPhase(ServerRuntimePhase.mediaActive));
+      return;
+    }
     final wasExternalActive = _externalCaptureOwners.remove(clientId);
     _activeSessions[clientId] = options;
     try {

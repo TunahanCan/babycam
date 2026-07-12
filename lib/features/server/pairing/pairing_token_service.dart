@@ -249,6 +249,10 @@ class PairingTokenService {
     _streamTokens.removeWhere((_, record) => record.clientId == clientId);
   }
 
+  void revokeStreamToken(String token) {
+    _streamTokens.remove(hashToken(token));
+  }
+
   String hashToken(String token) =>
       sha256.convert(utf8.encode(token)).toString();
   TrustedClientRecord? recordForClient(String clientId) => _clients[clientId];

@@ -284,6 +284,7 @@ class MimiCamServer {
   bool _videoCaptureDesired = false;
   final _standaloneSessionDemands = <String, ({bool video, bool audio})>{};
   final _sessionMediaDemands = <String, ({bool video, bool audio})>{};
+  final _sessionMediaTransports = <String, String>{};
   final _runtimeSessionClients = <String>{};
   Uint8List? _latestJpeg;
   int? _lastCameraFrameAtMs;
@@ -1664,25 +1665,39 @@ class MimiCamServer {
       });
       return;
     }
-    var runtimeAcquired = false;
+    final sessionClientId = startResult.clientId;
+    final hadExistingSession = !startResult.createdActiveSlot;
+    final hadRuntimeSession = _runtimeSessionClients.contains(sessionClientId);
+    final previousDemand = _sessionMediaDemands[sessionClientId];
+    final previousTransport = _sessionMediaTransports[sessionClientId];
+    final previousStandaloneDemand = _standaloneSessionDemands[sessionClientId];
+    final sameRuntimeRequest = hadExistingSession &&
+        previousDemand == demand &&
+        previousTransport == mediaTransport;
+    var runtimeMutationApplied = false;
     try {
-      _sessionMediaDemands[startResult.clientId] = demand;
+      _sessionMediaDemands[sessionClientId] = demand;
+      _sessionMediaTransports[sessionClientId] = mediaTransport;
       await _applyMediaProfileForCurrentDemand();
       final callback = onStreamSessionStarted;
       if (callback != null) {
-        await callback(
-          startResult.clientId,
-          video: demand.video,
-          audio: demand.audio,
-          mediaTransport: mediaTransport,
-        );
-        runtimeAcquired = true;
-        _runtimeSessionClients.add(startResult.clientId);
+        if (!sameRuntimeRequest) {
+          await callback(
+            sessionClientId,
+            video: demand.video,
+            audio: demand.audio,
+            mediaTransport: mediaTransport,
+          );
+          runtimeMutationApplied = true;
+        }
+        _runtimeSessionClients.add(sessionClientId);
       } else if (startMediaOnSessionStart) {
-        _standaloneSessionDemands[startResult.clientId] = runtimeDemand;
-        await _reconcileStandaloneSessionDemand();
-        runtimeAcquired = true;
-        _runtimeSessionClients.add(startResult.clientId);
+        if (!sameRuntimeRequest) {
+          _standaloneSessionDemands[sessionClientId] = runtimeDemand;
+          await _reconcileStandaloneSessionDemand();
+          runtimeMutationApplied = true;
+        }
+        _runtimeSessionClients.add(sessionClientId);
       }
       await _writeJson(request.response, {
         'ok': true,
@@ -1696,31 +1711,89 @@ class MimiCamServer {
         if (accessSnapshot != null) 'broadcastAccess': accessSnapshot.toJson(),
       });
     } catch (error) {
-      if (runtimeAcquired) {
-        _runtimeSessionClients.remove(startResult.clientId);
+      if (hadExistingSession) {
+        if (previousDemand == null) {
+          _sessionMediaDemands.remove(sessionClientId);
+        } else {
+          _sessionMediaDemands[sessionClientId] = previousDemand;
+        }
+        if (previousTransport == null) {
+          _sessionMediaTransports.remove(sessionClientId);
+        } else {
+          _sessionMediaTransports[sessionClientId] = previousTransport;
+        }
+        if (previousStandaloneDemand == null) {
+          _standaloneSessionDemands.remove(sessionClientId);
+        } else {
+          _standaloneSessionDemands[sessionClientId] = previousStandaloneDemand;
+        }
+
+        if (runtimeMutationApplied) {
+          try {
+            final callback = onStreamSessionStarted;
+            if (hadRuntimeSession &&
+                callback != null &&
+                previousDemand != null &&
+                previousTransport != null) {
+              await callback(
+                sessionClientId,
+                video: previousDemand.video,
+                audio: previousDemand.audio,
+                mediaTransport: previousTransport,
+              );
+            } else if (hadRuntimeSession && startMediaOnSessionStart) {
+              await _reconcileStandaloneSessionDemand();
+            } else if (!hadRuntimeSession) {
+              final stopCallback = onStreamSessionStopped;
+              if (stopCallback != null) {
+                await stopCallback(sessionClientId);
+              } else if (startMediaOnSessionStart) {
+                await _reconcileStandaloneSessionDemand();
+              }
+            }
+          } catch (rollbackError) {
+            onLog('Session replacement rollback failed: $rollbackError');
+          }
+        }
+        if (hadRuntimeSession) {
+          _runtimeSessionClients.add(sessionClientId);
+        } else {
+          _runtimeSessionClients.remove(sessionClientId);
+        }
+        try {
+          await _applyMediaProfileForCurrentDemand();
+        } catch (rollbackError) {
+          onLog('Session media profile rollback failed: $rollbackError');
+        }
+        _activeClientRegistry.rollbackSessionStart(startResult);
+      } else if (runtimeMutationApplied) {
+        _runtimeSessionClients.remove(sessionClientId);
         try {
           final callback = onStreamSessionStopped;
           if (callback != null) {
-            await callback(startResult.clientId);
+            await callback(sessionClientId);
           } else {
-            _standaloneSessionDemands.remove(startResult.clientId);
+            _standaloneSessionDemands.remove(sessionClientId);
             await _reconcileStandaloneSessionDemand();
           }
         } catch (rollbackError) {
           onLog('Session runtime rollback failed: $rollbackError');
         }
       }
-      _standaloneSessionDemands.remove(startResult.clientId);
-      _sessionMediaDemands.remove(startResult.clientId);
-      _activeClientRegistry.stopSession(startResult.clientId);
-      try {
-        accessSnapshot = await _broadcastAccess?.endSession(
-          _broadcastAccessSessionId(clientId),
-        );
-        _notifyBroadcastAccessChanged(accessSnapshot);
-        _scheduleBroadcastAccessTimer(accessSnapshot);
-      } catch (accessError) {
-        onLog('Session access rollback failed: $accessError');
+      if (!hadExistingSession) {
+        _standaloneSessionDemands.remove(sessionClientId);
+        _sessionMediaDemands.remove(sessionClientId);
+        _sessionMediaTransports.remove(sessionClientId);
+        _activeClientRegistry.rollbackSessionStart(startResult);
+        try {
+          accessSnapshot = await _broadcastAccess?.endSession(
+            _broadcastAccessSessionId(clientId),
+          );
+          _notifyBroadcastAccessChanged(accessSnapshot);
+          _scheduleBroadcastAccessTimer(accessSnapshot);
+        } catch (accessError) {
+          onLog('Session access rollback failed: $accessError');
+        }
       }
       onLog('Medya başlatılamadı: $error');
       await _writeJsonBestEffort(
@@ -2025,6 +2098,7 @@ class MimiCamServer {
     );
     _activeClientRegistry.stopSession(clientId);
     _sessionMediaDemands.remove(clientId);
+    _sessionMediaTransports.remove(clientId);
 
     final ownedRuntimeSession = _runtimeSessionClients.remove(clientId);
     if (ownedRuntimeSession) {
@@ -3003,6 +3077,7 @@ class MimiCamServer {
     _runtimeSessionClients.clear();
     _standaloneSessionDemands.clear();
     _sessionMediaDemands.clear();
+    _sessionMediaTransports.clear();
     await cleanup.attempt('room features', _features.dispose);
     await cleanup.attempt('native playback demand', () async {
       await onPlaybackDemandChanged?.call(false);

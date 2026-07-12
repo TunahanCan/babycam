@@ -362,6 +362,28 @@ void main() {
     expect(runtime.currentState.activeClients, 1);
   });
 
+  test('aynı WebRTC session start dış capture sahipliğini korur', () async {
+    final media = MediaRuntimeController();
+    final runtime = ServerRuntime(mediaRuntime: media);
+    addTearDown(runtime.dispose);
+    const options = StreamSessionOptions(
+      video: true,
+      audio: true,
+      transport: ServerStreamTransport.webRtc,
+    );
+
+    await runtime.startStreamSession('client-webrtc', options);
+    await runtime.activateExternalCapture('client-webrtc');
+    expect(runtime.currentState.externalCaptureActive, isTrue);
+    expect(media.isActive, isFalse);
+
+    await runtime.startStreamSession('client-webrtc', options);
+
+    expect(runtime.currentState.activeClients, 1);
+    expect(runtime.currentState.externalCaptureActive, isTrue);
+    expect(media.isActive, isFalse);
+  });
+
   test('notification demand releases WebRTC tracks before analyzer capture',
       () async {
     final events = <String>[];
