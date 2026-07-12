@@ -10,6 +10,7 @@ import 'alerts/client_alert_history.dart';
 import 'controls/client_room_controls.dart';
 import 'media/active_stream_session.dart';
 import 'media/client_stream_health_state.dart';
+import 'pairing/pairing_failure.dart';
 
 class ClientRuntimeState {
   const ClientRuntimeState({
@@ -119,6 +120,7 @@ class ClientRuntime {
   StreamSubscription<bool>? _alertConnectionSubscription;
   Timer? _broadcastAccessTimer;
   PairingSession? _activeStreamOwnerSession;
+  Future<void>? _pairingOperation;
   Future<void> _watchTail = Future<void>.value();
   Future<void> _endpointRebindTail = Future<void>.value();
   int _endpointGeneration = 0;
@@ -241,29 +243,61 @@ class ClientRuntime {
     }
   }
 
-  Future<void> pairWithServer(PairingPayload payload) async {
-    if (_disposed) return;
-    final previousSession = _state.session;
+  Future<void> pairWithServer(PairingPayload payload) {
+    if (_disposed) return Future<void>.value();
+    if (_pairingOperation != null) {
+      return Future<void>.error(
+        const PairingFailure(PairingFailureCode.pairingInProgress),
+      );
+    }
+    late final Future<void> operation;
+    operation = _pairWithServer(payload).whenComplete(() {
+      if (identical(_pairingOperation, operation)) {
+        _pairingOperation = null;
+      }
+    });
+    _pairingOperation = operation;
+    return operation;
+  }
+
+  Future<void> _pairWithServer(PairingPayload payload) async {
+    if (payload.isExpired) {
+      throw const PairingFailure(PairingFailureCode.payloadExpired);
+    }
+    final previousState = _state;
     _emit(_copyState(
       phase: ClientRuntimePhase.pairing,
-      session: previousSession,
-      clearActiveStream: true,
+      clearError: true,
     ));
     late final PairingSession session;
     try {
       session = await _pair(payload);
     } catch (error) {
       if (!_disposed) {
-        _emit(ClientRuntimeState(
-          phase: ClientRuntimePhase.error,
-          session: previousSession,
-          error: error,
-          broadcastAccess: _state.broadcastAccess,
-        ));
+        // A second QR attempt must not blank a healthy room view or its
+        // alerts. The caller receives the actionable error for the banner.
+        if (previousState.session != null) {
+          _emit(previousState);
+        } else {
+          _emit(ClientRuntimeState(
+            phase: ClientRuntimePhase.error,
+            error: error,
+            broadcastAccess: previousState.broadcastAccess,
+          ));
+        }
       }
       rethrow;
     }
     if (_disposed) return;
+    if (previousState.session != null) {
+      await _releasePreviousRoomForReplacement(previousState);
+    }
+    if (_disposed) return;
+    if (previousState.session?.deviceId != session.deviceId) {
+      // Alerts describe the child in the paired room. Do not show a new
+      // caregiver the previous room's history after switching devices.
+      await alertHistory.clear();
+    }
     final mediaProfile = MediaQualityProfile.fromJson(
         session.payload.capabilities['mediaProfile']);
     _emit(ClientRuntimeState(
@@ -274,6 +308,37 @@ class ClientRuntime {
     ));
     _startNetworkQuality(session);
     await _startEndpointResolution(session);
+  }
+
+  Future<void> _releasePreviousRoomForReplacement(
+    ClientRuntimeState previousState,
+  ) async {
+    await _networkQualitySubscription?.cancel();
+    _networkQualitySubscription = null;
+    await _cancelEndpointResolution();
+    await _enqueueWatch(() async {
+      final previousSession = previousState.session;
+      if (previousSession != null && previousState.activeStream != null) {
+        try {
+          await _stopStream?.call(_activeStreamOwnerSession ?? previousSession);
+        } catch (_) {
+          // The replacement session remains usable even when the old room is
+          // already unreachable.
+        }
+      }
+      _activeStreamOwnerSession = null;
+      _cancelBroadcastAccessTimer();
+      await _broadcastAccess?.endSession('client.watch');
+      streamHealthState?.setWatchActive(false);
+    });
+    try {
+      // Stop unconditionally: an alert subscription may still be connecting
+      // even when the old immutable state has not flipped to active yet.
+      await _stopAlerts?.call();
+    } catch (_) {
+      // A stale WebSocket must never prevent a fresh pairing.
+    }
+    _setAlertTransportConnected(false);
   }
 
   Future<void> renewTokenIfNeeded({DateTime? now}) async {

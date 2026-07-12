@@ -229,6 +229,92 @@ class AppStrings {
       de: 'MimiCam Warnungen',
       ar: 'تنبيهات MimiCam');
 
+  /// Pairing errors are deliberately phrased as recovery steps. Raw HTTP and
+  /// nonce errors make a stressed caregiver repeat the same failing action.
+  String pairingFailureMessage(String code) => switch (code) {
+        'payloadExpired' || 'nonceInvalidOrExpired' => _t(
+            tr: 'Bu QR kodu kullanılmış ya da süresi dolmuş. Oda telefonunda yeni QR oluşturup tekrar deneyin.',
+            en: 'This QR code was used or has expired. Show a new QR code on the room phone and try again.',
+            zh: '此二维码已使用或已过期。请在房间手机上显示新的二维码后重试。',
+            hi: 'यह QR कोड इस्तेमाल हो चुका है या इसकी समय-सीमा समाप्त हो गई है। कमरे वाले फ़ोन पर नया QR दिखाकर फिर कोशिश करें।',
+            es: 'Este código QR ya se usó o caducó. Muestra un código nuevo en el teléfono de la habitación e inténtalo de nuevo.',
+            fr: 'Ce code QR a déjà été utilisé ou a expiré. Affichez un nouveau code sur le téléphone de la chambre, puis réessayez.',
+            de: 'Dieser QR-Code wurde bereits verwendet oder ist abgelaufen. Zeige auf dem Zimmertelefon einen neuen Code an und versuche es erneut.',
+            ar: 'تم استخدام رمز QR هذا أو انتهت صلاحيته. اعرض رمزاً جديداً على هاتف الغرفة ثم حاول مرة أخرى.'),
+        'pairingNotActive' => _t(
+            tr: 'Oda telefonunda eşleştirme açık değil. Yayın ekranından “Eşleştir”i açıp yeni QR kodu okutun.',
+            en: 'Pairing is not open on the room phone. Open Pair on the broadcast screen and scan the new QR code.',
+            zh: '房间手机未开启配对。请在直播页面打开“配对”，然后扫描新的二维码。',
+            hi: 'कमरे वाले फ़ोन पर पेयरिंग खुली नहीं है। प्रसारण स्क्रीन से पेयरिंग खोलें और नया QR स्कैन करें।',
+            es: 'La vinculación no está abierta en el teléfono de la habitación. Abre Vincular en la pantalla de transmisión y escanea el nuevo QR.',
+            fr: 'L’association n’est pas ouverte sur le téléphone de la chambre. Ouvrez Associer sur l’écran de diffusion et scannez le nouveau QR.',
+            de: 'Auf dem Zimmertelefon ist die Kopplung nicht geöffnet. Öffne auf dem Übertragungsbildschirm „Koppeln“ und scanne den neuen QR-Code.',
+            ar: 'الإقران غير مفتوح على هاتف الغرفة. افتح «إقران» من شاشة البث وامسح رمز QR الجديد.'),
+        'rateLimited' => _t(
+            tr: 'Çok fazla eşleştirme denemesi yapıldı. Bir dakika bekleyip yeni QR koduyla tekrar deneyin.',
+            en: 'There were too many pairing attempts. Wait a minute, then try again with a new QR code.',
+            zh: '配对尝试过多。请等待一分钟，再使用新的二维码重试。',
+            hi: 'बहुत अधिक पेयरिंग प्रयास किए गए। एक मिनट रुकें, फिर नए QR कोड से कोशिश करें।',
+            es: 'Hubo demasiados intentos de vinculación. Espera un minuto e inténtalo de nuevo con un código QR nuevo.',
+            fr: 'Il y a eu trop de tentatives d’association. Attendez une minute, puis réessayez avec un nouveau code QR.',
+            de: 'Es gab zu viele Kopplungsversuche. Warte eine Minute und versuche es dann mit einem neuen QR-Code erneut.',
+            ar: 'كان هناك عدد كبير جداً من محاولات الإقران. انتظر دقيقة ثم حاول مرة أخرى برمز QR جديد.'),
+        'selfPairingNotAllowed' => _t(
+            tr: 'Bir telefon kendi oda yayınına bağlanamaz. İzlemek için diğer telefonu Client modunda kullanın.',
+            en: 'A phone cannot connect to its own room broadcast. Use the other phone in Client mode to watch.',
+            zh: '手机不能连接到自己的房间直播。请使用另一部处于 Client 模式的手机观看。',
+            hi: 'कोई फ़ोन अपने ही कमरे के प्रसारण से नहीं जुड़ सकता। देखने के लिए दूसरे फ़ोन को Client मोड में उपयोग करें।',
+            es: 'Un teléfono no puede conectarse a su propia transmisión de habitación. Usa el otro teléfono en modo Client para mirar.',
+            fr: 'Un téléphone ne peut pas se connecter à sa propre diffusion de chambre. Utilisez l’autre téléphone en mode Client pour regarder.',
+            de: 'Ein Telefon kann sich nicht mit seiner eigenen Zimmerübertragung verbinden. Verwende zum Zuschauen das andere Telefon im Client-Modus.',
+            ar: 'لا يمكن للهاتف الاتصال ببث غرفته نفسه. استخدم الهاتف الآخر في وضع العميل للمشاهدة.'),
+        'maxTrustedClientsReached' => _t(
+            tr: 'Bu oda için izin verilen ebeveyn cihazı sayısına ulaşıldı. Oda telefonundaki bağlı cihazlar listesinden eski bir cihazı kaldırın.',
+            en: 'This room has reached its allowed number of parent devices. Remove an old device from the connected-devices list on the room phone.',
+            zh: '此房间已达到允许的家长设备数量。请在房间手机的已连接设备列表中移除旧设备。',
+            hi: 'इस कमरे के लिए अनुमत अभिभावक डिवाइस की सीमा पूरी हो गई है। कमरे वाले फ़ोन की कनेक्टेड डिवाइस सूची से पुराना डिवाइस हटाएँ।',
+            es: 'Esta habitación alcanzó el número permitido de dispositivos parentales. Elimina un dispositivo antiguo de la lista de dispositivos conectados del teléfono de la habitación.',
+            fr: 'Cette chambre a atteint le nombre autorisé d’appareils parents. Retirez un ancien appareil de la liste des appareils connectés sur le téléphone de la chambre.',
+            de: 'Dieses Zimmer hat die erlaubte Anzahl an Eltern-Geräten erreicht. Entferne ein altes Gerät aus der Liste verbundener Geräte auf dem Zimmertelefon.',
+            ar: 'بلغت هذه الغرفة العدد المسموح به من أجهزة الوالدين. أزل جهازاً قديماً من قائمة الأجهزة المتصلة على هاتف الغرفة.'),
+        'maxChildProfilesReached' => _t(
+            tr: 'Bu telefonda en fazla dört oda kaydedilebilir. Ayarlardan artık kullanmadığınız bir odayı kaldırıp tekrar deneyin.',
+            en: 'This phone can save up to four rooms. Remove a room you no longer use in Settings, then try again.',
+            zh: '此手机最多可保存四个房间。请在“设置”中移除不再使用的房间后重试。',
+            hi: 'इस फ़ोन में अधिकतम चार कमरे सहेजे जा सकते हैं। सेटिंग में जिस कमरे का उपयोग नहीं करते उसे हटाकर फिर कोशिश करें।',
+            es: 'Este teléfono puede guardar hasta cuatro habitaciones. Elimina una que ya no uses en Ajustes y vuelve a intentarlo.',
+            fr: 'Ce téléphone peut enregistrer jusqu’à quatre chambres. Supprimez une chambre inutilisée dans Réglages, puis réessayez.',
+            de: 'Dieses Telefon kann bis zu vier Zimmer speichern. Entferne in den Einstellungen ein nicht mehr verwendetes Zimmer und versuche es erneut.',
+            ar: 'يمكن لهذا الهاتف حفظ ما يصل إلى أربع غرف. أزل غرفة لا تستخدمها من الإعدادات ثم حاول مرة أخرى.'),
+        'connectionUnavailable' => _t(
+            tr: 'Oda telefonuna ulaşılamadı. İki telefonun aynı Wi-Fi ağında olduğundan ve odadaki yayının açık olduğundan emin olun.',
+            en: 'The room phone could not be reached. Check that both phones are on the same Wi-Fi network and that the room broadcast is on.',
+            zh: '无法连接到房间手机。请确认两部手机连接到同一 Wi-Fi，且房间直播已开启。',
+            hi: 'कमरे वाले फ़ोन तक नहीं पहुँचा जा सका। जाँचें कि दोनों फ़ोन एक ही Wi-Fi पर हैं और कमरे का प्रसारण चालू है।',
+            es: 'No se pudo localizar el teléfono de la habitación. Comprueba que ambos teléfonos estén en la misma red Wi-Fi y que la transmisión esté activa.',
+            fr: 'Le téléphone de la chambre est inaccessible. Vérifiez que les deux téléphones sont sur le même Wi-Fi et que la diffusion est active.',
+            de: 'Das Zimmertelefon ist nicht erreichbar. Prüfe, ob beide Telefone im selben WLAN sind und die Zimmerübertragung aktiv ist.',
+            ar: 'تعذر الوصول إلى هاتف الغرفة. تأكد من أن الهاتفين على شبكة Wi-Fi نفسها وأن بث الغرفة قيد التشغيل.'),
+        'pairingInProgress' => _t(
+            tr: 'Eşleştirme zaten sürüyor. Lütfen bağlantı sonucunu bekleyin.',
+            en: 'Pairing is already in progress. Please wait for the connection result.',
+            zh: '配对正在进行中。请等待连接结果。',
+            hi: 'पेयरिंग पहले से चल रही है। कृपया कनेक्शन परिणाम की प्रतीक्षा करें।',
+            es: 'La vinculación ya está en curso. Espera el resultado de la conexión.',
+            fr: 'L’association est déjà en cours. Attendez le résultat de la connexion.',
+            de: 'Die Kopplung läuft bereits. Bitte warte auf das Verbindungsergebnis.',
+            ar: 'الإقران جارٍ بالفعل. يرجى انتظار نتيجة الاتصال.'),
+        _ => _t(
+            tr: 'Şu an bağlanılamadı. İki telefonun aynı Wi-Fi ağında olduğunu kontrol edip yeni QR koduyla tekrar deneyin.',
+            en: 'Could not connect right now. Check that both phones are on the same Wi-Fi network, then try again with a new QR code.',
+            zh: '暂时无法连接。请确认两部手机在同一 Wi-Fi 网络上，然后使用新的二维码重试。',
+            hi: 'अभी कनेक्ट नहीं हो सका। जाँचें कि दोनों फ़ोन एक ही Wi-Fi नेटवर्क पर हैं, फिर नए QR कोड से कोशिश करें।',
+            es: 'No se pudo conectar ahora. Comprueba que ambos teléfonos estén en la misma red Wi-Fi e inténtalo de nuevo con un código QR nuevo.',
+            fr: 'Connexion impossible pour le moment. Vérifiez que les deux téléphones sont sur le même réseau Wi-Fi, puis réessayez avec un nouveau code QR.',
+            de: 'Eine Verbindung ist gerade nicht möglich. Prüfe, ob beide Telefone im selben WLAN sind, und versuche es mit einem neuen QR-Code erneut.',
+            ar: 'تعذر الاتصال الآن. تأكد من أن الهاتفين على شبكة Wi-Fi نفسها ثم حاول مرة أخرى برمز QR جديد.'),
+      };
+
   String get cameraNotFound => _t(
       tr: 'Kamera bulunamadı.',
       en: 'Camera not found.',

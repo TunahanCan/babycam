@@ -34,12 +34,23 @@ class PairingSessionStore {
 
   Future<void> save(PairingSession session) => saveChild(session);
 
+  /// Checks storage capacity before the room issues a new trusted token.
+  /// Re-pairing a known room replaces that room's profile and is always safe.
+  Future<void> ensureCanSavePayload(PairingPayload payload) async {
+    final existing = await _readProfiles(migrateLegacy: false);
+    final id = _childIdForPayload(payload);
+    final replacing = existing.any((profile) => profile.id == id);
+    if (!replacing && existing.length >= maxChildProfiles) {
+      throw const ChildProfileLimitException();
+    }
+  }
+
   Future<void> saveChild(
     PairingSession session, {
     bool selected = true,
   }) async {
     final existing = await _readProfiles(migrateLegacy: false);
-    final id = ChildProfile.idForSession(session);
+    final id = _childIdForPayload(session.payload);
     final replacing = existing.any((profile) => profile.id == id);
     if (!replacing && existing.length >= maxChildProfiles) {
       throw const ChildProfileLimitException();
@@ -237,6 +248,13 @@ class PairingSessionStore {
   }
 
   String _childTokenKey(String childId) => '$_childTokenPrefix$childId';
+
+  String _childIdForPayload(PairingPayload payload) {
+    final serverDeviceId = payload.deviceId.trim();
+    return serverDeviceId.isNotEmpty
+        ? serverDeviceId
+        : '${payload.host}:${payload.port}';
+  }
 }
 
 abstract interface class SecureTokenStore {

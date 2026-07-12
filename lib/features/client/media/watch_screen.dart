@@ -495,6 +495,7 @@ class _WatchScreenState extends State<WatchScreen> {
             profile: profile,
             audioEnabled: _audioEnabled,
             alertsActive: state.alertsActive,
+            alertsConnected: widget.runtime.alertTransportConnected,
           ),
           const SizedBox(height: 18),
           _SectionLabel(
@@ -1391,12 +1392,14 @@ class _LiveMetricGrid extends StatelessWidget {
     required this.profile,
     required this.audioEnabled,
     required this.alertsActive,
+    required this.alertsConnected,
   });
 
   final NetworkQualitySnapshot? quality;
   final MediaQualityProfile? profile;
   final bool audioEnabled;
   final bool alertsActive;
+  final bool alertsConnected;
 
   @override
   Widget build(BuildContext context) {
@@ -1427,9 +1430,11 @@ class _LiveMetricGrid extends StatelessWidget {
           child: _MetricTile(
             icon: Icons.notifications_active_rounded,
             title: strings.ui('navNotifications'),
-            value: alertsActive
-                ? strings.ui('notificationsOn')
-                : strings.ui('notificationsOff'),
+            value: !alertsActive
+                ? strings.ui('notificationsOff')
+                : alertsConnected
+                    ? strings.ui('notificationsOn')
+                    : strings.ui('clientTitleReconnecting'),
             color: const Color(0xFFFFE3EA),
           ),
         ),

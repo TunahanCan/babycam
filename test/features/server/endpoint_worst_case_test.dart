@@ -248,7 +248,53 @@ void main() {
     expect(firstPair.statusCode, HttpStatus.ok);
     expect(firstPair.body['trustedClientToken'], isNotEmpty);
     expect(replayPair.statusCode, HttpStatus.unauthorized);
+    expect(replayPair.body['code'], 'PAIRING_NONCE_INVALID_OR_EXPIRED');
     expect(expiredPair.statusCode, HttpStatus.unauthorized);
+    expect(expiredPair.body['code'], 'PAIRING_NONCE_INVALID_OR_EXPIRED');
+    expect(tokenService.pairedClientCount, 1);
+  });
+
+  test('bir telefon kendi oda yayınıyla eşleşemez ve QR tüketilmez', () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+    final status = await _getPublicJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.statusPublic,
+    );
+    final nonce = status['pairingNonce'] as String;
+
+    final rejected = await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.pairConfirm,
+      null,
+      {
+        'pairingNonce': nonce,
+        'clientName': 'Aynı telefon',
+        'deviceId': 'client',
+        'originServerDeviceId': 'server_local',
+      },
+    );
+    final validAfterRejection = await _postJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.pairConfirm,
+      null,
+      {
+        'pairingNonce': nonce,
+        'clientName': 'Diğer telefon',
+        'deviceId': 'other-client',
+      },
+    );
+
+    expect(rejected.statusCode, HttpStatus.conflict);
+    expect(rejected.body['code'], 'SELF_PAIRING_NOT_ALLOWED');
+    expect(validAfterRejection.statusCode, HttpStatus.ok);
     expect(tokenService.pairedClientCount, 1);
   });
 

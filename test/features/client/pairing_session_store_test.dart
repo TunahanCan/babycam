@@ -102,6 +102,11 @@ void main() {
       () => store.saveChild(_session('token-4', serverId: 'server-4')),
       throwsA(isA<ChildProfileLimitException>()),
     );
+    await expectLater(
+      store.ensureCanSavePayload(_payload(deviceId: 'server-4')),
+      throwsA(isA<ChildProfileLimitException>()),
+    );
+    await store.ensureCanSavePayload(_payload(deviceId: 'server-0'));
   });
 
   test('bozuk session kaydi crash yerine temizlenir', () async {

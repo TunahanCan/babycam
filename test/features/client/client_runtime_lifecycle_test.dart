@@ -6,20 +6,104 @@ import 'package:mimicam/core/protocol/pairing_payload.dart';
 import 'package:mimicam/core/protocol/pairing_session.dart';
 import 'package:mimicam/features/client/client_runtime.dart';
 import 'package:mimicam/features/client/media/active_stream_session.dart';
+import 'package:mimicam/features/client/pairing/pairing_failure.dart';
 import 'package:mimicam/services/monetization/broadcast_access_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  PairingPayload payload() => PairingPayload(
+  PairingPayload payload({String deviceId = 's'}) => PairingPayload(
       schemaVersion: 1,
       host: 'h',
       port: 1,
-      deviceId: 's',
+      deviceId: deviceId,
       deviceName: 'd',
       pairingNonce: 'n',
       expiresAtMs:
           DateTime.now().add(const Duration(minutes: 1)).millisecondsSinceEpoch,
       capabilities: const {});
+
+  test('yeni oda eşleşmesi eski yayın ve uyarıları kapatır', () async {
+    var streamsStopped = 0;
+    var alertsStopped = 0;
+    final runtime = ClientRuntime(
+      pair: (value) async => PairingSession(
+        payload: value,
+        sessionToken: 'token_${value.deviceId}',
+      ),
+      startStream: (_, {bool audioEnabled = false}) async =>
+          const ActiveStreamSession(streamToken: 'stream'),
+      stopStream: (_) async => streamsStopped++,
+      startAlerts: (_) async => true,
+      stopAlerts: () async => alertsStopped++,
+    );
+    final first = payload(deviceId: 'first-room');
+    final second = payload(deviceId: 'second-room');
+
+    await runtime.pairWithServer(first);
+    await runtime.startAlertListening();
+    await runtime.startWatching();
+    await runtime.pairWithServer(second);
+
+    expect(streamsStopped, 1);
+    expect(alertsStopped, 1);
+    expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
+    expect(runtime.currentState.session?.deviceId, 'second-room');
+    expect(runtime.currentState.activeStream, isNull);
+    expect(runtime.currentState.alertsActive, isFalse);
+  });
+
+  test('başarısız yeni QR denemesi mevcut izlemeyi korur', () async {
+    var shouldFail = false;
+    final runtime = ClientRuntime(
+      pair: (value) async {
+        if (shouldFail) {
+          throw const PairingFailure(PairingFailureCode.nonceInvalidOrExpired);
+        }
+        return PairingSession(payload: value, sessionToken: 'token');
+      },
+      startStream: (_, {bool audioEnabled = false}) async =>
+          const ActiveStreamSession(streamToken: 'stream'),
+      startAlerts: (_) async => true,
+    );
+    final first = payload(deviceId: 'first-room');
+
+    await runtime.pairWithServer(first);
+    await runtime.startAlertListening();
+    await runtime.startWatching();
+    shouldFail = true;
+
+    await expectLater(
+      runtime.pairWithServer(payload(deviceId: 'second-room')),
+      throwsA(isA<PairingFailure>()),
+    );
+
+    expect(runtime.currentState.phase, ClientRuntimePhase.watching);
+    expect(runtime.currentState.session?.deviceId, 'first-room');
+    expect(runtime.currentState.activeStream, isNotNull);
+    expect(runtime.currentState.alertsActive, isTrue);
+  });
+
+  test('eşzamanlı ikinci eşleşme dokunuşu güvenli biçimde reddedilir',
+      () async {
+    final pending = Completer<PairingSession>();
+    final runtime = ClientRuntime(pair: (_) => pending.future);
+
+    final first = runtime.pairWithServer(payload());
+    await expectLater(
+      runtime.pairWithServer(payload()),
+      throwsA(
+        isA<PairingFailure>().having(
+          (failure) => failure.code,
+          'code',
+          PairingFailureCode.pairingInProgress,
+        ),
+      ),
+    );
+    pending.complete(PairingSession(payload: payload(), sessionToken: 'token'));
+    await first;
+
+    expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
+  });
 
   test(
       'WatchScreen/runtime açılınca video audio session başlar, kapanınca durur, clearPairing token siler',

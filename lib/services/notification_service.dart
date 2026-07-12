@@ -28,6 +28,10 @@ class NotificationService {
   static const channelId = 'mimicam_alerts';
   static const alertsPayload = 'mimicam://alerts';
   static const _groupKey = 'mimicam_alerts_group';
+  // iOS groups notifications by this exact thread identifier. Keep it
+  // independent of the Android channel name so a future Android rename cannot
+  // silently split the parent alert stack on iPhone.
+  static const iosAlertThreadIdentifier = 'mimicam.parent-alerts';
   static final _notificationTaps = StreamController<String>.broadcast();
   static String? _pendingTap;
   static String? _lastPublishedTap;
@@ -221,7 +225,11 @@ class NotificationService {
             presentSound: true,
             presentBanner: true,
             presentList: true,
-            threadIdentifier: channelId,
+            // This is the iOS Notification Center grouping contract. Every
+            // parent alert retains its own notification id while sharing one
+            // thread, so iOS shows a single MimiCam stack instead of a noisy
+            // list of independent banners.
+            threadIdentifier: iosAlertThreadIdentifier,
             interruptionLevel: InterruptionLevel.active,
           ),
         ),

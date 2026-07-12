@@ -15,6 +15,7 @@ import 'media/remote_broadcast_access_client.dart';
 import 'media/stream_session_controller.dart';
 import 'media/webrtc/flutter_webrtc_client_connector.dart';
 import 'pairing/client_identity_store.dart';
+import 'pairing/pairing_failure.dart';
 import 'pairing/pairing_session_store.dart';
 import 'pairing/qr_pairing_client.dart';
 import 'pairing/trusted_token_renewal_client.dart';
@@ -32,7 +33,14 @@ class ClientCompositionRoot {
   }) {
     createCount++;
     final identity = ClientIdentityStore(secureTokens: secureTokens);
-    final pairingClient = QRPairingClient(clientIdProvider: identity.clientId);
+    final pairingClient = QRPairingClient(
+      clientIdProvider: identity.clientId,
+      // When this phone has previously acted as Server, its discovery id is
+      // retained locally. Send it only to prevent the phone from pairing with
+      // its own QR code after a role switch.
+      localServerDeviceIdProvider: () async =>
+          preferences.getString('discovery.server_device_id'),
+    );
     final tokenRenewal = TrustedTokenRenewalClient();
     final store = PairingSessionStore(
       preferences,
@@ -82,9 +90,18 @@ class ClientCompositionRoot {
 
     final runtime = ClientRuntime(
       pair: (payload) async {
-        final session = await pairingClient.pair(payload);
-        await store.save(session);
-        return session;
+        try {
+          // A new room would otherwise consume a trusted-client slot on the
+          // Server and only then discover that this phone cannot retain it.
+          await store.ensureCanSavePayload(payload);
+          final session = await pairingClient.pair(payload);
+          await store.save(session);
+          return session;
+        } on ChildProfileLimitException {
+          throw const PairingFailure(
+            PairingFailureCode.maxChildProfilesReached,
+          );
+        }
       },
       renew: (session) async {
         final renewed = await tokenRenewal.renew(session);

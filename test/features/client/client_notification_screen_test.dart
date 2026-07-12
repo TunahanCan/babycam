@@ -105,6 +105,34 @@ void main() {
     expect(find.text('Son durum bekleniyor'), findsNothing);
   });
 
+  testWidgets('eşleşmiş odadaki bildirime dokunmak canlı izlemeyi açar',
+      (tester) async {
+    final session = PairingSession(payload: _payload(), sessionToken: 'token');
+    final runtime = ClientRuntime(
+      pair: (_) async => session,
+      startStream: (_, {bool audioEnabled = false}) async => null,
+      stopStream: (_) async {},
+    );
+    addTearDown(runtime.dispose);
+    await runtime.pairWithServer(session.payload);
+    await runtime.recordAlert(_alert('alert-open', 'Canlıyı aç'));
+
+    await tester.pumpWidget(_App(
+      home: ClientHomeScreen(
+        runtime: runtime,
+        activeRole: AppRole.client,
+        onRoleSelected: (_) {},
+        initialTab: 2,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Canlıyı aç'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(WatchScreen), findsOneWidget);
+  });
+
   testWidgets('telefon bildirimine dokunmak Bildirimler sekmesini acar',
       (tester) async {
     final taps = StreamController<String>.broadcast();

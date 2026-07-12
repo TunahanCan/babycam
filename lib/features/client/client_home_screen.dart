@@ -19,6 +19,7 @@ import '../shared/presentation/mimicam_shells.dart';
 import 'client_runtime.dart';
 import 'media/watch_screen.dart';
 import 'pairing/client_pairing_flow.dart';
+import 'pairing/pairing_failure.dart';
 import 'pairing/qr_scan_screen.dart';
 
 class ClientHomeScreen extends StatefulWidget {
@@ -218,7 +219,12 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
               stream: widget.runtime.alertUpdates,
               initialData: widget.runtime.alerts,
               builder: (context, snapshot) => _NotificationList(
-                  alerts: snapshot.data ?? const [], filter: _alertFilter),
+                alerts: snapshot.data ?? const [],
+                filter: _alertFilter,
+                onWatch: state.session == null
+                    ? null
+                    : () => _openWatch(context, state),
+              ),
             ),
           ],
         ),
@@ -276,8 +282,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
           strings.uiFormat('pairedMessage', {'name': payload.deviceName}));
     } catch (error) {
       if (!context.mounted) return;
-      _showMessage(
-          context, strings.uiFormat('pairingFailed', {'error': error}));
+      _showMessage(context, _pairingFailureMessage(strings, error));
     }
   }
 
@@ -297,8 +302,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
           strings.uiFormat('pairedMessage', {'name': payload.deviceName}));
     } catch (error) {
       if (!context.mounted) return;
-      _showMessage(
-          context, strings.uiFormat('manualPairingFailed', {'error': error}));
+      _showMessage(context, _pairingFailureMessage(strings, error));
     }
   }
 
@@ -321,11 +325,15 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
       );
     } catch (error) {
       if (!context.mounted) return;
-      _showMessage(
-        context,
-        strings.uiFormat('manualPairingFailed', {'error': error}),
-      );
+      _showMessage(context, _pairingFailureMessage(strings, error));
     }
+  }
+
+  String _pairingFailureMessage(AppStrings strings, Object error) {
+    if (error is PairingFailure) {
+      return strings.pairingFailureMessage(error.code.name);
+    }
+    return strings.uiFormat('pairingFailed', {'error': error});
   }
 
   Future<PairingPayload> _fetchManualPairingPayload(
@@ -1275,10 +1283,15 @@ class _NotificationFilterBar extends StatelessWidget {
 }
 
 class _NotificationList extends StatelessWidget {
-  const _NotificationList({required this.alerts, required this.filter});
+  const _NotificationList({
+    required this.alerts,
+    required this.filter,
+    this.onWatch,
+  });
 
   final List<AlertEventDto> alerts;
   final _AlertFilter filter;
+  final VoidCallback? onWatch;
 
   @override
   Widget build(BuildContext context) {
@@ -1295,7 +1308,7 @@ class _NotificationList extends StatelessWidget {
     return Column(
       children: [
         for (final item in items) ...[
-          _NotificationCard(item),
+          _NotificationCard(item, onWatch: onWatch),
           if (item != items.last) const SizedBox(height: 10),
         ],
       ],
@@ -1389,76 +1402,109 @@ class _NotificationSpec {
 }
 
 class _NotificationCard extends StatelessWidget {
-  const _NotificationCard(this.item);
+  const _NotificationCard(this.item, {this.onWatch});
 
   final _NotificationSpec item;
+  final VoidCallback? onWatch;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: MimiCamDesignTokens.cardDecoration().copyWith(
-        color: item.backgroundColor,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: Colors.white,
-            child: Icon(item.icon, color: MimiCamDesignTokens.nightPlum),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
+    final strings = AppStrings.of(context);
+    final decoration = MimiCamDesignTokens.cardDecoration().copyWith(
+      color: item.backgroundColor,
+    );
+    return Semantics(
+      button: onWatch != null,
+      label: onWatch == null ? item.title : strings.ui('openLiveWatch'),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onWatch,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: decoration,
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  item.title,
-                  style: const TextStyle(
-                    color: MimiCamDesignTokens.nightPlum,
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w900,
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: Colors.white,
+                  child: Icon(item.icon, color: MimiCamDesignTokens.nightPlum),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.title,
+                        style: const TextStyle(
+                          color: MimiCamDesignTokens.nightPlum,
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        item.text,
+                        style: const TextStyle(
+                          color: MimiCamDesignTokens.slate,
+                          fontSize: 13.5,
+                          height: 1.25,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        onWatch == null
+                            ? item.time
+                            : '${item.time} · ${strings.ui('openLiveWatch')}',
+                        style: const TextStyle(
+                          color: MimiCamDesignTokens.slate,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 5),
-                Text(
-                  item.text,
-                  style: const TextStyle(
-                    color: MimiCamDesignTokens.slate,
-                    fontSize: 13.5,
-                    height: 1.25,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  item.time,
-                  style: const TextStyle(
-                    color: MimiCamDesignTokens.slate,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 11,
+                        vertical: 6,
+                      ),
+                      decoration: const ShapeDecoration(
+                        color: Colors.white,
+                        shape: StadiumBorder(),
+                      ),
+                      child: Text(
+                        item.badge,
+                        style: const TextStyle(
+                          color: MimiCamDesignTokens.pink,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    if (onWatch != null) ...[
+                      const SizedBox(height: 18),
+                      const Icon(
+                        Icons.play_circle_fill_rounded,
+                        color: MimiCamDesignTokens.pink,
+                        size: 22,
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-            decoration: const ShapeDecoration(
-              color: Colors.white,
-              shape: StadiumBorder(),
-            ),
-            child: Text(
-              item.badge,
-              style: const TextStyle(
-                color: MimiCamDesignTokens.pink,
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

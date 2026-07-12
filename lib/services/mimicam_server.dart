@@ -1512,7 +1512,11 @@ class MimiCamServer {
     try {
       if (!_pairingModeActive) {
         request.response.statusCode = HttpStatus.notFound;
-        await request.response.close();
+        await _writeJson(request.response, {
+          'ok': false,
+          'code': 'PAIRING_NOT_ACTIVE',
+          'message': 'Pairing is not active on this room device.',
+        });
         return;
       }
       if (!tokenService.consumePairConfirmAttempt(
@@ -1528,20 +1532,44 @@ class MimiCamServer {
       }
       final body = await utf8.decoder.bind(request).join();
       final json = jsonDecode(body);
-      if (json is! Map ||
-          tokenService.validateAndConsumeNonce(
-                  json['pairingNonce']?.toString() ?? '') ==
-              false) {
+      if (json is! Map) {
+        request.response.statusCode = HttpStatus.badRequest;
+        await _writeJson(request.response, {
+          'ok': false,
+          'code': 'PAIRING_REQUEST_INVALID',
+          'message': 'Pairing request is invalid.',
+        });
+        return;
+      }
+      final serverDeviceId = await _serverDeviceIdentityResolver.resolve();
+      final originServerDeviceId =
+          json['originServerDeviceId']?.toString().trim() ?? '';
+      if (originServerDeviceId.isNotEmpty &&
+          originServerDeviceId == serverDeviceId) {
+        request.response.statusCode = HttpStatus.conflict;
+        await _writeJson(request.response, {
+          'ok': false,
+          'code': 'SELF_PAIRING_NOT_ALLOWED',
+          'message': 'A device cannot pair with its own room.',
+        });
+        return;
+      }
+      if (tokenService.validateAndConsumeNonce(
+              json['pairingNonce']?.toString() ?? '') ==
+          false) {
         request.response.statusCode = HttpStatus.unauthorized;
-        await request.response.close();
+        await _writeJson(request.response, {
+          'ok': false,
+          'code': 'PAIRING_NONCE_INVALID_OR_EXPIRED',
+          'message': 'This pairing QR has expired or was already used.',
+        });
         return;
       }
       final token = tokenService.issueTrustedClientToken(
           clientName: json['clientName']?.toString() ?? 'Client',
           deviceId: json['deviceId']?.toString() ?? 'client');
-      final deviceId = await _serverDeviceIdentityResolver.resolve();
       await _writeJson(request.response, {
-        'serverDeviceId': deviceId,
+        'serverDeviceId': serverDeviceId,
         'serverName': 'Bebek Odası',
         'clientId': token.clientId,
         'trustedClientToken': token.token,
@@ -1558,7 +1586,11 @@ class MimiCamServer {
       });
     } catch (_) {
       request.response.statusCode = HttpStatus.badRequest;
-      await request.response.close();
+      await _writeJson(request.response, {
+        'ok': false,
+        'code': 'PAIRING_REQUEST_INVALID',
+        'message': 'Pairing request is invalid.',
+      });
     }
   }
 

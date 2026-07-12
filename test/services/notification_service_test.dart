@@ -157,6 +157,27 @@ void main() {
     expect(android?.styleInformation, isA<BigTextStyleInformation>());
   });
 
+  test('iOS parent alerts share one Notification Center thread', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final plugin = _FakeNotificationsPlugin();
+    final service = NotificationService(
+      AppStrings(const Locale('en')),
+      plugin: plugin,
+    );
+
+    await service.showAlert('First room alert', alertId: 'ios-alert-1');
+    final first = plugin.lastDetails?.iOS;
+    await service.showAlert('Second room alert', alertId: 'ios-alert-2');
+    final second = plugin.lastDetails?.iOS;
+
+    expect(
+        first?.threadIdentifier, NotificationService.iosAlertThreadIdentifier);
+    expect(
+        second?.threadIdentifier, NotificationService.iosAlertThreadIdentifier);
+    expect(second?.badgeNumber, isNull);
+    expect(second?.presentList, isTrue);
+  });
+
   test('notification tap stream accepts only MimiCam alert payloads', () async {
     final plugin = _FakeNotificationsPlugin();
     final service = NotificationService(
