@@ -76,6 +76,17 @@ void main() {
     expect(diag['analyzedFrames'], greaterThanOrEqualTo(5));
   });
 
+  test('off threshold cannot exceed the sensitive on threshold', () {
+    final analyzer = MotionAnalyzerV2(
+      config: fastConfig().copyWith(
+        motionOnThreshold: 0.15,
+        motionOffThreshold: 0.20,
+      ),
+    );
+
+    expect(analyzer.diagnostics()['effectiveMotionOffThreshold'], 0.12);
+  });
+
   test('small local motion raises raw score and score', () {
     final analyzer = MotionAnalyzerV2(config: fastConfig());
     prime(analyzer, width, height);
@@ -84,6 +95,23 @@ void main() {
     final result = analyzer.analyze(makeFrame(data, width, height, 600));
     expect(result.rawScore, greaterThan(0.2));
     expect(result.score, greaterThan(0.1));
+  });
+
+  test('isolated sensor speckles do not become motion', () {
+    final analyzer = MotionAnalyzerV2(config: fastConfig());
+    prime(analyzer, width, height);
+    MotionAnalysisResult? result;
+    for (final t in [600, 900, 1200]) {
+      final data = makeLumaFrame(width: width, height: height, value: 80);
+      for (var y = 0; y < height; y += 6) {
+        for (var x = 0; x < width; x += 6) {
+          data[y * width + x] = 180;
+        }
+      }
+      result = analyzer.analyze(makeFrame(data, width, height, t));
+    }
+    expect(result!.activeAreaRatio, lessThan(0.01));
+    expect(result.isMotion, isFalse);
   });
 
   test('motion shorter than min duration stays false', () {

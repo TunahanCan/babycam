@@ -88,6 +88,19 @@ void main() {
     expect(frame.any((value) => value != 0), isTrue);
   });
 
+  test('comfort generator supports the soft shushing track', () {
+    final generator = ComfortPcmGenerator(sampleRate: 16000);
+
+    final frame = generator.nextFrame(
+      trackId: 'shushing',
+      volume: .5,
+      duration: const Duration(milliseconds: 100),
+    );
+
+    expect(frame, hasLength(3200));
+    expect(frame.any((value) => value != 0), isTrue);
+  });
+
   test('native start failure does not poison later room audio commands',
       () async {
     final sink = _FailFirstStartPcmAudioSink();

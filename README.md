@@ -1,5 +1,7 @@
 <div align="center">
-  <img src="assets/branding/mimicam_wordmark.png" width="520" alt="MimiCam" />
+  <img src="assets/branding/mimicam_launcher_icon.png" width="168" alt="MimiCam uygulama ikonu" />
+  <br />
+  <img src="assets/branding/mimicam_wordmark.png" width="420" alt="MimiCam" />
 
   <h3>İki telefon. Tek Wi-Fi. Güvenli ve yerel bebek takibi.</h3>
 
@@ -226,6 +228,6 @@ flutter run \
 ---
 
 <div align="center">
-  <img src="assets/branding/mimicam_bear_icon.png" width="82" alt="MimiCam ayı ikonu" />
+  <img src="assets/branding/mimicam_launcher_icon.png" width="82" alt="MimiCam" />
   <p><strong>MimiCam</strong><br />Yakında. Yerel. Senin kontrolünde.</p>
 </div>

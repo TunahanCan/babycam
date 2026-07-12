@@ -4,6 +4,7 @@ import '../../core/media/adaptive_media_profile.dart';
 import '../audio/audio_analysis_result.dart';
 import '../video/motion_analysis_result.dart';
 import '../../l10n/app_strings.dart';
+import '../audio/audio_calibration_state.dart';
 import 'alert_config.dart';
 import 'alert_event.dart';
 import 'alert_severity.dart';
@@ -59,6 +60,11 @@ class AlertEngine {
 
   /// Handles one motion analysis result and returns the emitted alert, if any.
   AlertEvent? onMotionResult(MotionAnalysisResult result) {
+    // A skipped or malformed frame is not evidence of movement. Treating it
+    // as motion is especially harmful when the camera reconnects or the
+    // device is under load because it creates believable-looking false alerts.
+    if (result.invalidFrame || result.skippedByFrameRateGate) return null;
+    if (_videoReliableProvider?.call() == false) return null;
     _episodeAggregator?.onMotionResult(result);
     if (result.isGlobalLightChange) {
       if (!config.emitGlobalLightChangeInfo) {
@@ -90,11 +96,13 @@ class AlertEngine {
 
   /// Handles one audio analysis result and returns the emitted alert, if any.
   AlertEvent? onAudioResult(AudioAnalysisResult result) {
+    final audioReliable = _audioReliableProvider?.call() ?? true;
+    if (!audioReliable) return null;
     final episode = _episodeAggregator?.onAudioResult(
       result,
       streamQualityTier:
           _networkTierProvider?.call() ?? NetworkQualityTier.unknown,
-      audioReliable: _audioReliableProvider?.call() ?? true,
+      audioReliable: audioReliable,
       videoReliable: _videoReliableProvider?.call() ?? true,
     );
     if (episode != null) {
@@ -106,6 +114,15 @@ class AlertEngine {
         timestampMs: episode.lastUpdatedAtMs,
         metadata: episode.toJson(),
       );
+    }
+
+    // No audio-derived notification is trustworthy until the room baseline
+    // is known. This also covers loud-sound alerts when the episode
+    // aggregator is enabled but still warming up.
+    if (result.invalidChunk ||
+        !result.isCalibrated ||
+        result.calibrationState != AudioCalibrationState.calibrated) {
+      return null;
     }
 
     if (_episodeAggregator == null &&

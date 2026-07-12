@@ -2790,6 +2790,14 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'Nana suave',
     'fr': 'Berceuse douce',
   },
+  'shushingSound': {
+    'tr': 'Piş piş sesi',
+    'en': 'Soft shushing',
+    'zh': '轻柔嘘声',
+    'hi': 'हल्की श्श्श ध्वनि',
+    'es': 'Susurro suave',
+    'fr': 'Chut apaisant',
+  },
   'playComfort': {
     'tr': 'Oynat',
     'en': 'Play',

@@ -20,6 +20,8 @@ class MotionAnalyzerV2 {
   final FrameRateGate _gate;
   Uint8List _current = Uint8List(0);
   Float64List _background = Float64List(0);
+  Uint8List _rawActiveMask = Uint8List(0);
+  Float64List _residualDiff = Float64List(0);
   bool _hasBackground = false;
   double _smoothedScore = 0;
   double _noiseFloor = 0;
@@ -95,15 +97,48 @@ class MotionAnalyzerV2 {
     var allDiffSum = 0.0;
 
     for (var i = 0; i < count; i++) {
-      if (!_inRoi(i)) continue;
+      if (!_inRoi(i)) {
+        // Do not let a stale active bit outside the ROI participate in the
+        // neighbourhood test on the next frame.
+        _rawActiveMask[i] = 0;
+        _residualDiff[i] = 0;
+        continue;
+      }
       final rawDiff = (_current[i] - _background[i]).abs().toDouble();
       if (rawDiff > threshold) rawActive++;
       final diff =
           (_current[i] - globalShift - _background[i]).abs().toDouble();
       allDiffSum += diff;
-      if (diff > threshold) {
+      _rawActiveMask[i] = diff > threshold ? 1 : 0;
+      _residualDiff[i] = diff;
+    }
+
+    // A single noisy Y-plane sample must not become movement. Require an
+    // active pixel to have nearby active neighbours, which preserves real
+    // connected objects while removing isolated sensor/compression speckles.
+    for (var i = 0; i < count; i++) {
+      if (_rawActiveMask[i] == 0 || !_inRoi(i)) continue;
+      final x = i % _config.downsampleWidth;
+      final y = i ~/ _config.downsampleWidth;
+      var neighbours = 0;
+      for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+          if (dx == 0 && dy == 0) continue;
+          final nx = x + dx;
+          final ny = y + dy;
+          if (nx < 0 ||
+              ny < 0 ||
+              nx >= _config.downsampleWidth ||
+              ny >= _config.downsampleHeight) {
+            continue;
+          }
+          final neighbourIndex = ny * _config.downsampleWidth + nx;
+          if (_rawActiveMask[neighbourIndex] != 0) neighbours++;
+        }
+      }
+      if (neighbours >= _config.minActiveNeighborCount) {
         active++;
-        diffSum += diff;
+        diffSum += _residualDiff[i];
       }
     }
 
@@ -126,7 +161,7 @@ class MotionAnalyzerV2 {
 
     if (!_isMotion &&
         !isGlobalLightChange &&
-        rawScore < _config.motionOffThreshold) {
+        rawScore < _effectiveMotionOffThreshold) {
       final observedNoise = allDiffSum / total;
       _noiseFloor = _noiseFloor * 0.90 + observedNoise * 0.10;
     }
@@ -180,6 +215,7 @@ class MotionAnalyzerV2 {
         'isMotion': _isMotion,
         'candidateStartMs': _candidateStartMs,
         'analyzedFrames': _analyzedFrames,
+        'effectiveMotionOffThreshold': _effectiveMotionOffThreshold,
         'config': _config.toJson(),
       };
 
@@ -188,6 +224,8 @@ class MotionAnalyzerV2 {
         max(0, _config.downsampleWidth * _config.downsampleHeight).toInt();
     _current = Uint8List(length);
     _background = Float64List(length);
+    _rawActiveMask = Uint8List(length);
+    _residualDiff = Float64List(length);
     _noiseFloor = _config.minPixelDiff / _config.noiseMultiplier;
   }
 
@@ -203,13 +241,14 @@ class MotionAnalyzerV2 {
   }
 
   void _updateMotionState(int timestampMs, bool isGlobalLightChange) {
+    final offThreshold = _effectiveMotionOffThreshold;
     if (isGlobalLightChange) {
       _isMotion = false;
       _candidateStartMs = null;
       return;
     }
     if (_isMotion) {
-      if (_smoothedScore <= _config.motionOffThreshold) {
+      if (_smoothedScore <= offThreshold) {
         _isMotion = false;
         _candidateStartMs = null;
       }
@@ -220,10 +259,15 @@ class MotionAnalyzerV2 {
       if (timestampMs - _candidateStartMs! >= _config.minMotionDurationMs) {
         _isMotion = true;
       }
-    } else if (_smoothedScore <= _config.motionOffThreshold) {
+    } else if (_smoothedScore <= offThreshold) {
       _candidateStartMs = null;
     }
   }
+
+  double get _effectiveMotionOffThreshold => min(
+        _config.motionOffThreshold,
+        (_config.motionOnThreshold * 0.80).clamp(0.01, 1.0),
+      );
 
   MotionAnalysisResult _result(int timestampMs, int micros) =>
       MotionAnalysisResult(

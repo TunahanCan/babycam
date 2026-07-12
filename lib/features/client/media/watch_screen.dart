@@ -448,12 +448,14 @@ class _WatchScreenState extends State<WatchScreen> {
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 88),
         children: [
           _Top(
-            trailing: _ConnectedBadge(text: strings.ui('connected')),
+            trailing: _ConnectedBadge(
+              text: state.activeStream == null
+                  ? strings.ui('measuring')
+                  : strings.ui('connected'),
+            ),
           ),
-          const SizedBox(height: 16),
-          Text(strings.ui('liveWatching'), style: _title),
-          const SizedBox(height: 8),
-          Text(strings.ui('liveStreamConnectedSubtitle'), style: _subtitle),
+          const SizedBox(height: 14),
+          _LiveOverviewCard(session: state.session, state: state),
           if (state.broadcastAccess != null) ...[
             const SizedBox(height: 14),
             _BroadcastAccessCard(
@@ -482,6 +484,12 @@ class _WatchScreenState extends State<WatchScreen> {
             onFatalError: widget.runtime.reportStreamFailure,
           ),
           const SizedBox(height: 16),
+          _SectionLabel(
+            icon: Icons.insights_rounded,
+            title: strings.ui('roomStatus'),
+            subtitle: strings.ui('liveStreamConnectedSubtitle'),
+          ),
+          const SizedBox(height: 10),
           _LiveMetricGrid(
             quality: quality,
             profile: profile,
@@ -489,6 +497,12 @@ class _WatchScreenState extends State<WatchScreen> {
             alertsActive: state.alertsActive,
           ),
           const SizedBox(height: 18),
+          _SectionLabel(
+            icon: Icons.tune_rounded,
+            title: strings.ui('watchPreferences'),
+            subtitle: strings.ui('liveWatching'),
+          ),
+          const SizedBox(height: 10),
           _ActionGroup(
             actions: _watchActionSpecs(strings, state),
           ),
@@ -500,23 +514,24 @@ class _WatchScreenState extends State<WatchScreen> {
               onError: (error) => _showSnack(error.toString()),
             ),
           ],
-          const SizedBox(height: 28),
+          const SizedBox(height: 22),
           SizedBox(
             width: double.infinity,
-            height: 58,
-            child: FilledButton(
+            height: 52,
+            child: OutlinedButton.icon(
               onPressed: () => Navigator.pop(context),
-              style: FilledButton.styleFrom(
-                backgroundColor: _pink,
-                foregroundColor: Colors.white,
+              icon: const Icon(Icons.stop_circle_outlined, size: 20),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _navy,
+                side: BorderSide(color: _navy.withValues(alpha: .18)),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(16),
                 ),
               ),
-              child: Text(
+              label: Text(
                 strings.ui('stopLiveWatch'),
                 style:
-                    const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
               ),
             ),
           ),
@@ -829,6 +844,141 @@ class _BroadcastAccessCard extends StatelessWidget {
   }
 }
 
+class _LiveOverviewCard extends StatelessWidget {
+  const _LiveOverviewCard({required this.session, required this.state});
+
+  final PairingSession? session;
+  final ClientRuntimeState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final isLive = state.activeStream != null;
+    final title = session?.deviceName.trim().isNotEmpty == true
+        ? session!.deviceName
+        : strings.ui('liveWatching');
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF162B4A), Color(0xFF264D68)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x24162B4A),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: .14),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              isLive ? Icons.videocam_rounded : Icons.videocam_off_rounded,
+              color: isLive ? _mint : Colors.white70,
+              size: 25,
+            ),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Row(
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isLive ? _mint : Colors.white54,
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    Flexible(
+                      child: Text(
+                        isLive
+                            ? strings.ui('liveStreamConnectedSubtitle')
+                            : strings.ui('measuring'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(
+            isLive ? Icons.check_circle_rounded : Icons.sync_rounded,
+            color: isLive ? _mint : Colors.white70,
+            size: 22,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(
+      {required this.icon, required this.title, required this.subtitle});
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: _navy, size: 19),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: _title.copyWith(fontSize: 16)),
+              const SizedBox(height: 2),
+              Text(subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _subtitle.copyWith(fontSize: 12)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _VideoPanel extends StatelessWidget {
   const _VideoPanel({
     required this.session,
@@ -863,9 +1013,10 @@ class _VideoPanel extends StatelessWidget {
       aspectRatio: 16 / 9,
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFFA47465),
+          color: const Color(0xFF162B4A),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFF2D8CD), width: 4),
+          border:
+              Border.all(color: Colors.white.withValues(alpha: .75), width: 2),
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
@@ -1253,8 +1404,9 @@ class _LiveMetricGrid extends StatelessWidget {
     final networkLabel = quality == null
         ? strings.ui('measuring')
         : _VideoPanel._networkLabel(strings, quality!.tier);
-    final latencyLabel =
-        quality?.rttMs == null ? '120 ms' : '${quality!.rttMs} ms';
+    final latencyLabel = quality?.rttMs == null
+        ? strings.ui('measuring')
+        : '${quality!.rttMs} ms';
     final audioLabel = audioEnabled
         ? profile?.audioFirst == true
             ? strings.ui('audioPriority')
@@ -1640,28 +1792,17 @@ class _ActionGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 420) {
-          return Column(
-            children: [
-              for (final action in actions) ...[
-                _Action(action),
-                if (action != actions.last) const SizedBox(height: 10),
-              ],
-            ],
-          );
-        }
-
-        return Row(
-          children: [
-            for (final action in actions) ...[
-              Expanded(child: _Action(action)),
-              if (action != actions.last) const SizedBox(width: 10),
-            ],
-          ],
-        );
-      },
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: actions.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        mainAxisExtent: 76,
+      ),
+      itemBuilder: (context, index) => _Action(actions[index]),
     );
   }
 }
@@ -1683,35 +1824,38 @@ class _Action extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 94,
+      height: 76,
       width: double.infinity,
       child: FilledButton(
         onPressed: spec.onTap,
         style: FilledButton.styleFrom(
           backgroundColor: spec.backgroundColor,
           foregroundColor: _navy,
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(4),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             CircleAvatar(
-              radius: 18,
+              radius: 13,
               backgroundColor: Colors.white,
               child: Icon(spec.icon, color: _navy, size: 20),
             ),
-            const SizedBox(height: 8),
-            Text(
-              spec.text,
-              maxLines: 2,
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: _navy,
-                fontWeight: FontWeight.w900,
-                fontSize: 12.5,
+            const SizedBox(height: 3),
+            Flexible(
+              child: Text(
+                spec.text,
+                maxLines: 2,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: _navy,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 11.5,
+                ),
               ),
             ),
           ],
@@ -1835,23 +1979,40 @@ class _Top extends StatelessWidget {
     return Row(
       children: [
         IconButton(
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
           onPressed: () => Navigator.maybePop(context),
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           color: _navy,
         ),
-        const Spacer(),
-        const Icon(Icons.circle, color: _pink, size: 10),
-        const SizedBox(width: 8),
-        const Text(
-          'MimiCam',
-          style: TextStyle(
-            color: _pink,
-            fontWeight: FontWeight.w900,
-            fontSize: 15,
+        const Expanded(
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.circle, color: _pink, size: 9),
+                SizedBox(width: 6),
+                Text(
+                  'MimiCam',
+                  style: TextStyle(
+                    color: _pink,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        const Spacer(),
-        if (trailing != null) trailing! else const SizedBox(width: 48),
+        SizedBox(
+          width: 92,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: trailing == null
+                ? const SizedBox.shrink()
+                : FittedBox(fit: BoxFit.scaleDown, child: trailing),
+          ),
+        ),
       ],
     );
   }

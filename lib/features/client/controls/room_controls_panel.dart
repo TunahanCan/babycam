@@ -106,6 +106,7 @@ class _RoomControlsPanelState extends State<RoomControlsPanel> {
                 _trackChip(strings, 'pink_noise', 'pinkNoise'),
                 _trackChip(strings, 'rain', 'rainSound'),
                 _trackChip(strings, 'soft_lullaby', 'softLullaby'),
+                _trackChip(strings, 'shushing', 'shushingSound'),
               ],
             ),
             const SizedBox(height: 12),

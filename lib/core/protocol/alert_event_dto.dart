@@ -134,6 +134,10 @@ class AlertEventDto {
   }
 
   String localizedMessage(AppStrings strings) {
+    // A newer client may receive an older/server-side event with a message key
+    // but without the feature metadata needed to rebuild it. Never replace a
+    // valid server message with a template filled with zeroes.
+    if (!_hasLocalizationMetadata) return message;
     return switch (messageKey) {
       'parentCryAlert' => strings.parentCryAlert(
           confidencePercent: _int('confidencePercent'),
@@ -169,6 +173,33 @@ class AlertEventDto {
       _ => message,
     };
   }
+
+  bool get _hasLocalizationMetadata {
+    switch (messageKey) {
+      case 'parentCryAlert':
+        return _hasAll(const [
+          'confidencePercent',
+          'ambientDeltaDb',
+          'cryBandPercent',
+          'isCalibrated',
+        ]);
+      case 'parentLoudSoundAlert':
+        return _hasAll(const ['dbfs', 'ambientDeltaDb']);
+      case 'parentMotionAlert':
+        return _hasAll(const ['scorePercent', 'activeAreaPercent', 'meanDiff']);
+      case 'parentLightChangeAlert':
+        return _hasAll(const ['scorePercent', 'globalLumaShift']);
+      case 'parentEpisodeHighCryAlert':
+        return _hasAll(const ['durationMs', 'networkTier']);
+      case 'parentEpisodeShortSoundAlert':
+      case 'parentEpisodeCryAlert':
+        return _hasAll(const ['durationMs']);
+      default:
+        return true;
+    }
+  }
+
+  bool _hasAll(List<String> keys) => keys.every(metadata.containsKey);
 
   int _int(String key) {
     final value = metadata[key];

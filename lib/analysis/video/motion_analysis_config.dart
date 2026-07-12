@@ -11,6 +11,7 @@ class MotionAnalysisConfig {
     this.initializationAlpha = 0.20,
     this.minPixelDiff = 12.0,
     this.noiseMultiplier = 2.5,
+    this.minActiveNeighborCount = 2,
     this.motionOnThreshold = 0.35,
     this.motionOffThreshold = 0.20,
     this.minMotionDurationMs = 1200,
@@ -28,6 +29,10 @@ class MotionAnalysisConfig {
   final double initializationAlpha;
   final double minPixelDiff;
   final double noiseMultiplier;
+
+  /// Rejects isolated pixels that are typical of sensor/compression noise.
+  /// A real moving object normally produces a small connected region.
+  final int minActiveNeighborCount;
   final double motionOnThreshold;
   final double motionOffThreshold;
   final int minMotionDurationMs;
@@ -45,6 +50,7 @@ class MotionAnalysisConfig {
     double? initializationAlpha,
     double? minPixelDiff,
     double? noiseMultiplier,
+    int? minActiveNeighborCount,
     double? motionOnThreshold,
     double? motionOffThreshold,
     int? minMotionDurationMs,
@@ -65,6 +71,8 @@ class MotionAnalysisConfig {
         initializationAlpha: initializationAlpha ?? this.initializationAlpha,
         minPixelDiff: minPixelDiff ?? this.minPixelDiff,
         noiseMultiplier: noiseMultiplier ?? this.noiseMultiplier,
+        minActiveNeighborCount:
+            minActiveNeighborCount ?? this.minActiveNeighborCount,
         motionOnThreshold: motionOnThreshold ?? this.motionOnThreshold,
         motionOffThreshold: motionOffThreshold ?? this.motionOffThreshold,
         minMotionDurationMs: minMotionDurationMs ?? this.minMotionDurationMs,
@@ -84,6 +92,7 @@ class MotionAnalysisConfig {
         'initializationAlpha': initializationAlpha,
         'minPixelDiff': minPixelDiff,
         'noiseMultiplier': noiseMultiplier,
+        'minActiveNeighborCount': minActiveNeighborCount,
         'motionOnThreshold': motionOnThreshold,
         'motionOffThreshold': motionOffThreshold,
         'minMotionDurationMs': minMotionDurationMs,

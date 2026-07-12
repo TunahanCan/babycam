@@ -355,6 +355,7 @@ class ComfortPcmGenerator {
         'pink_noise' => _pinkNoise(),
         'rain' => _rain(),
         'soft_lullaby' => _lullaby(),
+        'shushing' => _shushing(),
         _ => _whiteNoise(),
       };
       final sample = (value * gain * 32767).round().clamp(-32768, 32767);
@@ -394,6 +395,17 @@ class ComfortPcmGenerator {
     final envelopePhase = (_sampleCursor % noteFrames) / noteFrames;
     final envelope = sin(pi * envelopePhase).clamp(0, 1);
     return (sin(phase) * .16 + sin(phase / 2) * .05) * envelope;
+  }
+
+  /// A soft, airy "şşş / piş piş" texture. It is generated locally so the
+  /// room device does not need an audio asset or a network download.
+  double _shushing() {
+    const breathSamples = 16000 * 1.8;
+    final phase = (_sampleCursor % breathSamples) / breathSamples;
+    final envelope = .34 + sin(pi * phase) * .66;
+    final airy = _randomSigned() * .17;
+    final body = _pinkNoise() * .08;
+    return ((airy + body) * envelope).clamp(-.30, .30);
   }
 
   double _randomSigned() => (_nextRandom() / 0x7fffffff) * 2 - 1;

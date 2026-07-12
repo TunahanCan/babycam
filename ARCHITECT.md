@@ -116,7 +116,7 @@ Runtime acisindan onemli dependency'ler:
 
 Flutter assets:
 
-- `assets/branding/mimicam_bear_icon.png`
+- `assets/branding/mimicam_launcher_icon.png`
 - `assets/branding/mimicam_wordmark.png`
 - `assets/test_dashboard/index.html`
 - `assets/test_dashboard/dashboard.js`

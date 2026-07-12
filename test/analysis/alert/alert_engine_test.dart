@@ -69,6 +69,24 @@ void main() {
           ]));
     });
 
+    test('kalibrasyon tamamlanmadan loud sound bildirimi üretmez', () {
+      final engine = AlertEngine(
+        config: const AlertConfig(emitLoudSoundAlerts: true),
+      );
+      addTearDown(engine.dispose);
+
+      final event = engine.onAudioResult(
+        fakeAudioResult(
+          isCryLikely: false,
+          isLoudSound: true,
+          isCalibrated: false,
+          calibrationState: AudioCalibrationState.calibrating,
+        ),
+      );
+
+      expect(event, isNull);
+    });
+
     test('localized parent message explains evidence without diagnosis', () {
       final engine = AlertEngine(strings: AppStrings(const Locale('zh')));
       addTearDown(engine.dispose);
@@ -98,6 +116,31 @@ void main() {
       addTearDown(engine.dispose);
 
       expect(engine.onMotionResult(fakeMotionResult(isMotion: false)), isNull);
+    });
+
+    test('skipped or invalid video frame produces no event', () {
+      final engine = AlertEngine();
+      addTearDown(engine.dispose);
+
+      expect(
+        engine.onMotionResult(fakeMotionResult(skippedByFrameRateGate: true)),
+        isNull,
+      );
+      expect(
+        engine.onMotionResult(fakeMotionResult(invalidFrame: true)),
+        isNull,
+      );
+    });
+
+    test('unreliable media does not create a parent notification', () {
+      final engine = AlertEngine(
+        audioReliableProvider: () => false,
+        videoReliableProvider: () => false,
+      );
+      addTearDown(engine.dispose);
+
+      expect(engine.onAudioResult(fakeAudioResult()), isNull);
+      expect(engine.onMotionResult(fakeMotionResult()), isNull);
     });
 
     test('isMotion true over threshold produces motion event', () {
@@ -177,6 +220,18 @@ void main() {
       expect(event.message, contains('rahat pozisyonda'));
       expect(event.metadata['activeAreaPercent'], 10);
     });
+
+    test('mesajlar algılamayı kesin teşhis gibi sunmaz', () {
+      final engine = AlertEngine(strings: AppStrings(const Locale('tr')));
+      addTearDown(engine.dispose);
+
+      final event = engine.onAudioResult(
+        fakeAudioResult(timestampMs: 1000, isCryLikely: true),
+      )!;
+
+      expect(event.message, contains('olabilir'));
+      expect(event.message, isNot(contains('doğrulandı')));
+    });
   });
 
   group('AlertEngine stream', () {
@@ -238,6 +293,8 @@ AudioAnalysisResult fakeAudioResult({
   int timestampMs = 1000,
   double cryScore = 0.8,
   bool isCryLikely = true,
+  bool isCalibrated = true,
+  AudioCalibrationState calibrationState = AudioCalibrationState.calibrated,
   double dbfs = -30,
   bool isLoudSound = false,
 }) =>
@@ -246,8 +303,8 @@ AudioAnalysisResult fakeAudioResult({
       cryScore: cryScore,
       rawCryScore: cryScore,
       isCryLikely: isCryLikely,
-      isCalibrated: true,
-      calibrationState: AudioCalibrationState.calibrated,
+      isCalibrated: isCalibrated,
+      calibrationState: calibrationState,
       rms: 0.1,
       dbfs: dbfs,
       peak: 0.2,
@@ -270,6 +327,8 @@ MotionAnalysisResult fakeMotionResult({
   double score = 0.5,
   bool isMotion = true,
   bool isGlobalLightChange = false,
+  bool skippedByFrameRateGate = false,
+  bool invalidFrame = false,
 }) =>
     MotionAnalysisResult(
       timestampMs: timestampMs,
@@ -282,7 +341,7 @@ MotionAnalysisResult fakeMotionResult({
       globalLumaShift: 10,
       isMotion: isMotion,
       isGlobalLightChange: isGlobalLightChange,
-      skippedByFrameRateGate: false,
-      invalidFrame: false,
+      skippedByFrameRateGate: skippedByFrameRateGate,
+      invalidFrame: invalidFrame,
       processingTimeMicros: 10,
     );

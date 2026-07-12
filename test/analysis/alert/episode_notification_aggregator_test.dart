@@ -64,6 +64,31 @@ void main() {
     expect(aggregator.state, BabyEventEpisodeState.quiet);
   });
 
+  test('eski kamera hareketi yeni ses episodeuna taşınmaz', () {
+    final aggregator = EpisodeBasedNotificationAggregator();
+
+    aggregator.onMotionResult(_motion(timestampMs: 1000));
+    final episode = aggregator.onAudioResult(_audio(timestampMs: 10000));
+
+    expect(episode, isNull);
+    final confirmed = aggregator.onAudioResult(_audio(timestampMs: 16000));
+    expect(confirmed, isNotNull);
+    expect(confirmed!.motionBursts, 0);
+    expect(confirmed.lastMotionAtMs, isNull);
+  });
+
+  test('kalibrasyon tamamlanmadan ses episodeu başlatılmaz', () {
+    final aggregator = EpisodeBasedNotificationAggregator();
+    final result = _audio(
+      timestampMs: 1000,
+      isCalibrated: false,
+      calibrationState: AudioCalibrationState.calibrating,
+    );
+
+    expect(aggregator.onAudioResult(result), isNull);
+    expect(aggregator.state, BabyEventEpisodeState.quiet);
+  });
+
   test('NotificationComposer episode mesajını locale ile üretir', () {
     const composer = NotificationComposer();
     const episode = BabyEventEpisode(
@@ -91,7 +116,7 @@ void main() {
       strings: AppStrings(const Locale('fr')),
     );
 
-    expect(english, contains('crying'));
+    expect(english, contains('cry-like'));
     expect(english, contains('Weak'));
     expect(french.toLowerCase(), contains('pleurs'));
     expect(french, isNot(contains('Yayın')));
@@ -101,14 +126,16 @@ void main() {
 AudioAnalysisResult _audio({
   required int timestampMs,
   bool active = true,
+  bool isCalibrated = true,
+  AudioCalibrationState calibrationState = AudioCalibrationState.calibrated,
 }) =>
     AudioAnalysisResult(
       timestampMs: timestampMs,
       cryScore: active ? 0.85 : 0.05,
       rawCryScore: active ? 0.85 : 0.05,
       isCryLikely: false,
-      isCalibrated: true,
-      calibrationState: AudioCalibrationState.calibrated,
+      isCalibrated: isCalibrated,
+      calibrationState: calibrationState,
       rms: active ? 0.2 : 0.01,
       dbfs: active ? -25 : -60,
       peak: active ? 0.3 : 0.02,

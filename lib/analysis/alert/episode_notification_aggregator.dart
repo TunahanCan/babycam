@@ -1,6 +1,7 @@
 import '../../core/media/adaptive_media_profile.dart';
 import '../../l10n/app_strings.dart';
 import '../audio/audio_analysis_result.dart';
+import '../audio/audio_calibration_state.dart';
 import '../video/motion_analysis_result.dart';
 import 'alert_severity.dart';
 
@@ -126,6 +127,7 @@ class EpisodeBasedNotificationAggregator {
   final int confirmedCryMs;
   final int resolveQuietMs;
   final LowCostCryScorer _scorer;
+  static const _motionAssociationWindowMs = 5000;
 
   BabyEventEpisodeState _state = BabyEventEpisodeState.quiet;
   int _sequence = 0;
@@ -143,6 +145,15 @@ class EpisodeBasedNotificationAggregator {
 
   void onMotionResult(MotionAnalysisResult result) {
     if (!result.isMotion) return;
+    // Motion is only evidence for the current audio episode. Keep a short
+    // pending window for a camera burst that arrives just before its audio
+    // window, but never carry stale motion into a later episode.
+    final episodeStartedAtMs = _episodeStartedAtMs;
+    if (episodeStartedAtMs == null &&
+        _lastMotionAtMs != null &&
+        result.timestampMs - _lastMotionAtMs! > _motionAssociationWindowMs) {
+      _motionBursts = 0;
+    }
     _motionBursts++;
     _lastMotionAtMs = result.timestampMs;
   }
@@ -153,6 +164,15 @@ class EpisodeBasedNotificationAggregator {
     bool audioReliable = true,
     bool videoReliable = true,
   }) {
+    // Ambient calibration is part of the signal contract. Before it finishes,
+    // a loud room, microphone gain change, or startup transient must not start
+    // an episode that can later be promoted to a phone notification.
+    if (result.invalidChunk ||
+        !result.isCalibrated ||
+        result.calibrationState != AudioCalibrationState.calibrated) {
+      if (_state != BabyEventEpisodeState.quiet) reset();
+      return null;
+    }
     final nowMs = result.timestampMs;
     final durationMs =
         _episodeStartedAtMs == null ? 0 : nowMs - _episodeStartedAtMs!;
@@ -220,6 +240,11 @@ class EpisodeBasedNotificationAggregator {
 
   void _startIfNeeded(int nowMs) {
     if (_episodeStartedAtMs != null) return;
+    if (_lastMotionAtMs == null ||
+        nowMs - _lastMotionAtMs! > _motionAssociationWindowMs) {
+      _motionBursts = 0;
+      _lastMotionAtMs = null;
+    }
     _episodeStartedAtMs = nowMs;
     _state = BabyEventEpisodeState.suspectedCry;
     _sequence++;
@@ -292,11 +317,11 @@ class NotificationComposer {
       final ago = episode.lastMotionAgoMs();
       final motionText =
           ago == null ? 'hareket yok' : '${(ago / 1000).round()} sn önce';
-      return 'Yaklaşık $seconds sn süren yüksek ağlama algılandı. Son hareket $motionText. Yayın ${episode.streamQualityTier.label} modunda.';
+      return 'Yaklaşık $seconds sn süren güçlü ağlama benzeri ses algılandı. Son kamera hareketi $motionText. Yayın ${episode.streamQualityTier.label} modunda.';
     }
     if (episode.resolved && episode.totalCryDurationMs < 5000) {
       return 'Kısa süreli ses yükselmesi algılandı. Devam ederse tekrar bildirilecek.';
     }
-    return 'Yaklaşık $seconds sn süren ağlama sinyali algılandı. Yayın ${episode.streamQualityTier.label} modunda.';
+    return 'Yaklaşık $seconds sn süren ağlama benzeri sinyal algılandı. Yayın ${episode.streamQualityTier.label} modunda.';
   }
 }

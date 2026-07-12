@@ -84,7 +84,13 @@ class ComfortAudioState {
         trackTitle: null,
         volume: 0.5,
         loop: true,
-        playlistTrackIds: const ['white_noise', 'soft_lullaby'],
+        playlistTrackIds: const [
+          'white_noise',
+          'pink_noise',
+          'rain',
+          'soft_lullaby',
+          'shushing',
+        ],
         updatedAtMs: updatedAtMs ?? DateTime.now().millisecondsSinceEpoch,
       );
 

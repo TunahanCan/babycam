@@ -75,6 +75,22 @@ void main() {
     expect(message, isNot(contains('Motion detected')));
   });
 
+  test('eksik analiz metadata geldiğinde sunucunun gerçek mesajını korur', () {
+    const dto = AlertEventDto(
+      id: 'legacy-cry',
+      type: 'cryDetected',
+      severity: 'warning',
+      messageKey: 'parentCryAlert',
+      message:
+          'Anne, odada ağlama benzeri bir ses duyuldu; lütfen görüntüyü kontrol et.',
+      score: .8,
+      timestampMs: 42,
+      sourceDeviceId: 'server',
+    );
+
+    expect(dto.localizedMessage(AppStrings(const Locale('en'))), dto.message);
+  });
+
   test('opsiyonel alert alanlari geriye uyumlu round-trip edilir', () {
     const dto = AlertEventDto(
       id: 'alert-optional',

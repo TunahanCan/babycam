@@ -302,7 +302,7 @@ void main() {
 
     expect(hindi, contains('बच्चा रो रहा'));
     expect(hindi, contains('डायपर'));
-    expect(spanish, contains('movimiento suave'));
+    expect(spanish, contains('cambio suave'));
     expect(spanish, contains('bebé esté cómodo'));
     expect(french, contains('Brève hausse sonore'));
     expect(french, contains('bébé est bien'));
@@ -322,9 +322,40 @@ void main() {
       networkTier: 'कमज़ोर',
     );
 
-    expect(english, contains('crying'));
+    expect(english, contains('cry-like'));
     expect(english, contains('Weak'));
     expect(spanish, contains('sonido'));
     expect(hindi, contains('बेचैनी'));
+  });
+
+  test('uyarı mesajları annenin dilinde doğal hitapla başlar', () {
+    const expected = {
+      'tr': 'Anne,',
+      'en': 'Mom,',
+      'zh': '妈妈,',
+      'hi': 'माँ,',
+      'es': 'Mamá,',
+      'fr': 'Maman,',
+      'de': 'Mama,',
+      'ar': 'يا أمي,',
+    };
+
+    for (final entry in expected.entries) {
+      final strings = AppStrings(Locale(entry.key));
+      expect(
+        strings.parentMotionAlert(
+          scorePercent: 72,
+          activeAreaPercent: 18,
+          meanDiff: 12.4,
+        ),
+        startsWith(entry.value),
+        reason: entry.key,
+      );
+      expect(
+        strings.parentEpisodeCryAlert(seconds: 7, networkTier: 'Good'),
+        startsWith(entry.value),
+        reason: entry.key,
+      );
+    }
   });
 }
