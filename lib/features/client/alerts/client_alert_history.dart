@@ -54,14 +54,22 @@ class ClientAlertHistory {
 
   Future<void> add(AlertEventDto alert) async {
     _replaceWith(_mergeAlerts([alert, ..._alerts]));
-    await _persist();
-    _emit();
+    try {
+      await _persist();
+    } finally {
+      // Persistence failure must not hide an alert that is already available
+      // in memory; callers still receive the error for telemetry/retry.
+      _emit();
+    }
   }
 
   Future<void> clear() async {
     _alerts.clear();
-    await _removePersisted();
-    _emit();
+    try {
+      await _removePersisted();
+    } finally {
+      _emit();
+    }
   }
 
   Future<void> dispose() async {

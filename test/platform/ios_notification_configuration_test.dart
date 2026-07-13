@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('iOS forwards local notification presentation and taps to Flutter', () {
+  test('iOS delegates local notification presentation and taps to Flutter', () {
     final appDelegate = File('ios/Runner/AppDelegate.swift').readAsStringSync();
 
     expect(appDelegate, contains('import UserNotifications'));
@@ -11,9 +11,12 @@ void main() {
       appDelegate,
       contains('UNUserNotificationCenter.current().delegate = self'),
     );
-    expect(appDelegate, contains('willPresent notification: UNNotification'));
-    expect(appDelegate, contains('[.banner, .list, .sound, .badge]'));
-    expect(appDelegate, contains('[.alert, .sound, .badge]'));
+    expect(
+      appDelegate,
+      isNot(contains('willPresent notification: UNNotification')),
+      reason: 'FlutterAppDelegate must forward the plugin-specific present* '
+          'flags instead of bypassing them with an app-wide override.',
+    );
   });
 
   test('iOS notification permission implementation is compiled in', () {

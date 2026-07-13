@@ -43,6 +43,17 @@ CAPTURES = (
 )
 
 
+def locale_parts(locale: str) -> tuple[str, str]:
+    parts = locale.split('_', maxsplit=1)
+    language_code = parts[0]
+    country_code = parts[1] if len(parts) == 2 else ''
+    # Keep the historical `en` report directory stable while rendering the
+    # app's canonical American English locale explicitly.
+    if language_code == 'en' and not country_code:
+        country_code = 'US'
+    return language_code, country_code
+
+
 def run(command: list[str], *, cwd: Path = ROOT, stdout=None) -> None:
     subprocess.run(command, cwd=cwd, check=True, stdout=stdout)
 
@@ -50,9 +61,7 @@ def run(command: list[str], *, cwd: Path = ROOT, stdout=None) -> None:
 def launch(scene: str, locale: str, tab: int) -> None:
     run([str(ADB), '-s', DEVICE, 'shell', 'input', 'keyevent', 'KEYCODE_WAKEUP'])
     run([str(ADB), '-s', DEVICE, 'shell', 'wm', 'dismiss-keyguard'])
-    parts = locale.split('_', maxsplit=1)
-    language_code = parts[0]
-    country_code = parts[1] if len(parts) == 2 else ''
+    language_code, country_code = locale_parts(locale)
     command = [
         'flutter',
         'run',
@@ -86,9 +95,7 @@ def launch_sequence(locale: str) -> None:
     run([str(ADB), '-s', DEVICE, 'shell', 'input', 'keyevent', 'KEYCODE_WAKEUP'])
     run([str(ADB), '-s', DEVICE, 'shell', 'wm', 'dismiss-keyguard'])
     run([str(ADB), '-s', DEVICE, 'logcat', '-c'])
-    parts = locale.split('_', maxsplit=1)
-    language_code = parts[0]
-    country_code = parts[1] if len(parts) == 2 else ''
+    language_code, country_code = locale_parts(locale)
     command = [
         'flutter',
         'run',

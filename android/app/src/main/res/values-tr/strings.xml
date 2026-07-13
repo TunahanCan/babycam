@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mimicam_server_channel_name">MimiCam Server</string>
+    <string name="mimicam_alert_connection_channel_name">MimiCam Bildirim Bağlantısı</string>
+    <string name="mimicam_server_channel_description">MimiCam yerel sunucu ve medya etkinliği</string>
+    <string name="mimicam_alert_connection_channel_description">Bebek odası bildirim bağlantısını arka planda etkin tutar</string>
+    <string name="mimicam_runtime_camera_microphone_playback">Kamera, mikrofon ve bebek odası sesi arka planda etkin.</string>
+    <string name="mimicam_runtime_camera_microphone">Kamera ve mikrofon arka planda etkin.</string>
+    <string name="mimicam_runtime_camera_playback">Kamera ve bebek odası sesi arka planda etkin.</string>
+    <string name="mimicam_runtime_microphone_playback">Mikrofon ve bebek odası sesi arka planda etkin.</string>
+    <string name="mimicam_runtime_camera">Kamera arka planda etkin.</string>
+    <string name="mimicam_runtime_microphone">Mikrofon arka planda etkin.</string>
+    <string name="mimicam_runtime_playback">Bebek odası sesi arka planda etkin.</string>
+    <string name="mimicam_runtime_server">Yerel sunucu ve Wi-Fi bağlantısı etkin tutuluyor.</string>
+    <string name="mimicam_runtime_alerts">Bebek odası bildirimleri arka planda izleniyor.</string>
+    <string name="mimicam_runtime_stopping">Arka plan servisi durduruluyor.</string>
+    <string name="mimicam_runtime_title_media">MimiCam bebek odası oturumu etkin</string>
+    <string name="mimicam_runtime_title_server">MimiCam yerel sunucusu etkin</string>
+    <string name="mimicam_runtime_title_alerts">MimiCam bebek odası bildirimleri etkin</string>
+</resources>

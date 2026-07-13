@@ -14,6 +14,12 @@ typedef TrustedEndpointProbe = Future<bool> Function(PairingSession candidate);
 
 /// Rebinds a trusted session when DNS-SD reports the same stable device ID at a
 /// new IPv4/IPv6 endpoint.
+///
+/// DNS-SD announcements are not authenticated. Automatic rebinding is
+/// therefore disabled by default: probing a newly announced address with the
+/// long-lived bearer token would disclose that token to a spoofed service.
+/// It may only be enabled by a transport that authenticates the server first
+/// (for example, QR-pinned TLS).
 class TrustedSessionEndpointResolver {
   TrustedSessionEndpointResolver({
     required this.browser,
@@ -21,6 +27,7 @@ class TrustedSessionEndpointResolver {
     RetryPolicy? retryPolicy,
     this.maxProbeAttempts = 3,
     this.probeTimeout = const Duration(seconds: 2),
+    this.allowUnverifiedEndpointRebind = false,
   })  : _probe = probe,
         _retryPolicy = retryPolicy ??
             ExponentialBackoffPolicy(
@@ -42,8 +49,10 @@ class TrustedSessionEndpointResolver {
   final RetryPolicy _retryPolicy;
   final int maxProbeAttempts;
   final Duration probeTimeout;
+  final bool allowUnverifiedEndpointRebind;
 
   Stream<PairingSession> watch(PairingSession initialSession) async* {
+    if (!allowUnverifiedEndpointRebind) return;
     final queue = StreamController<List<MimiCamDiscoveredService>>();
     void enqueue(List<MimiCamDiscoveredService> services) {
       if (!queue.isClosed) queue.add(services);

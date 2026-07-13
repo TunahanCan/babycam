@@ -99,6 +99,7 @@ class ServerRuntime implements AppRuntime {
     BroadcastAccessService? broadcastAccess,
     PlatformMediaLifecycleCoordinator? platformLifecycle,
     Future<void> Function(MediaResourceDemand demand)? onMediaDemandChanged,
+    Future<void> Function(bool enabled)? onVideoEncodingDemandChanged,
     Future<void> Function(String reason)? onPauseExternalMedia,
     Future<void> Function(String reason)? onRecoverExternalMedia,
   })  : _mediaRuntime = mediaRuntime,
@@ -111,6 +112,7 @@ class ServerRuntime implements AppRuntime {
         _broadcastAccess = broadcastAccess,
         _platformLifecycle = platformLifecycle,
         _onMediaDemandChanged = onMediaDemandChanged,
+        _onVideoEncodingDemandChanged = onVideoEncodingDemandChanged,
         _onPauseExternalMedia = onPauseExternalMedia,
         _onRecoverExternalMedia = onRecoverExternalMedia {
     _platformLifecycle?.start();
@@ -127,6 +129,7 @@ class ServerRuntime implements AppRuntime {
   final PlatformMediaLifecycleCoordinator? _platformLifecycle;
   final Future<void> Function(MediaResourceDemand demand)?
       _onMediaDemandChanged;
+  final Future<void> Function(bool enabled)? _onVideoEncodingDemandChanged;
   final Future<void> Function(String reason)? _onPauseExternalMedia;
   final Future<void> Function(String reason)? _onRecoverExternalMedia;
   final _states = StreamController<ServerRuntimeState>.broadcast();
@@ -834,6 +837,9 @@ class ServerRuntime implements AppRuntime {
     bool forceNone = false,
     MediaResourceDemand? demandOverride,
   }) async {
+    await _onVideoEncodingDemandChanged?.call(
+      !forceNone && _resources.needsVideoEncoding,
+    );
     final callback = _onMediaDemandChanged;
     if (callback == null) return;
     final demand = forceNone

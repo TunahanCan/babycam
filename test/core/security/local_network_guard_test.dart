@@ -24,18 +24,28 @@ void main() {
         guard.isAllowedRemoteAddress(InternetAddress('172.32.0.1')), isFalse);
   });
 
-  test('ULA, link-local and global-unicast IPv6 LAN addresses are accepted',
-      () {
+  test('ULA ve link-local kabul edilir; bağlamsız global IPv6 reddedilir', () {
     const guard = LocalNetworkGuard();
 
     expect(guard.isAllowedRemoteAddress(InternetAddress('fd00::20')), isTrue);
     expect(guard.isAllowedRemoteAddress(InternetAddress('fe80::20')), isTrue);
     expect(
       guard.isAllowedRemoteAddress(InternetAddress('2001:db8:42::20')),
-      isTrue,
+      isFalse,
     );
     expect(guard.isAllowedRemoteAddress(InternetAddress('ff02::fb')), isFalse);
     expect(guard.isAllowedRemoteAddress(InternetAddress('::')), isFalse);
+  });
+
+  test('global IPv6 için eski uyumluluk davranışı açıkça seçilebilir', () {
+    const guard = LocalNetworkGuard(
+      allowGlobalIpv6WithoutPrefixContext: true,
+    );
+
+    expect(
+      guard.isAllowedRemoteAddress(InternetAddress('2001:db8:42::20')),
+      isTrue,
+    );
   });
 
   test('known IPv6 interface prefix rejects a different global subnet', () {

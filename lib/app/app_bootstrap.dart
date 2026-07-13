@@ -28,10 +28,12 @@ class AppBootstrap extends StatefulWidget {
     super.key,
     this.onLocaleChanged,
     this.preferencesLoader,
+    this.secureStorageClearer,
   });
 
   final ValueChanged<Locale?>? onLocaleChanged;
   final Future<SharedPreferences> Function()? preferencesLoader;
+  final Future<void> Function()? secureStorageClearer;
 
   @override
   State<AppBootstrap> createState() => _AppBootstrapState();
@@ -44,6 +46,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
   AppRuntime? _runtime;
   bool _loaded = false;
   bool _loading = true;
+  bool _installPreparationPending = false;
   Object? _loadError;
   bool _switchingRole = false;
   int _roleSwitchGeneration = 0;
@@ -60,14 +63,32 @@ class _AppBootstrapState extends State<AppBootstrap> {
     if (!_loading && mounted) {
       setState(() {
         _loading = true;
+        _installPreparationPending = false;
         _loadError = null;
       });
     }
     try {
       final prefs = await (widget.preferencesLoader?.call() ??
           SharedPreferences.getInstance());
-      await const InstallIntegrityGuard().prepare(prefs);
       final roles = SharedPreferencesRoleRepository(prefs);
+      final isFreshInstallation = prefs.getKeys().isEmpty;
+      if (isFreshInstallation && mounted) {
+        // Render the welcome surface immediately, but do not let it create a
+        // runtime or touch retained secure data until the integrity guard ends.
+        setState(() {
+          _prefs = prefs;
+          _roles = roles;
+          _role = null;
+          _loaded = true;
+          _loading = false;
+          _installPreparationPending = true;
+          _loadError = null;
+        });
+      }
+      await const InstallIntegrityGuard().prepare(
+        prefs,
+        clearSecureStorage: widget.secureStorageClearer,
+      );
       final role = await RoleResolver(roles).resolve();
       if (!mounted) return;
       widget.onLocaleChanged?.call(ClientPreferencesService(prefs).locale);
@@ -77,6 +98,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
         _role = role;
         _loaded = true;
         _loading = false;
+        _installPreparationPending = false;
         _loadError = null;
       });
     } catch (error, stackTrace) {
@@ -92,12 +114,14 @@ class _AppBootstrapState extends State<AppBootstrap> {
       setState(() {
         _loaded = false;
         _loading = false;
+        _installPreparationPending = false;
         _loadError = error;
       });
     }
   }
 
   Future<void> _select(AppRole role) async {
+    if (_installPreparationPending) return;
     await _permissionCoordinator.requestFor(role);
     if (!mounted) return;
     await _switchRole(role);
@@ -163,7 +187,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
   }
 
   Future<void> _switchRole(AppRole? role) async {
-    if (_switchingRole) return;
+    if (_switchingRole || _installPreparationPending) return;
 
     final generation = ++_roleSwitchGeneration;
     final runtime = _runtime;
@@ -245,23 +269,101 @@ class _AppBootstrapState extends State<AppBootstrap> {
           onRoleSelected: (role) => unawaited(_requestRoleChange(role)),
           onRestartServer: () => unawaited(_switchRole(AppRole.server)),
         ),
-      AppRole.client => ClientAppShell(
-          runtime: (_runtime ??= ClientCompositionRoot.create(
-            preferences: prefs,
-            strings: AppStrings.of(context),
-          )) as ClientRuntime,
-          activeRole: AppRole.client,
-          switchingRole: _switchingRole,
+      AppRole.client => _buildClientShell(
+          prefs: prefs,
           preferences: clientPreferences,
-          selectedLocale: clientPreferences.locale,
-          onLocaleChanged: widget.onLocaleChanged,
-          onRoleSelected: (role) => unawaited(_requestRoleChange(role)),
+          strings: strings,
         ),
       null => Theme(
           data: MimiCamTheme.neutralTheme(),
-          child: RoleSelectionScreen(onRoleSelected: _select),
+          child: _buildRoleSelection(strings),
         ),
     };
+  }
+
+  Widget _buildRoleSelection(AppStrings strings) {
+    final roleSelection = AbsorbPointer(
+      key: const ValueKey('app-bootstrap-install-preparation-gate'),
+      absorbing: _installPreparationPending,
+      child: ExcludeSemantics(
+        excluding: _installPreparationPending,
+        child: Opacity(
+          opacity: _installPreparationPending ? .72 : 1,
+          child: RoleSelectionScreen(onRoleSelected: _select),
+        ),
+      ),
+    );
+    if (!_installPreparationPending) return roleSelection;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        roleSelection,
+        Positioned(
+          left: 20,
+          right: 20,
+          bottom: 16,
+          child: SafeArea(
+            top: false,
+            child: Semantics(
+              liveRegion: true,
+              label: strings.ui('bootstrapPreparing'),
+              child: Material(
+                key: const ValueKey(
+                  'app-bootstrap-install-preparation-progress',
+                ),
+                elevation: 8,
+                color: const Color(0xFFF8F7FF),
+                borderRadius: BorderRadius.circular(18),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 13,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          strings.ui('bootstrapPreparing'),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildClientShell({
+    required SharedPreferences prefs,
+    required ClientPreferencesService preferences,
+    required AppStrings strings,
+  }) {
+    final runtime = (_runtime ??= ClientCompositionRoot.create(
+      preferences: prefs,
+      strings: strings,
+    )) as ClientRuntime;
+    runtime.updateAlertStrings(strings);
+    return ClientAppShell(
+      runtime: runtime,
+      activeRole: AppRole.client,
+      switchingRole: _switchingRole,
+      preferences: preferences,
+      selectedLocale: preferences.locale,
+      onLocaleChanged: widget.onLocaleChanged,
+      onRoleSelected: (role) => unawaited(_requestRoleChange(role)),
+    );
   }
 }
 

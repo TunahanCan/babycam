@@ -6,6 +6,7 @@ import '../../core/media/adaptive_media_profile.dart';
 import '../../core/protocol/alert_event_dto.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../core/protocol/pairing_session.dart';
+import '../../l10n/app_strings.dart';
 import '../../services/monetization/broadcast_access_service.dart';
 import '../../services/discovery/mimicam_service_discovery.dart';
 import 'alerts/client_alert_history.dart';
@@ -64,6 +65,7 @@ class ClientRuntime implements AppRuntime {
     Future<bool> Function(PairingSession session)? startAlerts,
     Future<void> Function()? stopAlerts,
     Stream<bool>? alertConnectionStates,
+    Future<bool> Function()? initializeSystemNotifications,
     Future<void> Function()? clearStore,
     Stream<PairingSession> Function(PairingSession session)?
         watchSessionEndpoints,
@@ -75,6 +77,7 @@ class ClientRuntime implements AppRuntime {
     this.roomControls,
     this.serviceBrowser,
     BroadcastAccessService? broadcastAccess,
+    void Function(AppStrings strings)? updateAlertStrings,
   })  : _pair = pair,
         _renew = renew,
         _startStream = startStream,
@@ -82,11 +85,13 @@ class ClientRuntime implements AppRuntime {
         _watchNetworkQuality = watchNetworkQuality,
         _startAlerts = startAlerts,
         _stopAlerts = stopAlerts,
+        _initializeSystemNotifications = initializeSystemNotifications,
         _clearStore = clearStore,
         _watchSessionEndpoints = watchSessionEndpoints,
         _persistReboundSession = persistReboundSession,
         _refreshRemoteBroadcastAccess = refreshRemoteBroadcastAccess,
         _broadcastAccess = broadcastAccess,
+        _updateAlertStrings = updateAlertStrings,
         alertHistory = alertHistory ?? ClientAlertHistory() {
     _alertConnectionSubscription =
         alertConnectionStates?.distinct().listen(_setAlertTransportConnected);
@@ -103,6 +108,7 @@ class ClientRuntime implements AppRuntime {
       _watchNetworkQuality;
   final Future<bool> Function(PairingSession session)? _startAlerts;
   final Future<void> Function()? _stopAlerts;
+  final Future<bool> Function()? _initializeSystemNotifications;
   final Future<void> Function()? _clearStore;
   final Stream<PairingSession> Function(PairingSession session)?
       _watchSessionEndpoints;
@@ -110,6 +116,7 @@ class ClientRuntime implements AppRuntime {
   final Future<BroadcastAccessSnapshot?> Function(PairingSession session)?
       _refreshRemoteBroadcastAccess;
   final BroadcastAccessService? _broadcastAccess;
+  final void Function(AppStrings strings)? _updateAlertStrings;
   final ClientAlertHistory alertHistory;
   final ClientStreamHealthState? streamHealthState;
   final ClientRoomControls? roomControls;
@@ -124,15 +131,21 @@ class ClientRuntime implements AppRuntime {
   PairingSession? _activeStreamOwnerSession;
   Future<void>? _pairingOperation;
   final _watchOperations = SerializedAsyncExecutor();
+  final _alertOperations = SerializedAsyncExecutor(
+    closedErrorMessage: 'Client alert operation queue is closed.',
+  );
   final _endpointRebindOperations = SerializedAsyncExecutor();
   int _endpointGeneration = 0;
   int _broadcastAccessTimerGeneration = 0;
   int _watchPresentationGeneration = 0;
   bool _disposed = false;
   bool _alertTransportConnected = false;
+  bool? _systemNotificationsEnabled;
+  PairingSession? _alertOwnerSession;
 
   ClientRuntimeState get currentState => _state;
   bool get alertTransportConnected => _alertTransportConnected;
+  bool? get systemNotificationsEnabled => _systemNotificationsEnabled;
   Stream<ClientRuntimeState> get states => Stream<ClientRuntimeState>.multi(
         (controller) {
           controller.add(_state);
@@ -151,6 +164,9 @@ class ClientRuntime implements AppRuntime {
   Stream<List<MimiCamDiscoveredService>> get discoveryUpdates =>
       serviceBrowser?.updates ?? const Stream.empty();
   bool get canManageBroadcastPurchase => _broadcastAccess != null;
+
+  void updateAlertStrings(AppStrings strings) =>
+      _updateAlertStrings?.call(strings);
 
   /// Claims ownership of watch/alert presentation transitions for one screen.
   /// A later screen claim invalidates delayed teardown work from the previous
@@ -248,8 +264,15 @@ class ClientRuntime implements AppRuntime {
     ));
     _startNetworkQuality(session);
     await _startEndpointResolution(session);
-    if (session.shouldRenew(DateTime.now())) {
-      await renewTokenIfNeeded();
+    final now = DateTime.now();
+    if (session.shouldRenew(now)) {
+      if (_isTrustedTokenExpired(session, now)) {
+        await renewTokenIfNeeded(now: now);
+      } else {
+        // A transient renewal outage must not prevent a still-valid token from
+        // starting LAN alerts. Renewal remains best effort until expiry.
+        unawaited(renewTokenIfNeeded(now: now).catchError((_) {}));
+      }
     }
   }
 
@@ -344,7 +367,13 @@ class ClientRuntime implements AppRuntime {
     try {
       // Stop unconditionally: an alert subscription may still be connecting
       // even when the old immutable state has not flipped to active yet.
-      await _stopAlerts?.call();
+      await _alertOperations.run(() async {
+        try {
+          await _stopAlerts?.call();
+        } finally {
+          _alertOwnerSession = null;
+        }
+      });
     } catch (_) {
       // A stale WebSocket must never prevent a fresh pairing.
     }
@@ -356,25 +385,51 @@ class ClientRuntime implements AppRuntime {
     final renew = _renew;
     if (renew == null) return;
     final session = _state.session;
-    if (session == null || !session.shouldRenew(now ?? DateTime.now())) return;
+    final renewalTime = now ?? DateTime.now();
+    if (session == null || !session.shouldRenew(renewalTime)) return;
     _emit(_copyState(phase: ClientRuntimePhase.renewingToken));
-    final renewed = await renew(session);
+    late final PairingSession? renewed;
+    try {
+      renewed = await renew(session);
+    } catch (error) {
+      if (!_disposed && identical(_state.session, session)) {
+        final expired = _isTrustedTokenExpired(session, renewalTime);
+        _emit(_copyState(
+          phase: expired ? ClientRuntimePhase.offline : _activePhase(),
+          error: expired ? error : null,
+          clearError: !expired,
+        ));
+      }
+      rethrow;
+    }
     if (_disposed) return;
+    if (!identical(_state.session, session)) return;
     if (renewed == null) {
       await _handleRevokedSession(session);
       return;
     }
+    final renewedSession = renewed;
+    if (identical(_activeStreamOwnerSession, session)) {
+      // The stream token remains valid across trusted-token renewal, but
+      // session/stop must use the new bearer token when the user leaves watch.
+      _activeStreamOwnerSession = renewedSession;
+    }
     _emit(ClientRuntimeState(
-      phase: ClientRuntimePhase.pairedIdle,
-      session: renewed,
+      phase: _activePhase(),
+      session: renewedSession,
       networkQuality: _state.networkQuality,
       mediaProfile: _state.mediaProfile,
       activeStream: _state.activeStream,
       alertsActive: _state.alertsActive,
       broadcastAccess: _state.broadcastAccess,
     ));
-    _startNetworkQuality(renewed);
-    await _startEndpointResolution(renewed);
+    _startNetworkQuality(renewedSession);
+    await _startEndpointResolution(renewedSession);
+    if (!_disposed) {
+      await _alertOperations.run(
+        () => _rebindAlertTransportForSession(renewedSession),
+      );
+    }
   }
 
   Future<void> startWatching({bool audioEnabled = false}) =>
@@ -545,12 +600,39 @@ class ClientRuntime implements AppRuntime {
     ));
   }
 
-  Future<bool> startAlertListening() async {
+  Future<bool> startAlertListening() {
+    if (_disposed) return Future<bool>.value(false);
+    return _alertOperations.run(_startAlertListeningUnlocked);
+  }
+
+  Future<bool> _startAlertListeningUnlocked() async {
     if (_disposed || _state.session == null) return false;
-    final session = _state.session!;
+    final initializeNotifications = _initializeSystemNotifications;
+    if (initializeNotifications != null) {
+      var enabled = false;
+      try {
+        enabled = await initializeNotifications();
+      } catch (_) {
+        // Native notification permission is independent from LAN alert
+        // ingestion; history and in-app warnings must continue to work.
+      }
+      if (_disposed) return false;
+      _setSystemNotificationsEnabled(enabled);
+    }
+    if (_state.alertsActive && identical(_alertOwnerSession, _state.session)) {
+      return true;
+    }
+    final session = _state.session;
+    if (session == null) return false;
     try {
+      if (_state.alertsActive || _alertOwnerSession != null) {
+        await _stopAlerts?.call();
+        _alertOwnerSession = null;
+        _setAlertTransportConnected(false);
+      }
       final started = await _startAlerts?.call(session) ?? false;
       if (!started) {
+        _alertOwnerSession = null;
         if (!_disposed) {
           _emit(ClientRuntimeState(
             phase: _state.activeStream == null
@@ -567,6 +649,7 @@ class ClientRuntime implements AppRuntime {
         return false;
       }
     } catch (error) {
+      _alertOwnerSession = null;
       if (!_disposed) {
         _emit(ClientRuntimeState(
           phase: ClientRuntimePhase.error,
@@ -583,8 +666,10 @@ class ClientRuntime implements AppRuntime {
     }
     if (_disposed) {
       await _stopAlerts?.call();
+      _alertOwnerSession = null;
       return false;
     }
+    _alertOwnerSession = session;
     _emit(ClientRuntimeState(
       phase: _state.activeStream == null
           ? ClientRuntimePhase.alertOnly
@@ -599,9 +684,18 @@ class ClientRuntime implements AppRuntime {
     return true;
   }
 
-  Future<void> stopAlertListening() async {
-    await _stopAlerts?.call();
-    _setAlertTransportConnected(false);
+  Future<void> stopAlertListening() {
+    if (_disposed) return Future<void>.value();
+    return _alertOperations.run(_stopAlertListeningUnlocked);
+  }
+
+  Future<void> _stopAlertListeningUnlocked() async {
+    try {
+      await _stopAlerts?.call();
+    } finally {
+      _alertOwnerSession = null;
+      _setAlertTransportConnected(false);
+    }
     if (_disposed) return;
     _emit(ClientRuntimeState(
       phase: _state.activeStream == null
@@ -614,6 +708,43 @@ class ClientRuntime implements AppRuntime {
       alertsActive: false,
       broadcastAccess: _state.broadcastAccess,
     ));
+  }
+
+  Future<void> _rebindAlertTransportForSession(
+    PairingSession session, {
+    bool Function()? isCurrent,
+  }) async {
+    bool current() =>
+        !_disposed &&
+        identical(_state.session, session) &&
+        (isCurrent?.call() ?? true);
+
+    if (!current() ||
+        !_state.alertsActive ||
+        identical(_alertOwnerSession, session)) {
+      return;
+    }
+    try {
+      await _stopAlerts?.call();
+      _alertOwnerSession = null;
+      _setAlertTransportConnected(false);
+      if (!current()) return;
+      final started = await _startAlerts?.call(session) ?? false;
+      if (!current()) {
+        if (started) await _stopAlerts?.call();
+        return;
+      }
+      if (!started) {
+        _emit(_copyState(alertsActive: false));
+        return;
+      }
+      _alertOwnerSession = session;
+    } catch (error) {
+      _alertOwnerSession = null;
+      if (current()) {
+        _emit(_copyState(error: error, alertsActive: false));
+      }
+    }
   }
 
   Future<void> clearPairing() async {
@@ -642,7 +773,14 @@ class ClientRuntime implements AppRuntime {
     }
     _activeStreamOwnerSession = null;
     try {
-      await _stopAlerts?.call();
+      await _alertOperations.run(() async {
+        try {
+          await _stopAlerts?.call();
+        } finally {
+          _alertOwnerSession = null;
+          _setAlertTransportConnected(false);
+        }
+      });
     } catch (_) {}
     await _clearStore?.call();
     if (_disposed) return;
@@ -674,6 +812,7 @@ class ClientRuntime implements AppRuntime {
     }
 
     await attempt(_watchOperations.drain);
+    await attempt(_alertOperations.close);
     await attempt(() async => _networkQualitySubscription?.cancel());
     await attempt(() async => _alertConnectionSubscription?.cancel());
     await attempt(_cancelEndpointResolution);
@@ -686,7 +825,13 @@ class ClientRuntime implements AppRuntime {
     _activeStreamOwnerSession = null;
     await attempt(() async => _broadcastAccess?.endAllSessions());
     _cancelBroadcastAccessTimer();
-    await attempt(() async => _stopAlerts?.call());
+    await attempt(() async {
+      try {
+        await _stopAlerts?.call();
+      } finally {
+        _alertOwnerSession = null;
+      }
+    });
     await attempt(() async => roomControls?.dispose());
     await attempt(() async => serviceBrowser?.dispose());
     await attempt(alertHistory.dispose);
@@ -701,6 +846,24 @@ class ClientRuntime implements AppRuntime {
     // the current immutable state again so presentation can show reconnecting
     // without rewriting every runtime transition.
     if (!_states.isClosed) _states.add(_state);
+  }
+
+  void _setSystemNotificationsEnabled(bool enabled) {
+    if (_disposed || _systemNotificationsEnabled == enabled) return;
+    _systemNotificationsEnabled = enabled;
+    // Permission state is presentation metadata, independent from transport
+    // and pairing state. Re-emit so resumed screens refresh immediately.
+    if (!_states.isClosed) _states.add(_state);
+  }
+
+  bool _isTrustedTokenExpired(PairingSession session, DateTime now) =>
+      session.trustedClientTokenExpiresAtMs > 0 &&
+      session.trustedClientTokenExpiresAtMs <= now.millisecondsSinceEpoch;
+
+  ClientRuntimePhase _activePhase() {
+    if (_state.activeStream != null) return ClientRuntimePhase.watching;
+    if (_state.alertsActive) return ClientRuntimePhase.alertOnly;
+    return ClientRuntimePhase.pairedIdle;
   }
 
   void _startNetworkQuality(PairingSession session) {
@@ -799,12 +962,12 @@ class ClientRuntime implements AppRuntime {
     _startNetworkQuality(resolved);
     if (!alertsWereActive) return;
     try {
-      await _stopAlerts?.call();
-      if (_disposed || generation != _endpointGeneration) return;
-      final started = await _startAlerts?.call(resolved) ?? false;
-      if (!started && !_disposed && generation == _endpointGeneration) {
-        _emit(_copyState(alertsActive: false));
-      }
+      await _alertOperations.run(
+        () => _rebindAlertTransportForSession(
+          resolved,
+          isCurrent: () => generation == _endpointGeneration,
+        ),
+      );
     } catch (error) {
       if (!_disposed && generation == _endpointGeneration) {
         _emit(_copyState(error: error, alertsActive: false));

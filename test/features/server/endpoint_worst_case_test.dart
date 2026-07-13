@@ -130,6 +130,105 @@ void main() {
     );
   });
 
+  test(
+      'aynı trusted client ikinci event websocket için 429 alır ve slot açılır',
+      () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(
+      tokenService,
+      maxEventSocketsPerClient: 1,
+      maxTotalEventSockets: 5,
+    );
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final socket = await WebSocket.connect(
+      Uri(
+        scheme: 'ws',
+        host: InternetAddress.loopbackIPv4.address,
+        port: base.port,
+        path: MimiCamProtocolV2.events,
+      ).toString(),
+      headers: {HttpHeaders.authorizationHeader: 'Bearer ${trusted.token}'},
+    );
+    addTearDown(socket.close);
+
+    final rejected = await _rawWebSocketHandshake(
+      base.port,
+      trusted.token,
+    );
+    expect(rejected.statusCode, HttpStatus.tooManyRequests);
+    expect(rejected.body, contains('CLIENT_CONNECTION_LIMIT_REACHED'));
+
+    await socket.close();
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+    await _waitForEventSocketCount(
+      client,
+      base.port,
+      trusted.token,
+      0,
+    );
+    final replacement = await WebSocket.connect(
+      Uri(
+        scheme: 'ws',
+        host: InternetAddress.loopbackIPv4.address,
+        port: base.port,
+        path: MimiCamProtocolV2.events,
+      ).toString(),
+      headers: {HttpHeaders.authorizationHeader: 'Bearer ${trusted.token}'},
+    );
+    await replacement.close();
+  });
+
+  test('toplam event websocket kapasitesi dolunca yeni client 503 alır',
+      () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(
+      tokenService,
+      maxEventSocketsPerClient: 1,
+      maxTotalEventSockets: 2,
+    );
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trustedClients = List.generate(
+      3,
+      (index) => tokenService.issueTrustedClientToken(
+        clientName: 'Parent $index',
+        deviceId: 'parent_$index',
+      ),
+    );
+    final sockets = <WebSocket>[];
+    for (final trusted in trustedClients.take(2)) {
+      sockets.add(await WebSocket.connect(
+        Uri(
+          scheme: 'ws',
+          host: InternetAddress.loopbackIPv4.address,
+          port: base.port,
+          path: MimiCamProtocolV2.events,
+        ).toString(),
+        headers: {
+          HttpHeaders.authorizationHeader: 'Bearer ${trusted.token}',
+        },
+      ));
+    }
+    addTearDown(() async {
+      for (final socket in sockets) {
+        await socket.close();
+      }
+    });
+
+    final rejected = await _rawWebSocketHandshake(
+      base.port,
+      trustedClients[2].token,
+    );
+    expect(rejected.statusCode, HttpStatus.serviceUnavailable);
+    expect(rejected.body, contains('SERVER_CONNECTION_CAPACITY_REACHED'));
+  });
+
   test('malformed ve non-object JSON mutasyon üretmez', () async {
     final tokenService = PairingTokenService();
     final server = await _testServer(tokenService);
@@ -175,6 +274,55 @@ void main() {
     expect(listStop, HttpStatus.badRequest);
     expect(badQuality, HttpStatus.badRequest);
 
+    final status = await _getJson(
+      client,
+      base.port,
+      MimiCamProtocolV2.status,
+      bearerToken: trusted.token,
+    );
+    expect(status['activeStreamClients'], 0);
+    expect(status['qualityReportClients'], 0);
+  });
+
+  test('control-plane JSON gövdeleri merkezi byte sınırını aşamaz', () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+    final oversized = jsonEncode({
+      'padding': 'x' * MimiCamServer.maxJsonRequestBodyBytes,
+    });
+
+    final statuses = [
+      await _postRaw(
+        client,
+        base.port,
+        MimiCamProtocolV2.pairConfirm,
+        oversized,
+      ),
+      await _postRaw(
+        client,
+        base.port,
+        MimiCamProtocolV2.sessionStart,
+        oversized,
+        bearerToken: trusted.token,
+      ),
+      await _postRaw(
+        client,
+        base.port,
+        MimiCamProtocolV2.qualityReport,
+        oversized,
+        bearerToken: trusted.token,
+      ),
+    ];
+
+    expect(statuses, everyElement(HttpStatus.requestEntityTooLarge));
     final status = await _getJson(
       client,
       base.port,
@@ -565,7 +713,11 @@ void main() {
   });
 }
 
-Future<MimiCamServer> _testServer(PairingTokenService tokenService) async {
+Future<MimiCamServer> _testServer(
+  PairingTokenService tokenService, {
+  int maxEventSocketsPerClient = 1,
+  int? maxTotalEventSockets,
+}) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
   return MimiCamServer(
@@ -576,7 +728,64 @@ Future<MimiCamServer> _testServer(PairingTokenService tokenService) async {
     tokenService: tokenService,
     httpPort: 0,
     startMediaOnSessionStart: false,
+    maxEventSocketsPerClient: maxEventSocketsPerClient,
+    maxTotalEventSockets: maxTotalEventSockets,
   );
+}
+
+Future<({int statusCode, String body})> _rawWebSocketHandshake(
+  int port,
+  String bearerToken,
+) async {
+  final socket = await Socket.connect(
+    InternetAddress.loopbackIPv4,
+    port,
+    timeout: const Duration(seconds: 2),
+  );
+  try {
+    socket.write(
+      'GET ${MimiCamProtocolV2.events} HTTP/1.1\r\n'
+      'Host: 127.0.0.1:$port\r\n'
+      'Connection: Upgrade\r\n'
+      'Upgrade: websocket\r\n'
+      'Sec-WebSocket-Version: 13\r\n'
+      'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n'
+      'Authorization: Bearer $bearerToken\r\n'
+      '\r\n',
+    );
+    await socket.flush();
+    final response = await utf8.decoder
+        .bind(socket)
+        .join()
+        .timeout(const Duration(seconds: 2));
+    final firstLine = const LineSplitter().convert(response).first;
+    return (
+      statusCode: int.parse(firstLine.split(' ')[1]),
+      body: response,
+    );
+  } finally {
+    await socket.close();
+  }
+}
+
+Future<void> _waitForEventSocketCount(
+  HttpClient client,
+  int port,
+  String bearerToken,
+  int expected,
+) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 2));
+  while (DateTime.now().isBefore(deadline)) {
+    final status = await _getJson(
+      client,
+      port,
+      MimiCamProtocolV2.status,
+      bearerToken: bearerToken,
+    );
+    if (status['eventSocketConnections'] == expected) return;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  throw StateError('Event socket count did not become $expected.');
 }
 
 Future<int> _requestStatusCode(

@@ -195,7 +195,8 @@ class _WatchScreenState extends State<WatchScreen> {
         return;
       }
       final started = await widget.runtime.startAlertListening();
-      if (!started && mounted) {
+      if ((!started || widget.runtime.systemNotificationsEnabled == false) &&
+          mounted) {
         ScaffoldMessenger.of(context)
           ..clearSnackBars()
           ..showSnackBar(
@@ -403,7 +404,9 @@ class _WatchScreenState extends State<WatchScreen> {
               !state.alertsActive
                   ? strings.ui('notificationsOff')
                   : widget.runtime.alertTransportConnected
-                      ? strings.ui('nightClockAudioAlertsOn')
+                      ? widget.runtime.systemNotificationsEnabled == false
+                          ? strings.ui('notificationsInAppOnly')
+                          : strings.ui('nightClockAudioAlertsOn')
                       : strings.ui('clientTitleReconnecting'),
               textAlign: TextAlign.center,
               style: const TextStyle(
@@ -528,6 +531,8 @@ class _WatchScreenState extends State<WatchScreen> {
             audioEnabled: _audioEnabled,
             alertsActive: state.alertsActive,
             alertsConnected: widget.runtime.alertTransportConnected,
+            systemNotificationsEnabled:
+                widget.runtime.systemNotificationsEnabled,
           ),
           const SizedBox(height: 18),
           _SectionLabel(
@@ -1805,6 +1810,7 @@ class _LiveMetricGrid extends StatelessWidget {
     required this.audioEnabled,
     required this.alertsActive,
     required this.alertsConnected,
+    required this.systemNotificationsEnabled,
   });
 
   final NetworkQualitySnapshot? quality;
@@ -1812,6 +1818,7 @@ class _LiveMetricGrid extends StatelessWidget {
   final bool audioEnabled;
   final bool alertsActive;
   final bool alertsConnected;
+  final bool? systemNotificationsEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -1830,7 +1837,9 @@ class _LiveMetricGrid extends StatelessWidget {
     final notificationLabel = !alertsActive
         ? strings.ui('notificationsOff')
         : alertsConnected
-            ? strings.ui('notificationsOn')
+            ? systemNotificationsEnabled == false
+                ? strings.ui('notificationsInAppOnly')
+                : strings.ui('notificationsOn')
             : strings.ui('clientTitleReconnecting');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -2069,7 +2078,7 @@ class _AlertTimeline extends StatelessWidget {
               Text(
                 items.isEmpty
                     ? strings.ui('parentEventsPriorityText')
-                    : '${items.length} ${strings.ui('navNotifications')}',
+                    : strings.notificationCount(items.length),
                 style: const TextStyle(
                     color: Colors.white70, fontSize: 14.5, height: 1.25),
               ),
@@ -2082,12 +2091,7 @@ class _AlertTimeline extends StatelessWidget {
 }
 
 String _alertTitle(AppStrings strings, AlertEventDto alert) {
-  final family = alert.category;
-  return switch (family) {
-    AlertCategory.motion => strings.ui('motionDetectedTitle'),
-    AlertCategory.audio => strings.ui('cryDetectedTitle'),
-    AlertCategory.system => strings.notificationTitle,
-  };
+  return alert.localizedTitle(strings);
 }
 
 Color _alertColor(AlertEventDto alert) {

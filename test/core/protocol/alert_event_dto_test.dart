@@ -91,6 +91,112 @@ void main() {
     expect(dto.localizedMessage(AppStrings(const Locale('en'))), dto.message);
   });
 
+  test('yanlış tipte veya aralık dışı metadata güvenli mesaja düşer', () {
+    const invalidCry = AlertEventDto(
+      id: 'invalid-cry',
+      type: 'cryDetected',
+      severity: 'warning',
+      messageKey: 'parentCryAlert',
+      message: 'Server fallback message',
+      score: .8,
+      timestampMs: 42,
+      sourceDeviceId: 'server',
+      metadata: {
+        'confidencePercent': '82',
+        'ambientDeltaDb': 14.2,
+        'cryBandPercent': 168,
+        'isCalibrated': true,
+      },
+    );
+    const invalidEpisode = AlertEventDto(
+      id: 'invalid-episode',
+      type: 'cryDetected',
+      severity: 'attention',
+      messageKey: 'parentEpisodeCryAlert',
+      message: 'Episode fallback message',
+      score: .8,
+      timestampMs: 43,
+      sourceDeviceId: 'server',
+      metadata: {'durationMs': 9000, 'networkTier': 7},
+    );
+    final strings = AppStrings(AppStrings.fallbackLocale);
+
+    expect(invalidCry.localizedMessage(strings), invalidCry.message);
+    expect(invalidEpisode.localizedMessage(strings), invalidEpisode.message);
+  });
+
+  test('hareket zamanı null olan uzun ağlama olayı client dilinde kalır', () {
+    const dto = AlertEventDto(
+      id: 'episode-without-motion',
+      type: 'cryDetected',
+      severity: 'attention',
+      messageKey: 'parentEpisodeHighCryAlert',
+      message: 'Sunucunun ham mesajı',
+      score: .91,
+      timestampMs: 44,
+      sourceDeviceId: 'server',
+      metadata: {
+        'durationMs': 18000,
+        'networkTier': 'good',
+        'lastMotionAgoMs': null,
+      },
+    );
+    final localized = dto.localizedMessage(
+      AppStrings(AppStrings.fallbackLocale),
+    );
+
+    expect(localized, isNot(dto.message));
+    expect(localized, contains('No recent camera movement'));
+  });
+
+  test('alert title and native body follow message type and client locale', () {
+    const dto = AlertEventDto(
+      id: 'motion-title',
+      type: 'motionDetected',
+      severity: 'info',
+      messageKey: 'parentMotionAlert',
+      message: 'Motion detected',
+      score: .64,
+      timestampMs: 99,
+      sourceDeviceId: 'server',
+      metadata: {
+        'scorePercent': 64,
+        'activeAreaPercent': 12,
+        'meanDiff': 7.4,
+      },
+    );
+    final strings = AppStrings(const Locale('es'));
+
+    expect(
+        dto.localizedTitle(strings), 'Movimiento detectado en la habitación');
+    expect(dto.localizedNotificationBody(strings), startsWith('Mamá,'));
+    expect(dto.localizedNotificationBody(strings), isNot(contains('7,4')));
+    expect(dto.localizedMessage(strings), contains('7,4'));
+  });
+
+  test('system notification body follows client locale instead of server text',
+      () {
+    const dto = AlertEventDto(
+      id: 'system-locale',
+      type: 'systemWarning',
+      severity: 'info',
+      messageKey: 'legacyAlert',
+      message: 'MimiCam test bildirimi',
+      score: 0,
+      timestampMs: 100,
+      sourceDeviceId: 'server',
+    );
+    final strings = AppStrings(AppStrings.fallbackLocale);
+
+    expect(dto.localizedTitle(strings), 'Nursery status update');
+    expect(dto.localizedNotificationBody(strings), startsWith('Mom,'));
+    expect(
+      dto.localizedNotificationBody(strings),
+      isNot(contains('test bildirimi')),
+    );
+    expect(dto.localizedMessage(strings), dto.message);
+  });
+
   test('opsiyonel alert alanlari geriye uyumlu round-trip edilir', () {
     const dto = AlertEventDto(
       id: 'alert-optional',

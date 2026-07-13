@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "MimiCam verwendet die Kamera, um das Babyzimmer zu übertragen und QR-Codes zur Kopplung zu scannen.";
+"NSLocalNetworkUsageDescription" = "MimiCam verwendet dein lokales Netzwerk, um Babyzimmer- und Elterngeräte zu finden und zu verbinden.";
+"NSMicrophoneUsageDescription" = "MimiCam verwendet das Mikrofon im Server-Modus, um den Ton aus dem Babyzimmer zu übertragen und wichtige Geräusche zu erkennen.";

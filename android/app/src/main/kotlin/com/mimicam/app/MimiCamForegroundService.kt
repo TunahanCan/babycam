@@ -308,16 +308,16 @@ class MimiCamForegroundService : LifecycleService() {
             val channel = NotificationChannel(
                 channelId,
                 if (hasMediaDemand() || serverDemand) {
-                    "MimiCam Server"
+                    getString(R.string.mimicam_server_channel_name)
                 } else {
-                    "MimiCam Bildirim Bağlantısı"
+                    getString(R.string.mimicam_alert_connection_channel_name)
                 },
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = if (hasMediaDemand() || serverDemand) {
-                    "MimiCam yerel ağ sunucusu ve medya çalışma durumu"
+                    getString(R.string.mimicam_server_channel_description)
                 } else {
-                    "Bebek odası uyarılarını arka planda dinlemek için bağlantı durumu"
+                    getString(R.string.mimicam_alert_connection_channel_description)
                 }
                 setSound(null, null)
                 enableVibration(false)
@@ -337,19 +337,19 @@ class MimiCamForegroundService : LifecycleService() {
         )
         val text = when {
             cameraDemand && microphoneDemand && playbackDemand ->
-                "Kamera, mikrofon ve oda sesi için arka plan koruması açık."
+                getString(R.string.mimicam_runtime_camera_microphone_playback)
             cameraDemand && microphoneDemand ->
-                "Kamera ve mikrofon için arka plan koruması açık."
+                getString(R.string.mimicam_runtime_camera_microphone)
             cameraDemand && playbackDemand ->
-                "Kamera ve oda sesi için arka plan koruması açık."
+                getString(R.string.mimicam_runtime_camera_playback)
             microphoneDemand && playbackDemand ->
-                "Mikrofon ve oda sesi için arka plan koruması açık."
-            cameraDemand -> "Kamera için arka plan koruması açık."
-            microphoneDemand -> "Mikrofon için arka plan koruması açık."
-            playbackDemand -> "Oda sesi için arka plan koruması açık."
-            serverDemand -> "Yerel ağ sunucusu ve Wi-Fi bağlantısı korunuyor."
-            alertDemand -> "Bebek odası bildirimleri arka planda dinleniyor."
-            else -> "Arka plan servisi durduruluyor."
+                getString(R.string.mimicam_runtime_microphone_playback)
+            cameraDemand -> getString(R.string.mimicam_runtime_camera)
+            microphoneDemand -> getString(R.string.mimicam_runtime_microphone)
+            playbackDemand -> getString(R.string.mimicam_runtime_playback)
+            serverDemand -> getString(R.string.mimicam_runtime_server)
+            alertDemand -> getString(R.string.mimicam_runtime_alerts)
+            else -> getString(R.string.mimicam_runtime_stopping)
         }
         val channelId = if (hasMediaDemand() || serverDemand) {
             SERVER_CHANNEL_ID
@@ -370,11 +370,11 @@ class MimiCamForegroundService : LifecycleService() {
             .setSmallIcon(R.drawable.ic_stat_mimicam)
             .setContentTitle(
                 if (hasMediaDemand()) {
-                    "MimiCam oda yayını korunuyor"
+                    getString(R.string.mimicam_runtime_title_media)
                 } else if (serverDemand) {
-                    "MimiCam yerel ağ sunucusu açık"
+                    getString(R.string.mimicam_runtime_title_server)
                 } else {
-                    "MimiCam uyarıları açık"
+                    getString(R.string.mimicam_runtime_title_alerts)
                 }
             )
             .setContentText(text)

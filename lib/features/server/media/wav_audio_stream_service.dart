@@ -46,6 +46,7 @@ class WavAudioStreamService {
 
   final _clients = <HttpResponse>{};
   final _clientIds = <HttpResponse, String>{};
+  final _clientDetachCallbacks = <HttpResponse, void Function()>{};
   final _busyClientIds = <String>{};
   final _clientQueues = <HttpResponse, BoundedAudioFrameQueue>{};
   final _backpressure =
@@ -81,7 +82,11 @@ class WavAudioStreamService {
         backpressure: _backpressure.aggregateMetrics(),
       );
 
-  Future<void> attachClient(HttpResponse response, String clientId) async {
+  Future<void> attachClient(
+    HttpResponse response,
+    String clientId, {
+    void Function()? onDetached,
+  }) async {
     response.bufferOutput = false;
     response.headers
       ..contentType = ContentType('audio', 'wav')
@@ -100,6 +105,9 @@ class WavAudioStreamService {
     ));
     _clients.add(response);
     _clientIds[response] = clientId;
+    if (onDetached != null) {
+      _clientDetachCallbacks[response] = onDetached;
+    }
     _clientQueues[response] = BoundedAudioFrameQueue(
       maxFrames: max(
         1,
@@ -228,10 +236,17 @@ class WavAudioStreamService {
   void removeClient(HttpResponse response) {
     final hadClient = _clients.remove(response);
     final clientId = _clientIds.remove(response);
+    final detach = _clientDetachCallbacks.remove(response);
     _clientQueues.remove(response);
     if (clientId != null) _busyClientIds.remove(clientId);
     _backpressure.remove(response);
-    if (hadClient && clientId != null) _onClientDetached?.call(clientId);
+    if (hadClient && clientId != null) {
+      if (detach != null) {
+        detach();
+      } else {
+        _onClientDetached?.call(clientId);
+      }
+    }
   }
 
   Future<void> closeClient(String clientId) async {
@@ -254,6 +269,7 @@ class WavAudioStreamService {
     }
     _clients.clear();
     _clientIds.clear();
+    _clientDetachCallbacks.clear();
     _clientQueues.clear();
     _busyClientIds.clear();
     _backpressure.clear();

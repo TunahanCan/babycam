@@ -28,7 +28,7 @@ String _localizedFallback(
 
 const _deUiText = <String, String>{
   'notificationChannelDescription':
-      'Wein-, Bewegungs- und Verbindungswarnungen aus dem Babyzimmer.',
+      'Hinweise zu weinähnlichen und lauten Geräuschen, Bewegung und Lichtänderungen im Babyzimmer.',
   'bootstrapPreparing': 'MimiCam wird vorbereitet...',
   'bootstrapFailedTitle': 'MimiCam konnte nicht gestartet werden',
   'bootstrapFailedText':
@@ -78,7 +78,7 @@ const _deUiText = <String, String>{
   'clientTitlePairedIdle': 'Zimmer verbunden',
   'clientTitleRenewingToken': 'Sitzung wird erneuert',
   'clientTitleWatching': 'Live-Ansicht aktiv',
-  'clientTitleAlertOnly': 'Warnungen werden beobachtet',
+  'clientTitleAlertOnly': 'Warnungen sind aktiv',
   'clientTitleReconnecting': 'Verbindung wird erneuert',
   'clientTitleOffline': 'Verbindung offline',
   'clientTitleRevoked': 'Zugriff widerrufen',
@@ -96,9 +96,9 @@ const _deUiText = <String, String>{
   'latestStatusTracked': 'Letzter Status wird verfolgt',
   'pairRoomForNotifications': 'Zimmer für Warnungen koppeln',
   'latestStatusTrackedText':
-      'Wichtige Ereignisse und Verbindungsstatus erscheinen hier.',
+      'Hinweise zu weinähnlichen und lauten Geräuschen, Bewegung und Lichtänderungen erscheinen hier.',
   'pairRoomForNotificationsText':
-      'Weinen, Bewegung und Verbindungswarnungen werden auf diesem Elternbildschirm hervorgehoben.',
+      'Hinweise zu weinähnlichen und lauten Geräuschen, Bewegung und Lichtänderungen werden hier hervorgehoben.',
   'openNotifications': 'Warnungen öffnen',
   'pairRoom': 'Zimmer koppeln',
   'live': 'Direkt',
@@ -141,18 +141,18 @@ const _deUiText = <String, String>{
   'invalidServerResponse': 'Ungültige Server-Antwort.',
   'missingPairingNonce': 'Pairing-Nonce fehlt.',
   'scanServerQrFirst': 'Scanne zuerst den Server-QR.',
-  'latestStatusAndNotifications': 'Status und Hinweise',
+  'latestStatusAndNotifications': 'Neues aus dem Babyzimmer',
   'parentEventsPriorityText':
-      'Wichtige Ton-, Bewegungs- und Systemnotizen erscheinen hier ruhig.',
-  'waitingLatestStatus': 'Wartet auf letzten Status',
+      'Wichtige Hinweise zu weinähnlichen und lauten Geräuschen, Bewegung und Lichtänderungen erscheinen hier.',
+  'waitingLatestStatus': 'Warten auf Neuigkeiten aus dem Babyzimmer',
   'pairedServerAlertAppears':
-      'Wenn der gekoppelte Server warnt, erscheint der wichtigste Status hier.',
+      'Wichtige Neuigkeiten aus dem Babyzimmer erscheinen hier.',
   'parentDevicePreferences': 'Einstellungen des Eltern-Geräts',
   'noServerControlsText':
       'Hier gibt es nur Client-Einstellungen; keine Server-Port- oder Stream-Steuerung.',
   'clientSettings': 'Client-Einstellungen',
   'clientSettingsPlaceholder':
-      'Lokale Benachrichtigungen, Wiederverbindung und Anzeigepräferenzen werden hier verwaltet.',
+      'Verwalte hier Benachrichtigungen, Wiederverbindung und Anzeige.',
   'liveWatching': 'Live-Ansicht',
   'liveStreamConnectedSubtitle':
       'Video, Audio und Warnungsereignisse kommen vom Babyzimmer.',
@@ -167,7 +167,7 @@ const _deUiText = <String, String>{
   'openHistory': 'Verlauf öffnen',
   'alertHistory': 'Warnungsverlauf',
   'alertHistorySubtitle':
-      'Weinen, Bewegung und Systemereignisse bleiben chronologisch sichtbar.',
+      'Sieh dir Weinen, Bewegung und Systemereignisse chronologisch an.',
   'all': 'Alle',
   'audio': 'Ton',
   'audioOn': 'Ton an',
@@ -180,6 +180,7 @@ const _deUiText = <String, String>{
   'exitNightClock': 'Nachtuhr verlassen',
   'nightClockAudioAlertsOn': 'Video ist aus; Audio und Warnungen bleiben an.',
   'notificationsOn': 'Warnungen an',
+  'notificationsInAppOnly': 'Hinweise nur in der App',
   'notificationsOff': 'Warnungen aus',
   'enableNotifications': 'Warnungen einschalten',
   'disableNotifications': 'Warnungen ausschalten',
@@ -192,7 +193,7 @@ const _deUiText = <String, String>{
       'Live-Warnungen und Bildschirmverhalten; die Erkennung bleibt am Babyzimmer-Gerät.',
   'notificationCooldown': 'Benachrichtigungs-Pause',
   'repeatedAlertsLimit': 'Begrenzt wiederholte Warnungen.',
-  'cryThreshold': 'Wein-Schwelle',
+  'cryThreshold': 'Schwelle für Weinerkennung',
   'ambientCrySensitivity': 'Empfindlichkeit für Umgebungsgeräusche.',
   'motionThreshold': 'Bewegungs-Schwelle',
   'cameraMotionSensitivity': 'Empfindlichkeit der Kamera-Bewegung.',
@@ -338,12 +339,12 @@ const _deUiText = <String, String>{
   'detectionSettingsSubtitle':
       'Passe Weinen, Bewegung, Dauer und Benachrichtigungs-Pause an.',
   'cryThresholdDescription':
-      'Höher bedeutet weniger, aber sicherere Wein-Warnungen.',
+      'Ein höherer Wert meldet weniger, dafür deutlichere Weingeräusche.',
   'motionThresholdDescription':
       'Höher bedeutet weniger Bewegungserkennung bei kleinen Änderungen.',
   'notificationCooldownDescription':
       'Begrenzt wiederholte Meldungen im selben Ereignis.',
-  'cryMinimumDuration': 'Minimale Wein-Dauer',
+  'cryMinimumDuration': 'Mindestdauer der Weinerkennung',
   'cryMinimumDurationDescription': 'Wie lange ein Tonsignal anhalten muss.',
   'motionMinimumDuration': 'Minimale Bewegungsdauer',
   'motionMinimumDurationDescription':
@@ -352,8 +353,8 @@ const _deUiText = <String, String>{
   'sentToClientDevice': 'An Eltern-Gerät gesendet',
   'saving': 'Speichert',
   'realSettings': 'Aktive Einstellungen',
-  'goodMorning': 'Guten Morgen',
-  'babySleepingWell': 'Baby schläft ruhig',
+  'babyRoomHeader': 'Babyzimmer',
+  'roomConnectedTitle': 'Du bist mit dem Babyzimmer verbunden.',
   'noRoomCalmText': 'Kein Zimmer verbunden; alles ist ruhig.',
   'findAndConnectRoom': 'Zimmer suchen und verbinden',
   'roomStatus': 'Zimmerstatus',
@@ -371,9 +372,9 @@ const _deUiText = <String, String>{
   'important': 'Wichtig',
   'info': 'Hinweis',
   'warning': 'Warnung',
-  'cryDetectedTitle': 'Weinton',
+  'cryDetectedTitle': 'Weinähnliches Geräusch',
   'cryDetectedText': 'Aus dem Babyzimmer kam ein weinähnlicher Ton.',
-  'motionDetectedTitle': 'Bewegungsnotiz',
+  'motionDetectedTitle': 'Bewegung erkannt',
   'motionDetectedText': 'Im Babyzimmer wurde sanfte Bewegung bemerkt.',
   'temperatureWarningTitle': 'Temperatur prüfen',
   'temperatureWarningText':
@@ -484,7 +485,7 @@ const _deUiText = <String, String>{
 
 const _arUiText = <String, String>{
   'notificationChannelDescription':
-      'تنبيهات البكاء والحركة والاتصال من غرفة الطفل.',
+      'تنبيهات الأصوات الشبيهة بالبكاء والأصوات العالية والحركة وتغيّر الإضاءة في غرفة الطفل.',
   'bootstrapPreparing': 'يتم تجهيز MimiCam...',
   'bootstrapFailedTitle': 'تعذر بدء MimiCam',
   'bootstrapFailedText':
@@ -533,7 +534,7 @@ const _arUiText = <String, String>{
   'clientTitlePairedIdle': 'الغرفة متصلة',
   'clientTitleRenewingToken': 'يتم تجديد الجلسة',
   'clientTitleWatching': 'المشاهدة المباشرة نشطة',
-  'clientTitleAlertOnly': 'تتم مراقبة التنبيهات',
+  'clientTitleAlertOnly': 'التنبيهات مفعّلة',
   'clientTitleReconnecting': 'إعادة الاتصال',
   'clientTitleOffline': 'الاتصال غير متصل',
   'clientTitleRevoked': 'تم إلغاء الوصول',
@@ -549,9 +550,10 @@ const _arUiText = <String, String>{
   'parentPriority': 'أولوية الوالدين',
   'latestStatusTracked': 'تتم متابعة آخر حالة',
   'pairRoomForNotifications': 'إقران غرفة للتنبيهات',
-  'latestStatusTrackedText': 'تظهر الأحداث المهمة وحالة الاتصال هنا.',
+  'latestStatusTrackedText':
+      'تظهر هنا تنبيهات الأصوات الشبيهة بالبكاء والأصوات العالية والحركة وتغيّر الإضاءة.',
   'pairRoomForNotificationsText':
-      'يتم إبراز تنبيهات البكاء والحركة والاتصال في شاشة الوالدين.',
+      'تُبرز هنا تنبيهات الأصوات الشبيهة بالبكاء والأصوات العالية والحركة وتغيّر الإضاءة.',
   'openNotifications': 'فتح التنبيهات',
   'pairRoom': 'إقران الغرفة',
   'live': 'مباشر',
@@ -590,18 +592,17 @@ const _arUiText = <String, String>{
   'invalidServerResponse': 'استجابة الخادم غير صالحة.',
   'missingPairingNonce': 'رمز الإقران المؤقت مفقود.',
   'scanServerQrFirst': 'امسح QR الخاص بالخادم أولاً.',
-  'latestStatusAndNotifications': 'الحالة والملاحظات',
+  'latestStatusAndNotifications': 'آخر أخبار غرفة الطفل',
   'parentEventsPriorityText':
-      'تظهر هنا ملاحظات الصوت والحركة والنظام المهمة بهدوء.',
-  'waitingLatestStatus': 'بانتظار آخر حالة',
-  'pairedServerAlertAppears':
-      'عندما يرسل الخادم المقترن تنبيهاً، تظهر أهم حالة هنا.',
+      'تظهر هنا التنبيهات المهمة للأصوات الشبيهة بالبكاء والأصوات العالية والحركة وتغيّر الإضاءة.',
+  'waitingLatestStatus': 'بانتظار خبر من غرفة الطفل',
+  'pairedServerAlertAppears': 'ستظهر هنا الأخبار المهمة من غرفة الطفل.',
   'parentDevicePreferences': 'تفضيلات جهاز الوالدين',
   'noServerControlsText':
       'هنا إعدادات العميل فقط؛ لا توجد تحكمات منفذ أو بث للخادم.',
   'clientSettings': 'إعدادات العميل',
   'clientSettingsPlaceholder':
-      'تتم إدارة الإشعارات المحلية وإعادة الاتصال وتفضيلات العرض هنا.',
+      'أديري الإشعارات وإعادة الاتصال وتفضيلات المشاهدة من هنا.',
   'liveWatching': 'مشاهدة مباشرة',
   'liveStreamConnectedSubtitle':
       'الفيديو والصوت وأحداث التنبيه تأتي من غرفة الطفل.',
@@ -615,7 +616,7 @@ const _arUiText = <String, String>{
   'changeAddress': 'تغيير العنوان',
   'openHistory': 'فتح السجل',
   'alertHistory': 'سجل التنبيهات',
-  'alertHistorySubtitle': 'تبقى أحداث البكاء والحركة والنظام مرتبة زمنياً.',
+  'alertHistorySubtitle': 'راجعي أحداث البكاء والحركة والنظام بالترتيب الزمني.',
   'all': 'الكل',
   'audio': 'الصوت',
   'audioOn': 'الصوت يعمل',
@@ -629,6 +630,7 @@ const _arUiText = <String, String>{
   'nightClockAudioAlertsOn':
       'الفيديو متوقف؛ يبقى الصوت والتنبيهات قيد التشغيل.',
   'notificationsOn': 'التنبيهات مفعلة',
+  'notificationsInAppOnly': 'تنبيهات داخل التطبيق فقط',
   'notificationsOff': 'التنبيهات متوقفة',
   'enableNotifications': 'تشغيل التنبيهات',
   'disableNotifications': 'إيقاف التنبيهات',
@@ -783,8 +785,8 @@ const _arUiText = <String, String>{
   'sentToClientDevice': 'مرسل إلى جهاز الوالدين',
   'saving': 'جارٍ الحفظ',
   'realSettings': 'إعدادات نشطة',
-  'goodMorning': 'صباح الخير',
-  'babySleepingWell': 'الطفل ينام بهدوء',
+  'babyRoomHeader': 'غرفة الطفل',
+  'roomConnectedTitle': 'أنتِ متصلة بغرفة الطفل.',
   'noRoomCalmText': 'لا توجد غرفة متصلة؛ كل شيء هادئ.',
   'findAndConnectRoom': 'البحث عن غرفة والاتصال',
   'roomStatus': 'حالة الغرفة',

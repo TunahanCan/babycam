@@ -94,6 +94,116 @@ void main() {
     expect(status['activeStreamClients'], 1);
   });
 
+  test('aynı token video ve audio dışında üçüncü media socket açamaz',
+      () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(
+      tokenService,
+      maxMediaConnectionsPerClient: 2,
+      maxTotalMediaConnections: 10,
+    );
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final controlClient = HttpClient();
+    addTearDown(() => controlClient.close(force: true));
+    final started = await _postSessionStart(
+      controlClient,
+      base.port,
+      trusted.token,
+      trusted.clientId,
+      audio: true,
+    );
+    final streamToken = started['streamToken'] as String;
+
+    final video = await _openMediaStream(
+      base.port,
+      MimiCamProtocolV2.video,
+      streamToken,
+    );
+    final audio = await _openMediaStream(
+      base.port,
+      MimiCamProtocolV2.audio,
+      streamToken,
+    );
+    addTearDown(video.close);
+    addTearDown(audio.close);
+
+    final rejected = await _requestRejectedMediaStream(
+      base.port,
+      MimiCamProtocolV2.video,
+      streamToken,
+    );
+    expect(rejected.statusCode, HttpStatus.tooManyRequests);
+    expect(rejected.body['code'], 'CLIENT_CONNECTION_LIMIT_REACHED');
+    expect(rejected.retryAfter, '1');
+    final status = await _getJson(
+      controlClient,
+      base.port,
+      MimiCamProtocolV2.status,
+      trusted.token,
+    );
+    expect(status['mediaConnections'], 2);
+    expect(status['videoClients'], 1);
+    expect(status['audioClients'], 1);
+  });
+
+  test('toplam media socket kapasitesi dolunca yeni client 503 alır', () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(
+      tokenService,
+      maxMediaConnectionsPerClient: 2,
+      maxTotalMediaConnections: 2,
+    );
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final controlClient = HttpClient();
+    addTearDown(() => controlClient.close(force: true));
+    final trustedClients = List.generate(
+      3,
+      (index) => tokenService.issueTrustedClientToken(
+        clientName: 'Parent $index',
+        deviceId: 'parent_$index',
+      ),
+    );
+    final streamTokens = <String>[];
+    for (final trusted in trustedClients) {
+      final started = await _postSessionStart(
+        controlClient,
+        base.port,
+        trusted.token,
+        trusted.clientId,
+        audio: false,
+      );
+      streamTokens.add(started['streamToken'] as String);
+    }
+
+    final first = await _openMediaStream(
+      base.port,
+      MimiCamProtocolV2.video,
+      streamTokens[0],
+    );
+    final second = await _openMediaStream(
+      base.port,
+      MimiCamProtocolV2.video,
+      streamTokens[1],
+    );
+    addTearDown(first.close);
+    addTearDown(second.close);
+
+    final rejected = await _requestRejectedMediaStream(
+      base.port,
+      MimiCamProtocolV2.video,
+      streamTokens[2],
+    );
+    expect(rejected.statusCode, HttpStatus.serviceUnavailable);
+    expect(rejected.body['code'], 'SERVER_CONNECTION_CAPACITY_REACHED');
+    expect(rejected.body['channel'], 'media');
+  });
+
   test('session/stop client medya socketlerini kapatip runtimei bosaltir',
       () async {
     final tokenService = PairingTokenService();
@@ -320,6 +430,8 @@ void main() {
 Future<MimiCamServer> _testServer(
   PairingTokenService tokenService, {
   bool startMediaOnSessionStart = true,
+  int maxMediaConnectionsPerClient = 2,
+  int? maxTotalMediaConnections,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
@@ -331,11 +443,112 @@ Future<MimiCamServer> _testServer(
     tokenService: tokenService,
     httpPort: 0,
     startMediaOnSessionStart: startMediaOnSessionStart,
+    maxMediaConnectionsPerClient: maxMediaConnectionsPerClient,
+    maxTotalMediaConnections: maxTotalMediaConnections,
     mediaSource: DeterministicServerMediaSource(
       videoInterval: const Duration(milliseconds: 25),
       audioInterval: const Duration(milliseconds: 25),
     ),
   );
+}
+
+class _OpenMediaStream {
+  _OpenMediaStream(this._socket, this._subscription);
+
+  final Socket _socket;
+  final StreamSubscription<List<int>> _subscription;
+  bool _closed = false;
+
+  Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    _socket.destroy();
+    await _subscription.cancel();
+  }
+}
+
+Future<_OpenMediaStream> _openMediaStream(
+  int port,
+  String path,
+  String streamToken,
+) async {
+  final socket = await Socket.connect(
+    InternetAddress.loopbackIPv4,
+    port,
+    timeout: const Duration(seconds: 2),
+  );
+  final headersReceived = Completer<void>();
+  final headerBytes = BytesBuilder(copy: false);
+  late final StreamSubscription<List<int>> subscription;
+  subscription = socket.listen(
+    (chunk) {
+      if (headersReceived.isCompleted) return;
+      headerBytes.add(chunk);
+      final text = utf8.decode(headerBytes.toBytes(), allowMalformed: true);
+      if (!text.contains('\r\n\r\n')) return;
+      if (!text.startsWith('HTTP/1.1 200')) {
+        headersReceived.completeError(StateError(
+          'Media stream rejected: ${text.split('\r\n').first}',
+        ));
+        return;
+      }
+      headersReceived.complete();
+    },
+    onError: (Object error, StackTrace stack) {
+      if (!headersReceived.isCompleted) {
+        headersReceived.completeError(error, stack);
+      }
+    },
+    onDone: () {
+      if (!headersReceived.isCompleted) {
+        headersReceived.completeError(StateError('Media stream ended'));
+      }
+    },
+    cancelOnError: true,
+  );
+  socket.write(
+    'GET $path?streamToken=${Uri.encodeQueryComponent(streamToken)} HTTP/1.1\r\n'
+    'Host: 127.0.0.1:$port\r\n'
+    'Connection: close\r\n'
+    '\r\n',
+  );
+  await socket.flush();
+  try {
+    await headersReceived.future.timeout(const Duration(seconds: 2));
+  } catch (_) {
+    socket.destroy();
+    await subscription.cancel();
+    rethrow;
+  }
+  return _OpenMediaStream(socket, subscription);
+}
+
+Future<({int statusCode, Map<String, Object?> body, String? retryAfter})>
+    _requestRejectedMediaStream(
+  int port,
+  String path,
+  String streamToken,
+) async {
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
+  try {
+    final request = await client.getUrl(Uri(
+      scheme: 'http',
+      host: InternetAddress.loopbackIPv4.address,
+      port: port,
+      path: path,
+      queryParameters: {'streamToken': streamToken},
+    ));
+    final response = await request.close().timeout(const Duration(seconds: 2));
+    final retryAfter = response.headers.value(HttpHeaders.retryAfterHeader);
+    final body = await utf8.decoder.bind(response).join();
+    return (
+      statusCode: response.statusCode,
+      body: Map<String, Object?>.from(jsonDecode(body) as Map),
+      retryAfter: retryAfter,
+    );
+  } finally {
+    client.close(force: true);
+  }
 }
 
 Future<Map<String, Object?>> _postSessionStart(

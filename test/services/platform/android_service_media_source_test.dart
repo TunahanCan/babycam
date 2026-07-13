@@ -50,7 +50,10 @@ void main() {
     expect(source.audioActive, isFalse);
     expect(source.snapshot.videoFrames, 1);
     expect(source.snapshot.lastVideoFrameAtMs, 101);
-    expect(bridge.consumerDemands.single, (video: true, audio: false));
+    expect(
+      bridge.consumerDemands.single,
+      (video: true, audio: false, encodeVideo: true),
+    );
     expect(bridge.readyDemands.single, (video: true, audio: false));
 
     await source.reconcile(
@@ -132,7 +135,10 @@ void main() {
 
     expect(source.isActive, isFalse);
     expect(source.latestPreviewFrame, isNull);
-    expect(bridge.consumerDemands.last, (video: false, audio: false));
+    expect(
+      bridge.consumerDemands.last,
+      (video: false, audio: false, encodeVideo: false),
+    );
     expect(bridge.detachCalls, 1);
     expect(bridge.hardwareDemandMutations, 0);
     await bridge.close();
@@ -225,11 +231,47 @@ void main() {
     await source.stop();
     await bridge.close();
   });
+
+  test('motion-only demand forwards luma without requiring a JPEG', () async {
+    final bridge = _FakeBridge();
+    final source = AndroidServiceMediaSource(bridge: bridge);
+    final videoFrames = <Uint8List>[];
+    final lumaFrames = <LumaFrame>[];
+    final subscription = source.lumaFrames.listen(lumaFrames.add);
+
+    await source.setVideoEncodingDemand(false);
+    await source.reconcile(
+      video: true,
+      audio: false,
+      onVideoFrame: videoFrames.add,
+      onAudioChunk: (_) {},
+    );
+    bridge.emit({
+      'type': 'video',
+      'timestampMs': 303,
+      'bytes': Uint8List(0),
+      'lumaBytes': Uint8List.fromList([1, 2, 3, 4]),
+      'lumaWidth': 2,
+      'lumaHeight': 2,
+    });
+
+    expect(videoFrames, isEmpty);
+    expect(lumaFrames, hasLength(1));
+    expect(lumaFrames.single.yPlane, [1, 2, 3, 4]);
+    expect(
+      bridge.consumerDemands.single,
+      (video: true, audio: false, encodeVideo: false),
+    );
+
+    await source.stop();
+    await subscription.cancel();
+    await bridge.close();
+  });
 }
 
 class _FakeBridge implements AndroidServiceMediaBridgePort {
   final _events = StreamController<Object?>.broadcast(sync: true);
-  final consumerDemands = <({bool video, bool audio})>[];
+  final consumerDemands = <({bool video, bool audio, bool encodeVideo})>[];
   final readyDemands = <({bool video, bool audio})>[];
   final mediaPolicies = <({int jpegQuality, int maxVideoFps})>[];
   int attachCalls = 0;
@@ -284,9 +326,18 @@ class _FakeBridge implements AndroidServiceMediaBridgePort {
   Future<Map<Object?, Object?>> setConsumerDemand({
     required bool video,
     required bool audio,
+    bool encodeVideo = true,
   }) async {
-    consumerDemands.add((video: video, audio: audio));
-    return {'consumerVideo': video, 'consumerAudio': audio};
+    consumerDemands.add((
+      video: video,
+      audio: audio,
+      encodeVideo: encodeVideo,
+    ));
+    return {
+      'consumerVideo': video,
+      'consumerAudio': audio,
+      'consumerVideoEncoding': encodeVideo,
+    };
   }
 
   @override

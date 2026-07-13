@@ -6,6 +6,7 @@ void main() {
     final counter = MediaResourceCounter()..localPreviewActive = true;
 
     expect(counter.needsVideoCapture, isTrue);
+    expect(counter.needsVideoEncoding, isTrue);
     expect(counter.needsAudioCapture, isFalse);
     expect(counter.hasLiveWatch, isFalse);
   });
@@ -18,6 +19,7 @@ void main() {
       ..externalAudioClients = 1;
 
     expect(counter.needsVideoCapture, isFalse);
+    expect(counter.needsVideoEncoding, isFalse);
     expect(counter.needsAudioCapture, isFalse);
     expect(counter.hasLiveWatch, isTrue);
   });
@@ -30,6 +32,7 @@ void main() {
 
     expect(counter.needsAudioCapture, isTrue);
     expect(counter.needsVideoCapture, isTrue);
+    expect(counter.needsVideoEncoding, isFalse);
     expect(counter.hasNotificationDemand, isTrue);
   });
 }

@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mimicam/core/protocol/alert_event_dto.dart';
+import 'package:mimicam/features/client/alerts/client_notification_service.dart';
 import 'package:mimicam/l10n/app_strings.dart';
 import 'package:mimicam/services/notification_service.dart';
 
@@ -143,18 +145,44 @@ void main() {
     final android = plugin.lastDetails?.android;
 
     expect(receipt.posted, isTrue);
-    expect(plugin.lastTitle, 'MimiCam alert');
+    expect(plugin.lastTitle, 'MimiCam · Nursery');
     expect(plugin.lastBody, 'Baby is crying');
     expect(plugin.lastPayload, 'mimicam://alerts?alertId=cry+alert%2F1');
     expect(android?.channelId, NotificationService.channelId);
     expect(android?.importance, Importance.high);
     expect(android?.priority, Priority.high);
     expect(android?.category, AndroidNotificationCategory.message);
+    expect(android?.visibility, NotificationVisibility.private);
     expect(android?.playSound, isTrue);
     expect(android?.enableVibration, isTrue);
     expect(android?.autoCancel, isTrue);
     expect(android?.groupKey, isNotEmpty);
     expect(android?.styleInformation, isA<BigTextStyleInformation>());
+  });
+
+  test('informational room updates are quiet and keep their typed title',
+      () async {
+    final plugin = _FakeNotificationsPlugin();
+    final service = NotificationService(
+      AppStrings(AppStrings.fallbackLocale),
+      plugin: plugin,
+    );
+
+    final receipt = await service.showAlert(
+      'Mom, there is movement in the nursery view.',
+      alertId: 'motion-info-1',
+      title: 'Movement detected in the nursery',
+      severity: 'info',
+    );
+    final android = plugin.lastDetails?.android;
+
+    expect(receipt.posted, isTrue);
+    expect(plugin.lastTitle, 'Movement detected in the nursery');
+    expect(android?.channelId, NotificationService.updatesChannelId);
+    expect(android?.importance, Importance.defaultImportance);
+    expect(android?.priority, Priority.defaultPriority);
+    expect(android?.playSound, isFalse);
+    expect(android?.enableVibration, isFalse);
   });
 
   test('iOS parent alerts share one Notification Center thread', () async {
@@ -176,6 +204,62 @@ void main() {
         second?.threadIdentifier, NotificationService.iosAlertThreadIdentifier);
     expect(second?.badgeNumber, isNull);
     expect(second?.presentList, isTrue);
+  });
+
+  test('iOS informational update uses passive interruption without sound',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final plugin = _FakeNotificationsPlugin();
+    final service = NotificationService(
+      AppStrings(AppStrings.fallbackLocale),
+      plugin: plugin,
+    );
+
+    await service.showAlert(
+      'Mom, the nursery light may have changed.',
+      alertId: 'ios-light-info',
+      title: 'The nursery light changed',
+      severity: 'info',
+    );
+    final details = plugin.lastDetails?.iOS;
+
+    expect(details?.interruptionLevel, InterruptionLevel.passive);
+    expect(details?.presentSound, isFalse);
+  });
+
+  test('active client notification copy follows a runtime locale change',
+      () async {
+    final plugin = _FakeNotificationsPlugin();
+    final nativeService = NotificationService(
+      AppStrings(AppStrings.fallbackLocale),
+      plugin: plugin,
+    );
+    final service = ClientNotificationService(service: nativeService);
+    const alert = AlertEventDto(
+      id: 'locale-motion',
+      type: 'motionDetected',
+      severity: 'info',
+      messageKey: 'parentMotionAlert',
+      message: 'Motion detected',
+      score: .7,
+      timestampMs: 42,
+      sourceDeviceId: 'server',
+      metadata: {
+        'scorePercent': 70,
+        'activeAreaPercent': 14,
+        'meanDiff': 8.2,
+      },
+    );
+
+    await service.initialize(strings: AppStrings(AppStrings.fallbackLocale));
+    await service.showAlert(alert);
+    expect(plugin.lastTitle, 'Movement detected in the nursery');
+    expect(plugin.lastBody, startsWith('Mom,'));
+
+    service.updateStrings(AppStrings(const Locale('tr')));
+    await service.showAlert(alert);
+    expect(plugin.lastTitle, 'Bebek odasında hareket var');
+    expect(plugin.lastBody, startsWith('Anne,'));
   });
 
   test('notification tap stream accepts only MimiCam alert payloads', () async {

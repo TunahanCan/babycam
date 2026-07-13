@@ -14,6 +14,12 @@ class ClientPreferencesService {
     final languageCode = _preferences.getString(_localeLanguageKey);
     if (languageCode == null || languageCode.isEmpty) return null;
     final countryCode = _preferences.getString(_localeCountryKey);
+    // English used to be stored without a region. The active English pack is
+    // now explicitly American English, so legacy installs should resolve to
+    // the same canonical locale instead of showing an unselected duplicate.
+    if (languageCode == 'en' && (countryCode == null || countryCode.isEmpty)) {
+      return const Locale('en', 'US');
+    }
     return Locale.fromSubtags(
       languageCode: languageCode,
       countryCode:

@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
+import '../../../core/async/serialized_async_executor.dart';
 import '../../../core/security/secure_random_token_generator.dart';
 import '../../../core/security/trusted_client_token.dart';
 import 'trusted_client_repository.dart';
@@ -105,6 +106,10 @@ class PairingTokenService {
   final _pairConfirmAttempts = <String, List<int>>{};
   final _clients = <String, TrustedClientRecord>{};
   final _streamTokens = <String, StreamTokenRecord>{};
+  final _pendingRenewalClientIdsByTokenHash = <String, String>{};
+  final _trustedClientMutations = SerializedAsyncExecutor(
+    closedErrorMessage: 'Trusted-client persistence queue is closed.',
+  );
   Future<void> _persistenceQueue = Future<void>.value();
   Object? _lastPersistenceError;
 
@@ -176,6 +181,19 @@ class PairingTokenService {
         clientId: clientId, token: token, expiresAtMs: expiresAtMs);
   }
 
+  Future<TrustedClientToken> issueTrustedClientTokenPersisted({
+    required String clientName,
+    required String deviceId,
+  }) =>
+      _trustedClientMutations.run(
+        () => _persistTrustedClientMutation(
+          () => issueTrustedClientToken(
+            clientName: clientName,
+            deviceId: deviceId,
+          ),
+        ),
+      );
+
   String issueSessionToken(
           {required String clientName, required String deviceId}) =>
       issueTrustedClientToken(clientName: clientName, deviceId: deviceId).token;
@@ -186,6 +204,29 @@ class PairingTokenService {
     return issueTrustedClientToken(
         clientName: record.clientName, deviceId: record.clientId);
   }
+
+  Future<TrustedClientToken?> renewTrustedClientTokenPersisted(
+    String token,
+  ) =>
+      _trustedClientMutations.run(() async {
+        final record = validateTrustedClientToken(token);
+        if (record == null || record.revokedAtMs != null) return null;
+        final tokenHash = hashToken(token);
+        _pendingRenewalClientIdsByTokenHash[tokenHash] = record.clientId;
+        try {
+          return await _persistTrustedClientMutation(
+            () => issueTrustedClientToken(
+              clientName: record.clientName,
+              deviceId: record.clientId,
+            ),
+          );
+        } finally {
+          if (_pendingRenewalClientIdsByTokenHash[tokenHash] ==
+              record.clientId) {
+            _pendingRenewalClientIdsByTokenHash.remove(tokenHash);
+          }
+        }
+      });
 
   TrustedClientRecord? validateTrustedClientToken(String token) {
     final tokenHash = hashToken(token);
@@ -278,13 +319,19 @@ class PairingTokenService {
   void revokeSession(String token) {
     final tokenHash = hashToken(token);
     final nowMs = _now().millisecondsSinceEpoch;
+    String? clientId = _pendingRenewalClientIdsByTokenHash[tokenHash];
     for (final entry in _clients.entries) {
       if (entry.value.tokenHash == tokenHash) {
-        _clients[entry.key] = entry.value.copyWith(revokedAtMs: nowMs);
-        revokeStreamTokensForClient(entry.key);
-        _persistTrustedClients();
+        clientId = entry.key;
+        break;
       }
     }
+    if (clientId == null) return;
+    final record = _clients[clientId];
+    if (record == null) return;
+    _clients[clientId] = record.copyWith(revokedAtMs: nowMs);
+    revokeStreamTokensForClient(clientId);
+    _persistTrustedClients();
   }
 
   void revokeClient(String clientId) {
@@ -310,12 +357,53 @@ class PairingTokenService {
     _nonces.clear();
     _pairConfirmAttempts.clear();
     _streamTokens.clear();
+    _pendingRenewalClientIdsByTokenHash.clear();
   }
 
   Future<void> flushPersistence() async {
     await _persistenceQueue;
     final error = _lastPersistenceError;
     if (error != null) throw TrustedClientPersistenceException(error);
+  }
+
+  Future<TrustedClientToken> _persistTrustedClientMutation(
+    TrustedClientToken Function() mutation,
+  ) async {
+    final previousClients = Map<String, TrustedClientRecord>.of(_clients);
+    final value = mutation();
+    final issuedRecord = _clients[value.clientId];
+    try {
+      await flushPersistence();
+      return value;
+    } on TrustedClientPersistenceException {
+      final previousRecord = previousClients[value.clientId];
+      final currentRecord = _clients[value.clientId];
+      if (identical(currentRecord, issuedRecord)) {
+        if (previousRecord == null) {
+          _clients.remove(value.clientId);
+        } else {
+          _clients[value.clientId] = previousRecord;
+        }
+      } else if (issuedRecord != null &&
+          currentRecord?.tokenHash == issuedRecord.tokenHash &&
+          currentRecord?.revokedAtMs != null) {
+        // Revocation is monotonic authority. If it raced the failed write,
+        // restore the old durable token only in revoked form; never resurrect
+        // it by replacing the whole client map with a stale snapshot.
+        if (previousRecord == null) {
+          _clients.remove(value.clientId);
+        } else {
+          _clients[value.clientId] = previousRecord.copyWith(
+            revokedAtMs: currentRecord!.revokedAtMs,
+          );
+        }
+      }
+      // Persist the merged authority best-effort. This snapshot also retains
+      // mutations to other clients that may have completed during the failed
+      // repository write.
+      _persistTrustedClients();
+      rethrow;
+    }
   }
 
   void _persistTrustedClients() {

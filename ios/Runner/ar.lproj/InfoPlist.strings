@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "يستخدم MimiCam الكاميرا لبث غرفة الطفل ومسح رموز QR الخاصة بالاقتران.";
+"NSLocalNetworkUsageDescription" = "يستخدم MimiCam شبكتك المحلية للعثور على جهازي غرفة الطفل والوالدين وربطهما.";
+"NSMicrophoneUsageDescription" = "يستخدم MimiCam الميكروفون في وضع Server لبث صوت غرفة الطفل ورصد الأصوات المهمة.";

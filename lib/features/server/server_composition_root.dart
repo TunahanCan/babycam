@@ -173,6 +173,17 @@ class ServerCompositionRoot {
       onSettingsChanged: server.reloadAnalysisConfig,
       broadcastAccess: broadcastAccess,
       onMediaDemandChanged: publishRuntimeDemand,
+      onVideoEncodingDemandChanged: nativeMediaSource == null
+          ? null
+          : (enabled) async {
+              try {
+                await nativeMediaSource.setVideoEncodingDemand(enabled);
+              } catch (error) {
+                // Capture ownership and alert analysis remain functional if a
+                // stale platform channel rejects this optimization update.
+                onLog?.call('Native JPEG demand could not be updated: $error');
+              }
+            },
       onPauseExternalMedia: server.pauseExternalMediaForPlatform,
       onRecoverExternalMedia: server.recoverExternalMediaForPlatform,
       onStartPairing: startPairingOverride ??

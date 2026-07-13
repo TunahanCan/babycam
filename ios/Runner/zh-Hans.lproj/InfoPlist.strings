@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "MimiCam 使用摄像头直播宝宝房画面并扫描配对二维码。";
+"NSLocalNetworkUsageDescription" = "MimiCam 使用本地网络查找并连接宝宝房设备和家长设备。";
+"NSMicrophoneUsageDescription" = "MimiCam 在 Server 模式下使用麦克风传输宝宝房声音并检测重要声音。";

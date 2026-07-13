@@ -29,7 +29,7 @@ BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
 LOCALES = [
     ('tr', 'Türkçe', 'Türkçe ekran görüntüleri'),
     ('zh', 'Çince', 'Çince ekran görüntüleri'),
-    ('en', 'English', 'English screenshots'),
+    ('en', 'Amerikan İngilizcesi', 'American English screenshots'),
     ('es', 'Español', 'Capturas en español'),
     ('fr', 'Français', 'Captures en français'),
     ('de', 'Deutsch', 'Deutsche Screenshots'),

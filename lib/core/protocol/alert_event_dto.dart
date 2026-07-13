@@ -174,32 +174,70 @@ class AlertEventDto {
     };
   }
 
+  String localizedTitle(AppStrings strings) => strings.alertNotificationTitle(
+        type: type,
+        messageKey: messageKey,
+      );
+
+  String localizedNotificationBody(AppStrings strings) =>
+      strings.alertNotificationBody(type: type, messageKey: messageKey) ??
+      localizedMessage(strings);
+
   bool get _hasLocalizationMetadata {
     switch (messageKey) {
       case 'parentCryAlert':
-        return _hasAll(const [
-          'confidencePercent',
-          'ambientDeltaDb',
-          'cryBandPercent',
-          'isCalibrated',
-        ]);
+        return _isNumber('confidencePercent', min: 0, max: 100) &&
+            _isNumber('ambientDeltaDb', min: -200, max: 200) &&
+            _isNumber('cryBandPercent', min: 0, max: 100) &&
+            metadata['isCalibrated'] is bool;
       case 'parentLoudSoundAlert':
-        return _hasAll(const ['dbfs', 'ambientDeltaDb']);
+        return _isNumber('dbfs', min: -200, max: 20) &&
+            _isNumber('ambientDeltaDb', min: -200, max: 200);
       case 'parentMotionAlert':
-        return _hasAll(const ['scorePercent', 'activeAreaPercent', 'meanDiff']);
+        return _isNumber('scorePercent', min: 0, max: 100) &&
+            _isNumber('activeAreaPercent', min: 0, max: 100) &&
+            _isNumber('meanDiff', min: 0, max: 255);
       case 'parentLightChangeAlert':
-        return _hasAll(const ['scorePercent', 'globalLumaShift']);
+        return _isNumber('scorePercent', min: 0, max: 100) &&
+            _isNumber('globalLumaShift', min: -255, max: 255);
       case 'parentEpisodeHighCryAlert':
-        return _hasAll(const ['durationMs', 'networkTier']);
+        return _isDuration('durationMs') &&
+            _isNetworkTier('networkTier') &&
+            _isOptionalNumber('lastMotionAgoMs', min: 0, max: 86400000);
       case 'parentEpisodeShortSoundAlert':
+        return _isDuration('durationMs');
       case 'parentEpisodeCryAlert':
-        return _hasAll(const ['durationMs']);
+        return _isDuration('durationMs') && _isNetworkTier('networkTier');
       default:
         return true;
     }
   }
 
-  bool _hasAll(List<String> keys) => keys.every(metadata.containsKey);
+  bool _isDuration(String key) => _isNumber(key, min: 0, max: 86400000);
+
+  bool _isNetworkTier(String key) {
+    final value = metadata[key];
+    return value is String &&
+        NetworkQualityTier.values.any((tier) => tier.name == value);
+  }
+
+  bool _isOptionalNumber(
+    String key, {
+    required num min,
+    required num max,
+  }) =>
+      !metadata.containsKey(key) ||
+      metadata[key] == null ||
+      _isNumber(key, min: min, max: max);
+
+  bool _isNumber(
+    String key, {
+    required num min,
+    required num max,
+  }) {
+    final value = metadata[key];
+    return value is num && value.isFinite && value >= min && value <= max;
+  }
 
   int _int(String key) {
     final value = metadata[key];
@@ -221,5 +259,7 @@ class AlertEventDto {
   int _durationSeconds() => (_int('durationMs') / 1000).round();
 
   NetworkQualityTier _networkTier() =>
-      NetworkQualityTier.fromName(metadata['networkTier'] as String?);
+      NetworkQualityTier.fromName(metadata['networkTier'] is String
+          ? metadata['networkTier'] as String
+          : null);
 }

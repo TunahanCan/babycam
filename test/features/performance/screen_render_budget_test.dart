@@ -313,10 +313,10 @@ void main() {
     await tester.tap(find.text('Dil'));
     await tester.pumpAndSettle();
     expect(find.text('Uygulama dili'), findsOneWidget);
-    await tester.tap(find.text('English'));
+    await tester.tap(find.text('English (United States)'));
     await tester.pumpAndSettle();
-    expect(selectedLocale, const Locale('en'));
-    expect(clientPreferences.locale, const Locale('en'));
+    expect(selectedLocale, const Locale('en', 'US'));
+    expect(clientPreferences.locale, const Locale('en', 'US'));
 
     await tester.scrollUntilVisible(
       find.byType(Switch).last,

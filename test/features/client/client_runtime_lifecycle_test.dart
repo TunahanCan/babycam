@@ -503,7 +503,7 @@ void main() {
     expect(runtime.currentState.activeStream?.streamToken, 'stream-2');
   });
 
-  test('bildirim izni açılmazsa alert listener kapalı kalır', () async {
+  test('alert transport başlatılamazsa listener kapalı kalır', () async {
     var alertStarted = 0;
     final runtime = ClientRuntime(
       pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
@@ -520,6 +520,157 @@ void main() {
     expect(alertStarted, 1);
     expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
     expect(runtime.currentState.alertsActive, isFalse);
+  });
+
+  test('sistem izni kapalıyken uygulama içi alertler çalışmayı sürdürür',
+      () async {
+    var permissionEnabled = false;
+    var permissionChecks = 0;
+    var alertStarts = 0;
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      initializeSystemNotifications: () async {
+        permissionChecks++;
+        return permissionEnabled;
+      },
+      startAlerts: (_) async {
+        alertStarts++;
+        return true;
+      },
+    );
+    addTearDown(runtime.dispose);
+    await runtime.pairWithServer(payload());
+
+    expect(await runtime.startAlertListening(), isTrue);
+    expect(runtime.systemNotificationsEnabled, isFalse);
+    expect(runtime.currentState.alertsActive, isTrue);
+    expect(alertStarts, 1);
+
+    permissionEnabled = true;
+    expect(await runtime.startAlertListening(), isTrue);
+    expect(runtime.systemNotificationsEnabled, isTrue);
+    expect(runtime.currentState.alertsActive, isTrue);
+    expect(permissionChecks, 2);
+    expect(alertStarts, 1, reason: 'izin yenileme socketi çoğaltmamalı');
+  });
+
+  test('geçerli token yenileme hatası alert başlangıcını bloke etmez',
+      () async {
+    var alertStarts = 0;
+    final expiring = PairingSession(
+      payload: payload(),
+      sessionToken: 'still-valid-token',
+      trustedClientTokenExpiresAtMs:
+          DateTime.now().add(const Duration(days: 1)).millisecondsSinceEpoch,
+    );
+    final runtime = ClientRuntime(
+      pair: (_) async => expiring,
+      renew: (_) async => throw StateError('temporary network outage'),
+      startAlerts: (_) async {
+        alertStarts++;
+        return true;
+      },
+    );
+    addTearDown(runtime.dispose);
+
+    await runtime.restoreSession(expiring);
+    expect(await runtime.startAlertListening(), isTrue);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(alertStarts, 1);
+    expect(runtime.currentState.alertsActive, isTrue);
+    expect(runtime.currentState.phase, ClientRuntimePhase.alertOnly);
+    expect(runtime.currentState.error, isNull);
+  });
+
+  test('arka plan token yenilemesi alert socketini yeni tokena taşır',
+      () async {
+    final renewal = Completer<PairingSession?>();
+    final oldAlertStartEntered = Completer<void>();
+    final finishOldAlertStart = Completer<void>();
+    final renewedAlertStarted = Completer<void>();
+    final alertTokens = <String>[];
+    var alertStops = 0;
+    final expiring = PairingSession(
+      payload: payload(),
+      sessionToken: 'old-token',
+      trustedClientTokenExpiresAtMs:
+          DateTime.now().add(const Duration(days: 1)).millisecondsSinceEpoch,
+    );
+    final renewed = expiring.copyWith(
+      sessionToken: 'new-token',
+      trustedClientTokenExpiresAtMs:
+          DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch,
+    );
+    final runtime = ClientRuntime(
+      pair: (_) async => expiring,
+      renew: (_) => renewal.future,
+      startAlerts: (session) async {
+        alertTokens.add(session.sessionToken);
+        if (session.sessionToken == 'old-token') {
+          if (!oldAlertStartEntered.isCompleted) {
+            oldAlertStartEntered.complete();
+          }
+          await finishOldAlertStart.future;
+        } else if (!renewedAlertStarted.isCompleted) {
+          renewedAlertStarted.complete();
+        }
+        return true;
+      },
+      stopAlerts: () async => alertStops++,
+    );
+    addTearDown(runtime.dispose);
+
+    await runtime.restoreSession(expiring);
+    final alertStart = runtime.startAlertListening();
+    await oldAlertStartEntered.future;
+    renewal.complete(renewed);
+    await Future<void>.delayed(Duration.zero);
+    finishOldAlertStart.complete();
+    await alertStart;
+    await renewedAlertStarted.future.timeout(const Duration(seconds: 2));
+
+    expect(alertTokens, ['old-token', 'new-token']);
+    expect(alertStops, 1);
+    expect(runtime.currentState.session, same(renewed));
+    expect(runtime.currentState.alertsActive, isTrue);
+  });
+
+  test('token yenilenince aktif yayının stop isteği yeni bearer kullanır',
+      () async {
+    final renewal = Completer<PairingSession?>();
+    final stoppedWithTokens = <String>[];
+    final expiring = PairingSession(
+      payload: payload(),
+      sessionToken: 'old-token',
+      trustedClientTokenExpiresAtMs:
+          DateTime.now().add(const Duration(days: 1)).millisecondsSinceEpoch,
+    );
+    final renewed = expiring.copyWith(
+      sessionToken: 'new-token',
+      trustedClientTokenExpiresAtMs:
+          DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch,
+    );
+    final runtime = ClientRuntime(
+      pair: (_) async => expiring,
+      renew: (_) => renewal.future,
+      startStream: (_, {bool audioEnabled = false}) async =>
+          const ActiveStreamSession(streamToken: 'stream-token'),
+      stopStream: (session) async {
+        stoppedWithTokens.add(session.sessionToken);
+      },
+    );
+    addTearDown(runtime.dispose);
+
+    await runtime.restoreSession(expiring);
+    await runtime.startWatching();
+    renewal.complete(renewed);
+    await runtime.states
+        .firstWhere((state) => identical(state.session, renewed))
+        .timeout(const Duration(seconds: 2));
+    await runtime.stopWatching();
+
+    expect(stoppedWithTokens, ['new-token']);
   });
 
   test('eşleşme sonrası kalite ölçümü canlı ekran açılmadan başlar', () async {
@@ -573,6 +724,9 @@ void main() {
     );
 
     await runtime.restoreSession(expiring);
+    await runtime.states.firstWhere(
+      (state) => state.phase == ClientRuntimePhase.revoked,
+    );
 
     expect(runtime.currentState.phase, ClientRuntimePhase.revoked);
     expect(runtime.currentState.session?.sessionToken, 'expired-token');

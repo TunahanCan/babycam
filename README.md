@@ -192,7 +192,7 @@ alınmış görüntülerle belgeliyor.
   <strong>153 ekran</strong> · <strong>9 use-case</strong> · <strong>8 dil / 9 locale</strong> · <strong>yaklaşık 20 MB</strong>
 </div>
 
-Desteklenen locale'ler: Türkçe, İngilizce, Çince, Hintçe, İspanyolca,
+Desteklenen locale'ler: Türkçe, Amerikan İngilizcesi, Çince, Hintçe, İspanyolca,
 Fransızca, Almanca, Arapça–Suudi Arabistan ve Arapça–Katar.
 
 ## Teknoloji özeti

@@ -36,11 +36,11 @@
 		<string>_mimicam._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>MimiCam kamera yayını ve QR eşleşmesi için kameraya ihtiyaç duyar.</string>
+	<string>MimiCam uses the camera to stream the nursery and scan pairing QR codes.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>MimiCam aynı yerel ağdaki client/server cihazlarını bulur.</string>
+	<string>MimiCam uses your local network to find and connect the nursery and parent devices.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>MimiCam server modu ses analizi ve yayın için mikrofona ihtiyaç duyar.</string>
+	<string>MimiCam uses the microphone in Server mode to stream nursery audio and detect important sounds.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

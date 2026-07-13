@@ -242,11 +242,15 @@ internal class MimiCamServiceMediaCapture(
                 targetWidth = LUMA_WIDTH,
                 targetHeight = LUMA_HEIGHT
             )
-            val encoded = encodeJpeg(
-                image,
-                rotationDegrees = rotation,
-                quality = MimiCamServiceMediaBridge.configuredJpegQuality
-            )
+            val encoded = if (MimiCamServiceMediaBridge.wantsVideoEncoding) {
+                encodeJpeg(
+                    image,
+                    rotationDegrees = rotation,
+                    quality = MimiCamServiceMediaBridge.configuredJpegQuality
+                )
+            } else {
+                ByteArray(0)
+            }
             val outputWidth = if (rotation == 90 || rotation == 270) image.height else image.width
             val outputHeight = if (rotation == 90 || rotation == 270) image.width else image.height
             MimiCamServiceMediaBridge.publishVideo(
@@ -263,7 +267,7 @@ internal class MimiCamServiceMediaCapture(
         } catch (error: Throwable) {
             MimiCamServiceMediaBridge.publishCaptureError(
                 "camera_frame",
-                error.describe("jpeg_encode_failed")
+                error.describe("camera_frame_failed")
             )
         } finally {
             image.close()

@@ -287,6 +287,35 @@ void main() {
     expect(engine.diagnostics()['alertsProduced'], 1);
     expect(engine.diagnostics()['lastAlertType'], 'cryDetected');
   });
+
+  test('pending buffer keeps only recent alerts and stays bounded', () {
+    final engine = AlertEngine(
+      config: const AlertConfig(motionCooldownMs: 0),
+    );
+    addTearDown(engine.dispose);
+    const overflow = 10;
+
+    for (var index = 0;
+        index < AlertEngine.maxPendingAlerts + overflow;
+        index++) {
+      expect(
+        engine.onMotionResult(fakeMotionResult(timestampMs: 1000 + index)),
+        isNotNull,
+      );
+    }
+
+    final diagnostics = engine.diagnostics();
+    final pending = engine.drainPending();
+    expect(pending, hasLength(AlertEngine.maxPendingAlerts));
+    expect(pending.first.timestampMs, 1000 + overflow);
+    expect(
+      diagnostics['alertsProduced'],
+      AlertEngine.maxPendingAlerts + overflow,
+    );
+    expect(diagnostics['pendingAlerts'], AlertEngine.maxPendingAlerts);
+    expect(diagnostics['pendingAlertsDropped'], overflow);
+    expect(engine.diagnostics()['pendingAlerts'], 0);
+  });
 }
 
 AudioAnalysisResult fakeAudioResult({

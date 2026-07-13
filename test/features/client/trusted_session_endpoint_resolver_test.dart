@@ -20,6 +20,7 @@ void main() {
     final probedHosts = <String>[];
     final resolver = TrustedSessionEndpointResolver(
       browser: browser,
+      allowUnverifiedEndpointRebind: true,
       retryPolicy: _noDelayRetry,
       maxProbeAttempts: 1,
       probe: (candidate) async {
@@ -55,6 +56,7 @@ void main() {
     var attempts = 0;
     final resolver = TrustedSessionEndpointResolver(
       browser: browser,
+      allowUnverifiedEndpointRebind: true,
       retryPolicy: _noDelayRetry,
       maxProbeAttempts: 2,
       probe: (_) async => ++attempts == 2,
@@ -88,6 +90,7 @@ void main() {
     final probedHosts = <String>[];
     final resolver = TrustedSessionEndpointResolver(
       browser: browser,
+      allowUnverifiedEndpointRebind: true,
       retryPolicy: _noDelayRetry,
       maxProbeAttempts: 1,
       probe: (candidate) async {
@@ -120,6 +123,7 @@ void main() {
     var attempts = 0;
     final resolver = TrustedSessionEndpointResolver(
       browser: browser,
+      allowUnverifiedEndpointRebind: true,
       maxProbeAttempts: 1,
       retryPolicy: _noDelayRetry,
       probe: (_) async => ++attempts >= 2,
@@ -143,6 +147,22 @@ void main() {
 
     expect(attempts, 2);
     expect(rebound.host, '192.168.1.55');
+  });
+
+  test('automatic endpoint rebinding is fail-closed by default', () async {
+    final browser = _ControllableBrowser();
+    addTearDown(browser.dispose);
+    var probeCalls = 0;
+    final resolver = TrustedSessionEndpointResolver(
+      browser: browser,
+      probe: (_) async {
+        probeCalls++;
+        return true;
+      },
+    );
+
+    expect(await resolver.watch(_session()).toList(), isEmpty);
+    expect(probeCalls, 0);
   });
 }
 

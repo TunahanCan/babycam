@@ -31,13 +31,20 @@ class ClientRoomControls {
     MicrophoneCaptureService? microphone,
     HttpClient Function()? clientFactory,
     this.timeout = const Duration(seconds: 5),
+    Duration? talkFlushTimeout,
+    Future<void> Function(HttpClientRequest request)? talkRequestFlusher,
   })  : _microphone = microphone ??
             MicrophoneCaptureService(sampleRate: 16000, channels: 1),
-        _clientFactory = clientFactory ?? HttpClient.new;
+        _clientFactory = clientFactory ?? HttpClient.new,
+        talkFlushTimeout = talkFlushTimeout ?? timeout,
+        _talkRequestFlusher =
+            talkRequestFlusher ?? ((request) => request.flush());
 
   final MicrophoneCaptureService _microphone;
   final HttpClient Function() _clientFactory;
+  final Future<void> Function(HttpClientRequest request) _talkRequestFlusher;
   final Duration timeout;
+  final Duration talkFlushTimeout;
   final _states = StreamController<ClientRoomControlSnapshot>.broadcast();
   ClientRoomControlSnapshot _state = const ClientRoomControlSnapshot();
   HttpClient? _talkClient;
@@ -45,6 +52,7 @@ class ClientRoomControls {
   PairingSession? _talkSession;
   String? _talkToken;
   Future<void>? _startInFlight;
+  Future<void>? _stopInFlight;
   Future<void>? _flushInFlight;
   Object? _talkPumpError;
   final _pendingTalkChunks = ListQueue<Uint8List>();
@@ -100,7 +108,7 @@ class ClientRoomControls {
   }
 
   Future<void> startTalking(PairingSession session) async {
-    if (_disposed || _state.talking) return;
+    if (_disposed || _state.talking || _stopInFlight != null) return;
     final inFlight = _startInFlight;
     if (inFlight != null) return inFlight;
     final operation = _startTalking(session);
@@ -209,7 +217,19 @@ class ClientRoomControls {
     } catch (_) {}
   }
 
-  Future<void> stopTalking() async {
+  Future<void> stopTalking() {
+    final inFlight = _stopInFlight;
+    if (inFlight != null) return inFlight;
+
+    late final Future<void> operation;
+    operation = _stopTalking().whenComplete(() {
+      if (identical(_stopInFlight, operation)) _stopInFlight = null;
+    });
+    _stopInFlight = operation;
+    return operation;
+  }
+
+  Future<void> _stopTalking() async {
     final starting = _startInFlight;
     if (starting != null) {
       try {
@@ -223,30 +243,42 @@ class ClientRoomControls {
     if (session == null || token == null) return;
     Object? error;
 
-    Future<void> attempt(Future<void> Function() operation) async {
+    Future<bool> attempt(Future<void> Function() operation) async {
       try {
         await operation();
+        return true;
       } catch (caught) {
         error ??= caught;
+        return false;
       }
     }
 
     try {
       await attempt(_microphone.stop);
-      await attempt(_drainTalkPump);
-      final request = _talkRequest;
-      _talkRequest = null;
-      if (request != null) {
-        await attempt(() async {
-          final response = await request.close().timeout(timeout);
-          final body =
-              await utf8.decoder.bind(response).join().timeout(timeout);
-          if (response.statusCode != HttpStatus.ok) {
-            throw StateError(
-              'Talk audio failed: ${response.statusCode} ${body.trim()}',
-            );
-          }
-        });
+      final pumpDrained = await attempt(
+        () => _drainTalkPump().timeout(talkFlushTimeout),
+      );
+      if (!pumpDrained) {
+        // A blocked socket must not retain stop ownership. Force-closing the
+        // streaming client lets the independent /talk/stop request proceed.
+        _talkClient?.close(force: true);
+        _talkClient = null;
+        _talkRequest = null;
+      } else {
+        final request = _talkRequest;
+        _talkRequest = null;
+        if (request != null) {
+          await attempt(() async {
+            final response = await request.close().timeout(timeout);
+            final body =
+                await utf8.decoder.bind(response).join().timeout(timeout);
+            if (response.statusCode != HttpStatus.ok) {
+              throw StateError(
+                'Talk audio failed: ${response.statusCode} ${body.trim()}',
+              );
+            }
+          });
+        }
       }
       await attempt(() async {
         await _requestJson(
@@ -416,7 +448,7 @@ class ClientRoomControls {
     }
     if (_chunksSinceFlush > 0 && identical(_talkRequest, request)) {
       _chunksSinceFlush = 0;
-      await request.flush();
+      await _talkRequestFlusher(request).timeout(talkFlushTimeout);
     }
   }
 

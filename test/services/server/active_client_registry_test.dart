@@ -108,4 +108,95 @@ void main() {
     registry.stopSession('anne');
     expect(registry.activeClientCount, 0);
   });
+
+  test('media lease limitleri per-client ve toplam kapasiteyi fail-fast korur',
+      () {
+    final registry = ActiveClientRegistry(
+      tokenService: PairingTokenService(),
+      maxActiveClients: 5,
+      maxMediaConnectionsPerClient: 2,
+      maxTotalMediaConnections: 2,
+    );
+
+    final video = registry.attachStream('anne');
+    final audio = registry.attachStream('anne');
+
+    expect(registry.mediaConnectionCount, 2);
+    expect(
+      () => registry.attachStream('anne'),
+      throwsA(
+        isA<ConnectionLimitException>().having(
+          (error) => error.scope,
+          'scope',
+          ConnectionLimitScope.client,
+        ),
+      ),
+    );
+    expect(
+      () => registry.attachStream('baba'),
+      throwsA(
+        isA<ConnectionLimitException>().having(
+          (error) => error.scope,
+          'scope',
+          ConnectionLimitScope.server,
+        ),
+      ),
+    );
+
+    video
+      ..release()
+      ..release();
+    expect(registry.mediaConnectionCount, 1);
+    expect(audio.isReleased, isFalse);
+    final baba = registry.attachStream('baba');
+    expect(registry.mediaConnectionCount, 2);
+
+    audio.release();
+    baba.release();
+    expect(registry.mediaConnectionCount, 0);
+  });
+
+  test('event socket lease aynı client ve toplam bağlantı sınırını korur', () {
+    final registry = ActiveClientRegistry(
+      tokenService: PairingTokenService(),
+      maxActiveClients: 5,
+      maxEventSocketsPerClient: 1,
+      maxTotalEventSockets: 2,
+    );
+
+    final anne = registry.attachEventSocket('anne');
+    final baba = registry.attachEventSocket('baba');
+
+    expect(
+      () => registry.attachEventSocket('anne'),
+      throwsA(
+        isA<ConnectionLimitException>().having(
+          (error) => error.scope,
+          'scope',
+          ConnectionLimitScope.client,
+        ),
+      ),
+    );
+    expect(
+      () => registry.attachEventSocket('dede'),
+      throwsA(
+        isA<ConnectionLimitException>().having(
+          (error) => error.scope,
+          'scope',
+          ConnectionLimitScope.server,
+        ),
+      ),
+    );
+
+    anne
+      ..release()
+      ..release();
+    expect(registry.eventSocketCount, 1);
+    final dede = registry.attachEventSocket('dede');
+    expect(registry.eventSocketCount, 2);
+
+    baba.release();
+    dede.release();
+    expect(registry.eventSocketCount, 0);
+  });
 }

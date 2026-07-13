@@ -51,6 +51,8 @@ void main() {
     expect(body['ok'], isFalse);
     expect(body['code'], TrustedClientPersistenceException.code);
     expect(body.containsKey('trustedClientToken'), isFalse);
+    expect(tokenService.pairedClientCount, 0);
+    expect(tokenService.recordForClient('client-1'), isNull);
   });
 
   test('public status and pairing response use the same persistent device ID',

@@ -110,6 +110,45 @@ void main() {
     expect(notifications.initializeCalls, 1);
     expect(listener.startCalls, 1);
     expect(runtime.currentState.alertsActive, isTrue);
+    expect(runtime.systemNotificationsEnabled, isFalse);
+  });
+
+  test('locale değişimi alert transport yeniden başlayınca geri alınmaz',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final payload = _payload();
+    SharedPreferences.setMockInitialValues({
+      'pairing_session': jsonEncode({
+        'payload': payload.toJson(),
+        'clientId': 'client-locale',
+        'trustedClientTokenExpiresAtMs':
+            DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch,
+        'pairedAtMs': 1000,
+      }),
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final secure = _FakeSecureTokenStore()
+      ..values['pairing_session_token'] = 'restored-token';
+    final notifications = _RecordingNotificationService();
+    final listener = _RecordingAlertListener();
+    final runtime = ClientCompositionRoot.create(
+      preferences: preferences,
+      strings: AppStrings(const Locale('tr')),
+      secureTokens: secure,
+      notificationService: notifications,
+      alertListener: listener,
+    );
+    addTearDown(runtime.dispose);
+    await runtime.states.firstWhere((state) => state.alertsActive);
+
+    runtime.updateAlertStrings(AppStrings(const Locale('en', 'US')));
+    await runtime.stopAlertListening();
+    await runtime.startAlertListening();
+
+    expect(notifications.currentLocale, 'en-US');
+    expect(notifications.localeUpdates, ['tr', 'en-US']);
+    expect(notifications.initializeCalls, 2);
   });
 }
 
@@ -149,6 +188,25 @@ class _DeniedNotificationService extends ClientNotificationService {
   Future<bool> initialize({AppStrings? strings}) async {
     initializeCalls++;
     return false;
+  }
+}
+
+class _RecordingNotificationService extends ClientNotificationService {
+  int initializeCalls = 0;
+  String? currentLocale;
+  final localeUpdates = <String>[];
+
+  @override
+  void updateStrings(AppStrings strings) {
+    currentLocale = strings.locale.toLanguageTag();
+    localeUpdates.add(currentLocale!);
+  }
+
+  @override
+  Future<bool> initialize({AppStrings? strings}) async {
+    initializeCalls++;
+    if (strings != null) updateStrings(strings);
+    return true;
   }
 }
 

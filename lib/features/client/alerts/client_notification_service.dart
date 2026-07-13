@@ -12,10 +12,19 @@ class ClientNotificationService {
 
   NotificationDeliveryReceipt? get lastDelivery => _lastDelivery;
 
+  void updateStrings(AppStrings strings) {
+    _strings = strings;
+    final service = _service;
+    if (service == null) {
+      _service = NotificationService(strings);
+    } else {
+      service.updateStrings(strings);
+    }
+  }
+
   Future<bool> initialize({AppStrings? strings}) async {
     if (strings != null) {
-      _strings = strings;
-      _service ??= NotificationService(strings);
+      updateStrings(strings);
     }
     final service = _service;
     if (service == null) return false;
@@ -25,6 +34,8 @@ class ClientNotificationService {
   Future<NotificationDeliveryReceipt> show(
     String message, {
     required String alertId,
+    String? title,
+    String severity = 'warning',
   }) async {
     final service = _service;
     if (service == null) {
@@ -34,7 +45,12 @@ class ClientNotificationService {
         error: 'notification_service_not_initialized',
       );
     }
-    final delivery = await service.showAlert(message, alertId: alertId);
+    final delivery = await service.showAlert(
+      message,
+      alertId: alertId,
+      title: title,
+      severity: severity,
+    );
     _lastDelivery = delivery;
     return delivery;
   }
@@ -42,8 +58,15 @@ class ClientNotificationService {
   Future<NotificationDeliveryReceipt> showAlert(AlertEventDto alert) {
     final strings = _strings;
     return show(
-      strings == null ? alert.message : alert.localizedMessage(strings),
+      strings == null
+          ? alert.message
+          : alert.localizedNotificationBody(strings),
       alertId: alert.id,
+      title: strings?.alertNotificationTitle(
+        type: alert.type,
+        messageKey: alert.messageKey,
+      ),
+      severity: alert.severity,
     );
   }
 }

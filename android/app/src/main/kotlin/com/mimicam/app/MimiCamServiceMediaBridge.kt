@@ -39,6 +39,9 @@ object MimiCamServiceMediaBridge : EventChannel.StreamHandler {
     private var consumerVideo = false
 
     @Volatile
+    private var consumerVideoEncoding = false
+
+    @Volatile
     private var consumerAudio = false
 
     @Volatile
@@ -77,6 +80,9 @@ object MimiCamServiceMediaBridge : EventChannel.StreamHandler {
 
     val wantsVideo: Boolean
         get() = consumerAttached && consumerVideo && eventSink != null
+
+    val wantsVideoEncoding: Boolean
+        get() = wantsVideo && consumerVideoEncoding
 
     val wantsAudio: Boolean
         get() = consumerAttached && consumerAudio && eventSink != null
@@ -120,6 +126,7 @@ object MimiCamServiceMediaBridge : EventChannel.StreamHandler {
                 val arguments = call.arguments as? Map<*, *>
                 val video = arguments?.get("video") as? Boolean ?: false
                 val audio = arguments?.get("audio") as? Boolean ?: false
+                val encodeVideo = arguments?.get("encodeVideo") as? Boolean ?: video
                 if ((video || audio) && !consumerAttached) {
                     result.error(
                         "NATIVE_MEDIA_CONSUMER_NOT_ATTACHED",
@@ -130,6 +137,7 @@ object MimiCamServiceMediaBridge : EventChannel.StreamHandler {
                 }
                 synchronized(this) {
                     consumerVideo = consumerAttached && video
+                    consumerVideoEncoding = consumerAttached && video && encodeVideo
                     consumerAudio = consumerAttached && audio
                     discardUndemandedEventsLocked()
                 }
@@ -209,7 +217,7 @@ object MimiCamServiceMediaBridge : EventChannel.StreamHandler {
         lumaWidth: Int,
         lumaHeight: Int
     ) {
-        if (!wantsVideo || jpeg.isEmpty()) return
+        if (!wantsVideo) return
         synchronized(this) {
             videoFrames += 1
             lastVideoAtMs = timestampMs
@@ -274,6 +282,7 @@ object MimiCamServiceMediaBridge : EventChannel.StreamHandler {
         "consumerAttached" to consumerAttached,
         "eventListenerAttached" to (eventSink != null),
         "consumerVideo" to consumerVideo,
+        "consumerVideoEncoding" to consumerVideoEncoding,
         "consumerAudio" to consumerAudio,
         "cameraRequested" to cameraRequested,
         "microphoneRequested" to microphoneRequested,
@@ -312,6 +321,7 @@ object MimiCamServiceMediaBridge : EventChannel.StreamHandler {
         synchronized(this) {
             consumerAttached = false
             consumerVideo = false
+            consumerVideoEncoding = false
             consumerAudio = false
             eventQueue.clear()
             waiters = readyWaiters.toList()

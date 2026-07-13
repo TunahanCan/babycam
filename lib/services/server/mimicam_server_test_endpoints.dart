@@ -47,9 +47,8 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
     Map<Object?, Object?>? body;
     try {
       body = await _readJsonObjectBody(request);
-    } catch (_) {
-      request.response.statusCode = HttpStatus.badRequest;
-      await request.response.close();
+    } catch (error) {
+      await _rejectInvalidJsonBody(request, error);
       return;
     }
 
@@ -507,9 +506,8 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
     Map<Object?, Object?>? body;
     try {
       body = await _readJsonObjectBody(request);
-    } catch (_) {
-      request.response.statusCode = HttpStatus.badRequest;
-      await request.response.close();
+    } catch (error) {
+      await _rejectInvalidJsonBody(request, error);
       return;
     }
     final event = _broadcastTestAlert(body);

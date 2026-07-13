@@ -297,6 +297,38 @@ void main() {
     expect(events.take(2), ['demand:true:false', 'camera-start']);
   });
 
+  test('motion-only demand captures luma without enabling JPEG encoding',
+      () async {
+    final encodingDemands = <bool>[];
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(
+        onStartVideo: () async {},
+        onStopVideo: () async {},
+      ),
+      onVideoEncodingDemandChanged: (enabled) async {
+        encodingDemands.add(enabled);
+      },
+    );
+    addTearDown(runtime.dispose);
+
+    await runtime.enableNotificationsForClient(
+      'alerts-only',
+      cry: false,
+      motion: true,
+    );
+
+    expect(runtime.currentState.cameraActive, isTrue);
+    expect(runtime.currentState.motionAnalyzerActive, isTrue);
+    expect(encodingDemands, isNotEmpty);
+    expect(encodingDemands.last, isFalse);
+
+    await runtime.startStreamSession(
+      'watching-parent',
+      const StreamSessionOptions(video: true),
+    );
+    expect(encodingDemands.last, isTrue);
+  });
+
   test('WebRTC capture offer kabulünde atomik devralır ve demandi korur',
       () async {
     var videoStarts = 0;

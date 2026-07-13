@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mimicam_server_channel_name">MimiCam 服务器</string>
+    <string name="mimicam_alert_connection_channel_name">MimiCam 提醒连接</string>
+    <string name="mimicam_server_channel_description">MimiCam 本地服务器和媒体活动</string>
+    <string name="mimicam_alert_connection_channel_description">在后台保持宝宝房提醒连接</string>
+    <string name="mimicam_runtime_camera_microphone_playback">摄像头、麦克风和宝宝房声音正在后台运行。</string>
+    <string name="mimicam_runtime_camera_microphone">摄像头和麦克风正在后台运行。</string>
+    <string name="mimicam_runtime_camera_playback">摄像头和宝宝房声音正在后台运行。</string>
+    <string name="mimicam_runtime_microphone_playback">麦克风和宝宝房声音正在后台运行。</string>
+    <string name="mimicam_runtime_camera">摄像头正在后台运行。</string>
+    <string name="mimicam_runtime_microphone">麦克风正在后台运行。</string>
+    <string name="mimicam_runtime_playback">宝宝房声音正在后台播放。</string>
+    <string name="mimicam_runtime_server">正在保持本地服务器和 Wi-Fi 连接。</string>
+    <string name="mimicam_runtime_alerts">正在后台监听宝宝房提醒。</string>
+    <string name="mimicam_runtime_stopping">后台服务正在停止。</string>
+    <string name="mimicam_runtime_title_media">MimiCam 宝宝房会话正在运行</string>
+    <string name="mimicam_runtime_title_server">MimiCam 本地服务器正在运行</string>
+    <string name="mimicam_runtime_title_alerts">MimiCam 宝宝房提醒已开启</string>
+</resources>

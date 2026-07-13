@@ -29,6 +29,7 @@ class MjpegStreamService {
   final MediaSessionTelemetry _telemetry;
   final _clients = <HttpResponse>{};
   final _clientIds = <HttpResponse, String>{};
+  final _clientDetachCallbacks = <HttpResponse, void Function()>{};
   final _pendingFrames = <HttpResponse, _PendingMjpegFrame>{};
   final _backpressure =
       StreamBackpressureGate<HttpResponse>(kind: StreamBackpressureKind.video);
@@ -52,6 +53,7 @@ class MjpegStreamService {
     HttpResponse response,
     String clientId, {
     Uint8List? firstFrame,
+    void Function()? onDetached,
   }) async {
     // A low-FPS thermal/network profile may not fill dart:io's default output
     // buffer before the client's first-frame deadline. MJPEG is a live stream,
@@ -66,6 +68,9 @@ class MjpegStreamService {
       ..set('X-Accel-Buffering', 'no');
     _clients.add(response);
     _clientIds[response] = clientId;
+    if (onDetached != null) {
+      _clientDetachCallbacks[response] = onDetached;
+    }
     response.done.catchError((Object _) {}).whenComplete(() {
       removeClient(response);
     });
@@ -201,9 +206,16 @@ class MjpegStreamService {
   void removeClient(HttpResponse response) {
     final hadClient = _clients.remove(response);
     final clientId = _clientIds.remove(response);
+    final detach = _clientDetachCallbacks.remove(response);
     _pendingFrames.remove(response);
     _backpressure.remove(response);
-    if (hadClient && clientId != null) _onClientDetached?.call(clientId);
+    if (hadClient && clientId != null) {
+      if (detach != null) {
+        detach();
+      } else {
+        _onClientDetached?.call(clientId);
+      }
+    }
   }
 
   Future<void> closeClient(String clientId) async {
@@ -228,6 +240,7 @@ class MjpegStreamService {
     }
     _clients.clear();
     _clientIds.clear();
+    _clientDetachCallbacks.clear();
     _pendingFrames.clear();
     _backpressure.clear();
   }

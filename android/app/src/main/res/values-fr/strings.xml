@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mimicam_server_channel_name">Serveur MimiCam</string>
+    <string name="mimicam_alert_connection_channel_name">Connexion aux alertes MimiCam</string>
+    <string name="mimicam_server_channel_description">Activité du serveur local et des médias MimiCam</string>
+    <string name="mimicam_alert_connection_channel_description">Maintient en arrière-plan la connexion aux alertes de la chambre</string>
+    <string name="mimicam_runtime_camera_microphone_playback">La caméra, le micro et le son de la chambre sont actifs en arrière-plan.</string>
+    <string name="mimicam_runtime_camera_microphone">La caméra et le micro sont actifs en arrière-plan.</string>
+    <string name="mimicam_runtime_camera_playback">La caméra et le son de la chambre sont actifs en arrière-plan.</string>
+    <string name="mimicam_runtime_microphone_playback">Le micro et le son de la chambre sont actifs en arrière-plan.</string>
+    <string name="mimicam_runtime_camera">La caméra est active en arrière-plan.</string>
+    <string name="mimicam_runtime_microphone">Le micro est actif en arrière-plan.</string>
+    <string name="mimicam_runtime_playback">Le son de la chambre est actif en arrière-plan.</string>
+    <string name="mimicam_runtime_server">Le serveur local et la connexion Wi-Fi restent actifs.</string>
+    <string name="mimicam_runtime_alerts">Les alertes de la chambre sont surveillées en arrière-plan.</string>
+    <string name="mimicam_runtime_stopping">Le service en arrière-plan s’arrête.</string>
+    <string name="mimicam_runtime_title_media">La session MimiCam de la chambre est active</string>
+    <string name="mimicam_runtime_title_server">Le serveur local MimiCam est actif</string>
+    <string name="mimicam_runtime_title_alerts">Les alertes MimiCam de la chambre sont actives</string>
+</resources>

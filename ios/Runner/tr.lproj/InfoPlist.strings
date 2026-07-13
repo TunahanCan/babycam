@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "MimiCam, bebek odasını yayınlamak ve eşleştirme QR kodlarını taramak için kamerayı kullanır.";
+"NSLocalNetworkUsageDescription" = "MimiCam, bebek odası ve ebeveyn cihazlarını bulup bağlamak için yerel ağınızı kullanır.";
+"NSMicrophoneUsageDescription" = "MimiCam, Server modunda bebek odası sesini yayınlamak ve önemli sesleri algılamak için mikrofonu kullanır.";

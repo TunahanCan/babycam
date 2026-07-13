@@ -14,7 +14,8 @@ class MediaResourceCounter {
       wantsMotionDetection;
   bool get needsAudioCapture =>
       activeAudioClients > externalAudioClients || wantsCryDetection;
-  bool get needsVideoEncoding => activeVideoClients > 0;
+  bool get needsVideoEncoding =>
+      localPreviewActive || activeVideoClients > externalVideoClients;
   bool get needsAudioStreaming => activeAudioClients > 0;
   bool get hasLiveWatch => activeVideoClients > 0 || activeAudioClients > 0;
   bool get hasNotificationDemand =>

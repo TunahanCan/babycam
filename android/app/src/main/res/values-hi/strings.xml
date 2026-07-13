@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mimicam_server_channel_name">MimiCam सर्वर</string>
+    <string name="mimicam_alert_connection_channel_name">MimiCam अलर्ट कनेक्शन</string>
+    <string name="mimicam_server_channel_description">MimiCam के लोकल सर्वर और मीडिया की गतिविधि</string>
+    <string name="mimicam_alert_connection_channel_description">बच्चे के कमरे के अलर्ट का कनेक्शन बैकग्राउंड में चालू रखता है</string>
+    <string name="mimicam_runtime_camera_microphone_playback">कैमरा, माइक्रोफ़ोन और बच्चे के कमरे की आवाज़ बैकग्राउंड में चालू हैं।</string>
+    <string name="mimicam_runtime_camera_microphone">कैमरा और माइक्रोफ़ोन बैकग्राउंड में चालू हैं।</string>
+    <string name="mimicam_runtime_camera_playback">कैमरा और बच्चे के कमरे की आवाज़ बैकग्राउंड में चालू हैं।</string>
+    <string name="mimicam_runtime_microphone_playback">माइक्रोफ़ोन और बच्चे के कमरे की आवाज़ बैकग्राउंड में चालू हैं।</string>
+    <string name="mimicam_runtime_camera">कैमरा बैकग्राउंड में चालू है।</string>
+    <string name="mimicam_runtime_microphone">माइक्रोफ़ोन बैकग्राउंड में चालू है।</string>
+    <string name="mimicam_runtime_playback">बच्चे के कमरे की आवाज़ बैकग्राउंड में चालू है।</string>
+    <string name="mimicam_runtime_server">लोकल सर्वर और Wi-Fi कनेक्शन चालू रखे जा रहे हैं।</string>
+    <string name="mimicam_runtime_alerts">बच्चे के कमरे के अलर्ट बैकग्राउंड में सुने जा रहे हैं।</string>
+    <string name="mimicam_runtime_stopping">बैकग्राउंड सेवा बंद हो रही है।</string>
+    <string name="mimicam_runtime_title_media">MimiCam का बच्चे के कमरे वाला सेशन चालू है</string>
+    <string name="mimicam_runtime_title_server">MimiCam का लोकल सर्वर चालू है</string>
+    <string name="mimicam_runtime_title_alerts">MimiCam के बच्चे के कमरे वाले अलर्ट चालू हैं</string>
+</resources>

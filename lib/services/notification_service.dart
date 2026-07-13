@@ -26,6 +26,7 @@ class NotificationService {
   }) : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
   static const channelId = 'mimicam_alerts';
+  static const updatesChannelId = 'mimicam_room_updates';
   static const alertsPayload = 'mimicam://alerts';
   static const _groupKey = 'mimicam_alerts_group';
   // iOS groups notifications by this exact thread identifier. Keep it
@@ -66,7 +67,7 @@ class NotificationService {
     }
   }
 
-  final AppStrings _strings;
+  AppStrings _strings;
   final FlutterLocalNotificationsPlugin _plugin;
   Future<bool>? _initializing;
   var _pluginInitialized = false;
@@ -79,6 +80,10 @@ class NotificationService {
   int get notificationsAttempted => _notificationsAttempted;
   int get notificationsPosted => _notificationsPosted;
   String? get lastError => _lastError;
+
+  void updateStrings(AppStrings strings) {
+    _strings = strings;
+  }
 
   Future<bool> initialize() {
     final active = _initializing;
@@ -151,10 +156,19 @@ class NotificationService {
         enableVibration: true,
         showBadge: true,
       ));
+      await android.createNotificationChannel(AndroidNotificationChannel(
+        updatesChannelId,
+        _strings.notificationUpdatesChannelName,
+        description: _strings.ui('notificationChannelDescription'),
+        importance: Importance.defaultImportance,
+        playSound: false,
+        enableVibration: false,
+        showBadge: true,
+      ));
       final alreadyEnabled = await android.areNotificationsEnabled();
       if (alreadyEnabled == true) return true;
       final granted = await android.requestNotificationsPermission();
-      return granted ?? await android.areNotificationsEnabled() ?? true;
+      return granted ?? await android.areNotificationsEnabled() ?? false;
     }
     final ios = _plugin.resolvePlatformSpecificImplementation<
         IOSFlutterLocalNotificationsPlugin>();
@@ -164,7 +178,7 @@ class NotificationService {
             badge: true,
             sound: true,
           ) ??
-          true;
+          false;
     }
     return true;
   }
@@ -172,6 +186,8 @@ class NotificationService {
   Future<NotificationDeliveryReceipt> showAlert(
     String message, {
     required String alertId,
+    String? title,
+    String severity = 'warning',
   }) async {
     final notificationId = notificationIdFor(alertId);
     _notificationsAttempted++;
@@ -191,38 +207,42 @@ class NotificationService {
     }
 
     try {
-      final title = _strings.notificationTitle;
+      final contentTitle = title ?? _strings.notificationTitle;
+      final interruptive = _isInterruptive(severity);
       await _plugin.show(
         notificationId,
-        title,
+        contentTitle,
         message,
         NotificationDetails(
           android: AndroidNotificationDetails(
-            channelId,
-            _strings.notificationChannelName,
+            interruptive ? channelId : updatesChannelId,
+            interruptive
+                ? _strings.notificationChannelName
+                : _strings.notificationUpdatesChannelName,
             channelDescription: _strings.ui('notificationChannelDescription'),
             icon: 'ic_stat_mimicam',
-            importance: Importance.high,
-            priority: Priority.high,
-            playSound: true,
-            enableVibration: true,
+            importance:
+                interruptive ? Importance.high : Importance.defaultImportance,
+            priority: interruptive ? Priority.high : Priority.defaultPriority,
+            playSound: interruptive,
+            enableVibration: interruptive,
             channelShowBadge: true,
             category: AndroidNotificationCategory.message,
-            visibility: NotificationVisibility.public,
+            visibility: NotificationVisibility.private,
             groupKey: _groupKey,
             autoCancel: true,
             onlyAlertOnce: false,
-            ticker: title,
+            ticker: contentTitle,
             styleInformation: BigTextStyleInformation(
               message,
-              contentTitle: title,
+              contentTitle: contentTitle,
               summaryText: 'MimiCam',
             ),
           ),
-          iOS: const DarwinNotificationDetails(
+          iOS: DarwinNotificationDetails(
             presentAlert: true,
             presentBadge: true,
-            presentSound: true,
+            presentSound: interruptive,
             presentBanner: true,
             presentList: true,
             // This is the iOS Notification Center grouping contract. Every
@@ -230,7 +250,9 @@ class NotificationService {
             // thread, so iOS shows a single MimiCam stack instead of a noisy
             // list of independent banners.
             threadIdentifier: iosAlertThreadIdentifier,
-            interruptionLevel: InterruptionLevel.active,
+            interruptionLevel: interruptive
+                ? InterruptionLevel.active
+                : InterruptionLevel.passive,
           ),
         ),
         payload: '$alertsPayload?alertId=${Uri.encodeQueryComponent(alertId)}',
@@ -251,6 +273,15 @@ class NotificationService {
         error: _lastError,
       );
     }
+  }
+
+  bool _isInterruptive(String severity) {
+    final normalized = severity.trim().toLowerCase();
+    return normalized == 'attention' ||
+        normalized == 'warning' ||
+        normalized == 'critical' ||
+        normalized == 'high' ||
+        normalized == 'medium';
   }
 
   Future<bool?> _verifyActive(int notificationId) async {

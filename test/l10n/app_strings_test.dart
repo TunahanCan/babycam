@@ -4,6 +4,29 @@ import 'package:mimicam/l10n/app_strings.dart';
 import 'package:mimicam/l10n/src/app_ui_text_catalog.dart';
 
 void main() {
+  test('American English is the canonical English locale', () async {
+    const delegate = AppStrings.delegate;
+    const locale = Locale('en', 'US');
+
+    expect(AppStrings.supportedLocales, contains(locale));
+    expect(delegate.isSupported(locale), isTrue);
+
+    final strings = await delegate.load(locale);
+
+    expect(strings.locale, locale);
+    expect(strings.notificationTitle, 'MimiCam · Nursery');
+    expect(
+      strings.alertNotificationTitle(
+        type: 'cryDetected',
+        messageKey: 'parentCryAlert',
+      ),
+      'Your baby may be crying',
+    );
+
+    final britishEnglish = await delegate.load(const Locale('en', 'GB'));
+    expect(britishEnglish.locale, locale);
+  });
+
   test('Chinese locale is supported and loaded', () async {
     const delegate = AppStrings.delegate;
 
@@ -13,7 +36,7 @@ void main() {
     final strings = await delegate.load(const Locale('zh'));
 
     expect(strings.isChinese, isTrue);
-    expect(strings.notificationTitle, 'MimiCam 提醒');
+    expect(strings.notificationTitle, 'MimiCam · 宝宝房');
     expect(strings.cameraNotFound, '未找到摄像头。');
   });
 
@@ -41,15 +64,15 @@ void main() {
     final arabicQatar = await delegate.load(const Locale('ar', 'QA'));
 
     expect(hindi.isHindi, isTrue);
-    expect(hindi.notificationTitle, 'MimiCam अलर्ट');
+    expect(hindi.notificationTitle, 'MimiCam · बच्चे का कमरा');
     expect(spanish.isSpanish, isTrue);
     expect(spanish.cameraNotFound, 'No se encontró la cámara.');
     expect(french.isFrench, isTrue);
     expect(french.reset, 'Réinitialiser');
     expect(german.isGerman, isTrue);
-    expect(german.notificationTitle, 'MimiCam Warnung');
+    expect(german.notificationTitle, 'MimiCam · Babyzimmer');
     expect(arabicSaudi.isArabic, isTrue);
-    expect(arabicSaudi.notificationTitle, 'تنبيه MimiCam');
+    expect(arabicSaudi.notificationTitle, 'MimiCam · غرفة الطفل');
     expect(arabicSaudi.locale.countryCode, 'SA');
     expect(arabicQatar.isArabic, isTrue);
     expect(arabicQatar.locale.countryCode, 'QA');
@@ -60,7 +83,7 @@ void main() {
 
     final strings = await delegate.load(const Locale('ru'));
 
-    expect(strings.locale, const Locale('en'));
+    expect(strings.locale, AppStrings.fallbackLocale);
     expect(strings.reset, 'Reset');
   });
 
@@ -125,6 +148,35 @@ void main() {
       expect(AppStrings(const Locale('ar', 'QA')).ui(key),
           isNot(startsWith('غير مترجم:')));
     }
+  });
+
+  test('all localized UI templates preserve the same placeholders', () {
+    const locales = [
+      Locale('tr'),
+      Locale('en', 'US'),
+      Locale('zh'),
+      Locale('hi'),
+      Locale('es'),
+      Locale('fr'),
+      Locale('de'),
+      Locale('ar', 'SA'),
+      Locale('ar', 'QA'),
+    ];
+
+    final mismatches = <String>[];
+    for (final entry in appUiTextCatalog.entries) {
+      final expected = _placeholderNames(entry.value['en'] ?? '');
+      for (final locale in locales) {
+        final actual = _placeholderNames(AppStrings(locale).ui(entry.key));
+        if (actual.length != expected.length || !actual.containsAll(expected)) {
+          mismatches.add(
+            '${entry.key} ${locale.toLanguageTag()}: '
+            'expected $expected, actual $actual',
+          );
+        }
+      }
+    }
+    expect(mismatches, isEmpty, reason: mismatches.join('\n'));
   });
 
   test('rapor dillerinde bildirim helper metinleri yerelleştirilir', () {
@@ -307,13 +359,15 @@ void main() {
     expect(spanish, contains('cambio suave'));
     expect(spanish, contains('bebé esté cómodo'));
     expect(french, contains('Brève hausse sonore'));
-    expect(french, contains('bébé est bien'));
+    expect(french, contains('bébé va bien'));
   });
 
   test('episode alert helper messages are localized', () {
-    final english = AppStrings(const Locale('en')).parentEpisodeHighCryAlert(
+    final strings = AppStrings(AppStrings.fallbackLocale);
+    final motionAgo = strings.parentMotionAgo(4000);
+    final english = strings.parentEpisodeHighCryAlert(
       seconds: 18,
-      motionAgo: '4 sec ago',
+      motionAgo: motionAgo,
       networkTier: 'Weak',
     );
     final spanish = AppStrings(const Locale('es')).parentEpisodeShortSoundAlert(
@@ -326,6 +380,8 @@ void main() {
 
     expect(english, contains('cry-like'));
     expect(english, contains('Weak'));
+    expect(english, contains('The last camera movement was 4 sec ago.'));
+    expect(english, isNot(contains('Last camera motion The last')));
     expect(spanish, contains('sonido'));
     expect(hindi, contains('बेचैनी'));
   });
@@ -334,12 +390,12 @@ void main() {
     const expected = {
       'tr': 'Anne,',
       'en': 'Mom,',
-      'zh': '妈妈,',
+      'zh': '妈妈，',
       'hi': 'माँ,',
       'es': 'Mamá,',
       'fr': 'Maman,',
       'de': 'Mama,',
-      'ar': 'يا أمي,',
+      'ar': 'ماما،',
     };
 
     for (final entry in expected.entries) {
@@ -360,4 +416,58 @@ void main() {
       );
     }
   });
+
+  test('native notification copy is short, warm, and localized', () {
+    const expected = <String, ({String title, String prefix})>{
+      'tr': (title: 'Bebeğin ağlıyor olabilir', prefix: 'Anne,'),
+      'en': (title: 'Your baby may be crying', prefix: 'Mom,'),
+      'zh': (title: '宝宝可能在哭', prefix: '妈妈，'),
+      'hi': (title: 'शायद बच्चा रो रहा है', prefix: 'माँ,'),
+      'es': (title: 'Puede que tu bebé esté llorando', prefix: 'Mamá,'),
+      'fr': (title: 'Bébé pleure peut-être', prefix: 'Maman,'),
+      'de': (title: 'Dein Baby weint vielleicht', prefix: 'Mama,'),
+      'ar': (title: 'قد يكون طفلك يبكي', prefix: 'ماما،'),
+    };
+
+    for (final entry in expected.entries) {
+      final strings = AppStrings(Locale(entry.key));
+      final title = strings.alertNotificationTitle(
+        type: 'cryDetected',
+        messageKey: 'parentCryAlert',
+      );
+      final body = strings.alertNotificationBody(
+        type: 'cryDetected',
+        messageKey: 'parentCryAlert',
+      );
+
+      expect(title, entry.value.title, reason: entry.key);
+      expect(body, startsWith(entry.value.prefix), reason: entry.key);
+      expect(body!.length, lessThan(180), reason: entry.key);
+      expect(body, isNot(contains('dBFS')), reason: entry.key);
+      expect(body, isNot(contains('{')), reason: entry.key);
+
+      final systemBody = strings.alertNotificationBody(
+        type: 'systemWarning',
+        messageKey: 'legacyAlert',
+      );
+      expect(systemBody, startsWith(entry.value.prefix), reason: entry.key);
+      expect(systemBody!.length, lessThan(180), reason: entry.key);
+    }
+  });
+
+  test('notification count uses locale-aware singular and plural forms', () {
+    expect(
+        AppStrings(AppStrings.fallbackLocale).notificationCount(1), '1 alert');
+    expect(
+        AppStrings(AppStrings.fallbackLocale).notificationCount(2), '2 alerts');
+    expect(AppStrings(const Locale('es')).notificationCount(1), '1 alerta');
+    expect(AppStrings(const Locale('de')).notificationCount(2), '2 Hinweise');
+    expect(
+        AppStrings(const Locale('ar', 'SA')).notificationCount(2), 'تنبيهان');
+  });
 }
+
+Set<String> _placeholderNames(String value) => RegExp(r'\{([^{}]+)\}')
+    .allMatches(value)
+    .map((match) => match.group(1)!)
+    .toSet();

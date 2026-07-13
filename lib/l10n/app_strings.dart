@@ -10,8 +10,10 @@ class AppStrings {
 
   final Locale locale;
 
+  static const fallbackLocale = Locale('en', 'US');
+
   static const supportedLocales = [
-    Locale('en'),
+    fallbackLocale,
     Locale('tr'),
     Locale('zh'),
     Locale('hi'),
@@ -28,7 +30,8 @@ class AppStrings {
   static AppStrings of(BuildContext context) {
     final localized = Localizations.of<AppStrings>(context, AppStrings);
     if (localized != null) return localized;
-    final locale = Localizations.maybeLocaleOf(context) ?? const Locale('en');
+    final locale =
+        Localizations.maybeLocaleOf(context) ?? AppStrings.fallbackLocale;
     return AppStrings(locale);
   }
 
@@ -211,14 +214,215 @@ class AppStrings {
       ar: 'بانتظار الخادم...');
 
   String get notificationTitle => _t(
-      tr: 'MimiCam uyarısı',
-      en: 'MimiCam alert',
-      zh: 'MimiCam 提醒',
-      hi: 'MimiCam अलर्ट',
-      es: 'Alerta de MimiCam',
-      fr: 'Alerte MimiCam',
-      de: 'MimiCam Warnung',
-      ar: 'تنبيه MimiCam');
+      tr: 'MimiCam · Bebek odası',
+      en: 'MimiCam · Nursery',
+      zh: 'MimiCam · 宝宝房',
+      hi: 'MimiCam · बच्चे का कमरा',
+      es: 'MimiCam · Habitación del bebé',
+      fr: 'MimiCam · Chambre de bébé',
+      de: 'MimiCam · Babyzimmer',
+      ar: 'MimiCam · غرفة الطفل');
+
+  String alertNotificationTitle({
+    required String type,
+    required String messageKey,
+  }) {
+    final normalizedType = type.trim().toLowerCase();
+    final normalizedKey = messageKey.trim().toLowerCase();
+    if (normalizedKey == 'parentcryalert' ||
+        normalizedKey == 'parentepisodehighcryalert' ||
+        normalizedKey == 'parentepisodecryalert' ||
+        (normalizedType == 'crydetected' &&
+            normalizedKey != 'parentepisodeshortsoundalert')) {
+      return _t(
+        tr: 'Bebeğin ağlıyor olabilir',
+        en: 'Your baby may be crying',
+        zh: '宝宝可能在哭',
+        hi: 'शायद बच्चा रो रहा है',
+        es: 'Puede que tu bebé esté llorando',
+        fr: 'Bébé pleure peut-être',
+        de: 'Dein Baby weint vielleicht',
+        ar: 'قد يكون طفلك يبكي',
+      );
+    }
+    if (normalizedKey == 'parentloudsoundalert' ||
+        normalizedKey == 'parentepisodeshortsoundalert' ||
+        normalizedType == 'loudsound') {
+      return _t(
+        tr: 'Bebek odasında bir ses var',
+        en: 'Sound detected in the nursery',
+        zh: '宝宝房里有声音',
+        hi: 'बच्चे के कमरे में आवाज़ सुनाई दी',
+        es: 'Se oyó un sonido en la habitación',
+        fr: 'Un son a été détecté dans la chambre',
+        de: 'Geräusch im Babyzimmer erkannt',
+        ar: 'تم رصد صوت في غرفة الطفل',
+      );
+    }
+    if (normalizedKey == 'parentmotionalert' ||
+        normalizedType == 'motiondetected') {
+      return _t(
+        tr: 'Bebek odasında hareket var',
+        en: 'Movement detected in the nursery',
+        zh: '宝宝房里有动静',
+        hi: 'बच्चे के कमरे में हलचल मिली',
+        es: 'Movimiento detectado en la habitación',
+        fr: 'Mouvement détecté dans la chambre',
+        de: 'Bewegung im Babyzimmer erkannt',
+        ar: 'تم رصد حركة في غرفة الطفل',
+      );
+    }
+    if (normalizedKey == 'parentlightchangealert' ||
+        normalizedType == 'globallightchange') {
+      return _t(
+        tr: 'Bebek odasının ışığı değişti',
+        en: 'The nursery light changed',
+        zh: '宝宝房的光线变了',
+        hi: 'बच्चे के कमरे की रोशनी बदली',
+        es: 'Cambió la luz de la habitación',
+        fr: 'La lumière de la chambre a changé',
+        de: 'Das Licht im Babyzimmer hat sich verändert',
+        ar: 'تغيّرت إضاءة غرفة الطفل',
+      );
+    }
+    if (normalizedKey == 'batterylow' || normalizedType == 'batterylow') {
+      return _t(
+        tr: 'Bebek odası telefonunun pili azalıyor',
+        en: 'The nursery phone battery is low',
+        zh: '宝宝房手机电量不足',
+        hi: 'बच्चे के कमरे वाले फ़ोन की बैटरी कम है',
+        es: 'El teléfono de la habitación tiene poca batería',
+        fr: 'Le téléphone de la chambre manque de batterie',
+        de: 'Der Akku des Babyzimmer-Handys ist fast leer',
+        ar: 'بطارية هاتف غرفة الطفل منخفضة',
+      );
+    }
+    if (normalizedType == 'systemwarning') {
+      return _t(
+        tr: 'Bebek odasından bir durum notu',
+        en: 'Nursery status update',
+        zh: '宝宝房状态更新',
+        hi: 'बच्चे के कमरे की स्थिति',
+        es: 'Novedad de la habitación',
+        fr: 'Nouvelle de la chambre',
+        de: 'Statushinweis aus dem Babyzimmer',
+        ar: 'تحديث من غرفة الطفل',
+      );
+    }
+    return notificationTitle;
+  }
+
+  String? alertNotificationBody({
+    required String type,
+    required String messageKey,
+  }) {
+    final normalizedType = type.trim().toLowerCase();
+    final normalizedKey = messageKey.trim().toLowerCase();
+    if (normalizedKey == 'parentepisodehighcryalert' ||
+        normalizedKey == 'parentepisodecryalert') {
+      return _addressParent(_t(
+        tr: 'Ağlama benzeri ses bir süredir devam ediyor. Müsait olduğunda bir bak.',
+        en: 'A cry-like sound has continued for a little while. Take a quick look when you can.',
+        zh: '类似哭声持续了一会儿。方便时看一眼吧。',
+        hi: 'रोने जैसी आवाज़ कुछ देर से सुनाई दे रही है। समय मिले तो एक बार देख लें।',
+        es: 'Se oye un sonido parecido al llanto desde hace un rato. Échale un vistazo cuando puedas.',
+        fr: 'Un son ressemblant à des pleurs dure depuis un moment. Regarde quand tu peux.',
+        de: 'Seit einer Weile ist ein weinähnliches Geräusch zu hören. Schau kurz nach, wenn du kannst.',
+        ar: 'يُسمع صوت يشبه البكاء منذ قليل. ألقي نظرة عندما تستطيعين.',
+      ));
+    }
+    if (normalizedKey == 'parentcryalert' ||
+        (normalizedType == 'crydetected' &&
+            normalizedKey != 'parentepisodeshortsoundalert')) {
+      return _addressParent(_t(
+        tr: 'Ağlama benzeri bir ses duydum. Müsait olduğunda bir bak.',
+        en: 'I heard a cry-like sound. Take a quick look when you can.',
+        zh: '听到了类似哭声。方便时看一眼吧。',
+        hi: 'रोने जैसी आवाज़ सुनाई दी। समय मिले तो एक बार देख लें।',
+        es: 'Se oye un sonido parecido al llanto. Échale un vistazo cuando puedas.',
+        fr: 'Un son ressemble à des pleurs. Regarde quand tu peux.',
+        de: 'Ein Geräusch klingt nach Weinen. Schau kurz nach, wenn du kannst.',
+        ar: 'سُمع صوت يشبه البكاء. ألقي نظرة عندما تستطيعين.',
+      ));
+    }
+    if (normalizedKey == 'parentepisodeshortsoundalert') {
+      return _addressParent(_t(
+        tr: 'Kısa bir huzursuzluk sesi oldu ama şimdilik sakin. Tekrarlarsa haber vereceğim.',
+        en: 'There was a brief fuss, but it is calm for now. I’ll let you know if it happens again.',
+        zh: '刚才有一小段烦躁声，现在已经平静。如果再次出现，我会提醒你。',
+        hi: 'थोड़ी देर बेचैनी की आवाज़ आई, लेकिन अभी शांति है। दोबारा होने पर आपको सूचना मिलेगी।',
+        es: 'Hubo un breve sonido de inquietud, pero ahora está tranquilo. Te avisaré si se repite.',
+        fr: 'Un bref son d’inconfort a été entendu, mais tout est calme maintenant. Je te préviendrai si cela recommence.',
+        de: 'Es war kurz ein unruhiges Geräusch zu hören, aber jetzt ist es ruhig. Ich melde mich, wenn es wiederkommt.',
+        ar: 'سُمع صوت انزعاج قصير، لكن الوضع هادئ الآن. سأخبركِ إذا تكرر.',
+      ));
+    }
+    if (normalizedKey == 'parentloudsoundalert' ||
+        normalizedType == 'loudsound') {
+      return _addressParent(_t(
+        tr: 'Odada kısa ve belirgin bir ses oldu. Uygun olduğunda görüntüyü kontrol et.',
+        en: 'There was a brief, noticeable sound in the nursery. Check the video when you can.',
+        zh: '宝宝房里出现了短暂而明显的声音。方便时看一下画面。',
+        hi: 'बच्चे के कमरे में थोड़ी देर साफ़ आवाज़ आई। समय मिले तो वीडियो देख लें।',
+        es: 'Se oyó un sonido breve y claro en la habitación. Revisa el video cuando puedas.',
+        fr: 'Un son bref et net a été entendu dans la chambre. Regarde la vidéo quand tu peux.',
+        de: 'Im Babyzimmer war kurz ein deutliches Geräusch zu hören. Schau ins Video, wenn du kannst.',
+        ar: 'سُمع صوت قصير وواضح في غرفة الطفل. راجعي الفيديو عندما تستطيعين.',
+      ));
+    }
+    if (normalizedKey == 'parentmotionalert' ||
+        normalizedType == 'motiondetected') {
+      return _addressParent(_t(
+        tr: 'Kamera görüntüsünde hareket var. Müsait olduğunda bir bak.',
+        en: 'There is movement in the nursery view. Take a quick look when you can.',
+        zh: '宝宝房画面里有动静。方便时看一眼吧。',
+        hi: 'बच्चे के कमरे की तस्वीर में हलचल है। समय मिले तो एक बार देख लें।',
+        es: 'Hay movimiento en la imagen de la habitación. Échale un vistazo cuando puedas.',
+        fr: 'Il y a du mouvement dans l’image de la chambre. Regarde quand tu peux.',
+        de: 'Im Bild des Babyzimmers ist Bewegung zu sehen. Schau kurz nach, wenn du kannst.',
+        ar: 'توجد حركة في صورة غرفة الطفل. ألقي نظرة عندما تستطيعين.',
+      ));
+    }
+    if (normalizedKey == 'parentlightchangealert' ||
+        normalizedType == 'globallightchange') {
+      return _addressParent(_t(
+        tr: 'Odanın ışığı değişmiş olabilir. Görüntüyü kontrol edebilirsin.',
+        en: 'The nursery light may have changed. You can check the camera view.',
+        zh: '宝宝房的光线可能变了。可以看一下摄像头画面。',
+        hi: 'बच्चे के कमरे की रोशनी बदली हो सकती है। कैमरा दृश्य देख लें।',
+        es: 'Puede haber cambiado la luz de la habitación. Puedes revisar la cámara.',
+        fr: 'La lumière de la chambre a peut-être changé. Tu peux vérifier la caméra.',
+        de: 'Das Licht im Babyzimmer hat sich vielleicht verändert. Du kannst die Kameraansicht prüfen.',
+        ar: 'ربما تغيّرت إضاءة غرفة الطفل. يمكنكِ مراجعة صورة الكاميرا.',
+      ));
+    }
+    if (normalizedKey == 'batterylow' || normalizedType == 'batterylow') {
+      return _addressParent(_t(
+        tr: 'Bebek odası telefonunu yakında şarja bağlaman iyi olur.',
+        en: 'The nursery phone needs to be charged soon.',
+        zh: '宝宝房的手机需要尽快充电。',
+        hi: 'बच्चे के कमरे वाले फ़ोन को जल्द चार्ज करना होगा।',
+        es: 'Conviene cargar pronto el teléfono de la habitación.',
+        fr: 'Il faudra bientôt recharger le téléphone de la chambre.',
+        de: 'Das Babyzimmer-Handy sollte bald geladen werden.',
+        ar: 'يُفضّل شحن هاتف غرفة الطفل قريباً.',
+      ));
+    }
+    if (normalizedType == 'systemwarning') {
+      return _addressParent(_t(
+        tr: 'MimiCam’den bir durum güncellemesi geldi. Ayrıntıları görmek için uygulamayı açabilirsin.',
+        en: 'MimiCam sent a nursery update. Open the app to see the details.',
+        zh: 'MimiCam 发来了一条宝宝房动态。打开应用即可查看详情。',
+        hi: 'MimiCam ने बच्चे के कमरे से नई जानकारी भेजी है। विवरण देखने के लिए ऐप खोलें।',
+        es: 'MimiCam envió una novedad de la habitación. Abre la app para ver los detalles.',
+        fr: 'MimiCam a envoyé une nouvelle de la chambre. Ouvre l’app pour voir les détails.',
+        de: 'MimiCam hat ein Update aus dem Babyzimmer gesendet. Öffne die App für weitere Details.',
+        ar: 'أرسل MimiCam تحديثاً من غرفة الطفل. افتحي التطبيق للاطلاع على التفاصيل.',
+      ));
+    }
+    return null;
+  }
+
   String get notificationChannelName => _t(
       tr: 'MimiCam Uyarıları',
       en: 'MimiCam Alerts',
@@ -228,6 +432,15 @@ class AppStrings {
       fr: 'Alertes MimiCam',
       de: 'MimiCam Warnungen',
       ar: 'تنبيهات MimiCam');
+  String get notificationUpdatesChannelName => _t(
+      tr: 'MimiCam Oda Notları',
+      en: 'MimiCam Nursery Updates',
+      zh: 'MimiCam 房间动态',
+      hi: 'MimiCam कमरे की जानकारी',
+      es: 'Novedades de la habitación',
+      fr: 'Nouvelles de la chambre',
+      de: 'MimiCam Zimmerhinweise',
+      ar: 'تحديثات غرفة الطفل');
 
   /// Pairing errors are deliberately phrased as recovery steps. Raw HTTP and
   /// nonce errors make a stressed caregiver repeat the same failing action.
@@ -527,9 +740,9 @@ class AppStrings {
     return _addressParent(_variant(
       seed: seed,
       tr: [
-        '👶 Bebeğiniz ağlıyor olabilir ($signal). Ses oda seviyesinin $delta dB üstünde; ağlama sinyali %$cryBandPercent. $calibration Sakin bir kontrol iyi olur: konfor, bez, beslenme, gaz veya sıcaklık.',
-        '🍼 Küçük bir oda kontrolü gerekebilir ($signal). Ses $delta dB yükseldi; ağlama sinyali %$cryBandPercent. $calibration Bebeğinizin neye ihtiyaç duyduğunu nazikçe kontrol edin.',
-        '🔊 Ağlama benzeri bir ses fark edildi ($signal). Oda sesinin $delta dB üstünde; ağlama sinyali %$cryBandPercent. $calibration Lütfen telaşsızca görüntüye bakın.',
+        '👶 Bebeğin ağlıyor olabilir ($signal). Ses oda seviyesinin $delta dB üstünde; ağlama sinyali %$cryBandPercent. $calibration Sakin bir kontrol iyi olur: konfor, bez, beslenme, gaz veya sıcaklık.',
+        '🍼 Küçük bir oda kontrolü gerekebilir ($signal). Ses $delta dB yükseldi; ağlama sinyali %$cryBandPercent. $calibration Bebeğinin neye ihtiyaç duyduğunu nazikçe kontrol et.',
+        '🔊 Ağlama benzeri bir ses fark edildi ($signal). Oda sesinin $delta dB üstünde; ağlama sinyali %$cryBandPercent. $calibration Telaşlanmadan görüntüye bak.',
       ],
       en: [
         '👶 Baby may be crying ($signal). Sound is $delta dB above the room level; cry signal is $cryBandPercent%. $calibration A calm check may help: comfort, diaper, feeding, gas, or temperature.',
@@ -552,9 +765,9 @@ class AppStrings {
         '🔊 Se notó un sonido parecido al llanto ($signal). Está $delta dB sobre el nivel de la habitación; señal de llanto $cryBandPercent%. $calibration Revisa el video con calma.',
       ],
       fr: [
-        '👶 Bébé pleure peut-être ($signal). Le son est $delta dB au-dessus du niveau de la pièce ; signal de pleurs $cryBandPercent %. $calibration Vérifiez calmement : réconfort, couche, repas, gaz ou température.',
-        '🍼 Un petit coup d’œil peut aider ($signal). L’audio a monté de $delta dB ; signal de pleurs $cryBandPercent %. $calibration Regardez tranquillement ce dont bébé a besoin.',
-        '🔊 Son proche de pleurs remarqué ($signal). Il est $delta dB au-dessus du niveau de la pièce ; signal de pleurs $cryBandPercent %. $calibration Vérifiez la vidéo sans vous presser.',
+        '👶 Bébé pleure peut-être ($signal). Le son est $delta dB au-dessus du niveau de la pièce ; signal de pleurs $cryBandPercent %. $calibration Vérifie calmement : réconfort, couche, repas, gaz ou température.',
+        '🍼 Un petit coup d’œil peut aider ($signal). Le son a monté de $delta dB ; signal de pleurs $cryBandPercent %. $calibration Regarde tranquillement ce dont bébé a besoin.',
+        '🔊 Un son proche de pleurs a été remarqué ($signal). Il est $delta dB au-dessus du niveau de la pièce ; signal de pleurs $cryBandPercent %. $calibration Regarde la vidéo sans te presser.',
       ],
       de: [
         '👶 Das Baby könnte weinen ($signal). Der Ton liegt $delta dB über dem Zimmerpegel; Weinsignal $cryBandPercent%. $calibration Eine ruhige Kontrolle hilft: Trost, Windel, Füttern, Bauchweh oder Temperatur.',
@@ -562,9 +775,9 @@ class AppStrings {
         '🔊 Weinähnlicher Ton bemerkt ($signal). Er liegt $delta dB über dem Zimmerpegel; Weinsignal $cryBandPercent%. $calibration Prüfe das Video ohne Eile.',
       ],
       ar: [
-        '👶 ربما يبكي الطفل ($signal). الصوت أعلى من مستوى الغرفة بـ $delta dB؛ إشارة البكاء $cryBandPercent%. $calibration تحقق بهدوء: الراحة أو الحفاض أو الرضاعة أو الغازات أو الحرارة.',
-        '🍼 قد تساعد نظرة هادئة إلى الغرفة ($signal). ارتفع الصوت $delta dB؛ إشارة البكاء $cryBandPercent%. $calibration تحقق بلطف مما يحتاجه الطفل.',
-        '🔊 لوحظ صوت يشبه البكاء ($signal). أعلى من مستوى الغرفة بـ $delta dB؛ إشارة البكاء $cryBandPercent%. $calibration راجع الفيديو بهدوء.',
+        '👶 ربما يبكي الطفل ($signal). الصوت أعلى من مستوى الغرفة بـ $delta dB؛ إشارة البكاء $cryBandPercent%. $calibration تحققي بهدوء: الراحة أو الحفاض أو الرضاعة أو الغازات أو الحرارة.',
+        '🍼 قد تساعد نظرة هادئة إلى الغرفة ($signal). ارتفع الصوت $delta dB؛ إشارة البكاء $cryBandPercent%. $calibration تحققي بلطف مما يحتاجه الطفل.',
+        '🔊 لوحظ صوت يشبه البكاء ($signal). أعلى من مستوى الغرفة بـ $delta dB؛ إشارة البكاء $cryBandPercent%. $calibration راجعي الفيديو بهدوء.',
       ],
     ));
   }
@@ -579,9 +792,9 @@ class AppStrings {
     return _addressParent(_variant(
       seed: seed,
       tr: [
-        '🔔 Odada kısa bir ses yükselmesi oldu. Seviye $level dBFS; oda sesinden $delta dB yüksek. Bebeğinizin rahat olduğundan nazikçe emin olun.',
+        '🔔 Odada kısa bir ses yükselmesi oldu. Seviye $level dBFS; oda sesinden $delta dB yüksek. Bebeğinin rahat olduğundan nazikçe emin ol.',
         '🚪 Kısa ve belirgin bir ses duyuldu. Seviye $level dBFS, oda seviyesinin $delta dB üstünde. Kapı, oyuncak veya ev sesi olabilir; sakin bir bakış yeterli.',
-        '🔊 Ses bir an yükseldi ($level dBFS). Oda farkı $delta dB. Bebeğiniz uyuyorsa görüntüyü sessizce kontrol edin.',
+        '🔊 Ses bir an yükseldi ($level dBFS). Oda farkı $delta dB. Bebeğin uyuyorsa görüntüyü sessizce kontrol et.',
       ],
       en: [
         '🔔 A brief sound rise happened in the room. Level $level dBFS; $delta dB above room level. Please gently check that baby is comfortable.',
@@ -604,7 +817,7 @@ class AppStrings {
         '🔊 El audio subió un momento ($level dBFS). Diferencia con la habitación: $delta dB. Si el bebé duerme, mira el video en silencio.',
       ],
       fr: [
-        '🔔 Brève hausse sonore dans la chambre. Niveau $level dBFS ; $delta dB au-dessus du niveau de la pièce. Vérifiez doucement que bébé est bien.',
+        '🔔 Brève hausse sonore dans la chambre. Niveau $level dBFS ; $delta dB au-dessus du niveau de la pièce. Vérifie doucement que bébé va bien.',
         '🚪 Un son court et net a été entendu. Niveau $level dBFS, $delta dB au-dessus de la pièce. Porte, jouet ou bruit de maison possible ; un regard calme suffit.',
         '🔊 L’audio a monté un instant ($level dBFS). Écart avec la pièce : $delta dB. Si bébé dort, vérifiez la vidéo discrètement.',
       ],
@@ -614,9 +827,9 @@ class AppStrings {
         '🔊 Audio stieg kurz an ($level dBFS). Abstand zum Zimmerpegel: $delta dB. Wenn das Baby schläft, prüfe das Video leise.',
       ],
       ar: [
-        '🔔 حدث ارتفاع صوت قصير في الغرفة. المستوى $level dBFS؛ أعلى من مستوى الغرفة بـ $delta dB. تحقق بلطف أن الطفل مرتاح.',
+        '🔔 حدث ارتفاع صوت قصير في الغرفة. المستوى $level dBFS؛ أعلى من مستوى الغرفة بـ $delta dB. تحققي بلطف أن الطفل مرتاح.',
         '🚪 سُمع صوت قصير وواضح. المستوى $level dBFS، أعلى من مستوى الغرفة بـ $delta dB. قد يكون باباً أو لعبة أو صوتاً منزلياً؛ تكفي نظرة هادئة.',
-        '🔊 ارتفع الصوت للحظة ($level dBFS). الفرق عن الغرفة $delta dB. إذا كان الطفل نائماً، راجع الفيديو بهدوء.',
+        '🔊 ارتفع الصوت للحظة ($level dBFS). الفرق عن الغرفة $delta dB. إذا كان الطفل نائماً، راجعي الفيديو بهدوء.',
       ],
     ));
   }
@@ -631,44 +844,44 @@ class AppStrings {
     return _addressParent(_variant(
       seed: seed,
       tr: [
-        '👶 Kamera görüntüsünde hafif hareket fark edildi ($scorePercent%). Görüntünün yaklaşık %$activeAreaPercent bölümü değişti; ortalama değişim $mean. Bebeğinizin rahat pozisyonda olduğundan emin olun.',
-        '🧸 Görüntünün bebek alanına yakın bölümünde değişim var ($scorePercent%). Görüntü değişimi %$activeAreaPercent, ortalama fark $mean. Örtü ve yatak kenarını sakin bir bakışla kontrol edin.',
-        '📹 Kamera bir hareket sinyali gönderdi ($scorePercent%). Aktif alan %$activeAreaPercent; değişim $mean. Görüntüye bakıp her şeyin yolunda olduğunu doğrulayın.',
+        '👶 Kamera görüntüsünde hafif hareket fark edildi ($scorePercent%). Görüntünün yaklaşık %$activeAreaPercent bölümü değişti; ortalama değişim $mean. Bebeğinin rahat pozisyonda olduğundan emin ol.',
+        '🧸 Görüntünün bir bölümünde değişim var ($scorePercent%). Değişen alan %$activeAreaPercent, ortalama fark $mean. Örtü ve yatak çevresini sakin bir bakışla kontrol et.',
+        '📹 Kamera bir hareket sinyali gönderdi ($scorePercent%). Aktif alan %$activeAreaPercent; değişim $mean. Görüntüye bakıp her şeyin yolunda olduğunu doğrula.',
       ],
       en: [
         '👶 Gentle movement appeared in the camera view ($scorePercent%). About $activeAreaPercent% of the image changed; average change $mean. Make sure baby is resting comfortably.',
-        '🧸 A change appeared near the baby area in the image ($scorePercent%). Image change $activeAreaPercent%, average difference $mean. Calmly check the blanket and crib edge.',
+        '🧸 A change appeared in part of the image ($scorePercent%). Changed area $activeAreaPercent%, average difference $mean. Calmly check the blanket and crib area.',
         '📹 The camera detected a motion signal ($scorePercent%). Active area $activeAreaPercent%; change $mean. Look at the video and confirm all is well.',
       ],
       zh: [
         '👶 摄像头画面出现轻微变化（$scorePercent%）。约 $activeAreaPercent% 的画面发生变化；平均变化 $mean。请确认宝宝睡得舒服。',
-        '🧸 宝宝区域附近的画面出现变化（$scorePercent%）。画面变化 $activeAreaPercent%，平均差异 $mean。请平静检查毯子和床边。',
+        '🧸 画面的一部分出现变化（$scorePercent%）。变化区域 $activeAreaPercent%，平均差异 $mean。请平静检查毯子和婴儿床周围。',
         '📹 摄像头检测到活动信号（$scorePercent%）。活动区域 $activeAreaPercent%；变化 $mean。看一眼画面，确认一切安好。',
       ],
       hi: [
         '👶 कैमरा दृश्य में हल्का बदलाव दिखा ($scorePercent%)। चित्र का लगभग $activeAreaPercent% हिस्सा बदला; औसत बदलाव $mean। देखें कि बच्चा आराम से लेटा है।',
-        '🧸 बच्चे के पास के चित्र में बदलाव है ($scorePercent%)। चित्र बदलाव $activeAreaPercent%, औसत फर्क $mean। कंबल और पालने के किनारे को शांति से देखें।',
+        '🧸 तस्वीर के एक हिस्से में बदलाव है ($scorePercent%)। बदला हुआ क्षेत्र $activeAreaPercent%, औसत फर्क $mean। कंबल और पालने के आसपास शांति से देखें।',
         '📹 कैमरे ने गतिविधि संकेत भेजा ($scorePercent%)। सक्रिय क्षेत्र $activeAreaPercent%; बदलाव $mean। वीडियो देखकर पुष्टि करें कि सब ठीक है।',
       ],
       es: [
         '👶 Se notó un cambio suave en la imagen ($scorePercent%). Cambió cerca del $activeAreaPercent% de la imagen; cambio medio $mean. Confirma que el bebé esté cómodo.',
-        '🧸 Hay un cambio en la imagen cerca de la zona del bebé ($scorePercent%). Cambio de imagen $activeAreaPercent%, diferencia media $mean. Revisa con calma manta y borde de la cuna.',
+        '🧸 Hay un cambio en una parte de la imagen ($scorePercent%). Área modificada $activeAreaPercent%, diferencia media $mean. Revisa con calma la manta y la cuna.',
         '📹 La cámara envió una nota de movimiento ($scorePercent%). Área activa $activeAreaPercent%; cambio $mean. Mira el video y confirma que todo esté bien.',
       ],
       fr: [
-        '👶 Léger changement dans l’image ($scorePercent %). Environ $activeAreaPercent % de l’image a changé ; variation moyenne $mean. Vérifiez que bébé est bien installé.',
-        '🧸 Changement dans l’image près de la zone de bébé ($scorePercent %). Changement d’image $activeAreaPercent %, écart moyen $mean. Vérifiez calmement couverture et bord du lit.',
-        '📹 La caméra a envoyé une note de mouvement ($scorePercent %). Zone active $activeAreaPercent % ; variation $mean. Regardez la vidéo et confirmez que tout va bien.',
+        '👶 Léger changement dans l’image ($scorePercent %). Environ $activeAreaPercent % de l’image a changé ; variation moyenne $mean. Vérifie que bébé est bien installé.',
+        '🧸 Une partie de l’image a changé ($scorePercent %). Zone modifiée $activeAreaPercent %, écart moyen $mean. Vérifie calmement la couverture et le lit.',
+        '📹 La caméra a détecté un mouvement ($scorePercent %). Zone active $activeAreaPercent % ; variation $mean. Regarde la vidéo et vérifie que tout va bien.',
       ],
       de: [
         '👶 Sanfte Bildveränderung bemerkt ($scorePercent%). Etwa $activeAreaPercent% des Bildes änderte sich; mittlere Änderung $mean. Vergewissere dich, dass das Baby bequem liegt.',
-        '🧸 Bildveränderung in der Nähe des Babybereichs ($scorePercent%). Bildänderung $activeAreaPercent%, mittlere Differenz $mean. Prüfe Decke und Krippenrand in Ruhe.',
+        '🧸 Ein Teil des Bildes hat sich verändert ($scorePercent%). Geänderter Bereich $activeAreaPercent%, mittlere Differenz $mean. Prüfe Decke und Babybett in Ruhe.',
         '📹 Die Kamera sendet eine Bewegungsnotiz ($scorePercent%). Aktiver Bereich $activeAreaPercent%; Änderung $mean. Schau ins Video und bestätige, dass alles gut ist.',
       ],
       ar: [
-        '👶 لوحظ تغير خفيف في صورة الكاميرا ($scorePercent%). تغيّر نحو $activeAreaPercent% من الصورة؛ متوسط التغير $mean. تأكد أن الطفل مستريح.',
-        '🧸 ظهر تغير في الصورة قرب منطقة الطفل ($scorePercent%). تغيّر الصورة $activeAreaPercent%، ومتوسط الفرق $mean. افحص البطانية وحافة السرير بهدوء.',
-        '📹 أرسلت الكاميرا ملاحظة حركة ($scorePercent%). المنطقة النشطة $activeAreaPercent%؛ التغير $mean. راجع الفيديو وتأكد أن كل شيء بخير.',
+        '👶 لوحظ تغير خفيف في صورة الكاميرا ($scorePercent%). تغيّر نحو $activeAreaPercent% من الصورة؛ متوسط التغير $mean. تأكدي أن الطفل مستريح.',
+        '🧸 ظهر تغير في جزء من الصورة ($scorePercent%). المنطقة المتغيرة $activeAreaPercent%، ومتوسط الفرق $mean. تحققي من البطانية ومحيط السرير بهدوء.',
+        '📹 رصدت الكاميرا حركة ($scorePercent%). المنطقة النشطة $activeAreaPercent%؛ التغير $mean. راجعي الفيديو وتأكدي أن كل شيء بخير.',
       ],
     ));
   }
@@ -683,8 +896,8 @@ class AppStrings {
       seed: seed,
       tr: [
         '💡 Oda ışığı değişmiş olabilir ($scorePercent%). Parlaklık farkı $shift. Gece lambası, perde ya da kapı aralığı etkili olabilir; görüntüye sakin bir bakış yeterli.',
-        '🌙 Işık seviyesi farklı görünüyor ($scorePercent%). Parlaklık kayması $shift. Kamera görüntüsünü nazikçe kontrol edin.',
-        '📷 Kamera ışık değişimi notu gönderdi ($scorePercent%). Parlaklık değişimi $shift. Hareketten çok ışık gibi görünüyor; yine de bir kez bakın.',
+        '🌙 Işık seviyesi farklı görünüyor ($scorePercent%). Parlaklık kayması $shift. Kamera görüntüsünü nazikçe kontrol et.',
+        '📷 Kamera ışık değişimi notu gönderdi ($scorePercent%). Parlaklık değişimi $shift. Hareketten çok ışık gibi görünüyor; yine de bir kez bak.',
       ],
       en: [
         '💡 Room light may have changed ($scorePercent%). Brightness difference $shift. Night light, curtain, or door gap may be affecting the view; a calm look is enough.',
@@ -708,7 +921,7 @@ class AppStrings {
       ],
       fr: [
         '💡 La lumière de la chambre a peut-être changé ($scorePercent %). Écart de luminosité $shift. Veilleuse, rideau ou porte entrouverte peuvent influencer l’image ; un regard calme suffit.',
-        '🌙 Le niveau de lumière semble différent ($scorePercent %). Décalage de luminosité $shift. Vérifiez doucement la caméra.',
+        '🌙 Le niveau de lumière semble différent ($scorePercent %). Décalage de luminosité $shift. Vérifie doucement la caméra.',
         '📷 La caméra a envoyé une note de lumière ($scorePercent %). Variation de luminosité $shift. Cela ressemble plus à la lumière qu’à un mouvement ; regardez quand même une fois.',
       ],
       de: [
@@ -718,8 +931,8 @@ class AppStrings {
       ],
       ar: [
         '💡 قد تكون إضاءة الغرفة تغيّرت ($scorePercent%). فرق السطوع $shift. قد يؤثر ضوء الليل أو الستار أو فتحة الباب على الصورة؛ تكفي نظرة هادئة.',
-        '🌙 يبدو مستوى الإضاءة مختلفاً ($scorePercent%). انحراف السطوع $shift. تحقق من عرض الكاميرا بلطف.',
-        '📷 أرسلت الكاميرا ملاحظة تغير ضوء ($scorePercent%). تغير السطوع $shift. يبدو أنه ضوء أكثر من حركة؛ ومع ذلك ألقِ نظرة واحدة.',
+        '🌙 يبدو مستوى الإضاءة مختلفاً ($scorePercent%). انحراف السطوع $shift. تحققي من صورة الكاميرا.',
+        '📷 رصدت الكاميرا تغيراً في الإضاءة ($scorePercent%). تغير السطوع $shift. يبدو أنه ضوء أكثر من حركة؛ ومع ذلك ألقي نظرة واحدة.',
       ],
     ));
   }
@@ -736,26 +949,26 @@ class AppStrings {
   String parentMotionAgo(int? agoMs) {
     if (agoMs == null) {
       return _t(
-        tr: 'son kamera hareketi yok',
-        en: 'no recent camera motion',
-        zh: '最近没有相机活动',
-        hi: 'हाल की कैमरा हलचल नहीं',
-        es: 'sin movimiento reciente de cámara',
-        fr: 'aucun mouvement récent de caméra',
-        de: 'keine aktuelle Kamerabewegung',
-        ar: 'لا توجد حركة حديثة للكاميرا',
+        tr: 'Kamerada yakın zamanda hareket görünmedi.',
+        en: 'No recent camera movement was detected.',
+        zh: '摄像头最近没有检测到活动。',
+        hi: 'कैमरे में हाल की कोई हलचल नहीं दिखी।',
+        es: 'No se detectó movimiento reciente en la cámara.',
+        fr: 'Aucun mouvement récent n’a été détecté par la caméra.',
+        de: 'Die Kamera hat zuletzt keine Bewegung erkannt.',
+        ar: 'لم ترصد الكاميرا حركة حديثة.',
       );
     }
     final seconds = (agoMs / 1000).round();
     return _t(
-      tr: 'kamera $seconds sn önce',
-      en: '$seconds sec ago on camera',
-      zh: '$seconds 秒前相机活动',
-      hi: 'कैमरा $seconds सेकंड पहले',
-      es: 'cámara hace $seconds s',
-      fr: 'caméra il y a $seconds s',
-      de: 'Kamera vor $seconds s',
-      ar: 'للكاميرا قبل $seconds ث',
+      tr: 'Kameradaki son hareket $seconds sn önceydi.',
+      en: 'The last camera movement was $seconds sec ago.',
+      zh: '摄像头上次检测到活动是在 $seconds 秒前。',
+      hi: 'कैमरे में आखिरी हलचल $seconds सेकंड पहले थी।',
+      es: 'El último movimiento en cámara fue hace $seconds s.',
+      fr: 'Le dernier mouvement filmé remonte à $seconds s.',
+      de: 'Die letzte Kamerabewegung war vor $seconds s.',
+      ar: 'كانت آخر حركة رصدتها الكاميرا قبل $seconds ث.',
     );
   }
 
@@ -767,44 +980,44 @@ class AppStrings {
       _addressParent(_variant(
         seed: seconds,
         tr: [
-          'Ağlama benzeri ses yaklaşık $seconds sn sürdü. Son kamera hareketi $motionAgo. Yayın kalitesi: $networkTier; sakin bir kontrol iyi olur.',
-          'Ağlama benzeri ses bir süre güçlü devam etti ($seconds sn). Kamera hareketi: $motionAgo. Bağlantı kalitesi: $networkTier; lütfen odayı nazikçe kontrol edin.',
-          'Uzayan bir ağlama benzeri ses notu var: ~$seconds sn. Son kamera hareketi $motionAgo. Yayın kalitesi: $networkTier; ses önceliği korunuyor.',
+          'Ağlama benzeri ses yaklaşık $seconds sn sürdü. $motionAgo Yayın kalitesi: $networkTier. Sakin bir kontrol iyi olur.',
+          'Ağlama benzeri ses $seconds sn boyunca belirgin kaldı. $motionAgo Bağlantı kalitesi: $networkTier. Odayı nazikçe kontrol et.',
+          'Uzayan bir ağlama benzeri ses notu var: yaklaşık $seconds sn. $motionAgo Yayın kalitesi: $networkTier; ses önceliği korunuyor.',
         ],
         en: [
-          'A cry-like sound lasted about $seconds sec. Last camera motion $motionAgo. Stream quality: $networkTier; a calm check may help.',
-          'A cry-like sound stayed noticeable for $seconds sec. Camera motion: $motionAgo. Connection quality: $networkTier; please check the room gently.',
-          'Longer cry-like sound note: ~$seconds sec. Last camera motion $motionAgo. Stream quality: $networkTier; audio priority is preserved.',
+          'A cry-like sound lasted about $seconds sec. $motionAgo Stream quality: $networkTier. A calm check may help.',
+          'A cry-like sound stayed noticeable for $seconds sec. $motionAgo Connection quality: $networkTier. Please check the room gently.',
+          'A longer cry-like sound lasted about $seconds sec. $motionAgo Stream quality: $networkTier; audio stays prioritized.',
         ],
         zh: [
-          '类似哭声持续约 $seconds 秒。最后相机活动：$motionAgo。直播状态：$networkTier；平静查看会有帮助。',
-          '类似哭声信号持续了 $seconds 秒。相机活动信息：$motionAgo。连接状态：$networkTier；请轻轻查看房间。',
-          '较长类似哭声提示：约 $seconds 秒。最后相机活动 $motionAgo。直播状态：$networkTier，已保持音频优先。',
+          '类似哭声持续约 $seconds 秒。$motionAgo 直播状态：$networkTier。平静看一眼会有帮助。',
+          '类似哭声持续了 $seconds 秒。$motionAgo 连接状态：$networkTier。请轻轻查看房间。',
+          '较长的类似哭声持续约 $seconds 秒。$motionAgo 直播状态：$networkTier，已保持声音优先。',
         ],
         hi: [
-          'रोने जैसी आवाज़ लगभग $seconds सेकंड चली। अंतिम कैमरा हलचल $motionAgo। स्ट्रीम की गुणवत्ता: $networkTier; शांत जाँच मदद कर सकती है।',
-          'रोने जैसा संकेत $seconds सेकंड तक स्पष्ट रहा। कैमरा हलचल: $motionAgo। कनेक्शन की गुणवत्ता: $networkTier; कमरे को प्यार से देखें।',
-          'लंबी रोने जैसी आवाज़ की सूचना: ~$seconds सेकंड। अंतिम कैमरा हलचल $motionAgo। स्ट्रीम की गुणवत्ता: $networkTier; ऑडियो प्राथमिकता सुरक्षित है।',
+          'रोने जैसी आवाज़ लगभग $seconds सेकंड चली। $motionAgo स्ट्रीम की गुणवत्ता: $networkTier। शांति से देखना मदद कर सकता है।',
+          'रोने जैसी आवाज़ $seconds सेकंड तक स्पष्ट रही। $motionAgo कनेक्शन की गुणवत्ता: $networkTier। कमरे को प्यार से देखें।',
+          'लंबी रोने जैसी आवाज़ लगभग $seconds सेकंड चली। $motionAgo स्ट्रीम की गुणवत्ता: $networkTier; ऑडियो को प्राथमिकता दी जा रही है।',
         ],
         es: [
-          'Un sonido parecido al llanto duró unos $seconds s. Último movimiento de cámara: $motionAgo. Calidad de transmisión: $networkTier; una revisión tranquila puede ayudar.',
-          'La señal parecida al llanto se mantuvo $seconds s. Movimiento de cámara: $motionAgo. Calidad de conexión: $networkTier; revisa la habitación con suavidad.',
-          'Aviso de sonido parecido al llanto: ~$seconds s. Último movimiento de cámara $motionAgo. Calidad de transmisión: $networkTier; se mantiene prioridad de audio.',
+          'Un sonido parecido al llanto duró unos $seconds s. $motionAgo Calidad de transmisión: $networkTier. Una revisión tranquila puede ayudar.',
+          'El sonido parecido al llanto se mantuvo $seconds s. $motionAgo Calidad de conexión: $networkTier. Revisa la habitación con calma.',
+          'Un sonido parecido al llanto duró unos $seconds s. $motionAgo Calidad de transmisión: $networkTier; el audio sigue siendo prioritario.',
         ],
         fr: [
-          'Un son proche de pleurs a duré environ $seconds s. Dernier mouvement de caméra $motionAgo. Qualité du flux : $networkTier ; un contrôle calme peut aider.',
-          'Le signal proche de pleurs est resté net $seconds s. Mouvement de caméra : $motionAgo. Qualité de connexion : $networkTier ; vérifiez doucement la chambre.',
-          'Note de son proche de pleurs : ~$seconds s. Dernier mouvement de caméra $motionAgo. Qualité du flux : $networkTier ; priorité audio conservée.',
+          'Un son proche de pleurs a duré environ $seconds s. $motionAgo Qualité du flux : $networkTier. Un contrôle calme peut aider.',
+          'Le son proche de pleurs est resté net $seconds s. $motionAgo Qualité de connexion : $networkTier. Vérifie doucement la chambre.',
+          'Un son proche de pleurs a duré environ $seconds s. $motionAgo Qualité du flux : $networkTier ; l’audio reste prioritaire.',
         ],
         de: [
-          'Ein weinähnlicher Ton dauerte etwa $seconds s. Letzte Kamerabewegung: $motionAgo. Streamqualität: $networkTier; ein ruhiger Blick kann helfen.',
-          'Das weinähnliche Signal blieb $seconds s deutlich. Kamerabewegung: $motionAgo. Verbindungsqualität: $networkTier; prüfe das Zimmer sanft.',
-          'Längerer Hinweis auf einen weinähnlichen Ton: ~$seconds s. Letzte Kamerabewegung $motionAgo. Streamqualität: $networkTier; Audio bleibt priorisiert.',
+          'Ein weinähnlicher Ton dauerte etwa $seconds s. $motionAgo Streamqualität: $networkTier. Ein ruhiger Blick kann helfen.',
+          'Der weinähnliche Ton blieb $seconds s deutlich. $motionAgo Verbindungsqualität: $networkTier. Prüfe das Zimmer sanft.',
+          'Ein weinähnlicher Ton dauerte etwa $seconds s. $motionAgo Streamqualität: $networkTier; Audio bleibt priorisiert.',
         ],
         ar: [
-          'استمر صوت يشبه البكاء حوالي $seconds ث. آخر حركة للكاميرا: $motionAgo. جودة البث: $networkTier؛ قد تساعد نظرة هادئة.',
-          'بقيت إشارة تشبه البكاء واضحة لمدة $seconds ث. حركة الكاميرا: $motionAgo. جودة الاتصال: $networkTier؛ تحقق من الغرفة بلطف.',
-          'ملاحظة صوت أطول يشبه البكاء: حوالي $seconds ث. آخر حركة للكاميرا $motionAgo. جودة البث: $networkTier؛ أولوية الصوت محفوظة.',
+          'استمر صوت يشبه البكاء حوالي $seconds ث. $motionAgo جودة البث: $networkTier. قد تساعد نظرة هادئة.',
+          'بقي صوت يشبه البكاء واضحاً لمدة $seconds ث. $motionAgo جودة الاتصال: $networkTier. تحققي من الغرفة بلطف.',
+          'استمر صوت يشبه البكاء حوالي $seconds ث. $motionAgo جودة البث: $networkTier؛ أولوية الصوت محفوظة.',
         ],
       ));
 
@@ -827,8 +1040,8 @@ class AppStrings {
           '声音短暂升高后恢复。若再次出现，我会轻轻提醒。',
         ],
         hi: [
-          'थोड़ी देर आवाज़ बढ़ी। अभी सब शांत लगता है; दोहराई तो बताऊँगा।',
-          'छोटी बेचैनी की आवाज़ सुनी गई। अभी यह लंबा रोना नहीं लग रहा; मैंने नोट कर लिया।',
+          'थोड़ी देर आवाज़ बढ़ी। अभी सब शांत लगता है; दोबारा होने पर आपको सूचना मिलेगी।',
+          'छोटी बेचैनी की आवाज़ सुनी गई। अभी यह लंबा रोना नहीं लग रहा; इसे दर्ज कर लिया गया है।',
           'आवाज़ थोड़ी देर बढ़ी और फिर शांत हुई। दोहराई तो हल्के से सूचना दूँगा।',
         ],
         es: [
@@ -837,9 +1050,9 @@ class AppStrings {
           'El audio subió un momento y luego se calmó. Te avisaré con suavidad si se repite.',
         ],
         fr: [
-          'Brève hausse sonore. Pour l’instant tout semble calme ; je vous préviens si cela revient.',
+          'Brève hausse sonore. Pour l’instant tout semble calme ; je te préviens si cela revient.',
           'Un bref son d’inconfort a été entendu. Cela ne ressemble pas à des pleurs longs pour le moment ; c’est noté.',
-          'Le son a monté un instant puis s’est calmé. Je vous préviendrai doucement si cela se répète.',
+          'Le son a monté un instant puis s’est calmé. Je te préviendrai si cela se répète.',
         ],
         de: [
           'Kurzer Tonanstieg. Im Moment wirkt alles ruhig; ich melde mich, falls es sich wiederholt.',
@@ -902,17 +1115,16 @@ class AppStrings {
       ));
 
   String _addressParent(String message) {
-    final address = _t(
-      tr: 'Anne',
-      en: 'Mom',
-      zh: '妈妈',
-      hi: 'माँ',
-      es: 'Mamá',
-      fr: 'Maman',
-      de: 'Mama',
-      ar: 'يا أمي',
+    return _t(
+      tr: 'Anne, $message',
+      en: 'Mom, $message',
+      zh: '妈妈，$message',
+      hi: 'माँ, $message',
+      es: 'Mamá, $message',
+      fr: 'Maman, $message',
+      de: 'Mama, $message',
+      ar: 'ماما، $message',
     );
-    return '$address, $message';
   }
 
   String _signalLabel(int percent) => _t(
@@ -925,6 +1137,21 @@ class AppStrings {
         de: 'Signalstärke $percent%',
         ar: 'قوة الإشارة $percent%',
       );
+
+  String notificationCount(int count) {
+    if (isChinese) return '$count 条提醒';
+    if (isHindi) return '$count अलर्ट';
+    if (isSpanish) return count == 1 ? '1 alerta' : '$count alertas';
+    if (isFrench) return count == 1 ? '1 alerte' : '$count alertes';
+    if (isGerman) return count == 1 ? '1 Hinweis' : '$count Hinweise';
+    if (isArabic) {
+      if (count == 1) return 'تنبيه واحد';
+      if (count == 2) return 'تنبيهان';
+      return '$count تنبيهات';
+    }
+    if (isTurkish) return '$count bildirim';
+    return count == 1 ? '1 alert' : '$count alerts';
+  }
 
   String ui(String key) {
     final values = appUiTextCatalog[key];
@@ -965,7 +1192,7 @@ class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {
         return SynchronousFuture(AppStrings(supported));
       }
     }
-    return SynchronousFuture(AppStrings(const Locale('en')));
+    return SynchronousFuture(AppStrings(AppStrings.fallbackLocale));
   }
 
   @override

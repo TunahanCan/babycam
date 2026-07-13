@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import '../../core/media/adaptive_media_profile.dart';
 import '../audio/audio_analysis_result.dart';
@@ -14,6 +15,13 @@ import 'episode_notification_aggregator.dart';
 
 /// Converts analyzer results into structured, transport-agnostic alerts.
 class AlertEngine {
+  /// The pull-style compatibility buffer is intentionally small and bounded.
+  ///
+  /// Live consumers should subscribe to [alerts]. This buffer only retains the
+  /// most recent events for callers that periodically use [drainPending]; it is
+  /// not a durable delivery queue.
+  static const int maxPendingAlerts = 128;
+
   AlertEngine({
     this.config = const AlertConfig(),
     AppStrings? strings,
@@ -47,10 +55,11 @@ class AlertEngine {
   final CooldownPolicy _cooldownPolicy;
   final StreamController<AlertEvent> _controller =
       StreamController<AlertEvent>.broadcast();
-  final List<AlertEvent> _pending = [];
+  final ListQueue<AlertEvent> _pending = ListQueue<AlertEvent>();
 
   int _sequence = 0;
   int _alertsProduced = 0;
+  int _pendingAlertsDropped = 0;
   AlertType? _lastAlertType;
   int? _lastAlertAt;
   bool _disposed = false;
@@ -167,6 +176,7 @@ class AlertEngine {
     _pending.clear();
     _sequence = 0;
     _alertsProduced = 0;
+    _pendingAlertsDropped = 0;
     _lastAlertType = null;
     _lastAlertAt = null;
     _episodeAggregator?.reset();
@@ -186,6 +196,8 @@ class AlertEngine {
     final nowMs = _lastAlertAt ?? DateTime.now().millisecondsSinceEpoch;
     return {
       'alertsProduced': _alertsProduced,
+      'pendingAlerts': _pending.length,
+      'pendingAlertsDropped': _pendingAlertsDropped,
       'lastAlertType': _lastAlertType?.name,
       'lastAlertAt': _lastAlertAt,
       'cooldowns': {
@@ -221,6 +233,10 @@ class AlertEngine {
     _alertsProduced++;
     _lastAlertType = type;
     _lastAlertAt = timestampMs;
+    if (_pending.length == maxPendingAlerts) {
+      _pending.removeFirst();
+      _pendingAlertsDropped++;
+    }
     _pending.add(event);
     if (!_controller.isClosed) {
       _controller.add(event);

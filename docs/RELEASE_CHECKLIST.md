@@ -75,6 +75,22 @@ hazır değilse paywall kapalı bırakılmalıdır.
 - Kamera/mikrofon/bildirim izni reddetme ve Ayarlar'dan sonradan açma.
 - 30 dakika kesintisiz yayın, termal yük ve pil tüketimi kaydı.
 
+## Güvenlik ve teslimat kapıları
+
+Aşağıdaki maddeler tamamlanmadan MimiCam, güvenilmeyen/ortak ağlar veya
+"uygulama kapalıyken WhatsApp benzeri bildirim" vaadiyle yayınlanmamalıdır:
+
+- QR ile pinlenen sunucu kimliği ve HTTPS/WSS; bearer token, ses ve video
+  cleartext HTTP/WS üzerinden taşınmamalı.
+- Manuel IP eşleşmesinde QR'a eşdeğer fiziksel onay. Public discovery yanıtı
+  tek başına uzun ömürlü trusted token üretmeye yetmemeli.
+- Kayıp telefonu server ekranından listeleme/iptal etme ve iptal anında açık
+  medya, WebSocket, WebRTC ve talk bağlantılarını kapatma.
+- Uygulama askıda/kapalıyken bildirim vaat edilecekse APNs/FCM, kalıcı event
+  sırası, ACK ve kaçırılan olay replay mekanizması.
+- Yukarıdaki tehdit modeli için gerçek iki cihazlı saldırı/yeniden bağlanma
+  kabul testi ve bağımsız güvenlik incelemesi.
+
 ## Dış bağımlı blockerlar
 
 - Production bundle/application ID kararı.
@@ -82,3 +98,12 @@ hazır değilse paywall kapalı bırakılmalıdır.
 - Android upload key ve iOS dağıtım sertifikaları.
 - HTTPS gizlilik/support URL'si ve destek e-postası.
 - Paywall açılacaksa mağaza ürünleri ve trusted verifier backend'i.
+
+## Toolchain bakım notu
+
+- Mevcut Flutter sürümünde release AAB oluşuyor; ancak Flutter, uygulama ve
+  `camera_android_camerax`, `flutter_webrtc`, `mobile_scanner`, `nsd_android`,
+  `wakelock_plus` eklentileri için eski Kotlin Gradle Plugin modelinin ileride
+  kaldırılacağını bildiriyor. Flutter major sürümü yükseltilmeden önce uygulama
+  Built-in Kotlin'e geçirilmeli, eklentilerin uyumlu sürümleri seçilmeli ve bu
+  listedeki Android/iOS kapıları yeniden çalıştırılmalıdır.

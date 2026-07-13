@@ -126,6 +126,76 @@ void main() {
     expect(stops, 1);
     expect(controls.currentState.talking, isFalse);
   });
+
+  test('stalled talk flush has a bounded single-flight stop', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var stops = 0;
+    unawaited(server.forEach((request) async {
+      if (request.uri.path == MimiCamProtocolV2.talkStart) {
+        await utf8.decoder.bind(request).join();
+        await _json(request.response, {
+          'ok': true,
+          'session': {'talkToken': 'talk-token'},
+        });
+        return;
+      }
+      if (request.uri.path == MimiCamProtocolV2.talkAudio) {
+        try {
+          await request.drain<void>();
+          await _json(request.response, {'ok': true});
+        } catch (_) {
+          // The client intentionally force-closes this stalled upload.
+        }
+        return;
+      }
+      if (request.uri.path == MimiCamProtocolV2.talkStop) {
+        await utf8.decoder.bind(request).join();
+        stops++;
+        await _json(request.response, {'ok': true});
+        return;
+      }
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
+    }));
+    addTearDown(() => server.close(force: true));
+
+    final flushStarted = Completer<void>();
+    final blockedFlush = Completer<void>();
+    addTearDown(() {
+      if (!blockedFlush.isCompleted) blockedFlush.complete();
+    });
+    final recorder = _FakeRecorder();
+    final controls = ClientRoomControls(
+      microphone: MicrophoneCaptureService(
+        sampleRate: 16000,
+        channels: 1,
+        recorder: recorder,
+      ),
+      talkFlushTimeout: const Duration(milliseconds: 50),
+      talkRequestFlusher: (_) {
+        if (!flushStarted.isCompleted) flushStarted.complete();
+        return blockedFlush.future;
+      },
+    );
+    addTearDown(controls.dispose);
+
+    await controls.startTalking(_session(server.port));
+    recorder.add(Uint8List.fromList([1, 0, 2, 0]));
+    await flushStarted.future.timeout(const Duration(seconds: 1));
+
+    final stopwatch = Stopwatch()..start();
+    final firstStop = controls.stopTalking();
+    final repeatedStop = controls.stopTalking();
+
+    expect(identical(firstStop, repeatedStop), isTrue);
+    await expectLater(firstStop, throwsA(isA<TimeoutException>()));
+    stopwatch.stop();
+
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 1)));
+    expect(stops, 1);
+    expect(controls.currentState.talking, isFalse);
+    expect(controls.currentState.lastError, isA<TimeoutException>());
+  });
 }
 
 PairingSession _session(int port) => PairingSession(

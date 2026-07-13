@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "MimiCam usa la cámara para transmitir la habitación del bebé y escanear códigos QR de vinculación.";
+"NSLocalNetworkUsageDescription" = "MimiCam usa tu red local para encontrar y conectar los dispositivos de la habitación y de los padres.";
+"NSMicrophoneUsageDescription" = "MimiCam usa el micrófono en modo Server para transmitir el audio de la habitación y detectar sonidos importantes.";

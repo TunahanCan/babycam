@@ -18,6 +18,7 @@ abstract interface class AndroidServiceMediaBridgePort {
   Future<Map<Object?, Object?>> setConsumerDemand({
     required bool video,
     required bool audio,
+    bool encodeVideo = true,
   });
 
   Future<Map<Object?, Object?>> setMediaPolicy({
@@ -68,8 +69,13 @@ class MethodChannelAndroidServiceMediaBridge
   Future<Map<Object?, Object?>> setConsumerDemand({
     required bool video,
     required bool audio,
+    bool encodeVideo = true,
   }) =>
-      _invokeMap('setConsumerDemand', {'video': video, 'audio': audio});
+      _invokeMap('setConsumerDemand', {
+        'video': video,
+        'audio': audio,
+        'encodeVideo': encodeVideo,
+      });
 
   @override
   Future<Map<Object?, Object?>> setMediaPolicy({
@@ -169,6 +175,7 @@ class AndroidServiceMediaSource extends ServerMediaSource
   bool _attached = false;
   bool _videoDemand = false;
   bool _audioDemand = false;
+  bool _videoEncodingDemand = true;
   bool _videoActive = false;
   bool _audioActive = false;
   int _videoFrames = 0;
@@ -209,6 +216,21 @@ class AndroidServiceMediaSource extends ServerMediaSource
       );
 
   Future<Map<Object?, Object?>> nativeSnapshot() => _bridge.snapshot();
+
+  /// Controls expensive JPEG production independently from camera/luma
+  /// capture. Motion-only notification demand needs luma frames, not an MJPEG
+  /// payload on every analysis frame.
+  Future<void> setVideoEncodingDemand(bool enabled) =>
+      _operations.run(() async {
+        _videoEncodingDemand = enabled;
+        if (_attached) {
+          await _bridge.setConsumerDemand(
+            video: _videoDemand,
+            audio: _audioDemand,
+            encodeVideo: _videoDemand && enabled,
+          );
+        }
+      });
 
   @override
   Future<void> applyMediaPolicy({
@@ -289,7 +311,11 @@ class AndroidServiceMediaSource extends ServerMediaSource
 
     try {
       await _ensureAttached();
-      await _bridge.setConsumerDemand(video: video, audio: audio);
+      await _bridge.setConsumerDemand(
+        video: video,
+        audio: audio,
+        encodeVideo: video && _videoEncodingDemand,
+      );
       await _bridge.awaitReady(
         video: video,
         audio: audio,
@@ -344,7 +370,11 @@ class AndroidServiceMediaSource extends ServerMediaSource
     StackTrace? firstStack;
     if (_attached) {
       try {
-        await _bridge.setConsumerDemand(video: false, audio: false);
+        await _bridge.setConsumerDemand(
+          video: false,
+          audio: false,
+          encodeVideo: false,
+        );
       } catch (error, stack) {
         firstError = error;
         firstStack = stack;
@@ -376,7 +406,11 @@ class AndroidServiceMediaSource extends ServerMediaSource
   Future<void> _bestEffortDetach() async {
     try {
       if (_attached) {
-        await _bridge.setConsumerDemand(video: false, audio: false);
+        await _bridge.setConsumerDemand(
+          video: false,
+          audio: false,
+          encodeVideo: false,
+        );
         await _bridge.detach();
       }
     } catch (_) {
@@ -399,13 +433,17 @@ class AndroidServiceMediaSource extends ServerMediaSource
     switch (event['type']) {
       case 'video':
         if (!_videoDemand) return;
+        try {
+          _emitLumaFrame(event);
+        } catch (error, stack) {
+          _recordError(error, stack);
+        }
         final bytes = _bytes(event['bytes']);
         final sink = _videoSink;
         if (bytes == null || bytes.isEmpty || sink == null) return;
         try {
           _latestPreviewFrame = bytes;
           if (_previewFrames.hasListener) _previewFrames.add(bytes);
-          _emitLumaFrame(event);
           sink(bytes);
           _videoFrames += 1;
           _lastVideoFrameAtMs = _eventTimestamp(event);

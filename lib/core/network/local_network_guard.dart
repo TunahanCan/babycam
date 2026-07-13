@@ -3,7 +3,7 @@ import 'dart:io';
 class LocalNetworkGuard {
   const LocalNetworkGuard({
     this.allowLoopback = true,
-    this.allowGlobalIpv6WithoutPrefixContext = true,
+    this.allowGlobalIpv6WithoutPrefixContext = false,
     this.localPrefixes = const [],
   });
 
@@ -64,9 +64,10 @@ class LocalNetworkGuard {
 
 /// A local interface prefix used to constrain globally routable LAN addresses.
 ///
-/// Callers that know the active interface should provide its prefixes. When no
-/// IPv6 prefix context exists, [LocalNetworkGuard] permits global unicast IPv6
-/// because many home IPv6-only LANs do not assign ULA addresses.
+/// Callers that know the active interface should provide its prefixes. Global
+/// unicast IPv6 is rejected when interface-prefix discovery is unavailable;
+/// callers may explicitly opt into the legacy compatibility behavior only
+/// when another boundary authenticates the remote peer.
 class LocalNetworkPrefix {
   const LocalNetworkPrefix({
     required this.address,

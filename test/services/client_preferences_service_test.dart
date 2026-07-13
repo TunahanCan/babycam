@@ -24,4 +24,17 @@ void main() {
     await restored.setLocale(null);
     expect(restored.locale, isNull);
   });
+
+  test('American English round-trips and legacy English is normalized',
+      () async {
+    final preferences = await SharedPreferences.getInstance();
+    final service = ClientPreferencesService(preferences);
+
+    await service.setLocale(const Locale('en', 'US'));
+    expect(service.locale, const Locale('en', 'US'));
+
+    await preferences.setString('client.locale.language', 'en');
+    await preferences.remove('client.locale.country');
+    expect(service.locale, const Locale('en', 'US'));
+  });
 }

@@ -3,13 +3,17 @@
 
 const appUiTextCatalog = <String, Map<String, String>>{
   'notificationChannelDescription': {
-    'tr': 'Bebek odasındaki ağlama, hareket ve bağlantı uyarıları.',
-    'en': 'Cry, motion, and connection alerts from the baby room.',
-    'zh': '来自婴儿房的哭声、移动和连接提醒。',
-    'hi': 'बच्चे के कमरे से रोने, हलचल और कनेक्शन के अलर्ट।',
-    'es': 'Alertas de llanto, movimiento y conexión de la habitación del bebé.',
+    'tr':
+        'Bebek odasındaki ağlama benzeri ses, yüksek ses, hareket ve ışık değişimi bildirimleri.',
+    'en':
+        'Cry-like sound, loud sound, movement, and light-change alerts from the nursery.',
+    'zh': '来自宝宝房的类似哭声、较大声音、动静和光线变化提醒。',
+    'hi':
+        'बच्चे के कमरे से रोने जैसी आवाज़, तेज़ आवाज़, हलचल और रोशनी बदलने के अलर्ट।',
+    'es':
+        'Avisos de sonidos parecidos al llanto, sonidos fuertes, movimiento y cambios de luz en la habitación.',
     'fr':
-        'Alertes de pleurs, de mouvement et de connexion de la chambre du bébé.',
+        'Alertes de sons proches de pleurs, de sons forts, de mouvement et de changement de lumière dans la chambre.',
   },
   'bootstrapPreparing': {
     'tr': 'MimiCam hazırlanıyor...',
@@ -363,12 +367,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Visionnage en direct actif'
   },
   'clientTitleAlertOnly': {
-    'tr': 'Uyarılar takipte',
-    'en': 'Alerts are being watched',
-    'zh': '提醒监控中',
-    'hi': 'अलर्ट देखे जा रहे हैं',
-    'es': 'Alertas en seguimiento',
-    'fr': 'Alertes surveillées'
+    'tr': 'Uyarılar açık',
+    'en': 'Alerts are on',
+    'zh': '提醒已开启',
+    'hi': 'अलर्ट चालू हैं',
+    'es': 'Alertas activadas',
+    'fr': 'Alertes activées'
   },
   'clientTitleReconnecting': {
     'tr': 'Yeniden bağlanıyor',
@@ -493,16 +497,17 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Appairez une chambre pour les alertes'
   },
   'latestStatusTrackedText': {
-    'tr': 'Ağlama, hareket ve bağlantı uyarıları bu anne ekranında öne çıkar.',
+    'tr':
+        'Ağlama benzeri ses, yüksek ses, hareket ve ışık değişimi uyarılarını burada görürsün.',
     'en':
-        'Cry, motion, and connection alerts are highlighted on this parent screen.',
-    'zh': '哭声、活动和连接提醒会在家长屏幕突出显示。',
+        'See cry-like sound, loud sound, movement, and light-change alerts here.',
+    'zh': '类似哭声、较大声音、动静和光线变化提醒会显示在这里。',
     'hi':
-        'रोना, गतिविधि और कनेक्शन अलर्ट इस अभिभावक स्क्रीन पर प्रमुख दिखते हैं।',
+        'रोने जैसी आवाज़, तेज़ आवाज़, हलचल और रोशनी बदलने के अलर्ट यहाँ दिखेंगे।',
     'es':
-        'Las alertas de llanto, movimiento y conexión destacan en esta pantalla de padres.',
+        'Aquí verás los avisos de sonidos parecidos al llanto, sonidos fuertes, movimiento y cambios de luz.',
     'fr':
-        'Les alertes de pleurs, mouvement et connexion sont mises en avant sur cet écran parent.'
+        'Retrouve ici les alertes de sons proches de pleurs, de sons forts, de mouvement et de changement de lumière.'
   },
   'pairRoomForNotificationsText': {
     'tr': 'QR veya IP ile eşleşince bebeğin son durumu burada görünür.',
@@ -826,43 +831,41 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Scannez d’abord le QR du serveur.'
   },
   'latestStatusAndNotifications': {
-    'tr': 'Son durum ve bildirimler',
-    'en': 'Latest status and alerts',
-    'zh': '最新状态和提醒',
-    'hi': 'नवीनतम स्थिति और अलर्ट',
-    'es': 'Último estado y alertas',
-    'fr': 'Dernier état et alertes'
+    'tr': 'Bebek odasından son haberler',
+    'en': 'Latest nursery updates',
+    'zh': '宝宝房的最新动态',
+    'hi': 'बच्चे के कमरे की ताज़ा जानकारी',
+    'es': 'Últimas novedades de la habitación',
+    'fr': 'Dernières nouvelles de la chambre'
   },
   'parentEventsPriorityText': {
-    'tr': 'Önemli ses, hareket ve sistem notları burada sakin şekilde görünür.',
-    'en': 'Important sound, motion, and system notes appear here calmly.',
-    'zh': '重要声音、活动和系统提示会在这里平静显示。',
-    'hi': 'ज़रूरी ध्वनि, हलचल और सिस्टम नोट यहाँ शांत ढंग से दिखते हैं।',
+    'tr':
+        'Önemli ağlama benzeri ses, yüksek ses, hareket ve ışık değişimi uyarıları burada görünür.',
+    'en':
+        'Important cry-like sound, loud sound, movement, and light-change alerts appear here.',
+    'zh': '重要的类似哭声、较大声音、动静和光线变化提醒会显示在这里。',
+    'hi':
+        'रोने जैसी आवाज़, तेज़ आवाज़, हलचल और रोशनी बदलने के ज़रूरी अलर्ट यहाँ दिखेंगे।',
     'es':
-        'Las notas importantes de sonido, movimiento y sistema aparecen aquí con calma.',
+        'Aquí verás los avisos importantes de sonidos parecidos al llanto, sonidos fuertes, movimiento y cambios de luz.',
     'fr':
-        'Les notes importantes de son, mouvement et système apparaissent ici calmement.'
+        'Retrouve ici les alertes importantes de sons proches de pleurs, de sons forts, de mouvement et de changement de lumière.'
   },
   'waitingLatestStatus': {
-    'tr': 'Son durum bekleniyor',
-    'en': 'Waiting for latest status',
-    'zh': '等待最新状态',
-    'hi': 'नवीनतम स्थिति की प्रतीक्षा',
-    'es': 'Esperando último estado',
-    'fr': 'En attente du dernier état'
+    'tr': 'Bebek odasından haber bekleniyor',
+    'en': 'Waiting for an update from the nursery',
+    'zh': '正在等待宝宝房的动态',
+    'hi': 'बच्चे के कमरे से जानकारी का इंतज़ार है',
+    'es': 'Esperando novedades de la habitación',
+    'fr': 'En attente de nouvelles de la chambre'
   },
   'pairedServerAlertAppears': {
-    'tr':
-        'Eşleşmiş bebek odası cihazı uyarı gönderdiğinde en önemli durum burada görünecek.',
-    'en':
-        'When the paired Server sends an alert, the most important status appears here.',
-    'zh': '已配对婴儿房设备发送提醒时，最重要的状态会显示在这里。',
-    'hi':
-        'पेयर बच्चे के कमरे का डिवाइस अलर्ट भेजेगा तो सबसे महत्वपूर्ण स्थिति यहाँ दिखेगी।',
-    'es':
-        'Cuando el cuarto emparejado envíe una alerta, el estado más importante aparecerá aquí.',
-    'fr':
-        'Quand la chambre appairée enverra une alerte, l’état le plus important apparaîtra ici.'
+    'tr': 'Bebek odasında önemli bir durum olduğunda burada göreceksin.',
+    'en': 'You’ll see important nursery updates here.',
+    'zh': '宝宝房有重要情况时，会显示在这里。',
+    'hi': 'बच्चे के कमरे की ज़रूरी जानकारी यहाँ दिखेगी।',
+    'es': 'Aquí verás los avisos importantes de la habitación.',
+    'fr': 'Les nouvelles importantes de la chambre apparaîtront ici.'
   },
   'parentDevicePreferences': {
     'tr': 'Ebeveyn cihazı tercihleri',
@@ -894,16 +897,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Réglages de l’appareil parent'
   },
   'clientSettingsPlaceholder': {
-    'tr': 'Yerel bildirim, reconnect ve viewer tercihleri burada yönetilecek.',
-    'en':
-        'Local notifications, reconnect, and viewer preferences will be managed here.',
-    'zh': '本地通知、重新连接和观看端偏好将在这里管理。',
-    'hi':
-        'स्थानीय सूचनाएँ, reconnect और viewer प्राथमिकताएँ यहाँ प्रबंधित होंगी।',
-    'es':
-        'Notificaciones locales, reconexión y preferencias del visor se gestionarán aquí.',
-    'fr':
-        'Notifications locales, reconnexion et préférences de visionnage seront gérées ici.'
+    'tr': 'Bildirim, yeniden bağlantı ve izleme tercihlerini burada yönet.',
+    'en': 'Manage notifications, reconnection, and viewing preferences here.',
+    'zh': '在这里管理通知、重新连接和观看偏好。',
+    'hi': 'सूचनाएँ, दोबारा कनेक्ट होने और देखने की पसंद यहाँ संभालें।',
+    'es': 'Gestiona aquí las notificaciones, la reconexión y la visualización.',
+    'fr': 'Gère ici les notifications, la reconnexion et le visionnage.'
   },
   'liveWatching': {
     'tr': 'Canlı izleme',
@@ -940,20 +939,20 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Dernière alerte'
   },
   'cryingDetectedAt': {
-    'tr': 'Ağlama algılandı · 09:38',
-    'en': 'Cry detected · 09:38',
-    'zh': '检测到哭声 · 09:38',
-    'hi': 'रोना मिला · 09:38',
-    'es': 'Llanto detectado · 09:38',
-    'fr': 'Pleurs détectés · 09:38'
+    'tr': 'Ağlama algılandı · {time}',
+    'en': 'Cry detected · {time}',
+    'zh': '检测到哭声 · {time}',
+    'hi': 'रोने की आवाज़ मिली · {time}',
+    'es': 'Llanto detectado · {time}',
+    'fr': 'Pleurs détectés · {time}'
   },
   'motionCalmScore': {
-    'tr': 'Sakin · skor %08',
-    'en': 'Calm · score 08%',
-    'zh': '安静 · 评分 08%',
-    'hi': 'शांत · स्कोर 08%',
-    'es': 'Calma · puntuación 08%',
-    'fr': 'Calme · score 08 %'
+    'tr': 'Hareket sakin · skor {score}',
+    'en': 'Movement is calm · score {score}',
+    'zh': '动静平稳 · 评分 {score}',
+    'hi': 'हलचल शांत है · स्कोर {score}',
+    'es': 'Movimiento tranquilo · puntuación {score}',
+    'fr': 'Mouvement calme · score {score}'
   },
   'localNotificationOn': {
     'tr': 'Yerel bildirim açık',
@@ -1004,12 +1003,14 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Historique des alertes'
   },
   'alertHistorySubtitle': {
-    'tr': 'Ağlama, hareket ve sistem olaylarını zaman çizgisi olarak takip et.',
-    'en': 'Follow cry, motion, and system events as a timeline.',
-    'zh': '以时间线查看哭声、活动和系统事件。',
-    'hi': 'रोना, गतिविधि और सिस्टम घटनाओं को टाइमलाइन में देखें।',
-    'es': 'Sigue llanto, movimiento y sistema como línea de tiempo.',
-    'fr': 'Suivez pleurs, mouvement et système sur une timeline.'
+    'tr': 'Ağlama, hareket ve sistem olaylarını zaman sırasıyla gör.',
+    'en': 'Review cry, movement, and system events in chronological order.',
+    'zh': '按时间顺序查看哭声、动静和系统事件。',
+    'hi': 'रोने, हलचल और सिस्टम की घटनाएँ समय के क्रम में देखें।',
+    'es':
+        'Consulta los eventos de llanto, movimiento y sistema en orden cronológico.',
+    'fr':
+        'Retrouve les événements de pleurs, de mouvement et du système dans l’ordre chronologique.'
   },
   'all': {
     'tr': 'Tümü',
@@ -1106,6 +1107,14 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'hi': 'अलर्ट चालू',
     'es': 'Alertas activas',
     'fr': 'Alertes activées'
+  },
+  'notificationsInAppOnly': {
+    'tr': 'Yalnızca uygulama içi uyarılar',
+    'en': 'In-app alerts only',
+    'zh': '仅显示应用内提醒',
+    'hi': 'केवल ऐप के अंदर अलर्ट',
+    'es': 'Solo avisos dentro de la app',
+    'fr': 'Alertes uniquement dans l’app'
   },
   'notificationsOff': {
     'tr': 'Bildirim kapalı',
@@ -2292,21 +2301,21 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'Ajustes reales',
     'fr': 'Réglages réels'
   },
-  'goodMorning': {
-    'tr': 'Günaydın',
-    'en': 'Good morning',
-    'zh': '早上好',
-    'hi': 'सुप्रभात',
-    'es': 'Buenos días',
-    'fr': 'Bonjour',
+  'babyRoomHeader': {
+    'tr': 'Bebek odası',
+    'en': 'Nursery',
+    'zh': '宝宝房',
+    'hi': 'बच्चे का कमरा',
+    'es': 'Habitación del bebé',
+    'fr': 'Chambre de bébé',
   },
-  'babySleepingWell': {
-    'tr': 'Bebeğiniz iyi uyuyor.',
-    'en': 'Your baby is sleeping well.',
-    'zh': '宝宝睡得很好。',
-    'hi': 'आपका बच्चा अच्छी तरह सो रहा है।',
-    'es': 'Tu bebé está durmiendo bien.',
-    'fr': 'Votre bébé dort bien.',
+  'roomConnectedTitle': {
+    'tr': 'Bebek odasına bağlısın.',
+    'en': 'You’re connected to the nursery.',
+    'zh': '已连接到宝宝房。',
+    'hi': 'बच्चे के कमरे से कनेक्शन हो गया है।',
+    'es': 'Ya estás conectada a la habitación.',
+    'fr': 'Tu es connectée à la chambre.',
   },
   'noRoomCalmText': {
     'tr':

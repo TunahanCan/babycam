@@ -87,7 +87,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
 
   Future<void> _resumeAlertDelivery() async {
     final state = widget.runtime.currentState;
-    if (state.session == null || state.alertsActive) return;
+    if (state.session == null) return;
     // This is important on iOS: a user who enables notifications in Settings
     // should not need to pair the room again before alert delivery resumes.
     await widget.runtime.startAlertListening().catchError((_) => false);
@@ -161,6 +161,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
                 tone: MimiCamDesignTokens.mint,
                 alertsActive: state.alertsActive,
                 alertsConnected: widget.runtime.alertTransportConnected,
+                systemNotificationsEnabled:
+                    widget.runtime.systemNotificationsEnabled,
                 onWatch: () => _openWatch(context, state),
               ),
               const SizedBox(height: 16),
@@ -431,7 +433,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
     }
     return switch (locale.languageCode) {
       'tr' => 'Türkçe',
-      'en' => 'English',
+      'en' => 'English (United States)',
       'zh' => '中文',
       'hi' => 'हिन्दी',
       'es' => 'Español',
@@ -512,7 +514,7 @@ class _ClientHeroCard extends StatelessWidget {
         _TinyLabel(strings.ui('parentPriority')),
         const SizedBox(height: 10),
         Text(
-          strings.ui('goodMorning'),
+          strings.ui('babyRoomHeader'),
           style: const TextStyle(
             color: MimiCamDesignTokens.slate,
             fontSize: 12,
@@ -521,7 +523,7 @@ class _ClientHeroCard extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          paired ? strings.ui('babySleepingWell') : _titleFor(strings, phase),
+          paired ? strings.ui('roomConnectedTitle') : _titleFor(strings, phase),
           style: const TextStyle(
             color: MimiCamDesignTokens.nightPlum,
             fontSize: 26,
@@ -610,6 +612,7 @@ class _RoomCard extends StatelessWidget {
     required this.tone,
     required this.alertsActive,
     required this.alertsConnected,
+    required this.systemNotificationsEnabled,
     this.onWatch,
   });
 
@@ -618,12 +621,14 @@ class _RoomCard extends StatelessWidget {
   final Color tone;
   final bool alertsActive;
   final bool alertsConnected;
+  final bool? systemNotificationsEnabled;
   final VoidCallback? onWatch;
 
   @override
   Widget build(BuildContext context) {
     final alertsReady = alertsActive && alertsConnected;
     final alertsReconnecting = alertsActive && !alertsConnected;
+    final inAppOnly = alertsReady && systemNotificationsEnabled == false;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: MimiCamDesignTokens.cardDecoration(),
@@ -684,37 +689,45 @@ class _RoomCard extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: alertsReady
-                  ? MimiCamDesignTokens.mintSoft
-                  : alertsReconnecting
-                      ? MimiCamDesignTokens.amberSoft
-                      : MimiCamDesignTokens.lavenderSoft,
+              color: inAppOnly
+                  ? MimiCamDesignTokens.amberSoft
+                  : alertsReady
+                      ? MimiCamDesignTokens.mintSoft
+                      : alertsReconnecting
+                          ? MimiCamDesignTokens.amberSoft
+                          : MimiCamDesignTokens.lavenderSoft,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
                 Icon(
-                  alertsReady
-                      ? Icons.notifications_active_rounded
-                      : alertsReconnecting
-                          ? Icons.sync_rounded
-                          : Icons.notifications_off_outlined,
-                  color: alertsReady
-                      ? MimiCamDesignTokens.mint
-                      : alertsReconnecting
-                          ? MimiCamDesignTokens.amber
-                          : MimiCamDesignTokens.pink,
+                  inAppOnly
+                      ? Icons.notifications_none_rounded
+                      : alertsReady
+                          ? Icons.notifications_active_rounded
+                          : alertsReconnecting
+                              ? Icons.sync_rounded
+                              : Icons.notifications_off_outlined,
+                  color: inAppOnly
+                      ? MimiCamDesignTokens.amber
+                      : alertsReady
+                          ? MimiCamDesignTokens.mint
+                          : alertsReconnecting
+                              ? MimiCamDesignTokens.amber
+                              : MimiCamDesignTokens.pink,
                   size: 19,
                 ),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
-                    alertsReady
-                        ? AppStrings.of(context).ui('notificationsOn')
-                        : alertsReconnecting
-                            ? AppStrings.of(context)
-                                .ui('clientTitleReconnecting')
-                            : AppStrings.of(context).ui('notificationsOff'),
+                    inAppOnly
+                        ? AppStrings.of(context).ui('notificationsInAppOnly')
+                        : alertsReady
+                            ? AppStrings.of(context).ui('notificationsOn')
+                            : alertsReconnecting
+                                ? AppStrings.of(context)
+                                    .ui('clientTitleReconnecting')
+                                : AppStrings.of(context).ui('notificationsOff'),
                     style: const TextStyle(
                       color: MimiCamDesignTokens.navy,
                       fontSize: 13,
@@ -1286,11 +1299,7 @@ _NotificationSpec _notificationSpecFromAlert(
       AlertCategory.audio => Icons.notifications_active_outlined,
       AlertCategory.system => Icons.wifi_rounded,
     },
-    switch (family) {
-      AlertCategory.motion => strings.ui('motionDetectedTitle'),
-      AlertCategory.audio => strings.ui('cryDetectedTitle'),
-      AlertCategory.system => strings.notificationTitle,
-    },
+    alert.localizedTitle(strings),
     alert.localizedMessage(strings),
     _formatAlertTime(alert.timestampMs),
     _severityLabel(strings, alert.severity),
@@ -1309,6 +1318,9 @@ String _severityLabel(AppStrings strings, String severity) {
   }
   if (normalized.contains('warning') || normalized.contains('medium')) {
     return strings.ui('warning');
+  }
+  if (normalized.contains('attention')) {
+    return strings.ui('important');
   }
   if (normalized.contains('info') || normalized.contains('low')) {
     return strings.ui('info');

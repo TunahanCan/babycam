@@ -56,6 +56,7 @@ class ClientCompositionRoot {
     final remoteBroadcastAccess = RemoteBroadcastAccessClient();
     final alertHistory = ClientAlertHistory(preferences: preferences);
     final notifications = notificationService ?? ClientNotificationService();
+    notifications.updateStrings(strings);
     const alertBackground = ClientAlertBackgroundService();
     final roomControls = ClientRoomControls();
     final serviceBrowser = MimiCamServiceBrowser();
@@ -112,11 +113,11 @@ class ClientCompositionRoot {
       startStream: streams.start,
       stopStream: streams.stop,
       watchNetworkQuality: networkQuality.watch,
+      initializeSystemNotifications: notifications.initialize,
       startAlerts: (session) async {
         // System banner permission and LAN event transport are separate
         // concerns. Even when iOS notifications are disabled, keep the socket
         // armed so alerts reach the in-app history and begin server analysis.
-        await notifications.initialize(strings: strings);
         try {
           await alertBackground.start();
           await alerts.start(session, waitForFirstConnection: false);
@@ -136,6 +137,7 @@ class ClientCompositionRoot {
       streamHealthState: streamHealth,
       roomControls: roomControls,
       serviceBrowser: serviceBrowser,
+      updateAlertStrings: notifications.updateStrings,
     );
     unawaited(runtime.loadAlertHistory().catchError((Object error) {
       runtime.reportStartupFailure(error);
