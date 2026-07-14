@@ -2712,6 +2712,30 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr':
         'Temps gratuit restant : {remaining}. Ensuite, débloquez l’accès illimité pour {price}.',
   },
+  'durationMinutesShort': {
+    'tr': '{minutes} dk',
+    'en': '{minutes} min',
+    'zh': '{minutes} 分钟',
+    'hi': '{minutes} मिनट',
+    'es': '{minutes} min.',
+    'fr': '{minutes} min.',
+  },
+  'durationHoursShort': {
+    'tr': '{hours} sa',
+    'en': '{hours} hr',
+    'zh': '{hours} 小时',
+    'hi': '{hours} घंटे',
+    'es': '{hours} h',
+    'fr': '{hours} h',
+  },
+  'durationHoursMinutesShort': {
+    'tr': '{hours} sa {minutes} dk',
+    'en': '{hours} hr {minutes} min',
+    'zh': '{hours} 小时 {minutes} 分钟',
+    'hi': '{hours} घंटे {minutes} मिनट',
+    'es': '{hours} h {minutes} min',
+    'fr': '{hours} h {minutes} min',
+  },
   'broadcastAccessLockedTitle': {
     'tr': 'Ücretsiz süre doldu',
     'en': 'Free time ended',
@@ -3185,6 +3209,14 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'hi': 'सेटिंग रीसेट करें?',
     'es': '¿Restablecer ajustes?',
     'fr': 'Réinitialiser les réglages ?',
+  },
+  'settingsSaveFailed': {
+    'tr': 'Ayar kaydedilemedi. Lütfen tekrar deneyin.',
+    'en': 'The setting could not be saved. Please try again.',
+    'zh': '无法保存设置。请重试。',
+    'hi': 'सेटिंग सहेजी नहीं जा सकी। कृपया फिर कोशिश करें।',
+    'es': 'No se pudo guardar el ajuste. Inténtalo de nuevo.',
+    'fr': 'Le réglage n’a pas pu être enregistré. Réessayez.',
   },
   'resetSettingsDescription': {
     'tr': 'Algılama ayarları önerilen Dengeli profile döner.',

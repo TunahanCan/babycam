@@ -642,7 +642,7 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
         'activeStreamClients': _activeClientRegistry.activeClientCount,
         'videoClients': videoStream.clientCount,
         'audioClients': audioStream.clientCount,
-        'webSocketClients': _webSockets.length,
+        'webSocketClients': _eventSockets.clientCount,
         'qualityReports':
             qualityReports.map((report) => report.toJson()).toList(),
         'audioPipelines': _clientAudioPipelineReports(qualityReports),
@@ -923,12 +923,7 @@ extension MimiCamServerTestEndpoints on MimiCamServer {
   Future<void> _closeStreamingClients() async {
     await _videoStreamService.closeAll();
     await _audioStreamService.closeAll();
-    for (final socket in _webSockets.toList()) {
-      try {
-        await socket.close().timeout(const Duration(milliseconds: 500));
-      } catch (_) {}
-    }
-    _webSockets.clear();
+    await _eventSockets.closeAll();
   }
 
   void _resetTestDiagnostics() {

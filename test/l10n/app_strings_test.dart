@@ -300,6 +300,26 @@ void main() {
     );
   });
 
+  test('yayın kalan süresi seçili locale göre kısaltılır', () {
+    final english = AppStrings(const Locale('en'));
+    final turkish = AppStrings(const Locale('tr'));
+
+    expect(
+      english.uiFormat(
+        'durationHoursMinutesShort',
+        {'hours': 1, 'minutes': 25},
+      ),
+      '1 hr 25 min',
+    );
+    expect(
+      turkish.uiFormat(
+        'durationHoursMinutesShort',
+        {'hours': 1, 'minutes': 25},
+      ),
+      '1 sa 25 dk',
+    );
+  });
+
   test('parent alert messages include evidence and suggested action', () {
     final strings = AppStrings(const Locale('en'));
 

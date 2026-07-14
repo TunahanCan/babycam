@@ -55,6 +55,45 @@ void main() {
     }
   });
 
+  testWidgets('client filtre state alt navigasyonu yeniden oluşturmaz',
+      (tester) async {
+    final runtime = ClientRuntime(
+      pair: (_) => throw UnimplementedError(),
+    );
+    addTearDown(runtime.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ClientHomeScreen(
+          runtime: runtime,
+          activeRole: AppRole.client,
+          onRoleSelected: (_) {},
+          initialTab: 2,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final navigationBefore = tester.widget<MimiCamBottomNav>(
+      find.byType(MimiCamBottomNav),
+    );
+    await tester.tap(find.text('Ses'));
+    await tester.pump();
+    final navigationAfter = tester.widget<MimiCamBottomNav>(
+      find.byType(MimiCamBottomNav),
+    );
+
+    expect(
+      identical(navigationBefore, navigationAfter),
+      isTrue,
+      reason: 'Notification filter state must stay inside its section.',
+    );
+    _expectNoFlutterException(tester);
+  });
+
   testWidgets('paired client ve canlı izleme dar ekranda overflow üretmez',
       (tester) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -403,6 +442,75 @@ void main() {
     expect(config.motionThreshold, .15);
     expect(config.notifyCooldownMs, 45000);
     _expectNoFlutterException(tester);
+  });
+
+  testWidgets(
+      'server runtime ve ayar güncellemeleri navigation rebuild bütçesini korur',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final preferences = await SharedPreferences.getInstance();
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(),
+      onStartPairing: () async => 'mimicam://pair?payload=x',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ServerHomeScreen(
+          runtime: runtime,
+          config: ConfigurationService(preferences),
+          activeRole: AppRole.server,
+          onRoleSelected: (_) {},
+          initialTab: 3,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final navigationBefore = tester.widget<MimiCamBottomNav>(
+      find.byType(MimiCamBottomNav),
+    );
+    for (var update = 0; update < 12; update++) {
+      runtime.refreshMediaProfile();
+    }
+    await tester.pump();
+    final navigationAfterRuntimeUpdates = tester.widget<MimiCamBottomNav>(
+      find.byType(MimiCamBottomNav),
+    );
+    expect(
+      identical(navigationBefore, navigationAfterRuntimeUpdates),
+      isTrue,
+      reason: 'Runtime stream emissions must not rebuild bottom navigation.',
+    );
+
+    await tester.ensureVisible(find.text('İleri ayarlar'));
+    await tester.tap(find.text('İleri ayarlar'));
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const ValueKey('server-settings')),
+      const Offset(0, -180),
+    );
+    await tester.pumpAndSettle();
+    final visibleSlider = find.byType(Slider).hitTestable().first;
+    expect(visibleSlider, findsOneWidget);
+    await tester.drag(visibleSlider, const Offset(28, 0));
+    await tester.pumpAndSettle();
+
+    final navigationAfterSlider = tester.widget<MimiCamBottomNav>(
+      find.byType(MimiCamBottomNav),
+    );
+    expect(
+      identical(navigationBefore, navigationAfterSlider),
+      isTrue,
+      reason: 'Slider-local state must not rebuild bottom navigation.',
+    );
+    _expectNoFlutterException(tester);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await runtime.dispose();
   });
 
   testWidgets('pahalı ortak yüzeyler repaint boundary ile izole edilir',

@@ -5,8 +5,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mimicam/core/theme/mimicam_colors.dart';
 import 'package:mimicam/core/theme/mimicam_theme.dart';
 import 'package:mimicam/features/shared/presentation/mimicam_design_tokens.dart';
+import 'package:mimicam/features/server/presentation/server_home_components.dart';
 
 void main() {
+  test('server destinasyonları tip güvenli ve dış indekslere dayanıklıdır', () {
+    expect(
+      ServerHomeDestination.fromIndex(-1),
+      ServerHomeDestination.stream,
+    );
+    expect(
+      ServerHomeDestination.fromIndex(99),
+      ServerHomeDestination.settings,
+    );
+    expect(
+      ServerHomeDestination.values
+          .map((destination) => destination.viewKey)
+          .toSet(),
+      hasLength(ServerHomeDestination.values.length),
+    );
+  });
+
   test('server theme ferah açık paleti kullanır ve client seedine düşmez', () {
     final theme = MimiCamTheme.serverTheme();
 

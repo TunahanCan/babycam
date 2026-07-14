@@ -410,6 +410,9 @@ const _deUiText = <String, String>{
   'broadcastAccessTrialTitle': '2 Stunden kostenlose Übertragung',
   'broadcastAccessTrialBody':
       'Kostenlose Zeit übrig: {remaining}. Danach einmalig für {price} unbegrenzt freischalten.',
+  'durationMinutesShort': '{minutes} Min.',
+  'durationHoursShort': '{hours} Std.',
+  'durationHoursMinutesShort': '{hours} Std. {minutes} Min.',
   'broadcastAccessLockedTitle': 'Kostenlose Zeit beendet',
   'broadcastAccessLockedBody':
       'Für Live-Übertragung ist jetzt ein einmaliger Kauf von 300 TL nötig. Die Freischaltung bleibt auf diesem Gerät.',
@@ -484,6 +487,8 @@ const _deUiText = <String, String>{
   'advancedSettings': 'Erweiterte Einstellungen',
   'advancedSettingsDescription': 'Schwellen und Zeiträume fein einstellen.',
   'resetSettingsTitle': 'Einstellungen zurücksetzen?',
+  'settingsSaveFailed':
+      'Die Einstellung konnte nicht gespeichert werden. Bitte erneut versuchen.',
   'resetSettingsDescription':
       'Die Erkennung kehrt zum empfohlenen Profil Ausgewogen zurück.',
 };
@@ -842,6 +847,9 @@ const _arUiText = <String, String>{
   'broadcastAccessTrialTitle': 'ساعتان مجانيتان للبث',
   'broadcastAccessTrialBody':
       'الوقت المجاني المتبقي: {remaining}. بعد ذلك افتح الوصول غير المحدود مرة واحدة مقابل {price}.',
+  'durationMinutesShort': '{minutes} د',
+  'durationHoursShort': '{hours} س',
+  'durationHoursMinutesShort': '{hours} س {minutes} د',
   'broadcastAccessLockedTitle': 'انتهى الوقت المجاني',
   'broadcastAccessLockedBody':
       'يتطلب البث المباشر الآن شراءً لمرة واحدة بقيمة 300 TL. يبقى الفتح على هذا الجهاز.',
@@ -910,5 +918,6 @@ const _arUiText = <String, String>{
   'advancedSettings': 'إعدادات متقدمة',
   'advancedSettingsDescription': 'ضبط الحدود والمدد بدقة.',
   'resetSettingsTitle': 'إعادة ضبط الإعدادات؟',
+  'settingsSaveFailed': 'تعذر حفظ الإعداد. يرجى المحاولة مرة أخرى.',
   'resetSettingsDescription': 'سيعود الاكتشاف إلى الملف المتوازن الموصى به.',
 };
