@@ -16,26 +16,27 @@ class MimiCamColors {
   static const danger = Color(0xFFDC5A6A);
   static const success = Color(0xFF2F9D7B);
 
-  // Server mode is intentionally night-friendly. Accent colors are reserved
-  // for state and action; large surfaces stay calm and low-saturation.
-  static const serverBackground = Color(0xFF0B1220);
-  static const serverBackgroundTop = Color(0xFF111D31);
-  static const serverSurface = Color(0xFF17263C);
-  static const serverSurfaceRaised = Color(0xFF20324B);
-  static const serverOutline = Color(0xFF3A506E);
-  static const serverText = Color(0xFFF6F8FC);
-  static const serverTextMuted = Color(0xFFB1C0D4);
-  static const serverPrimary = Color(0xFF7DD3FC);
-  static const serverPrimaryPressed = Color(0xFF38BDF8);
-  static const serverInfo = Color(0xFFA5B4FC);
-  static const serverLavender = Color(0xFFC4B5FD);
-  static const serverSuccess = Color(0xFF6EE7B7);
-  static const serverWarning = Color(0xFFFCD34D);
-  static const serverError = Color(0xFFFDA4AF);
-  static const serverDisabled = Color(0xFF8EA0B8);
-  static const serverLightSurface = Color(0xFFF6F8FC);
-  static const serverLightInk = Color(0xFF17263C);
-  static const serverPrimaryOnLight = Color(0xFF0369A1);
-  static const serverInfoOnLight = Color(0xFF4F46E5);
-  static const serverLavenderOnLight = Color(0xFF6D28D9);
+  // Server mode stays visually distinct without turning the nursery device
+  // into a wall of dark panels. Calm mint-tinted surfaces carry the layout;
+  // stronger colors are reserved for state and primary actions.
+  static const serverBackground = Color(0xFFF6FAF8);
+  static const serverBackgroundTop = Color(0xFFE7F4EF);
+  static const serverSurface = Color(0xFFFFFFFF);
+  static const serverSurfaceRaised = Color(0xFFEDF5F2);
+  static const serverOutline = Color(0xFFCBDCD5);
+  static const serverText = Color(0xFF18352C);
+  static const serverTextMuted = Color(0xFF526A62);
+  static const serverPrimary = Color(0xFF167D69);
+  static const serverPrimaryPressed = Color(0xFF0D6755);
+  static const serverInfo = Color(0xFF316FA6);
+  static const serverLavender = Color(0xFF6E5BA7);
+  static const serverSuccess = Color(0xFF187456);
+  static const serverWarning = Color(0xFF8A5A00);
+  static const serverError = Color(0xFFB13A4B);
+  static const serverDisabled = Color(0xFF647770);
+  static const serverLightSurface = Color(0xFFF3F8F6);
+  static const serverLightInk = Color(0xFF18352C);
+  static const serverPrimaryOnLight = Color(0xFF0D6755);
+  static const serverInfoOnLight = Color(0xFF285F90);
+  static const serverLavenderOnLight = Color(0xFF5B4895);
 }

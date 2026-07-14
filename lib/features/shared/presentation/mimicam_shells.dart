@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/app_role.dart';
+import '../../../core/theme/mimicam_colors.dart';
 import '../../../l10n/app_strings.dart';
 import 'mimicam_design_tokens.dart';
 import 'mimicam_role_presentation.dart';
@@ -196,7 +197,7 @@ class MimiCamRoleBadge extends StatelessWidget {
                 boxShadow: [
                   BoxShadow(
                     color: dark
-                        ? Colors.black.withValues(alpha: .22)
+                        ? const Color(0x1424493D)
                         : const Color(0x16111827),
                     blurRadius: dark ? 14 : 12,
                     offset: const Offset(0, 5),
@@ -365,9 +366,7 @@ class MimiCamBottomNav extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: dark
-                  ? Colors.black.withValues(alpha: .28)
-                  : const Color(0x1F111827),
+              color: dark ? const Color(0x1824493D) : const Color(0x1F111827),
               blurRadius: dark ? 16 : 16,
               offset: const Offset(0, 6),
             ),
@@ -487,14 +486,14 @@ enum MimiCamShellVariant {
           ],
         ),
       MimiCamShellVariant.server => const RadialGradient(
-          center: Alignment(.65, -.9),
-          radius: 1.18,
+          center: Alignment(.62, -.9),
+          radius: 1.22,
           colors: [
-            Color(0xFF173D49),
+            Color(0xFFD9F1E8),
             MimiCamDesignTokens.serverNavy,
-            MimiCamDesignTokens.serverInk,
+            MimiCamColors.serverBackground,
           ],
-          stops: [0, .48, 1],
+          stops: [0, .42, 1],
         ),
     };
   }

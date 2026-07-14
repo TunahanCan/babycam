@@ -1810,6 +1810,30 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'Mantén el código visible; tras emparejar se puede ver el directo.',
     'fr': 'Gardez le code visible ; le flux sera visible après appairage.'
   },
+  'qrTicketPreparing': {
+    'tr': 'Güvenli bağlantı bileti hazırlanıyor…',
+    'en': 'Preparing a secure connection ticket…',
+    'zh': '正在准备安全连接票据…',
+    'hi': 'सुरक्षित कनेक्शन टिकट तैयार हो रहा है…',
+    'es': 'Preparando un ticket de conexión seguro…',
+    'fr': 'Préparation du ticket de connexion sécurisé…'
+  },
+  'qrTicketUnavailable': {
+    'tr': 'QR şu anda hazırlanamadı. Aşağıdan yeniden deneyin.',
+    'en': 'The QR could not be prepared. Try again below.',
+    'zh': '目前无法准备二维码。请在下方重试。',
+    'hi': 'QR तैयार नहीं हो सका। नीचे फिर कोशिश करें।',
+    'es': 'No se pudo preparar el QR. Inténtalo de nuevo abajo.',
+    'fr': 'Le QR n’a pas pu être préparé. Réessayez ci-dessous.'
+  },
+  'qrTicketRefreshFailed': {
+    'tr': 'QR yenilenemedi. Wi-Fi bağlantısını kontrol edip tekrar deneyin.',
+    'en': 'The QR could not be refreshed. Check Wi-Fi and try again.',
+    'zh': '无法刷新二维码。请检查 Wi-Fi 后重试。',
+    'hi': 'QR रीफ़्रेश नहीं हुआ। Wi-Fi जाँचकर फिर कोशिश करें।',
+    'es': 'No se pudo actualizar el QR. Revisa el Wi-Fi e inténtalo de nuevo.',
+    'fr': 'Impossible d’actualiser le QR. Vérifiez le Wi-Fi et réessayez.'
+  },
   'qrTicketRefreshed': {
     'tr': 'QR bağlantı bileti yenilendi.',
     'en': 'QR connection ticket refreshed.',

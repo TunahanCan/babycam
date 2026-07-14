@@ -7,12 +7,15 @@ import 'package:mimicam/core/theme/mimicam_theme.dart';
 import 'package:mimicam/features/shared/presentation/mimicam_design_tokens.dart';
 
 void main() {
-  test('server theme gece paletini kullanır ve pembe client seedine düşmez',
-      () {
+  test('server theme ferah açık paleti kullanır ve client seedine düşmez', () {
     final theme = MimiCamTheme.serverTheme();
 
-    expect(theme.brightness, Brightness.dark);
+    expect(theme.brightness, Brightness.light);
     expect(theme.scaffoldBackgroundColor, MimiCamColors.serverBackground);
+    expect(
+      theme.scaffoldBackgroundColor.computeLuminance(),
+      greaterThan(.85),
+    );
     expect(theme.colorScheme.primary, MimiCamColors.serverPrimary);
     expect(theme.colorScheme.surface, MimiCamColors.serverSurface);
     expect(theme.colorScheme.primary, isNot(MimiCamColors.brandPink));
@@ -37,6 +40,25 @@ void main() {
         _contrastRatio(entry.value, surface),
         greaterThanOrEqualTo(4.5),
         reason: '${entry.key} panel üzerinde yetersiz kontrastta',
+      );
+    }
+  });
+
+  test('server durum renkleri üzerindeki ikonlar AA kontrastı taşır', () {
+    const colors = [
+      MimiCamDesignTokens.serverCyan,
+      MimiCamDesignTokens.serverBlue,
+      MimiCamDesignTokens.serverViolet,
+      MimiCamDesignTokens.serverSuccess,
+      MimiCamDesignTokens.serverWarning,
+      MimiCamDesignTokens.serverError,
+      MimiCamDesignTokens.serverDisabled,
+    ];
+
+    for (final color in colors) {
+      expect(
+        _contrastRatio(MimiCamDesignTokens.serverOnAccent, color),
+        greaterThanOrEqualTo(4.5),
       );
     }
   });

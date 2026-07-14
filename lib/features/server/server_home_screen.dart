@@ -55,6 +55,7 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
   bool _localPreviewWanted = false;
   bool _previewActionBusy = false;
   bool? _previewActionTargetEnabled;
+  bool _pairingActionBusy = false;
   bool _purchaseBusy = false;
   BoxFit _previewFit = BoxFit.cover;
   late int _tab;
@@ -386,6 +387,18 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
     _activatePreviewTab();
   }
 
+  Future<bool> _refreshPairingTicket() async {
+    if (_pairingActionBusy || !mounted) return false;
+    setState(() => _pairingActionBusy = true);
+    try {
+      await widget.runtime.startPairingMode();
+      final state = widget.runtime.currentState;
+      return state.qrPayload?.isNotEmpty == true && state.errorMessage == null;
+    } finally {
+      if (mounted) setState(() => _pairingActionBusy = false);
+    }
+  }
+
   Future<void> _toggleLocalPreview(bool currentlyActive) => _changeLocalPreview(
         !currentlyActive,
         showFailureMessage: true,
@@ -435,7 +448,7 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
             _ServerLiveStatusCard(
               state: state,
               onConnectParent: () => _selectTab(1),
-              onRetry: _retryLocalPreview,
+              onRetry: widget.onRestartServer ?? _retryLocalPreview,
               onRestart: widget.onRestartServer,
             ),
             const SizedBox(height: 12),
@@ -483,11 +496,16 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
               subtitle: strings.ui('qrIpTicketSubtitle'),
             ),
             const SizedBox(height: 10),
-            _ConnectionCard(qrPayload: state.qrPayload),
+            _ConnectionCard(
+              qrPayload: state.qrPayload,
+              loading: _pairingActionBusy,
+              failed: state.qrPayload == null && state.errorMessage != null,
+            ),
             const SizedBox(height: 10),
             _QrIpActions(
               payload: state.qrPayload,
-              onRefresh: widget.runtime.startPairingMode,
+              refreshing: _pairingActionBusy,
+              onRefresh: _refreshPairingTicket,
             ),
           ],
         ),
@@ -691,16 +709,16 @@ class _ServerLiveStatusCard extends StatelessWidget {
       key: const ValueKey('server-live-status-card'),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: MimiCamDesignTokens.serverPanel.withValues(alpha: .96),
+        color: MimiCamDesignTokens.serverPanel,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: accent.withValues(alpha: .38),
         ),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withValues(alpha: .24),
-            blurRadius: 18,
-            offset: const Offset(0, 7),
+            color: Color(0x1424493D),
+            blurRadius: 20,
+            offset: Offset(0, 8),
           ),
         ],
       ),
@@ -724,7 +742,7 @@ class _ServerLiveStatusCard extends StatelessWidget {
                           : preparing
                               ? Icons.hourglass_top_rounded
                               : Icons.sensors_rounded,
-                  color: MimiCamDesignTokens.serverInk,
+                  color: MimiCamDesignTokens.serverOnAccent,
                   size: 24,
                 ),
               ),
@@ -769,7 +787,7 @@ class _ServerLiveStatusCard extends StatelessWidget {
                       icon: const Icon(Icons.refresh_rounded),
                       style: FilledButton.styleFrom(
                         backgroundColor: MimiCamDesignTokens.serverCyan,
-                        foregroundColor: MimiCamDesignTokens.serverInk,
+                        foregroundColor: MimiCamDesignTokens.serverOnAccent,
                       ),
                       label: Text(strings.ui('tryAgain')),
                     )
@@ -779,7 +797,7 @@ class _ServerLiveStatusCard extends StatelessWidget {
                           icon: const Icon(Icons.restart_alt_rounded),
                           style: FilledButton.styleFrom(
                             backgroundColor: MimiCamDesignTokens.serverCyan,
-                            foregroundColor: MimiCamDesignTokens.serverInk,
+                            foregroundColor: MimiCamDesignTokens.serverOnAccent,
                           ),
                           label: Text(strings.ui('restartRoomStream')),
                         )
@@ -788,7 +806,7 @@ class _ServerLiveStatusCard extends StatelessWidget {
                           icon: const Icon(Icons.qr_code_2_rounded),
                           style: FilledButton.styleFrom(
                             backgroundColor: MimiCamDesignTokens.serverCyan,
-                            foregroundColor: MimiCamDesignTokens.serverInk,
+                            foregroundColor: MimiCamDesignTokens.serverOnAccent,
                           ),
                           label: Text(strings.ui('connectParentDevice')),
                         ),
@@ -798,7 +816,7 @@ class _ServerLiveStatusCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(vertical: 11),
             decoration: BoxDecoration(
-              color: MimiCamDesignTokens.serverInk.withValues(alpha: .38),
+              color: MimiCamDesignTokens.serverSurfaceRaised,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
@@ -812,12 +830,16 @@ class _ServerLiveStatusCard extends StatelessWidget {
                         ? strings.ui('active')
                         : stopped || failed
                             ? strings.ui('off')
-                            : strings.ui('preparing'),
+                            : state.phase == ServerRuntimePhase.mediaStarting
+                                ? strings.ui('preparing')
+                                : strings.ui('waiting'),
                     color: state.cameraActive
                         ? MimiCamDesignTokens.serverSuccess
                         : stopped || failed
                             ? MimiCamDesignTokens.serverDisabled
-                            : MimiCamDesignTokens.serverBlue,
+                            : state.phase == ServerRuntimePhase.mediaStarting
+                                ? MimiCamDesignTokens.serverBlue
+                                : MimiCamDesignTokens.serverDisabled,
                   ),
                 ),
                 const _ServerHealthDivider(),
@@ -963,7 +985,7 @@ class _SafeRoomSetupCard extends StatelessWidget {
                 backgroundColor: MimiCamDesignTokens.serverCyan,
                 child: Icon(
                   Icons.health_and_safety_rounded,
-                  color: MimiCamDesignTokens.serverInk,
+                  color: MimiCamDesignTokens.serverOnAccent,
                 ),
               ),
               const SizedBox(width: 12),
@@ -1188,14 +1210,19 @@ class _ServerSectionHeader extends StatelessWidget {
 }
 
 class _ConnectionCard extends StatelessWidget {
-  const _ConnectionCard({required this.qrPayload});
+  const _ConnectionCard({
+    required this.qrPayload,
+    required this.loading,
+    required this.failed,
+  });
 
   final String? qrPayload;
+  final bool loading;
+  final bool failed;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final payload = qrPayload ?? 'mimicam://pairing/pending';
     return MimiCamCard(
       dark: true,
       child: LayoutBuilder(
@@ -1207,6 +1234,12 @@ class _ConnectionCard extends StatelessWidget {
             compact: isCompact,
             shortScreen: isShortScreen,
           );
+          final qr = qrPayload != null
+              ? _QrPanel(payload: qrPayload!, size: qrSize)
+              : _QrPlaceholder(
+                  size: qrSize,
+                  loading: loading || !failed,
+                );
           final details = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1226,17 +1259,19 @@ class _ConnectionCard extends StatelessWidget {
               ),
               if (!isCompact) ...[
                 const SizedBox(height: 12),
-                _PayloadBox(payload: payload),
+                if (qrPayload case final payload?)
+                  _PayloadBox(payload: payload),
                 const SizedBox(height: 12),
               ] else
                 const SizedBox(height: 8),
-              Text(
-                strings.ui('keepCodeVisible'),
-                style: const TextStyle(
-                  color: MimiCamDesignTokens.serverTextMuted,
-                  fontSize: 14.5,
+              if (qrPayload != null)
+                Text(
+                  strings.ui('keepCodeVisible'),
+                  style: const TextStyle(
+                    color: MimiCamDesignTokens.serverTextMuted,
+                    fontSize: 14.5,
+                  ),
                 ),
-              ),
             ],
           );
 
@@ -1244,7 +1279,7 @@ class _ConnectionCard extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(child: _QrPanel(payload: payload, size: qrSize)),
+                Center(child: qr),
                 const SizedBox(height: 16),
                 details,
               ],
@@ -1255,7 +1290,7 @@ class _ConnectionCard extends StatelessWidget {
             children: [
               Expanded(child: details),
               const SizedBox(width: 20),
-              _QrPanel(payload: payload, size: qrSize),
+              qr,
             ],
           );
         },
@@ -1274,6 +1309,62 @@ class _ConnectionCard extends StatelessWidget {
     final preferredSize = maxWidth * (compact ? .70 : .42);
     final minReadableSize = maxSafeSize < 220 ? maxSafeSize : 220.0;
     return preferredSize.clamp(minReadableSize, maxSafeSize).toDouble();
+  }
+}
+
+class _QrPlaceholder extends StatelessWidget {
+  const _QrPlaceholder({required this.size, required this.loading});
+
+  final double size;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    return Container(
+      key: const ValueKey('server-qr-placeholder'),
+      width: size + _QrPanel.outerPadding * 2,
+      height: size + _QrPanel.outerPadding * 2,
+      decoration: BoxDecoration(
+        color: MimiCamDesignTokens.serverSurfaceRaised,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: MimiCamDesignTokens.serverOutline),
+      ),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (loading)
+                const SizedBox.square(
+                  dimension: 34,
+                  child: CircularProgressIndicator(strokeWidth: 3),
+                )
+              else
+                const Icon(
+                  Icons.qr_code_2_rounded,
+                  color: MimiCamDesignTokens.serverError,
+                  size: 42,
+                ),
+              const SizedBox(height: 14),
+              Text(
+                strings.ui(
+                  loading ? 'qrTicketPreparing' : 'qrTicketUnavailable',
+                ),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: MimiCamDesignTokens.serverText,
+                  fontSize: 14,
+                  height: 1.3,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -1297,7 +1388,7 @@ class _PayloadBox extends StatelessWidget {
           payload,
           maxLines: 1,
           style: const TextStyle(
-            color: MimiCamDesignTokens.serverInk,
+            color: MimiCamDesignTokens.serverText,
             fontSize: 14,
             fontWeight: FontWeight.w800,
           ),
@@ -1331,9 +1422,9 @@ class _QrPanel extends StatelessWidget {
           data: payload,
           size: size,
           padding: EdgeInsets.zero,
-          eyeStyle: const QrEyeStyle(color: MimiCamDesignTokens.serverInk),
+          eyeStyle: const QrEyeStyle(color: MimiCamDesignTokens.serverText),
           dataModuleStyle:
-              const QrDataModuleStyle(color: MimiCamDesignTokens.serverInk),
+              const QrDataModuleStyle(color: MimiCamDesignTokens.serverText),
         ),
       ),
     );
@@ -1341,10 +1432,15 @@ class _QrPanel extends StatelessWidget {
 }
 
 class _QrIpActions extends StatelessWidget {
-  const _QrIpActions({required this.payload, required this.onRefresh});
+  const _QrIpActions({
+    required this.payload,
+    required this.refreshing,
+    required this.onRefresh,
+  });
 
   final String? payload;
-  final Future<void> Function() onRefresh;
+  final bool refreshing;
+  final Future<bool> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -1358,19 +1454,37 @@ class _QrIpActions extends StatelessWidget {
           SizedBox(
             height: 48,
             child: FilledButton.icon(
-              onPressed: () async {
-                await onRefresh();
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context)
-                  ..clearSnackBars()
-                  ..showSnackBar(
-                    SnackBar(content: Text(strings.ui('qrTicketRefreshed'))),
-                  );
-              },
-              icon: const Icon(Icons.refresh_rounded),
+              onPressed: refreshing
+                  ? null
+                  : () async {
+                      final refreshed = await onRefresh();
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context)
+                        ..clearSnackBars()
+                        ..showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              strings.ui(
+                                refreshed
+                                    ? 'qrTicketRefreshed'
+                                    : 'qrTicketRefreshFailed',
+                              ),
+                            ),
+                          ),
+                        );
+                    },
+              icon: refreshing
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: MimiCamDesignTokens.serverOnAccent,
+                      ),
+                    )
+                  : const Icon(Icons.refresh_rounded),
               style: FilledButton.styleFrom(
                 backgroundColor: MimiCamDesignTokens.serverCyan,
-                foregroundColor: MimiCamDesignTokens.serverInk,
+                foregroundColor: MimiCamDesignTokens.serverOnAccent,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -1384,7 +1498,7 @@ class _QrIpActions extends StatelessWidget {
           SizedBox(
             height: 48,
             child: OutlinedButton.icon(
-              onPressed: payload == null
+              onPressed: payload == null || refreshing
                   ? null
                   : () async {
                       await Clipboard.setData(ClipboardData(text: payload!));
@@ -1425,15 +1539,26 @@ class _ServiceStatusGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    final inactive = state.phase == ServerRuntimePhase.stopped ||
+        state.phase == ServerRuntimePhase.error;
     final cards = [
       _ServiceStatusCard(
         icon: Icons.videocam_rounded,
         title: strings.ui('camera'),
-        value:
-            state.cameraActive ? strings.ui('active') : strings.ui('preparing'),
+        value: state.cameraActive
+            ? strings.ui('active')
+            : inactive
+                ? strings.ui('off')
+                : state.phase == ServerRuntimePhase.mediaStarting
+                    ? strings.ui('preparing')
+                    : strings.ui('waiting'),
         color: state.cameraActive
             ? MimiCamDesignTokens.serverSuccess
-            : MimiCamDesignTokens.serverBlue,
+            : inactive
+                ? MimiCamDesignTokens.serverDisabled
+                : state.phase == ServerRuntimePhase.mediaStarting
+                    ? MimiCamDesignTokens.serverBlue
+                    : MimiCamDesignTokens.serverDisabled,
       ),
       _ServiceStatusCard(
         icon: Icons.mic_rounded,
@@ -1549,7 +1674,7 @@ class _PlatformRuntimeContractCardState
               platform == PlatformRuntimeKind.ios
                   ? Icons.phone_iphone_rounded
                   : Icons.settings_applications_rounded,
-              color: MimiCamDesignTokens.serverInk,
+              color: MimiCamDesignTokens.serverOnAccent,
             ),
           ),
           const SizedBox(width: 12),
@@ -1622,7 +1747,7 @@ class _ServiceStatusCard extends StatelessWidget {
         children: [
           CircleAvatar(
             backgroundColor: color,
-            child: Icon(icon, color: MimiCamDesignTokens.serverInk),
+            child: Icon(icon, color: MimiCamDesignTokens.serverOnAccent),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1870,7 +1995,7 @@ class _LocalPreviewToggleButton extends StatelessWidget {
               strokeWidth: 2.2,
               color: active
                   ? MimiCamDesignTokens.serverCyan
-                  : MimiCamDesignTokens.serverInk,
+                  : MimiCamDesignTokens.serverOnAccent,
             ),
           )
         : Icon(
@@ -1923,7 +2048,7 @@ class _LocalPreviewToggleButton extends StatelessWidget {
                     : MimiCamDesignTokens.serverCyan,
               ),
               foregroundColor: const WidgetStatePropertyAll(
-                MimiCamDesignTokens.serverInk,
+                MimiCamDesignTokens.serverOnAccent,
               ),
             ),
             icon: icon,
@@ -1995,7 +2120,7 @@ class _ServerBroadcastAccessCard extends StatelessWidget {
                       : locked
                           ? Icons.lock_rounded
                           : Icons.hourglass_bottom_rounded,
-                  color: MimiCamDesignTokens.serverInk,
+                  color: MimiCamDesignTokens.serverOnAccent,
                 ),
               ),
               const SizedBox(width: 12),
@@ -2052,7 +2177,7 @@ class _ServerBroadcastAccessCard extends StatelessWidget {
                       : const Icon(Icons.lock_open_rounded),
                   style: FilledButton.styleFrom(
                     backgroundColor: MimiCamDesignTokens.serverCyan,
-                    foregroundColor: MimiCamDesignTokens.serverInk,
+                    foregroundColor: MimiCamDesignTokens.serverOnAccent,
                   ),
                   label: Text(
                     strings.uiFormat('unlockLifetimePrice', {
@@ -2106,7 +2231,7 @@ class _PreviewStatusChip extends StatelessWidget {
       child: Text(
         label,
         style: const TextStyle(
-          color: MimiCamDesignTokens.serverInk,
+          color: MimiCamDesignTokens.serverOnAccent,
           fontWeight: FontWeight.w900,
           fontSize: 12.5,
         ),
@@ -2322,14 +2447,14 @@ class _PreviewOffContent extends StatelessWidget {
         children: [
           const Icon(
             Icons.visibility_off_rounded,
-            color: MimiCamDesignTokens.serverDisabled,
+            color: Colors.white54,
             size: 36,
           ),
           const SizedBox(height: 8),
           Text(
             strings.ui('localPreviewOff'),
             style: const TextStyle(
-              color: MimiCamDesignTokens.serverTextMuted,
+              color: Colors.white70,
               fontSize: 14,
               fontWeight: FontWeight.w800,
             ),
@@ -2352,14 +2477,14 @@ class _PreviewWaitingContent extends StatelessWidget {
         children: [
           const Icon(
             Icons.videocam_off_rounded,
-            color: MimiCamDesignTokens.serverDisabled,
+            color: Colors.white54,
             size: 34,
           ),
           const SizedBox(height: 8),
           Text(
             strings.ui('cameraPreparing'),
             style: const TextStyle(
-              color: MimiCamDesignTokens.serverTextMuted,
+              color: Colors.white70,
               fontSize: 14,
               fontWeight: FontWeight.w800,
             ),
@@ -2744,7 +2869,7 @@ class _SettingsSaveChip extends StatelessWidget {
       child: Text(
         saving ? strings.ui('saving') : strings.ui('realSettings'),
         style: const TextStyle(
-          color: MimiCamDesignTokens.serverInk,
+          color: MimiCamDesignTokens.serverOnAccent,
           fontSize: 12,
           fontWeight: FontWeight.w900,
         ),

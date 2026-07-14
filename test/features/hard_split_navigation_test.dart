@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mimicam/app/app_role.dart';
@@ -454,6 +455,173 @@ void main() {
     expect(qrSize.width, greaterThanOrEqualTo(220));
     expect(qrSize.height, greaterThanOrEqualTo(220));
     expect(find.text('QR Tara'), findsNothing);
+  });
+
+  testWidgets('Server hata kartındaki tekrar dene tüm serverı yeniden başlatır',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    var restartRequests = 0;
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(
+        onStart: () async => throw StateError('camera unavailable'),
+      ),
+      onStartPairing: () async => 'mimicam://pair?payload=x',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ServerHomeScreen(
+          runtime: runtime,
+          config: ConfigurationService(preferences),
+          activeRole: AppRole.server,
+          onRoleSelected: (_) {},
+          onRestartServer: () => restartRequests++,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('server-local-preview-toggle')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Yayın başlatılamadı'), findsOneWidget);
+
+    await tester.tap(find.text('Tekrar dene'));
+    await tester.pump();
+
+    expect(restartRequests, 1);
+  });
+
+  testWidgets('Server başarısız eşleşmede sahte QR göstermez', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(),
+      onStartPairing: () async => throw StateError('network unavailable'),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ServerHomeScreen(
+          runtime: runtime,
+          config: ConfigurationService(preferences),
+          activeRole: AppRole.server,
+          onRoleSelected: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('QR/IP'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(QrImageView), findsNothing);
+    expect(
+      find.byKey(const ValueKey('server-qr-placeholder')),
+      findsOneWidget,
+    );
+    expect(
+      find.text('QR şu anda hazırlanamadı. Aşağıdan yeniden deneyin.'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'Adresi kopyala'),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    await tester.ensureVisible(find.text('QR yenile'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('QR yenile'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'QR yenilenemedi. Wi-Fi bağlantısını kontrol edip tekrar deneyin.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Server QR yenileme ve kopyalama eylemleri sonuç üretir',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    var pairingStarts = 0;
+    String? clipboardText;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          clipboardText =
+              (call.arguments as Map<Object?, Object?>)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(),
+      onStartPairing: () async {
+        pairingStarts++;
+        return 'mimicam://pair?ticket=$pairingStarts';
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ServerHomeScreen(
+          runtime: runtime,
+          config: ConfigurationService(preferences),
+          activeRole: AppRole.server,
+          onRoleSelected: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('QR/IP'));
+    await tester.pumpAndSettle();
+
+    final beforeRefresh = pairingStarts;
+    await tester.ensureVisible(find.text('QR yenile'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('QR yenile'));
+    await tester.pumpAndSettle();
+    expect(pairingStarts, beforeRefresh + 1);
+    expect(find.text('QR bağlantı bileti yenilendi.'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Adresi kopyala'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Adresi kopyala'));
+    await tester.pumpAndSettle();
+    expect(clipboardText, 'mimicam://pair?ticket=$pairingStarts');
+    expect(find.text('Bağlantı bileti kopyalandı.'), findsOneWidget);
   });
 }
 

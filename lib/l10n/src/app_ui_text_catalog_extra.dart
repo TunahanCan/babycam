@@ -282,6 +282,11 @@ const _deUiText = <String, String>{
       'Scanne diesen QR-Code mit dem Eltern-Gerät im selben WLAN.',
   'keepCodeVisible':
       'Code sichtbar halten, bis das Eltern-Gerät verbunden ist.',
+  'qrTicketPreparing': 'Sicheres Verbindungsticket wird vorbereitet…',
+  'qrTicketUnavailable':
+      'Der QR-Code konnte nicht vorbereitet werden. Versuche es unten erneut.',
+  'qrTicketRefreshFailed':
+      'QR konnte nicht erneuert werden. Prüfe das WLAN und versuche es erneut.',
   'qrTicketRefreshed': 'QR-Ticket erneuert.',
   'refreshQr': 'QR erneuern',
   'ticketCopied': 'Ticket kopiert.',
@@ -721,6 +726,9 @@ const _arUiText = <String, String>{
   'secureQrPairing': 'إقران QR آمن',
   'parentQrScanText': 'امسح هذا QR بجهاز الوالدين على نفس Wi‑Fi.',
   'keepCodeVisible': 'أبقِ الرمز ظاهراً حتى يتصل جهاز الوالدين.',
+  'qrTicketPreparing': 'جارٍ إعداد تذكرة اتصال آمنة…',
+  'qrTicketUnavailable': 'تعذر إعداد رمز QR حالياً. حاول مرة أخرى أدناه.',
+  'qrTicketRefreshFailed': 'تعذر تحديث QR. تحقق من شبكة Wi-Fi وحاول مرة أخرى.',
   'qrTicketRefreshed': 'تم تحديث تذكرة QR.',
   'refreshQr': 'تحديث QR',
   'ticketCopied': 'تم نسخ التذكرة.',

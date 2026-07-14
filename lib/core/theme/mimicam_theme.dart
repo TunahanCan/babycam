@@ -4,19 +4,19 @@ import 'mimicam_colors.dart';
 
 class MimiCamTheme {
   static ThemeData serverTheme() {
-    const scheme = ColorScheme.dark(
+    const scheme = ColorScheme.light(
       primary: MimiCamColors.serverPrimary,
-      onPrimary: MimiCamColors.serverBackground,
+      onPrimary: Colors.white,
       primaryContainer: MimiCamColors.serverSurfaceRaised,
       onPrimaryContainer: MimiCamColors.serverText,
       secondary: MimiCamColors.serverInfo,
-      onSecondary: MimiCamColors.serverBackground,
+      onSecondary: Colors.white,
       secondaryContainer: MimiCamColors.serverSurfaceRaised,
       onSecondaryContainer: MimiCamColors.serverText,
       tertiary: MimiCamColors.serverLavender,
-      onTertiary: MimiCamColors.serverBackground,
+      onTertiary: Colors.white,
       error: MimiCamColors.serverError,
-      onError: MimiCamColors.serverBackground,
+      onError: Colors.white,
       surface: MimiCamColors.serverSurface,
       onSurface: MimiCamColors.serverText,
       outline: MimiCamColors.serverOutline,
@@ -29,7 +29,7 @@ class MimiCamTheme {
     );
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: Brightness.light,
       colorScheme: scheme,
       scaffoldBackgroundColor: MimiCamColors.serverBackground,
       canvasColor: MimiCamColors.serverBackground,
@@ -39,8 +39,8 @@ class MimiCamTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
-        backgroundColor: MimiCamColors.serverSurface,
-        modalBackgroundColor: MimiCamColors.serverSurface,
+        backgroundColor: Colors.white,
+        modalBackgroundColor: Colors.white,
         showDragHandle: true,
       ),
       dialogTheme: DialogThemeData(
@@ -48,8 +48,9 @@ class MimiCamTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       ),
       snackBarTheme: const SnackBarThemeData(
-        backgroundColor: MimiCamColors.serverSurfaceRaised,
-        contentTextStyle: TextStyle(color: MimiCamColors.serverText),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: MimiCamColors.serverText,
+        contentTextStyle: TextStyle(color: Colors.white),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -72,7 +73,7 @@ class MimiCamTheme {
       ),
       chipTheme: ChipThemeData(
         backgroundColor: MimiCamColors.serverSurfaceRaised,
-        selectedColor: MimiCamColors.serverPrimary.withValues(alpha: .18),
+        selectedColor: MimiCamColors.serverSurfaceRaised,
         side: const BorderSide(color: MimiCamColors.serverOutline),
         labelStyle: const TextStyle(color: MimiCamColors.serverTextMuted),
         secondaryLabelStyle: const TextStyle(color: MimiCamColors.serverText),

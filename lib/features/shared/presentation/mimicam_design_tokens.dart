@@ -21,6 +21,7 @@ class MimiCamDesignTokens {
   static const serverOutline = MimiCamColors.serverOutline;
   static const serverText = MimiCamColors.serverText;
   static const serverTextMuted = MimiCamColors.serverTextMuted;
+  static const serverOnAccent = Colors.white;
   static const serverCyan = MimiCamColors.serverPrimary;
   static const serverCyanDeep = MimiCamColors.serverPrimaryPressed;
   static const serverBlue = MimiCamColors.serverInfo;
@@ -77,7 +78,7 @@ class MimiCamDesignTokens {
 
   static BoxDecoration cardDecoration({bool dark = false}) {
     return BoxDecoration(
-      color: dark ? serverPanel.withValues(alpha: .96) : Colors.white,
+      color: dark ? serverPanel : Colors.white,
       borderRadius: BorderRadius.circular(18),
       border: Border.all(
         color: dark
@@ -86,11 +87,9 @@ class MimiCamDesignTokens {
       ),
       boxShadow: [
         BoxShadow(
-          color: dark
-              ? Colors.black.withValues(alpha: .24)
-              : const Color(0x12111827),
-          blurRadius: dark ? 18 : 16,
-          offset: const Offset(0, 7),
+          color: dark ? const Color(0x1424493D) : const Color(0x12111827),
+          blurRadius: dark ? 20 : 16,
+          offset: const Offset(0, 8),
         ),
       ],
     );
