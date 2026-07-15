@@ -111,7 +111,7 @@
         }
       ],
       "measurements": [],
-      "requiredArtifacts": ["before-after privacy screenshots", "/test/status snapshots"]
+      "requiredArtifacts": ["before-after privacy screenshots", "/status snapshots"]
     },
     {
       "id": "NET-IPv4-01",
@@ -634,7 +634,7 @@
       "mediaLane": "legacy",
       "networkLane": "baseline-and-weak",
       "estimatedMinutes": 40,
-      "setup": ["Use a profile/release build and capture /test/status every five seconds."],
+      "setup": ["Use a profile/release build and capture authenticated /status every five seconds."],
       "steps": [
         "Run 15 minutes baseline, five minutes weak network, then ten minutes recovered baseline.",
         "Exercise alerts, audio toggle and one foreground/background cycle.",

@@ -153,7 +153,7 @@ testinde doğrulanmalıdır:
 
 Tam cihaz/OS/network/thermal senaryoları ve release gate'leri
 [`physical_device_test_matrix.md`](physical_device_test_matrix.md) içindedir.
-`tool/benchmarks/device_soak_harness.dart` `/test/status` JSONL kaydı üretir;
+`tool/benchmarks/device_soak_harness.dart` authenticated `/status` JSONL kaydı üretir;
 matris dokümanının varlığı fiziksel sonuçların çalıştırıldığı anlamına gelmez.
 
 ## Kalan riskler ve sonraki refactor sırası

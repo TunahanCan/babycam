@@ -184,38 +184,43 @@ class _ServerSettingsSectionState extends State<ServerSettingsSection> {
           onPresetSelected: (preset) =>
               unawaited(_applyDetectionPreset(preset)),
           onReset: _confirmResetSettings,
-          onMotionThresholdChanged: (value) =>
-              setState(() => _motionThreshold = value),
-          onMotionThresholdChangeEnd: (value) => unawaited(
-            _saveSetting(() => widget.config.setMotionThreshold(value)),
-          ),
-          onCryScoreThresholdChanged: (value) =>
-              setState(() => _cryScoreThreshold = value),
-          onCryScoreThresholdChangeEnd: (value) => unawaited(
-            _saveSetting(() => widget.config.setCryScoreThreshold(value)),
-          ),
-          onNotifyCooldownChanged: (value) =>
-              setState(() => _notifyCooldownSeconds = value),
-          onNotifyCooldownChangeEnd: (value) => unawaited(
-            _saveSetting(
-              () => widget.config.setNotifyCooldownMs((value * 1000).round()),
-            ),
-          ),
-          onMotionDurationChanged: (value) =>
-              setState(() => _motionDurationSeconds = value),
-          onMotionDurationChangeEnd: (value) => unawaited(
-            _saveSetting(
-              () =>
-                  widget.config.setMotionMinDurationMs((value * 1000).round()),
-            ),
-          ),
-          onCryDurationChanged: (value) =>
-              setState(() => _cryDurationSeconds = value),
-          onCryDurationChangeEnd: (value) => unawaited(
-            _saveSetting(
-              () => widget.config.setCryMinDurationMs((value * 1000).round()),
-            ),
-          ),
+          onMotionThresholdChangeEnd: (value) {
+            setState(() => _motionThreshold = value);
+            unawaited(
+              _saveSetting(() => widget.config.setMotionThreshold(value)),
+            );
+          },
+          onCryScoreThresholdChangeEnd: (value) {
+            setState(() => _cryScoreThreshold = value);
+            unawaited(
+              _saveSetting(() => widget.config.setCryScoreThreshold(value)),
+            );
+          },
+          onNotifyCooldownChangeEnd: (value) {
+            setState(() => _notifyCooldownSeconds = value);
+            unawaited(
+              _saveSetting(
+                () => widget.config.setNotifyCooldownMs((value * 1000).round()),
+              ),
+            );
+          },
+          onMotionDurationChangeEnd: (value) {
+            setState(() => _motionDurationSeconds = value);
+            unawaited(
+              _saveSetting(
+                () => widget.config
+                    .setMotionMinDurationMs((value * 1000).round()),
+              ),
+            );
+          },
+          onCryDurationChangeEnd: (value) {
+            setState(() => _cryDurationSeconds = value);
+            unawaited(
+              _saveSetting(
+                () => widget.config.setCryMinDurationMs((value * 1000).round()),
+              ),
+            );
+          },
         ),
       ],
     );
@@ -297,15 +302,10 @@ class _ServerSettingsCard extends StatelessWidget {
     required this.activePreset,
     required this.onPresetSelected,
     required this.onReset,
-    required this.onMotionThresholdChanged,
     required this.onMotionThresholdChangeEnd,
-    required this.onCryScoreThresholdChanged,
     required this.onCryScoreThresholdChangeEnd,
-    required this.onNotifyCooldownChanged,
     required this.onNotifyCooldownChangeEnd,
-    required this.onMotionDurationChanged,
     required this.onMotionDurationChangeEnd,
-    required this.onCryDurationChanged,
     required this.onCryDurationChangeEnd,
   });
 
@@ -318,15 +318,10 @@ class _ServerSettingsCard extends StatelessWidget {
   final _DetectionPreset? activePreset;
   final ValueChanged<_DetectionPreset> onPresetSelected;
   final VoidCallback onReset;
-  final ValueChanged<double> onMotionThresholdChanged;
   final ValueChanged<double> onMotionThresholdChangeEnd;
-  final ValueChanged<double> onCryScoreThresholdChanged;
   final ValueChanged<double> onCryScoreThresholdChangeEnd;
-  final ValueChanged<double> onNotifyCooldownChanged;
   final ValueChanged<double> onNotifyCooldownChangeEnd;
-  final ValueChanged<double> onMotionDurationChanged;
   final ValueChanged<double> onMotionDurationChangeEnd;
-  final ValueChanged<double> onCryDurationChanged;
   final ValueChanged<double> onCryDurationChangeEnd;
 
   @override
@@ -459,7 +454,6 @@ class _ServerSettingsCard extends StatelessWidget {
                       max: spec.max,
                       divisions: spec.divisions,
                       color: spec.color,
-                      onChanged: spec.onChanged,
                       onChangeEnd: spec.onChangeEnd,
                     ),
                     const SizedBox(height: 12),
@@ -483,45 +477,42 @@ class _ServerSettingsCard extends StatelessWidget {
       _SettingSliderSpec(
         title: strings.ui('cryThreshold'),
         description: strings.ui('cryThresholdDescription'),
-        valueLabel: '%${(cryScoreThreshold * 100).round()}',
+        valueLabel: (value) => '%${(value * 100).round()}',
         value: cryScoreThreshold,
         min: .20,
         max: .95,
         divisions: 75,
         color: MimiCamDesignTokens.serverCyan,
-        onChanged: onCryScoreThresholdChanged,
         onChangeEnd: onCryScoreThresholdChangeEnd,
       ),
       _SettingSliderSpec(
         title: strings.ui('motionThreshold'),
         description: strings.ui('motionThresholdDescription'),
-        valueLabel: '%${(motionThreshold * 100).round()}',
+        valueLabel: (value) => '%${(value * 100).round()}',
         value: motionThreshold,
         min: .05,
         max: .60,
         divisions: 55,
         color: MimiCamDesignTokens.serverViolet,
-        onChanged: onMotionThresholdChanged,
         onChangeEnd: onMotionThresholdChangeEnd,
       ),
       _SettingSliderSpec(
         title: strings.ui('notificationCooldown'),
         description: strings.ui('notificationCooldownDescription'),
-        valueLabel: localizedSecondsLabel(strings, notifyCooldownSeconds),
+        valueLabel: (value) => localizedSecondsLabel(strings, value),
         value: notifyCooldownSeconds,
         min: 10,
         max: 180,
         divisions: 34,
         color: MimiCamDesignTokens.serverBlue,
-        onChanged: onNotifyCooldownChanged,
         onChangeEnd: onNotifyCooldownChangeEnd,
       ),
       _SettingSliderSpec(
         title: strings.ui('cryMinimumDuration'),
         description: strings.ui('cryMinimumDurationDescription'),
-        valueLabel: localizedSecondsLabel(
+        valueLabel: (value) => localizedSecondsLabel(
           strings,
-          cryDurationSeconds,
+          value,
           fractionDigits: 1,
         ),
         value: cryDurationSeconds,
@@ -529,15 +520,14 @@ class _ServerSettingsCard extends StatelessWidget {
         max: 6,
         divisions: 11,
         color: MimiCamDesignTokens.serverCyan,
-        onChanged: onCryDurationChanged,
         onChangeEnd: onCryDurationChangeEnd,
       ),
       _SettingSliderSpec(
         title: strings.ui('motionMinimumDuration'),
         description: strings.ui('motionMinimumDurationDescription'),
-        valueLabel: localizedSecondsLabel(
+        valueLabel: (value) => localizedSecondsLabel(
           strings,
-          motionDurationSeconds,
+          value,
           fractionDigits: 1,
         ),
         value: motionDurationSeconds,
@@ -545,7 +535,6 @@ class _ServerSettingsCard extends StatelessWidget {
         max: 6,
         divisions: 11,
         color: MimiCamDesignTokens.serverViolet,
-        onChanged: onMotionDurationChanged,
         onChangeEnd: onMotionDurationChangeEnd,
       ),
     ];
@@ -562,19 +551,17 @@ class _SettingSliderSpec {
     required this.max,
     required this.divisions,
     required this.color,
-    required this.onChanged,
     required this.onChangeEnd,
   });
 
   final String title;
   final String description;
-  final String valueLabel;
+  final String Function(double value) valueLabel;
   final double value;
   final double min;
   final double max;
   final int divisions;
   final Color color;
-  final ValueChanged<double> onChanged;
   final ValueChanged<double> onChangeEnd;
 }
 
@@ -606,7 +593,7 @@ class _SettingsSaveChip extends StatelessWidget {
   }
 }
 
-class _SettingSlider extends StatelessWidget {
+class _SettingSlider extends StatefulWidget {
   const _SettingSlider({
     required this.title,
     required this.description,
@@ -616,24 +603,46 @@ class _SettingSlider extends StatelessWidget {
     required this.max,
     required this.divisions,
     required this.color,
-    required this.onChanged,
     required this.onChangeEnd,
   });
 
   final String title;
   final String description;
-  final String valueLabel;
+  final String Function(double value) valueLabel;
   final double value;
   final double min;
   final double max;
   final int divisions;
   final Color color;
-  final ValueChanged<double> onChanged;
   final ValueChanged<double> onChangeEnd;
 
   @override
+  State<_SettingSlider> createState() => _SettingSliderState();
+}
+
+class _SettingSliderState extends State<_SettingSlider> {
+  late double _value;
+  bool _dragging = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _value = _safeValue(widget.value);
+  }
+
+  @override
+  void didUpdateWidget(covariant _SettingSlider oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_dragging && oldWidget.value != widget.value) {
+      _value = _safeValue(widget.value);
+    }
+  }
+
+  double _safeValue(double value) =>
+      value.clamp(widget.min, widget.max).toDouble();
+
+  @override
   Widget build(BuildContext context) {
-    final safeValue = value.clamp(min, max).toDouble();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -641,7 +650,7 @@ class _SettingSlider extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                title,
+                widget.title,
                 style: const TextStyle(
                   color: MimiCamDesignTokens.serverText,
                   fontSize: 16,
@@ -649,35 +658,50 @@ class _SettingSlider extends StatelessWidget {
                 ),
               ),
             ),
-            Text(
-              valueLabel,
-              style: TextStyle(
-                color: color,
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
+            SizedBox(
+              width: 64,
+              child: Text(
+                widget.valueLabel(_value),
+                textAlign: TextAlign.end,
+                style: TextStyle(
+                  color: widget.color,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 4),
         Text(
-          description,
+          widget.description,
           style: const TextStyle(
             color: MimiCamDesignTokens.serverTextMuted,
             fontSize: 13.5,
             height: 1.25,
           ),
         ),
-        Slider(
-          activeColor: color,
-          inactiveColor:
-              MimiCamDesignTokens.serverOutline.withValues(alpha: .58),
-          value: safeValue,
-          min: min,
-          max: max,
-          divisions: divisions,
-          onChanged: onChanged,
-          onChangeEnd: onChangeEnd,
+        RepaintBoundary(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              tickMarkShape: SliderTickMarkShape.noTickMark,
+            ),
+            child: Slider(
+              activeColor: widget.color,
+              inactiveColor:
+                  MimiCamDesignTokens.serverOutline.withValues(alpha: .58),
+              value: _value,
+              min: widget.min,
+              max: widget.max,
+              divisions: widget.divisions,
+              onChangeStart: (_) => _dragging = true,
+              onChanged: (value) => setState(() => _value = value),
+              onChangeEnd: (value) {
+                _dragging = false;
+                widget.onChangeEnd(value);
+              },
+            ),
+          ),
         ),
       ],
     );

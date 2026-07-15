@@ -21,27 +21,4 @@ void main() {
     expect(
         ByteData.sublistView(header, 40, 44).getUint32(0, Endian.little), 3200);
   });
-
-  test('sineTone fade uygulanan PCM16 test tonu uretir', () {
-    final pcm = WavPcm16.sineTone(
-      sampleRate: 16000,
-      durationMs: 200,
-      frequencyHz: 1000,
-      amplitude: 0.25,
-    );
-
-    expect(pcm.length, 16000 * 200 ~/ 1000 * 2);
-    expect(_pcmPeak(pcm), greaterThan(1000));
-    expect(_pcmPeak(pcm), lessThanOrEqualTo((32767 * 0.25).ceil()));
-  });
-}
-
-int _pcmPeak(Uint8List pcm16le) {
-  final view = ByteData.sublistView(pcm16le);
-  var peak = 0;
-  for (var i = 0; i < pcm16le.length ~/ 2; i++) {
-    final sample = view.getInt16(i * 2, Endian.little).abs();
-    if (sample > peak) peak = sample;
-  }
-  return peak;
 }

@@ -11,14 +11,16 @@ void main() {
     final secureStore = File('lib/core/security/mimicam_secure_storage.dart')
         .readAsStringSync();
     final featureFlags = File('lib/core/feature_flags.dart').readAsStringSync();
+    final protocol =
+        File('lib/core/protocol/mimicam_protocol.dart').readAsStringSync();
 
     expect(manifest, contains('android:allowBackup="false"'));
     expect(manifest, contains('android:fullBackupContent="false"'));
     expect(pubspec, isNot(contains('bluetooth_low_energy:')));
     expect(pubspec, isNot(contains('just_audio:')));
     expect(pubspec, isNot(contains('web_socket_channel:')));
-    expect(featureFlags, contains('MIMICAM_TEST_ENDPOINTS_ENABLED'));
-    expect(featureFlags, contains('defaultValue: kDebugMode'));
+    expect(featureFlags, isNot(contains('MIMICAM_TEST_ENDPOINTS_ENABLED')));
+    expect(protocol, isNot(contains("'/test")));
     expect(
       secureStore,
       contains('KeychainAccessibility.first_unlock_this_device'),

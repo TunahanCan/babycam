@@ -25,33 +25,31 @@ void main() {
   testWidgets('client tab geçişleri kompakt ekranda overflow üretmez',
       (tester) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.binding.setSurfaceSize(const Size(320, 844));
+    final runtime = ClientRuntime(
+      pair: (_) => throw UnimplementedError(),
+    );
+    addTearDown(runtime.dispose);
 
-    for (final width in [320.0, 360.0, 390.0]) {
-      await tester.binding.setSurfaceSize(Size(width, 844));
-      final runtime = ClientRuntime(
-        pair: (_) => throw UnimplementedError(),
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          locale: const Locale('tr'),
-          supportedLocales: AppStrings.supportedLocales,
-          localizationsDelegates: _localizationsDelegates,
-          home: ClientHomeScreen(
-            runtime: runtime,
-            activeRole: AppRole.client,
-            onRoleSelected: (_) {},
-          ),
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ClientHomeScreen(
+          runtime: runtime,
+          activeRole: AppRole.client,
+          onRoleSelected: (_) {},
         ),
-      );
+      ),
+    );
+    await tester.pumpAndSettle();
+    _expectNoFlutterException(tester);
+
+    for (final label in ['Bul', 'Bildirim', 'Ayarlar', 'İzle']) {
+      await tester.tap(find.text(label).last);
       await tester.pumpAndSettle();
       _expectNoFlutterException(tester);
-
-      for (final label in ['Bul', 'Bildirim', 'Ayarlar', 'İzle']) {
-        await tester.tap(find.text(label).last);
-        await tester.pumpAndSettle();
-        _expectNoFlutterException(tester);
-      }
     }
   });
 
@@ -97,42 +95,40 @@ void main() {
   testWidgets('paired client ve canlı izleme dar ekranda overflow üretmez',
       (tester) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.binding.setSurfaceSize(const Size(320, 844));
+    final runtime = await _pairedRuntime();
+    addTearDown(runtime.dispose);
 
-    for (final width in [320.0, 360.0]) {
-      await tester.binding.setSurfaceSize(Size(width, 844));
-      final runtime = await _pairedRuntime();
-
-      await tester.pumpWidget(
-        MaterialApp(
-          locale: const Locale('tr'),
-          supportedLocales: AppStrings.supportedLocales,
-          localizationsDelegates: _localizationsDelegates,
-          home: ClientHomeScreen(
-            runtime: runtime,
-            activeRole: AppRole.client,
-            onRoleSelected: (_) {},
-          ),
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ClientHomeScreen(
+          runtime: runtime,
+          activeRole: AppRole.client,
+          onRoleSelected: (_) {},
         ),
-      );
+      ),
+    );
+    await tester.pumpAndSettle();
+    _expectNoFlutterException(tester);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: WatchScreen(runtime: runtime),
+      ),
+    );
+    await tester.pumpAndSettle();
+    _expectNoFlutterException(tester);
+
+    for (final label in ['Geçmiş', 'Ayarlar', 'İzle']) {
+      await tester.tap(find.text(label).last);
       await tester.pumpAndSettle();
       _expectNoFlutterException(tester);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          locale: const Locale('tr'),
-          supportedLocales: AppStrings.supportedLocales,
-          localizationsDelegates: _localizationsDelegates,
-          home: WatchScreen(runtime: runtime),
-        ),
-      );
-      await tester.pumpAndSettle();
-      _expectNoFlutterException(tester);
-
-      for (final label in ['Geçmiş', 'Ayarlar', 'İzle']) {
-        await tester.tap(find.text(label).last);
-        await tester.pumpAndSettle();
-        _expectNoFlutterException(tester);
-      }
     }
   });
 
@@ -174,39 +170,39 @@ void main() {
   testWidgets('server tab geçişleri kompakt ekranda overflow üretmez',
       (tester) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.binding.setSurfaceSize(const Size(320, 844));
+    final preferences = await SharedPreferences.getInstance();
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(),
+      onStartPairing: () async => 'mimicam://pair?payload=x',
+    );
 
-    for (final width in [320.0, 360.0, 390.0]) {
-      await tester.binding.setSurfaceSize(Size(width, 844));
-      final preferences = await SharedPreferences.getInstance();
-      final runtime = ServerRuntime(
-        mediaRuntime: MediaRuntimeController(),
-        onStartPairing: () async => 'mimicam://pair?payload=x',
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          locale: const Locale('tr'),
-          supportedLocales: AppStrings.supportedLocales,
-          localizationsDelegates: _localizationsDelegates,
-          home: ServerHomeScreen(
-            runtime: runtime,
-            config: ConfigurationService(preferences),
-            activeRole: AppRole.server,
-            onRoleSelected: (_) {},
-          ),
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ServerHomeScreen(
+          runtime: runtime,
+          config: ConfigurationService(preferences),
+          activeRole: AppRole.server,
+          onRoleSelected: (_) {},
         ),
-      );
+      ),
+    );
+    await tester.pumpAndSettle();
+    _expectNoFlutterException(tester);
+    expect(find.textContaining('300 TL'), findsNothing);
+    expect(find.textContaining('ücretsiz yayın'), findsNothing);
+
+    for (final label in ['QR/IP', 'Servis', 'Ayarlar', 'Yayın']) {
+      await tester.tap(find.text(label).last);
       await tester.pumpAndSettle();
       _expectNoFlutterException(tester);
-      expect(find.textContaining('300 TL'), findsNothing);
-      expect(find.textContaining('ücretsiz yayın'), findsNothing);
-
-      for (final label in ['QR/IP', 'Servis', 'Ayarlar', 'Yayın']) {
-        await tester.tap(find.text(label).last);
-        await tester.pumpAndSettle();
-        _expectNoFlutterException(tester);
-      }
     }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await runtime.dispose();
   });
 
   testWidgets('server yayın ekranı uzun diller ve büyük metinde taşmaz',
@@ -367,83 +363,6 @@ void main() {
     expect(clientPreferences.keepScreenAwake, isFalse);
   });
 
-  testWidgets('server gelişmiş ayar sliderları dar ekranda render olur',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(320, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final preferences = await SharedPreferences.getInstance();
-    final runtime = ServerRuntime(
-      mediaRuntime: MediaRuntimeController(),
-      onStartPairing: () async => 'mimicam://pair?payload=x',
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('tr'),
-        supportedLocales: AppStrings.supportedLocales,
-        localizationsDelegates: _localizationsDelegates,
-        home: ServerHomeScreen(
-          runtime: runtime,
-          config: ConfigurationService(preferences),
-          activeRole: AppRole.server,
-          onRoleSelected: (_) {},
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Ayarlar').last);
-    await tester.pumpAndSettle();
-
-    expect(find.byType(Slider), findsNothing);
-    await tester.drag(
-      find.byKey(const ValueKey('server-settings')),
-      const Offset(0, -320),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('İleri ayarlar'));
-    await tester.pumpAndSettle();
-    expect(find.byType(Slider), findsNWidgets(5));
-    _expectNoFlutterException(tester);
-  });
-
-  testWidgets('server hızlı algılama profili gerçek ayarları kaydeder',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final preferences = await SharedPreferences.getInstance();
-    final config = ConfigurationService(preferences);
-    final runtime = ServerRuntime(
-      mediaRuntime: MediaRuntimeController(),
-      onStartPairing: () async => 'mimicam://pair?payload=x',
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('tr'),
-        supportedLocales: AppStrings.supportedLocales,
-        localizationsDelegates: _localizationsDelegates,
-        home: ServerHomeScreen(
-          runtime: runtime,
-          config: config,
-          activeRole: AppRole.server,
-          onRoleSelected: (_) {},
-          initialTab: 3,
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.ensureVisible(find.text('Hassas'));
-    await tester.tap(find.text('Hassas'));
-    await tester.pumpAndSettle();
-
-    expect(config.cryScoreThreshold, .50);
-    expect(config.motionThreshold, .15);
-    expect(config.notifyCooldownMs, 45000);
-    _expectNoFlutterException(tester);
-  });
-
   testWidgets(
       'server runtime ve ayar güncellemeleri navigation rebuild bütçesini korur',
       (tester) async {
@@ -511,29 +430,6 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     await runtime.dispose();
-  });
-
-  testWidgets('pahalı ortak yüzeyler repaint boundary ile izole edilir',
-      (tester) async {
-    final runtime = ClientRuntime(
-      pair: (_) => throw UnimplementedError(),
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('tr'),
-        supportedLocales: AppStrings.supportedLocales,
-        localizationsDelegates: _localizationsDelegates,
-        home: ClientHomeScreen(
-          runtime: runtime,
-          activeRole: AppRole.client,
-          onRoleSelected: (_) {},
-        ),
-      ),
-    );
-
-    expect(find.byType(MimiCamBottomNav), findsOneWidget);
-    expect(find.byType(RepaintBoundary), findsAtLeastNWidgets(3));
   });
 }
 

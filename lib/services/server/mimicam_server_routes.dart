@@ -103,20 +103,6 @@ List<_RouteSpec> _buildMimiCamRoutes(MimiCamServer server) => [
         const {HttpMethod.get},
         (request, _) => server._handlePublicStatus(request),
       ),
-      if (server.enableTestEndpoints) ...[
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testDashboard,
-          _AuthMode.testAccess,
-          const {HttpMethod.get},
-          (request, _) => server._writeTestDashboard(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testDashboardScript,
-          _AuthMode.testAccess,
-          const {HttpMethod.get},
-          (request, _) => server._writeTestDashboardScript(request),
-        ),
-      ],
       _RouteSpec(
         protocol_v2.MimiCamProtocolV2.video,
         _AuthMode.streamToken,
@@ -135,42 +121,4 @@ List<_RouteSpec> _buildMimiCamRoutes(MimiCamServer server) => [
         const {HttpMethod.get},
         (request, _) => server._handlePrivateStatus(request),
       ),
-      if (server.enableTestEndpoints) ...[
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testStatus,
-          _AuthMode.bearer,
-          const {HttpMethod.get},
-          (request, _) => server._handleTestStatus(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testStart,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          (request, _) => server._handleTestStart(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testReset,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          (request, _) => server._handleTestReset(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testProbe,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          (request, _) => server._handleTestProbe(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testAlert,
-          _AuthMode.bearer,
-          const {HttpMethod.post},
-          (request, _) => server._handleTestAlert(request),
-        ),
-        _RouteSpec(
-          protocol_v2.MimiCamProtocolV2.testAudioTone,
-          _AuthMode.bearer,
-          const {HttpMethod.get},
-          (request, _) => server._handleTestAudioTone(request),
-        ),
-      ],
     ];

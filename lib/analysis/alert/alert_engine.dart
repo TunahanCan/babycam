@@ -115,7 +115,7 @@ class AlertEngine {
       videoReliable: _videoReliableProvider?.call() ?? true,
     );
     if (episode != null) {
-      return _tryEmit(
+      final event = _tryEmit(
         type: AlertType.cryDetected,
         severity: episode.severity,
         message: _notificationComposer.compose(episode, strings: _strings),
@@ -123,6 +123,10 @@ class AlertEngine {
         timestampMs: episode.lastUpdatedAtMs,
         metadata: episode.toJson(),
       );
+      if (event != null) {
+        _episodeAggregator?.acknowledgeNotification(episode);
+      }
+      return event;
     }
 
     // No audio-derived notification is trustworthy until the room baseline
@@ -181,6 +185,9 @@ class AlertEngine {
     _lastAlertAt = null;
     _episodeAggregator?.reset();
   }
+
+  /// Breaks only the active audio episode while preserving cooldown history.
+  void markAudioDiscontinuity() => _episodeAggregator?.reset();
 
   /// Closes the alert stream. Future result handling becomes a safe no-op.
   Future<void> dispose() async {

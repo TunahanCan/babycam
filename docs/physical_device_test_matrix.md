@@ -65,10 +65,10 @@ client. Select/reset the intended room/client role on each device before the
 case. For legacy, use `--media-lane legacy`; for the pilot the runner adds
 `--dart-define=MIMICAM_WEBRTC_PILOT=true`.
 
-After pairing, an authenticated diagnostic probe can capture `/test/status`
-and `/test/probe`. Put the token only in the environment and clear it after the
-command. `--probe-audio-tone` validates WAV transport without microphone
-input; omit it for a real microphone path.
+After pairing, `--probe` captures the authenticated production `/status`
+snapshot. Put the token only in the environment and clear it after the command.
+It does not synthesize media or alerts; validate microphone, `/audio` playback
+and notifications through the physical scenarios below.
 
 ```sh
 export MIMICAM_MATRIX_TOKEN='trusted-token-from-this-test-pair'
@@ -217,7 +217,7 @@ The machine-readable cases and their primary purpose are:
   samples. Compare trends within a platform, not absolute iOS versus Android
   RSS.
 - **WebRTC codecs:** save `getStats` codec and selected candidate-pair records.
-  Server `/test/status` should also show matching client transport telemetry.
+  Server `/status` should also show matching client transport telemetry.
 - **Thermal:** poll `deviceResources`, `resourceGovernor` and media profile at
   five-second intervals. Never bypass OS thermal protection; stop on an OS
   warning, shutdown risk or unsafe touch temperature.
@@ -238,7 +238,7 @@ The machine-readable cases and their primary purpose are:
 | critical thermal response | audio-first profile within 15 s |
 | recovery after pressure clears | stable upgrade without oscillation |
 
-Record the `/test/status` snapshots with
+Record the authenticated `/status` snapshots with
 `tool/benchmarks/device_soak_harness.dart`. Archive JSONL output with device
 model, OS/build, app commit, charger state and network lane in the filename.
 Also record selected media transport, fallback reason, DNS-SD-resolved address

@@ -9,35 +9,20 @@ import 'package:mimicam/core/media/adaptive_media_profile.dart';
 import 'package:mimicam/l10n/app_strings.dart';
 
 void main() {
-  test('LowCostCryScorer enerji ve voiced/harmonic oranlardan skor üretir', () {
-    const scorer = LowCostCryScorer();
-
-    final score = scorer.scoreFeatures(
-      normalizedEnergy: 1,
-      voicedRatio: 0.8,
-      harmonicRatio: 0.7,
-      consecutiveF0: 0.6,
-      durationScore: 0.5,
-    );
-
-    expect(score, closeTo(0.78, 0.01));
-  });
-
   test('cry episode suspected -> confirmed ve metadata üretir', () {
     final aggregator = EpisodeBasedNotificationAggregator();
 
     aggregator.onMotionResult(_motion(timestampMs: 2500));
-    expect(
-      aggregator.onAudioResult(_audio(timestampMs: 1000)),
-      isNull,
-    );
-    expect(aggregator.state, BabyEventEpisodeState.suspectedCry);
-    final episode = aggregator.onAudioResult(
-      _audio(timestampMs: 7000),
-      streamQualityTier: NetworkQualityTier.weak,
-      audioReliable: true,
-      videoReliable: false,
-    );
+    BabyEventEpisode? episode;
+    for (var timestampMs = 1000; timestampMs <= 6000; timestampMs += 1000) {
+      episode = aggregator.onAudioResult(
+            _audio(timestampMs: timestampMs),
+            streamQualityTier: NetworkQualityTier.weak,
+            audioReliable: true,
+            videoReliable: false,
+          ) ??
+          episode;
+    }
 
     expect(episode, isNotNull);
     expect(episode!.severity, AlertSeverity.attention);
@@ -45,7 +30,7 @@ void main() {
     expect(episode.videoReliable, isFalse);
     expect(episode.motionBursts, 1);
     expect(episode.toJson()['event'], 'baby_event');
-    expect(episode.toJson()['lastMotionAgoMs'], 4500);
+    expect(episode.toJson()['lastMotionAgoMs'], 3500);
   });
 
   test('10 saniye sessizlik kısa ses yükselmesi episodeunu resolve eder', () {
@@ -53,6 +38,7 @@ void main() {
     const composer = NotificationComposer();
 
     aggregator.onAudioResult(_audio(timestampMs: 1000));
+    aggregator.onAudioResult(_audio(timestampMs: 2000));
     aggregator.onAudioResult(_audio(timestampMs: 3000));
     final resolved = aggregator.onAudioResult(
       _audio(timestampMs: 14000, active: false),
@@ -68,10 +54,12 @@ void main() {
     final aggregator = EpisodeBasedNotificationAggregator();
 
     aggregator.onMotionResult(_motion(timestampMs: 1000));
-    final episode = aggregator.onAudioResult(_audio(timestampMs: 10000));
+    BabyEventEpisode? confirmed;
+    for (var timestampMs = 10000; timestampMs <= 15000; timestampMs += 1000) {
+      confirmed = aggregator.onAudioResult(_audio(timestampMs: timestampMs)) ??
+          confirmed;
+    }
 
-    expect(episode, isNull);
-    final confirmed = aggregator.onAudioResult(_audio(timestampMs: 16000));
     expect(confirmed, isNotNull);
     expect(confirmed!.motionBursts, 0);
     expect(confirmed.lastMotionAtMs, isNull);
@@ -87,6 +75,69 @@ void main() {
 
     expect(aggregator.onAudioResult(result), isNull);
     expect(aggregator.state, BabyEventEpisodeState.quiet);
+  });
+
+  test('uzun audio paket boşluğu iki sesi tek episode gibi birleştirmez', () {
+    final aggregator = EpisodeBasedNotificationAggregator(
+      confirmedCryMs: 2000,
+      suspectedCryMs: 1000,
+      maxActiveGapMs: 500,
+    );
+
+    expect(
+      aggregator.onAudioResult(_audio(timestampMs: 1000)),
+      isNull,
+    );
+    expect(
+      aggregator.onAudioResult(_audio(timestampMs: 3000)),
+      isNull,
+    );
+
+    expect(aggregator.state, BabyEventEpisodeState.suspectedCry);
+  });
+
+  test('ekran profilinden gelen eşik ve süre bildirim kararını değiştirir', () {
+    final sensitive = EpisodeBasedNotificationAggregator(
+      cryThreshold: .50,
+      suspectedCryMs: 500,
+      confirmedCryMs: 1000,
+    );
+    final fewerAlerts = EpisodeBasedNotificationAggregator(
+      cryThreshold: .78,
+      suspectedCryMs: 1250,
+      confirmedCryMs: 2500,
+    );
+
+    BabyEventEpisode? sensitiveEvent;
+    BabyEventEpisode? fewerAlertsEvent;
+    for (var timestampMs = 1000; timestampMs <= 2000; timestampMs += 500) {
+      final sample = _audio(
+        timestampMs: timestampMs,
+        cryScore: .60,
+        isCryLikely: false,
+      );
+      sensitiveEvent = sensitive.onAudioResult(sample) ?? sensitiveEvent;
+      fewerAlertsEvent = fewerAlerts.onAudioResult(sample) ?? fewerAlertsEvent;
+    }
+
+    expect(sensitiveEvent, isNotNull);
+    expect(fewerAlertsEvent, isNull);
+  });
+
+  test('self-audio kesintisi önceki cry adayını sonraki sesle birleştirmez',
+      () {
+    final aggregator = EpisodeBasedNotificationAggregator(
+      cryThreshold: .50,
+      suspectedCryMs: 500,
+      confirmedCryMs: 1000,
+    );
+
+    expect(aggregator.onAudioResult(_audio(timestampMs: 1000)), isNull);
+    expect(aggregator.onAudioResult(_audio(timestampMs: 1500)), isNull);
+    aggregator.reset();
+    expect(aggregator.onAudioResult(_audio(timestampMs: 2000)), isNull);
+    expect(aggregator.onAudioResult(_audio(timestampMs: 2500)), isNull);
+    expect(aggregator.state, BabyEventEpisodeState.suspectedCry);
   });
 
   test('NotificationComposer episode mesajını locale ile üretir', () {
@@ -126,14 +177,16 @@ void main() {
 AudioAnalysisResult _audio({
   required int timestampMs,
   bool active = true,
+  double? cryScore,
+  bool isCryLikely = false,
   bool isCalibrated = true,
   AudioCalibrationState calibrationState = AudioCalibrationState.calibrated,
 }) =>
     AudioAnalysisResult(
       timestampMs: timestampMs,
-      cryScore: active ? 0.85 : 0.05,
-      rawCryScore: active ? 0.85 : 0.05,
-      isCryLikely: false,
+      cryScore: cryScore ?? (active ? 0.85 : 0.05),
+      rawCryScore: cryScore ?? (active ? 0.85 : 0.05),
+      isCryLikely: isCryLikely,
       isCalibrated: isCalibrated,
       calibrationState: calibrationState,
       rms: active ? 0.2 : 0.01,

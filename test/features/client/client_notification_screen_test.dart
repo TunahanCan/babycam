@@ -14,24 +14,6 @@ import 'package:mimicam/l10n/app_strings.dart';
 import 'package:mimicam/services/notification_service.dart';
 
 void main() {
-  testWidgets('gelen alert ana bildirim ekranina duser', (tester) async {
-    final runtime = ClientRuntime(pair: (_) => throw UnimplementedError());
-    addTearDown(runtime.dispose);
-    await runtime.recordAlert(_alert('alert-1', 'Gercek bildirim geldi'));
-
-    await tester.pumpWidget(_App(
-      home: ClientHomeScreen(
-        runtime: runtime,
-        activeRole: AppRole.client,
-        onRoleSelected: (_) {},
-        initialTab: 2,
-      ),
-    ));
-
-    expect(find.text('Gercek bildirim geldi'), findsOneWidget);
-    expect(find.text('Son durum bekleniyor'), findsNothing);
-  });
-
   testWidgets('bildirim filtreleri ses hareket ve sistem kayitlarini ayirir',
       (tester) async {
     final runtime = ClientRuntime(pair: (_) => throw UnimplementedError());
@@ -64,6 +46,11 @@ void main() {
       ),
     ));
 
+    expect(find.text('Ses kaydi'), findsOneWidget);
+    expect(find.text('Hareket kaydi'), findsOneWidget);
+    expect(find.text('Sistem kaydi'), findsOneWidget);
+    expect(find.text('Son durum bekleniyor'), findsNothing);
+
     await tester.tap(find.text('Hareket').first);
     await tester.pump();
     expect(find.text('Hareket kaydi'), findsOneWidget);
@@ -81,28 +68,6 @@ void main() {
     expect(find.text('Sistem kaydi'), findsOneWidget);
     expect(find.text('Ses kaydi'), findsNothing);
     expect(find.text('Hareket kaydi'), findsNothing);
-  });
-
-  testWidgets('gelen alert watch gecmis ekranina duser', (tester) async {
-    final session = PairingSession(payload: _payload(), sessionToken: 'token');
-    final runtime = ClientRuntime(
-      pair: (_) async => session,
-      startStream: (_, {bool audioEnabled = false}) async => null,
-      stopStream: (_) async {},
-      startAlerts: (_) async => true,
-      stopAlerts: () async {},
-    );
-    addTearDown(runtime.dispose);
-    await runtime.pairWithServer(session.payload);
-    await runtime.recordAlert(_alert('alert-1', 'Watch gecmis bildirimi'));
-
-    await tester.pumpWidget(_App(
-      home: WatchScreen(runtime: runtime, initialTab: 1),
-    ));
-    await tester.pump();
-
-    expect(find.text('Watch gecmis bildirimi'), findsOneWidget);
-    expect(find.text('Son durum bekleniyor'), findsNothing);
   });
 
   testWidgets('watch son uyaridan geçmişe geçer ve filtreler gerçekten çalışır',

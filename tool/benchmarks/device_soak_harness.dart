@@ -69,7 +69,7 @@ Future<Map<String, Object?>> _readStatus(
   HttpClient client,
   _Options options,
 ) async {
-  final uri = options.baseUri.resolve('/test/status');
+  final uri = options.baseUri.resolve('/status');
   final request = await client.getUrl(uri).timeout(const Duration(seconds: 5));
   request.headers
     ..set(HttpHeaders.authorizationHeader, 'Bearer ${options.token}')

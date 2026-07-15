@@ -8,12 +8,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mimicam/core/protocol/mimicam_protocol.dart';
 import 'package:mimicam/features/client/media/mjpeg_stream_parser.dart';
 import 'package:mimicam/features/client/media/wav_pcm_stream_parser.dart';
-import 'package:mimicam/features/server/media/server_media_source.dart';
 import 'package:mimicam/features/server/pairing/pairing_token_service.dart';
 import 'package:mimicam/l10n/app_strings.dart';
 import 'package:mimicam/services/configuration_service.dart';
 import 'package:mimicam/services/mimicam_server.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../support/deterministic_server_media_source.dart';
 
 void main() {
   test('streamToken ile gerçek video ve audio endpointleri medya üretir',
@@ -49,7 +50,7 @@ void main() {
     final status = await _getJson(
       client,
       base.port,
-      MimiCamProtocolV2.testStatus,
+      MimiCamProtocolV2.status,
       trusted.token,
     );
 
@@ -57,8 +58,7 @@ void main() {
     expect(audio.sampleRate, 16000);
     expect(audio.channels, 1);
     expect(audio.pcm16le.length, greaterThan(0));
-    expect((status['video'] as Map)['framesStreamed'], greaterThan(0));
-    expect((status['audio'] as Map)['chunksStreamed'], greaterThan(0));
+    expect(status['activeStreamClients'], 1);
   });
 
   test('media socket reconnect aynı aktif watch slotunu düşürmez', () async {
@@ -322,108 +322,15 @@ void main() {
     final status = await _getJson(
       client,
       base.port,
-      MimiCamProtocolV2.testStatus,
+      MimiCamProtocolV2.status,
       anne.token,
     );
-    final video = status['video'] as Map;
-    final audio = status['audio'] as Map;
 
     expect((media[0] as Uint8List).length, greaterThan(100));
     expect((media[1] as Uint8List).length, greaterThan(100));
     expect((media[2] as ParsedPcmAudio).pcm16le.length, greaterThan(0));
     expect((media[3] as ParsedPcmAudio).pcm16le.length, greaterThan(0));
-    expect((status['clients'] as Map)['activeStreamClients'], 2);
-    expect(video['framesStreamed'], greaterThanOrEqualTo(2));
-    expect(audio['chunksStreamed'], greaterThanOrEqualTo(2));
-  });
-
-  test('/test/probe loopback video ve audio client tüketimini kanıtlar',
-      () async {
-    final tokenService = PairingTokenService();
-    final server = await _testServer(
-      tokenService,
-      startMediaOnSessionStart: false,
-    );
-    addTearDown(server.dispose);
-    final base = Uri.parse(await server.startPairingMode());
-    final trusted = tokenService.issueTrustedClientToken(
-      clientName: 'Anne',
-      deviceId: 'anne',
-    );
-    final client = HttpClient();
-    addTearDown(() => client.close(force: true));
-
-    final response = await _postJson(
-      client,
-      base.port,
-      MimiCamProtocolV2.testProbe,
-      trusted.token,
-      {
-        'startRuntime': true,
-        'waitMs': 250,
-        'requireVideo': true,
-        'requireAudio': true,
-        'loopbackMedia': true,
-      },
-    );
-    final checks = response.body['checks'] as Map;
-    final loopback = response.body['loopback'] as Map;
-
-    expect(response.statusCode, HttpStatus.ok, reason: '${response.body}');
-    expect(response.body['ok'], isTrue);
-    expect(checks['video'], isTrue);
-    expect(checks['audio'], isTrue);
-    expect(checks['videoClient'], isTrue);
-    expect(checks['audioClient'], isTrue);
-    expect(loopback['ok'], isTrue);
-    expect(loopback['videoBytes'], greaterThan(0));
-    expect(loopback['audioBytes'], greaterThan(0));
-  });
-
-  test('/test/probe audio-tone modu mikrofon olmadan audio streami kanıtlar',
-      () async {
-    final tokenService = PairingTokenService();
-    final server = await _testServer(
-      tokenService,
-      startMediaOnSessionStart: false,
-    );
-    addTearDown(server.dispose);
-    final base = Uri.parse(await server.startPairingMode());
-    final trusted = tokenService.issueTrustedClientToken(
-      clientName: 'Anne',
-      deviceId: 'anne',
-    );
-    final client = HttpClient();
-    addTearDown(() => client.close(force: true));
-
-    final response = await _postJson(
-      client,
-      base.port,
-      MimiCamProtocolV2.testProbe,
-      trusted.token,
-      {
-        'startRuntime': false,
-        'waitMs': 0,
-        'requireVideo': false,
-        'requireAudio': true,
-        'loopbackMedia': true,
-        'useAudioTone': true,
-      },
-    );
-    final audio = response.body['audio'] as Map;
-    final loopback = response.body['loopback'] as Map;
-
-    expect(response.statusCode, HttpStatus.ok, reason: '${response.body}');
-    expect(response.body['ok'], isTrue);
-    expect(audio['ok'], isTrue);
-    expect(audio['mode'], 'tone');
-    expect(audio['wavHeaderValid'], isTrue);
-    expect(audio['pcmBytesReceived'], greaterThan(0));
-    expect(audio['chunksReceived'], greaterThan(0));
-    expect((response.body['checks'] as Map)['audio'], isTrue);
-    expect((response.body['checks'] as Map)['audioClient'], isTrue);
-    expect(loopback['audioWavHeaderValid'], isTrue);
-    expect(loopback['audioBytes'], greaterThan(0));
+    expect(status['activeStreamClients'], 2);
   });
 }
 

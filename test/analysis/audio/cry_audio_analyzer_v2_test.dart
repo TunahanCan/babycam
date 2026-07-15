@@ -7,6 +7,13 @@ import 'test_audio_generators.dart';
 
 void main() {
   const sr = 16000;
+  test('ekran cry eşiği için off eşiği daima daha düşük türetilir', () {
+    expect(AudioAnalysisConfig.hysteresisOffThreshold(.20), closeTo(.14, 1e-9));
+    expect(AudioAnalysisConfig.hysteresisOffThreshold(.50), closeTo(.35, 1e-9));
+    expect(
+        AudioAnalysisConfig.hysteresisOffThreshold(.95), closeTo(.665, 1e-9));
+  });
+
   test('silence and low ambient noise stay low', () {
     final analyzer = CryAudioAnalyzerV2(
         config: const AudioAnalysisConfig(calibrationMs: 1000));
@@ -139,6 +146,48 @@ void main() {
     analyzer.startCalibration(timestampMs: 1000);
     analyzer.reset();
     expect(analyzer.calibrationState, AudioCalibrationState.uncalibrated);
+    expect(analyzer.diagnostics()['candidateActive'], isFalse);
+  });
+
+  test('self-audio kesintisi kalibrasyonu koruyup cry adayını temizler', () {
+    final analyzer = CryAudioAnalyzerV2(
+      config: const AudioAnalysisConfig(
+        calibrationMs: 1000,
+        cryOnThreshold: .30,
+        cryOffThreshold: .15,
+        minCryDurationMs: 1500,
+        smoothingAlpha: 1,
+      ),
+    );
+    analyzer.startCalibration(timestampMs: 0);
+    analyzer.addChunk(AudioChunk(
+      pcm16le: generateSinePcm16le(
+        sampleRate: sr,
+        frequencyHz: 440,
+        durationMs: 1000,
+        amplitude: 0,
+      ),
+      sampleRate: sr,
+      channels: 1,
+      timestampMs: 1000,
+    ));
+    analyzer.addChunk(AudioChunk(
+      pcm16le: generateCryLikePcm16le(
+        sampleRate: sr,
+        durationMs: 1000,
+        amplitude: .8,
+      ),
+      sampleRate: sr,
+      channels: 1,
+      timestampMs: 2000,
+    ));
+
+    expect(analyzer.calibrationState, AudioCalibrationState.calibrated);
+    expect(analyzer.diagnostics()['candidateActive'], isTrue);
+
+    analyzer.markDiscontinuity();
+
+    expect(analyzer.calibrationState, AudioCalibrationState.calibrated);
     expect(analyzer.diagnostics()['candidateActive'], isFalse);
   });
 }

@@ -66,8 +66,15 @@ class CryAudioAnalyzerV2 {
   }
 
   void reset() {
-    _ring.reset();
+    markDiscontinuity();
     resetCalibration();
+  }
+
+  /// Clears temporal classification state without losing the calibrated room
+  /// baseline. Use this when capture contains an intentional gap such as
+  /// comfort audio or parent talkback suppression.
+  void markDiscontinuity() {
+    _ring.reset();
     _previousCryScore = 0;
     _previousBandVector = null;
     _candidateActive = false;

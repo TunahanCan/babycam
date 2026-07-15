@@ -62,7 +62,7 @@ extension MimiCamServerMediaCaptureController on MimiCamServer {
       onAudioChunk: _handleInjectedAudioChunk,
       onError: (error, _) {
         _analysisMetrics?.recordAudioError();
-        onLog('Test medya kaynağı hata verdi: $error');
+        onLog('Medya kaynağı hata verdi: $error');
       },
     );
     await _updateMediaHostLifecycle();
@@ -78,7 +78,12 @@ extension MimiCamServerMediaCaptureController on MimiCamServer {
     final audioConfig = AudioAnalysisConfig(
       sampleRate: MimiCamServer._audioSampleRate,
       cryOnThreshold: config.cryScoreThreshold,
-      minCryDurationMs: config.cryMinDurationMs,
+      cryOffThreshold: AudioAnalysisConfig.hysteresisOffThreshold(
+        config.cryScoreThreshold,
+      ),
+      // EpisodeBasedNotificationAggregator is the single duration policy.
+      // Keeping a second gate here would nearly double profile latency.
+      minCryDurationMs: 0,
     );
     final alertConfig = AlertConfig(
       cryCooldownMs: config.notifyCooldownMs,
@@ -88,8 +93,9 @@ extension MimiCamServerMediaCaptureController on MimiCamServer {
     );
     final audioAnalyzer = CryAudioAnalyzerV2(config: audioConfig);
     if (enableAudioAutoCalibration) {
-      audioAnalyzer.startCalibration(
-          timestampMs: DateTime.now().millisecondsSinceEpoch);
+      // Anchor calibration to the first media timestamp. This keeps batched
+      // PCM and delayed capture startup on the same monotonic signal timeline.
+      audioAnalyzer.startCalibration();
     }
     final metrics =
         MediaAnalysisMetrics(motionTargetFps: motionConfig.analysisFps);
@@ -99,7 +105,14 @@ extension MimiCamServerMediaCaptureController on MimiCamServer {
       alertEngine: AlertEngine(
         config: alertConfig,
         strings: strings,
-        episodeAggregator: EpisodeBasedNotificationAggregator(),
+        episodeAggregator: EpisodeBasedNotificationAggregator(
+          cryThreshold: config.cryScoreThreshold,
+          suspectedCryMs: min(
+            config.cryMinDurationMs,
+            max(0, config.cryMinDurationMs ~/ 2),
+          ),
+          confirmedCryMs: config.cryMinDurationMs,
+        ),
         networkTierProvider: _activeClientRegistry.effectiveTier,
         audioReliableProvider: _isAudioReliable,
         videoReliableProvider: _isVideoReliable,
@@ -131,24 +144,13 @@ extension MimiCamServerMediaCaptureController on MimiCamServer {
   Future<bool> _startAudioAnalysis() async {
     final started = await _microphoneCapture.start(
       onChunk: (chunk) {
-        _mediaTelemetry.increment(MediaMetricName.audioCapturedCount);
-        if (_features.roomAudio.mode == RoomAudioMode.idle) {
-          _analysisCoordinator?.onAudioChunk(AudioChunk(
-            pcm16le: chunk.rawPcm16le,
-            sampleRate: chunk.sampleRate,
-            channels: chunk.channels,
-            timestampMs: chunk.timestampMs,
-          ));
-        } else {
-          // Do not classify room-generated comfort/talk output as a cry.
-          _selfAudioSuppressedChunks++;
-        }
-        if (enableLegacyWebSocketMediaPackets) {
-          _broadcastBinary(
-              [MimiCamProtocol.packetAudioPcm16Le, ...chunk.streamPcm16le]);
-        }
-        _audioStreamService.broadcast(chunk.streamPcm16le);
-        _logAudioDiagnostics();
+        _handleCapturedAudioChunk(
+          analysisPcm16le: chunk.rawPcm16le,
+          streamPcm16le: chunk.streamPcm16le,
+          sampleRate: chunk.sampleRate,
+          channels: chunk.channels,
+          timestampMs: chunk.timestampMs,
+        );
       },
       onError: (error, _) {
         _analysisMetrics?.recordAudioError();
@@ -174,11 +176,7 @@ extension MimiCamServerMediaCaptureController on MimiCamServer {
     final message = event.message;
     onLog(message);
     onAlert(message);
-    _alertsBroadcast++;
-    _lastAlertBroadcastAtMs = event.timestampMs;
-    _lastAlertDeliveredWebSocketClients =
-        _broadcastText(AlertProtocolAdapter.toJsonText(event));
-    _alertWebSocketDeliveries += _lastAlertDeliveredWebSocketClients;
+    _broadcastText(AlertProtocolAdapter.toJsonText(event));
     if (enableLegacyWebSocketMediaPackets) {
       _broadcastBinary(AlertProtocolAdapter.toLegacyAlertPacket(event));
     }
@@ -189,7 +187,6 @@ extension MimiCamServerMediaCaptureController on MimiCamServer {
     final capturedAtMonoUs = _mediaTelemetry.nowUs;
     _videoFramesCaptured++;
     _mediaTelemetry.increment(MediaMetricName.videoCapturedCount);
-    _lastCameraFrameAtMs = nowMs;
     _lastMotionEnergy = _estimateMotionEnergy(frame);
     _updateContentAwareFrameBudget(nowMs);
     if (!_frameBudget.shouldProcess(nowMs)) return;
@@ -197,8 +194,7 @@ extension MimiCamServerMediaCaptureController on MimiCamServer {
     try {
       _analysisCoordinator?.onCameraFrame(_toLumaFrame(frame, nowMs));
       final shouldEncodeJpeg = _encodingPolicy.shouldEncodeJpeg(
-        hasMjpegClients:
-            _videoStreamService.hasClients || _isVideoProbeActive(nowMs),
+        hasMjpegClients: _videoStreamService.hasClients,
         legacyWebSocketEnabled: enableLegacyWebSocketMediaPackets,
       );
       if (!shouldEncodeJpeg) return;
@@ -260,9 +256,6 @@ extension MimiCamServerMediaCaptureController on MimiCamServer {
           atMs: current.capturedAtMs,
         );
         _latestJpeg = jpeg;
-        _lastVideoFrameEncodedAtMs = DateTime.now().millisecondsSinceEpoch;
-        _lastJpegBytes = jpeg.length;
-        _videoFramesEncoded++;
         if (enableLegacyWebSocketMediaPackets) {
           _broadcastBinary([MimiCamProtocol.packetVideoMjpeg, ...jpeg]);
         }
@@ -299,7 +292,6 @@ extension MimiCamServerMediaCaptureController on MimiCamServer {
     final traceId = '${_mediaTelemetry.generation}-${++_videoTraceSequence}';
     _videoFramesCaptured++;
     _mediaTelemetry.increment(MediaMetricName.videoCapturedCount);
-    _lastCameraFrameAtMs = nowMs;
     _updateContentAwareFrameBudget(nowMs);
     if (!_frameBudget.shouldProcess(nowMs)) {
       // Native service frames arrive as already encoded JPEG. This is an
@@ -311,9 +303,6 @@ extension MimiCamServerMediaCaptureController on MimiCamServer {
       ..increment(MediaMetricName.videoEncodedCount)
       ..recordDurationUs(MediaMetricName.videoEncode, 0);
     _latestJpeg = jpeg;
-    _lastVideoFrameEncodedAtMs = nowMs;
-    _lastJpegBytes = jpeg.length;
-    _videoFramesEncoded++;
     if (enableLegacyWebSocketMediaPackets) {
       _broadcastBinary([MimiCamProtocol.packetVideoMjpeg, ...jpeg]);
     }
@@ -333,24 +322,39 @@ extension MimiCamServerMediaCaptureController on MimiCamServer {
 
   void _handleInjectedAudioChunk(Uint8List pcm16le) {
     if (pcm16le.isEmpty) return;
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    _handleCapturedAudioChunk(
+      analysisPcm16le: pcm16le,
+      streamPcm16le: pcm16le,
+      sampleRate: MimiCamServer._audioSampleRate,
+      channels: MimiCamServer._audioChannels,
+      timestampMs: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  void _handleCapturedAudioChunk({
+    required Uint8List analysisPcm16le,
+    required Uint8List streamPcm16le,
+    required int sampleRate,
+    required int channels,
+    required int timestampMs,
+  }) {
     _mediaTelemetry.increment(MediaMetricName.audioCapturedCount);
     if (_features.roomAudio.mode == RoomAudioMode.idle) {
       _analysisCoordinator?.onAudioChunk(AudioChunk(
-        pcm16le: pcm16le,
-        sampleRate: MimiCamServer._audioSampleRate,
-        channels: MimiCamServer._audioChannels,
-        timestampMs: nowMs,
+        pcm16le: analysisPcm16le,
+        sampleRate: sampleRate,
+        channels: channels,
+        timestampMs: timestampMs,
       ));
     } else {
-      // Android's service-owned microphone can hear AudioTrack output just as
-      // the Dart recorder can. Never classify comfort/talk loopback as a cry.
+      // Both Android's service source and iOS/Dart capture can hear local room
+      // output. Suppress analysis but keep the parent audio stream continuous.
       _selfAudioSuppressedChunks++;
     }
     if (enableLegacyWebSocketMediaPackets) {
-      _broadcastBinary([MimiCamProtocol.packetAudioPcm16Le, ...pcm16le]);
+      _broadcastBinary([MimiCamProtocol.packetAudioPcm16Le, ...streamPcm16le]);
     }
-    _audioStreamService.broadcast(pcm16le);
+    _audioStreamService.broadcast(streamPcm16le);
     _logAudioDiagnostics();
   }
 
@@ -865,3 +869,6 @@ extension _MimiCamServerMediaPolicyController on MimiCamServer {
         _ => ResolutionPreset.medium,
       };
 }
+
+int? _ageMs(int nowMs, int? eventAtMs) =>
+    eventAtMs == null ? null : max(0, nowMs - eventAtMs);

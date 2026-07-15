@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../core/async/serialized_async_executor.dart';
 import 'alerts/client_alert_background_service.dart';
+import 'alerts/client_alert_delivery_coordinator.dart';
 import 'alerts/client_alert_listener.dart';
 import 'alerts/client_alert_history.dart';
 import 'alerts/client_notification_service.dart';
@@ -63,19 +63,15 @@ class ClientCompositionRoot {
     final endpointResolver = TrustedSessionEndpointResolver(
       browser: serviceBrowser,
     );
-    final alertDeliveryOperations = SerializedAsyncExecutor();
+    final alertDelivery = ClientAlertDeliveryCoordinator(
+      history: alertHistory,
+      notifications: notifications,
+    );
     final alerts = alertListener ??
         ClientAlertListener(
           healthState: streamHealth,
           onAlert: (alert) {
-            unawaited(alertDeliveryOperations.run(() async {
-              try {
-                await alertHistory.add(alert);
-              } catch (_) {
-                // A storage failure must not suppress the phone notification.
-              }
-              await notifications.showAlert(alert);
-            }).catchError((_) {
+            unawaited(alertDelivery.deliver(alert).catchError((_) {
               // Keep processing later alerts if the platform rejects one post.
             }));
           },
@@ -87,7 +83,7 @@ class ClientCompositionRoot {
       } finally {
         await alertBackground.stop();
       }
-      await alertDeliveryOperations.drain();
+      await alertDelivery.drain();
     }
 
     final runtime = ClientRuntime(

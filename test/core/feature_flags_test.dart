@@ -5,8 +5,4 @@ void main() {
   test('broadcast paywall test buildlerinde varsayılan olarak kapalıdır', () {
     expect(MimiCamFeatureFlags.broadcastPaywallEnabled, isFalse);
   });
-
-  test('diagnostik endpointler yalnızca debug buildde varsayılan açıktır', () {
-    expect(MimiCamFeatureFlags.testEndpointsEnabled, isTrue);
-  });
 }

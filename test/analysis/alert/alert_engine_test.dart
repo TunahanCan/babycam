@@ -3,6 +3,7 @@ import 'package:mimicam/analysis/alert/alert_engine.dart';
 import 'package:mimicam/analysis/alert/alert_event.dart';
 import 'package:mimicam/analysis/alert/alert_severity.dart';
 import 'package:mimicam/analysis/alert/alert_type.dart';
+import 'package:mimicam/analysis/alert/episode_notification_aggregator.dart';
 import 'package:mimicam/analysis/audio/audio_analysis_result.dart';
 import 'package:mimicam/analysis/audio/audio_calibration_state.dart';
 import 'package:mimicam/analysis/video/motion_analysis_result.dart';
@@ -43,6 +44,36 @@ void main() {
       expect(engine.onAudioResult(fakeAudioResult(timestampMs: 1500)), isNull);
       expect(
           engine.onAudioResult(fakeAudioResult(timestampMs: 2000)), isNotNull);
+    });
+
+    test(
+        'cooldown bitince devam eden doğrulanmış episode tekrar değerlendirilir',
+        () {
+      final engine = AlertEngine(
+        config: const AlertConfig(cryCooldownMs: 5000),
+        episodeAggregator: EpisodeBasedNotificationAggregator(
+          suspectedCryMs: 500,
+          confirmedCryMs: 1000,
+          maxActiveGapMs: 600,
+        ),
+      );
+      addTearDown(engine.dispose);
+      final emittedAt = <int>[];
+
+      for (final timestampMs in [1000, 1500, 2000, 4000, 4500, 5000]) {
+        final event =
+            engine.onAudioResult(fakeAudioResult(timestampMs: timestampMs));
+        if (event != null) emittedAt.add(event.timestampMs);
+      }
+      expect(emittedAt, [2000]);
+
+      for (final timestampMs in [5500, 6000, 6500, 7000]) {
+        final event =
+            engine.onAudioResult(fakeAudioResult(timestampMs: timestampMs));
+        if (event != null) emittedAt.add(event.timestampMs);
+      }
+
+      expect(emittedAt, [2000, 7000]);
     });
 
     test('metadata contains basic audio features', () {

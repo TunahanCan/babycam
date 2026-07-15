@@ -29,6 +29,7 @@ void main() {
         'Bearer trusted-token',
       );
       final socket = await WebSocketTransformer.upgrade(request);
+      socket.listen((_) {});
       connections++;
       socket.add(_alertJson('alert-$connections'));
       if (connections == 1) {
@@ -128,11 +129,12 @@ void main() {
     final secondConnected = Completer<void>();
     firstServer.listen((request) async {
       final socket = await WebSocketTransformer.upgrade(request);
+      socket.listen((_) {});
       if (!firstConnected.isCompleted) firstConnected.complete();
-      await socket.done;
     });
     secondServer.listen((request) async {
       final socket = await WebSocketTransformer.upgrade(request);
+      socket.listen((_) {});
       if (!secondConnected.isCompleted) secondConnected.complete();
       socket.add(_alertJson('new-session-alert'));
     });

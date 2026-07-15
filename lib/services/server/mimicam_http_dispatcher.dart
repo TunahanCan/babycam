@@ -1,6 +1,6 @@
 import 'dart:io';
 
-enum MimiCamRouteAuthMode { none, bearer, streamToken, testAccess }
+enum MimiCamRouteAuthMode { none, bearer, streamToken }
 
 typedef MimiCamRouteHandler = Future<void> Function(
   HttpRequest request,

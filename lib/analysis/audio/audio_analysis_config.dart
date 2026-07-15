@@ -1,5 +1,10 @@
 /// Immutable configuration for [CryAudioAnalyzerV2].
 class AudioAnalysisConfig {
+  static double hysteresisOffThreshold(double onThreshold) {
+    final safeOnThreshold = onThreshold.clamp(.05, 1).toDouble();
+    return (safeOnThreshold * .70).clamp(.01, safeOnThreshold).toDouble();
+  }
+
   final int sampleRate;
   final int windowMs;
   final int hopMs;

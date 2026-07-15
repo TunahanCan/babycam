@@ -29,6 +29,8 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
   flutter_lints: ^4.0.0
 
 flutter:
@@ -38,5 +40,3 @@ flutter:
     - assets/branding/mimicam_bear_mascot.png
     - assets/branding/mimicam_wordmark.png
     - assets/branding/mimicam_wordmark_v2.png
-    - assets/test_dashboard/index.html
-    - assets/test_dashboard/dashboard.js

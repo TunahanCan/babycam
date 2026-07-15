@@ -87,6 +87,12 @@ class MediaAnalysisCoordinator {
     }
   }
 
+  void markAudioDiscontinuity() {
+    if (_disposed) return;
+    _audioAnalyzer.markDiscontinuity();
+    _alertEngine.markAudioDiscontinuity();
+  }
+
   Map<String, Object?> diagnostics() => {
         'analysis': _metrics.toJson(),
         'motionAnalyzer': _motionAnalyzer.diagnostics(),

@@ -69,64 +69,24 @@ class BabyEventEpisode {
       };
 }
 
-class LowCostCryScorer {
-  const LowCostCryScorer();
-
-  double scoreFeatures({
-    required double normalizedEnergy,
-    required double voicedRatio,
-    required double harmonicRatio,
-    required double consecutiveF0,
-    required double durationScore,
-  }) {
-    return (0.30 * normalizedEnergy +
-            0.25 * voicedRatio +
-            0.20 * harmonicRatio +
-            0.15 * consecutiveF0 +
-            0.10 * durationScore)
-        .clamp(0.0, 1.0)
-        .toDouble();
-  }
-
-  double score(AudioAnalysisResult result, {required int cryDurationMs}) {
-    final normalizedEnergy =
-        (result.ambientDeltaDb / 24).clamp(0.0, 1.0).toDouble();
-    final voicedRatio =
-        _trapezoid(result.zeroCrossingRate, 0.02, 0.05, 0.22, 0.34);
-    final harmonicRatio = result.cryBandRatio.clamp(0.0, 1.0).toDouble();
-    final consecutiveF0 = result.spectralFlux < 0.02 ? harmonicRatio : 0.0;
-    final durationScore = (cryDurationMs / 15000).clamp(0.0, 1.0).toDouble();
-    return scoreFeatures(
-      normalizedEnergy: normalizedEnergy,
-      voicedRatio: voicedRatio,
-      harmonicRatio: harmonicRatio,
-      consecutiveF0: consecutiveF0,
-      durationScore: durationScore,
-    );
-  }
-
-  double _trapezoid(double value, double a, double b, double c, double d) {
-    if (value <= a || value >= d) return 0;
-    if (value >= b && value <= c) return 1;
-    if (value < b) return ((value - a) / (b - a)).clamp(0.0, 1.0).toDouble();
-    return ((d - value) / (d - c)).clamp(0.0, 1.0).toDouble();
-  }
-}
-
 class EpisodeBasedNotificationAggregator {
   EpisodeBasedNotificationAggregator({
     this.cryThreshold = 0.4,
     this.suspectedCryMs = 2000,
     this.confirmedCryMs = 5000,
     this.resolveQuietMs = 10000,
-    LowCostCryScorer scorer = const LowCostCryScorer(),
-  }) : _scorer = scorer;
+    this.maxActiveGapMs = 1500,
+  })  : assert(cryThreshold >= 0 && cryThreshold <= 1),
+        assert(suspectedCryMs >= 0),
+        assert(confirmedCryMs >= suspectedCryMs),
+        assert(resolveQuietMs >= 0),
+        assert(maxActiveGapMs > 0);
 
   final double cryThreshold;
   final int suspectedCryMs;
   final int confirmedCryMs;
   final int resolveQuietMs;
-  final LowCostCryScorer _scorer;
+  final int maxActiveGapMs;
   static const _motionAssociationWindowMs = 5000;
 
   BabyEventEpisodeState _state = BabyEventEpisodeState.quiet;
@@ -139,7 +99,7 @@ class EpisodeBasedNotificationAggregator {
   int _sampleCount = 0;
   double _scoreSum = 0;
   double _maxScore = 0;
-  bool _confirmedEmitted = false;
+  bool _confirmedDelivered = false;
 
   BabyEventEpisodeState get state => _state;
 
@@ -174,15 +134,23 @@ class EpisodeBasedNotificationAggregator {
       return null;
     }
     final nowMs = result.timestampMs;
-    final durationMs =
-        _episodeStartedAtMs == null ? 0 : nowMs - _episodeStartedAtMs!;
-    final cryScore = _scorer.score(result, cryDurationMs: durationMs);
-    final active = cryScore > cryThreshold || result.isCryLikely;
+    // CryAudioAnalyzerV2 already owns feature extraction and score smoothing.
+    // Re-scoring the same window here made screen thresholds behave
+    // differently from the analyzer and could apply the duration gate twice.
+    final cryScore = result.cryScore.clamp(0.0, 1.0).toDouble();
+    final active = cryScore >= cryThreshold || result.isCryLikely;
 
     if (active) {
+      final previousCryAtMs = _lastCryAtMs;
+      if (previousCryAtMs != null && nowMs - previousCryAtMs > maxActiveGapMs) {
+        // Missing packets are not evidence of continuous crying. Start a new
+        // episode instead of turning two isolated sounds into one alert.
+        reset();
+      }
       _startIfNeeded(nowMs);
-      if (_lastCryAtMs != null && nowMs >= _lastCryAtMs!) {
-        _totalCryDurationMs += nowMs - _lastCryAtMs!;
+      final lastCryAtMs = _lastCryAtMs;
+      if (lastCryAtMs != null && nowMs >= lastCryAtMs) {
+        _totalCryDurationMs += nowMs - lastCryAtMs;
       }
       _lastCryAtMs = nowMs;
       _sampleCount++;
@@ -190,11 +158,10 @@ class EpisodeBasedNotificationAggregator {
       if (cryScore > _maxScore) _maxScore = cryScore;
       final activeDuration = nowMs - _episodeStartedAtMs!;
       if (activeDuration >= confirmedCryMs) {
-        _state = _confirmedEmitted
+        _state = _confirmedDelivered
             ? BabyEventEpisodeState.ongoingCry
             : BabyEventEpisodeState.confirmedCry;
-        if (!_confirmedEmitted) {
-          _confirmedEmitted = true;
+        if (!_confirmedDelivered) {
           return _episode(
             nowMs,
             streamQualityTier: streamQualityTier,
@@ -225,6 +192,18 @@ class EpisodeBasedNotificationAggregator {
     return null;
   }
 
+  /// Marks a confirmed episode as delivered only after the outer cooldown
+  /// policy accepted it. Rejected episodes remain eligible once cooldown ends.
+  void acknowledgeNotification(BabyEventEpisode episode) {
+    if (episode.resolved ||
+        episode.episodeId != 'episode-$_sequence' ||
+        _episodeStartedAtMs == null) {
+      return;
+    }
+    _confirmedDelivered = true;
+    _state = BabyEventEpisodeState.ongoingCry;
+  }
+
   void reset() {
     _state = BabyEventEpisodeState.quiet;
     _episodeStartedAtMs = null;
@@ -235,7 +214,7 @@ class EpisodeBasedNotificationAggregator {
     _sampleCount = 0;
     _scoreSum = 0;
     _maxScore = 0;
-    _confirmedEmitted = false;
+    _confirmedDelivered = false;
   }
 
   void _startIfNeeded(int nowMs) {

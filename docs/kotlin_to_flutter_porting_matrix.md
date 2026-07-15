@@ -58,9 +58,9 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | In-app alert history | New | `ClientAlertHistory` |
 | Adaptive media quality | New | `MediaQualitySelector`, `UtilityBasedProfileSelector` |
 | Thermal/power governor | New | `DeviceResourceSnapshotProvider`, `MediaResourceGovernor` |
-| Bounded E2E media telemetry | New | `MediaSessionTelemetry`, p50/p95/p99 and counters in `/test/status` |
+| Bounded E2E media telemetry | New | `MediaSessionTelemetry`, p50/p95/p99 and counters in authenticated `/status` |
 | Stream backpressure | New | `StreamBackpressureGate` |
-| Runtime diagnostics | New | `/test`, `/test/status`, `/test/probe`, `/test/alert`, `/test/audio-tone` |
+| Runtime verification | New | Production `/session/start`, `/video`, `/audio`, `/ws/events` and `/status` scenario tests |
 | Battery reporting | New | `BatterySnapshot`, `BatterySnapshotProvider`, `battery_plus` |
 | WebRTC H.264 + Opus | Pilot | Opt-in one-peer `flutter_webrtc` path with authenticated HTTP signaling and MJPEG/WAV fallback |
 | Comfort audio controls | Rebuilt | Procedural PCM catalog, native room playback and client controls |

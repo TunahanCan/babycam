@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
@@ -11,8 +10,6 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../analysis/alert/alert_config.dart';
 import '../analysis/alert/alert_engine.dart';
 import '../analysis/alert/alert_event.dart';
-import '../analysis/alert/alert_severity.dart';
-import '../analysis/alert/alert_type.dart';
 import '../analysis/alert/episode_notification_aggregator.dart';
 import '../analysis/audio/audio_analysis_result.dart';
 import '../analysis/audio/audio_analysis_config.dart';
@@ -23,7 +20,6 @@ import '../analysis/video/luma_frame.dart';
 import '../analysis/video/motion_analysis_config.dart';
 import '../analysis/video/motion_analyzer_v2.dart';
 import '../core/async/serialized_async_executor.dart';
-import '../core/feature_flags.dart';
 import '../core/media/camera_permission_gateway.dart';
 import '../core/media/adaptive_media_profile.dart';
 import '../core/media/client_quality_tracker.dart';
@@ -70,15 +66,12 @@ import 'server/server_session_registry.dart';
 import 'server/server_media_transport_controller.dart';
 import 'server/server_session_controller.dart';
 import 'server/stream_backpressure_gate.dart';
-import 'server/test_dashboard_assets.dart';
-import 'server/wav_pcm16.dart';
 import 'platform/device_capability_probe.dart';
 import 'platform/battery_snapshot_provider.dart';
 import 'platform/foreground_service_controller.dart';
 import 'platform/device_resource_snapshot_provider.dart';
 import 'network_address_provider.dart';
 
-part 'server/mimicam_server_test_endpoints.dart';
 part 'server/mimicam_server_routes.dart';
 part 'server/mimicam_server_http_controllers.dart';
 part 'server/mimicam_server_session_http_controller.dart';
@@ -126,7 +119,6 @@ class MimiCamServer {
     MediaSessionTelemetry? mediaTelemetry,
     this.webRtcGateway,
     this.onBroadcastAccessChanged,
-    this.enableTestEndpoints = MimiCamFeatureFlags.testEndpointsEnabled,
   })  : maxTotalMediaConnections =
             maxTotalMediaConnections ?? maxActiveWatchClients * 3,
         maxTotalEventSockets =
@@ -240,8 +232,6 @@ class MimiCamServer {
 
   final bool enableLegacyWebSocketMediaPackets;
   final bool enableAudioAutoCalibration;
-  final bool enableTestEndpoints;
-
   final ConfigurationService config;
   final AppStrings strings;
   final void Function(String message) onLog;
@@ -329,11 +319,6 @@ class MimiCamServer {
   bool _injectedAudioDemand = false;
   final _injectedMediaOperations = SerializedAsyncExecutor();
   Uint8List? _latestJpeg;
-  int? _lastCameraFrameAtMs;
-  int? _lastVideoFrameEncodedAtMs;
-  int? _lastAlertBroadcastAtMs;
-  int? _videoProbeEncodeUntilMs;
-  int _videoFramesEncoded = 0;
   int _videoFramesDroppedBeforeEncode = 0;
   int _videoFramesSkippedByPolicy = 0;
   int _videoFramesCaptured = 0;
@@ -341,10 +326,6 @@ class MimiCamServer {
   bool _jpegEncodeInFlight = false;
   _CameraEncodeRequest? _pendingCameraEncode;
   int _cameraEncodeGeneration = 0;
-  int _alertsBroadcast = 0;
-  int _alertWebSocketDeliveries = 0;
-  int _lastJpegBytes = 0;
-  int _lastAlertDeliveredWebSocketClients = 0;
   int _lastAudioDebugLog = 0;
   int _selfAudioSuppressedChunks = 0;
   final _frameBudget = MediaFrameBudget();
@@ -562,10 +543,6 @@ class MimiCamServer {
       case MimiCamRouteAuthMode.bearer:
         final auth = await _requireTrustedAuth(request);
         return (ok: auth != null, clientId: auth?.clientId);
-      case MimiCamRouteAuthMode.testAccess:
-        if (kDebugMode) return (ok: true, clientId: null);
-        final auth = await _requireTrustedAuth(request);
-        return (ok: auth != null, clientId: auth?.clientId);
       case MimiCamRouteAuthMode.streamToken:
         // Stream tokens intentionally stop at media endpoints; state-changing
         // endpoints must still prove identity with the trusted Bearer token.
@@ -575,12 +552,7 @@ class MimiCamServer {
   }
 
   String? _webSocketClientId(HttpRequest request) {
-    final trusted = _authGuard.trusted(request);
-    if (trusted != null) return trusted.clientId;
-    final token = request.uri.queryParameters['token'];
-    return token == null
-        ? null
-        : tokenService.validateTrustedClientToken(token)?.clientId;
+    return _authGuard.trusted(request)?.clientId;
   }
 
   String _pairConfirmAttemptKey(HttpRequest request) =>
@@ -781,7 +753,6 @@ class MimiCamServer {
       await controller?.dispose();
     } finally {
       _latestJpeg = null;
-      _videoProbeEncodeUntilMs = null;
       _lastMotionSample = null;
       _lastMotionEnergy = 0;
       _frameBudget.reset();
@@ -825,8 +796,8 @@ class MimiCamServer {
   }
 
   Future<void> _updateMediaHostLifecycle() async {
-    // Injected sources are deterministic test/diagnostic producers and do not
-    // own platform camera or microphone hardware.
+    // Injected sources do not necessarily own Flutter camera or microphone
+    // objects; the Android service source owns its platform lifecycle natively.
     if (mediaSource != null) {
       // Android's production CameraX/AudioRecord bridge is also a mediaSource.
       // Its foreground-service ownership stays native, while Dart still owns
@@ -870,6 +841,9 @@ class MimiCamServer {
       _resourcePolicyCoordinator.reconcileWatchdog();
 
   void _handleRoomAudioModeChanged(RoomAudioMode mode) {
+    // Never carry a pre-talk/pre-comfort cry candidate across locally
+    // generated audio. Calibration is retained; only temporal evidence resets.
+    _analysisCoordinator?.markAudioDiscontinuity();
     _updateResourceWatchdog();
   }
 
@@ -942,34 +916,13 @@ class MimiCamServer {
   }
 
   Future<void> _writeLandingPage(HttpResponse response) async {
-    final testDashboardLink = enableTestEndpoints
-        ? '<p><a style="color:#ff8ab3" href="${protocol_v2.MimiCamProtocolV2.testDashboard}">Canlı test panelini aç</a></p>'
-        : '';
     response.headers.contentType = ContentType.html;
     response.write('''<!doctype html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>MimiCam</title></head>
 <body style="margin:0;background:#111;color:white;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
-  <main style="padding:16px"><h1>${strings.appTitle}</h1><p>${strings.streamActiveHtml}</p>$testDashboardLink</main>
+  <main style="padding:16px"><h1>${strings.appTitle}</h1><p>${strings.streamActiveHtml}</p></main>
 </body></html>''');
     await response.close();
-  }
-
-  Future<void> _writeTestDashboard(HttpRequest request) async {
-    request.response.headers.contentType = ContentType.html;
-    final html = await const MimiCamTestDashboardAssets().loadHtml(
-      title: '${strings.appTitle} Test',
-    );
-    request.response.write(html);
-    await request.response.close();
-  }
-
-  Future<void> _writeTestDashboardScript(HttpRequest request) async {
-    request.response.headers.contentType =
-        ContentType('application', 'javascript', charset: 'utf-8');
-    request.response.write(
-      await const MimiCamTestDashboardAssets().loadScript(),
-    );
-    await request.response.close();
   }
 
   int _broadcastBinary(List<int> data) => _eventSockets.broadcastBinary(data);
@@ -1056,7 +1009,6 @@ class MimiCamServer {
       'camera controller',
       () async => controller?.dispose(),
     );
-    _videoProbeEncodeUntilMs = null;
     await cleanup.attempt('HTTP server', () async {
       await _httpServer?.close(force: true);
     });

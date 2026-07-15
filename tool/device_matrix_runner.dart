@@ -207,7 +207,7 @@ class _MatrixRunner {
         messages.add('HTTP probe skipped because automation preflight failed.');
       } else {
         try {
-          automation['probe'] = await _runServerProbe(options);
+          automation['probe'] = await _runServerStatusCheck(options);
         } catch (error) {
           automationStatus = 'fail';
           automation['probe'] = <String, Object?>{
@@ -682,7 +682,7 @@ Future<Map<String, Object?>> _gitMetadata() async {
   };
 }
 
-Future<Map<String, Object?>> _runServerProbe(_CliOptions options) async {
+Future<Map<String, Object?>> _runServerStatusCheck(_CliOptions options) async {
   final token = Platform.environment[_tokenEnvironmentKey];
   if (token == null || token.trim().isEmpty) {
     throw const _UsageException(
@@ -694,33 +694,16 @@ Future<Map<String, Object?>> _runServerProbe(_CliOptions options) async {
   try {
     final status = await _requestJson(
       client,
-      base.resolve('/test/status'),
+      base.resolve('/status'),
       token: token,
-    );
-    final probe = await _requestJson(
-      client,
-      base.resolve('/test/probe'),
-      token: token,
-      body: {
-        'startRuntime': true,
-        'waitMs': 2500,
-        'requireVideo': true,
-        'requireAudio': true,
-        'emitAlert': true,
-        'requireEvents': true,
-        'requireEventDelivery': false,
-        'loopbackMedia': true,
-        'useAudioTone': options.probeAudioTone,
-      },
     );
     return {
-      'ok': probe['ok'] == true,
+      'ok':
+          status['activeStreamClients'] is num && status['streamHealth'] is Map,
       'sampledAt': DateTime.now().toUtc().toIso8601String(),
       'baseUrl': base.replace(userInfo: '').toString(),
       'tokenSource': 'environment:$_tokenEnvironmentKey',
-      'audioMode': options.probeAudioTone ? 'tone' : 'microphone',
       'status': status,
-      'probe': probe,
     };
   } finally {
     client.close(force: true);
@@ -1285,7 +1268,6 @@ class _CliOptions {
     required this.runTests,
     required this.launch,
     required this.probe,
-    required this.probeAudioTone,
     required this.force,
     required this.verbose,
     required this.allChecksPass,
@@ -1351,8 +1333,7 @@ Options:
   --run-tests              Run the focused flutter test list from the plan
   --launch                 Run flutter run --no-resident on both devices
   --base-url URL           Paired server URL for --probe
-  --probe                  GET /test/status and POST /test/probe
-  --probe-audio-tone       Probe WAV path with a synthetic tone, not microphone
+  --probe                  Capture authenticated production /status
   --record PATH            Update an existing result JSON
   --status STATUS          pass, fail, blocked or skipped for --record
   --all-checks-pass        Mark every check in the recorded case passed
@@ -1374,7 +1355,6 @@ Wi-Fi, call, route and thermal transitions remain explicit operator actions.
   final bool runTests;
   final bool launch;
   final bool probe;
-  final bool probeAudioTone;
   final bool force;
   final bool verbose;
   final bool allChecksPass;
@@ -1403,7 +1383,6 @@ Wi-Fi, call, route and thermal transitions remain explicit operator actions.
     var runTests = false;
     var launch = false;
     var probe = false;
-    var probeAudioTone = false;
     var force = false;
     var verbose = false;
     var allChecksPass = false;
@@ -1443,8 +1422,6 @@ Wi-Fi, call, route and thermal transitions remain explicit operator actions.
           launch = true;
         case '--probe':
           probe = true;
-        case '--probe-audio-tone':
-          probeAudioTone = true;
         case '--force':
           force = true;
         case '--verbose':
@@ -1566,7 +1543,6 @@ Wi-Fi, call, route and thermal transitions remain explicit operator actions.
       runTests: runTests,
       launch: launch,
       probe: probe,
-      probeAudioTone: probeAudioTone,
       force: force,
       verbose: verbose,
       allChecksPass: allChecksPass,

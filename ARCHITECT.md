@@ -37,9 +37,9 @@ MJPEG/WAV fallback'i olan opt-in bir pilot olarak bulunur.
    biriktirilmez; skip ve failure metric yazilir.
 6. **Ses ve kritik alert video kalitesinden onceliklidir.** Ag kotulesirse
    video profili dusurulur; audio ve alert delivery korunmaya calisilir.
-7. **Runtime diagnostics urun davranisinin parcasidir.** `/test/status`,
-   `/test/probe` ve `/test/audio-tone` gercek endpoint davranisini kanitlar;
-   session telemetry p50/p95/p99 dagilimlari ve bounded counter'lar tasir.
+7. **Dogrulama production yollarini kullanir.** Test-only HTTP rotasi yoktur;
+   `/session/start`, `/video`, `/audio`, `/ws/events` ve authenticated `/status`
+   senaryo testlerinde dogrudan calistirilir.
 8. **Ucretli erisim UI'dan ibaret degildir.** 2 saat ucretsiz yayin/izleme
    siniri hem Client runtime hem Server `/session/start` katmaninda uygulanir.
 9. **Media hardware demand'e aittir.** Kamera ve mikrofon birbirinden bagimsiz,
@@ -66,7 +66,7 @@ MJPEG/WAV fallback'i olan opt-in bir pilot olarak bulunur.
 | Alert payload | JSON DTO |
 | Private auth | Trusted Bearer token |
 | Media auth | Short-lived stream token; Bearer alone cannot open media |
-| Test surface | `/test/*` |
+| Test surface | Runtime test-only HTTP route yok; production routes are exercised directly |
 | Local network exposure guard | `LocalNetworkGuard` |
 
 ## Out Of Scope In This Runtime
@@ -118,8 +118,6 @@ Flutter assets:
 
 - `assets/branding/mimicam_launcher_icon.png`
 - `assets/branding/mimicam_wordmark.png`
-- `assets/test_dashboard/index.html`
-- `assets/test_dashboard/dashboard.js`
 
 ## Source Tree Ownership
 
@@ -168,7 +166,7 @@ Package ownership:
 - `features/server/`: Server UI, Server runtime facade, pairing QR builder,
   stream services near UI/runtime boundaries.
 - `services/`: HTTP server, platform facades, monetization, media-quality
-  selectors, test dashboard, backpressure utilities.
+  selectors and backpressure utilities.
 
 ## App Bootstrap
 
@@ -232,7 +230,8 @@ Important permission boundaries:
 - iOS QR scanning must not rely on implicit scanner autostart only.
 - Server microphone capture is best-effort; video runtime must not crash only
   because microphone permission is denied.
-- Microphone failure must appear in `/test/status` or `/test/probe`.
+- Microphone failure must remain visible in runtime state/logs and must not take
+  down the video path.
 
 ## Composition Roots
 
@@ -445,14 +444,6 @@ Token renewal:
 | `events` | `/ws/events` |
 | `status` | `/status` |
 | `statusPublic` | `/status/public` |
-| `testDashboard` | `/test` |
-| `testDashboardScript` | `/test/dashboard.js` |
-| `testStatus` | `/test/status` |
-| `testStart` | `/test/start` |
-| `testReset` | `/test/reset` |
-| `testProbe` | `/test/probe` |
-| `testAlert` | `/test/alert` |
-| `testAudioTone` | `/test/audio-tone` |
 
 `ServerEndpointBuilder` builds HTTP and WS URIs from `PairingSession` and keeps
 path/query normalization centralized on the client.
@@ -482,7 +473,6 @@ path/query normalization centralized on the client.
 The class is still the HTTP composition boundary, but device/business work no
 longer all lives in one implementation body:
 
-- diagnostics handlers are in the `MimiCamServerTestEndpoints` part extension
 - comfort/night-light/talk delegate to `BabyMonitorFeatureController`
 - native comfort/talk output delegates to `RoomAudioCoordinator`
 - WebRTC peer/media ownership delegates to `WebRtcServerGateway`
@@ -517,7 +507,6 @@ Auth modes:
 | `none` | Router does not pre-authenticate; handler may validate nonce or a dedicated talk token |
 | `bearer` | Requires trusted `Authorization: Bearer <token>` |
 | `streamToken` | Requires a valid short-lived media stream token |
-| `testAccess` | Debug mode open; otherwise trusted Bearer token required |
 
 Stream tokens open legacy `/video` and `/audio`; pilot `/webrtc/*` routes also
 require the same token in addition to trusted Bearer identity. Other
@@ -548,14 +537,6 @@ state-changing routes cannot be authorized by a stream token alone.
 | `/talk/stop` | POST | bearer | Stop active talk session |
 | `/talk/audio` | POST | talk token in query/header | PCM ingest and native room playback |
 | `/talk/video` | POST | talk token in query/header | Compatibility ingest; video output unsupported |
-| `/test` | GET | debug or bearer | Browser test dashboard |
-| `/test/dashboard.js` | GET | debug or bearer | Dashboard script asset |
-| `/test/status` | GET | bearer | Diagnostics JSON |
-| `/test/start` | POST | bearer | Start media runtime for tests |
-| `/test/reset` | POST | bearer | Reset streams/metrics/test state |
-| `/test/probe` | POST | bearer | End-to-end loopback probe |
-| `/test/alert` | POST | bearer | Synthetic alert event |
-| `/test/audio-tone` | GET | bearer | Deterministic WAV tone |
 
 ## Pairing Architecture
 
@@ -868,8 +849,8 @@ ServerMediaSource.start
   -> same MjpegStreamService / WavAudioStreamService path
 ```
 
-This seam is central to reliable `/test/probe` and end-to-end tests because it
-does not require real hardware.
+This seam is central to production-route end-to-end tests because it does not
+require real hardware.
 
 WebRTC pilot uses a separate hardware owner inside
 `FlutterWebRtcServerGateway`: after an H.264/Opus capability probe it acquires
@@ -897,7 +878,7 @@ CameraImage
   -> HttpResponse multipart MJPEG clients
 ```
 
-Injected test path:
+Injected test path (`test/support/deterministic_server_media_source.dart`):
 
 ```text
 DeterministicServerMediaSource
@@ -954,7 +935,7 @@ MicrophoneCaptureService
   -> WavAudioStreamService.broadcast
 ```
 
-Server injected/test path:
+Server injected source path:
 
 ```text
 ServerMediaSource audio chunk
@@ -1052,15 +1033,14 @@ Client audio diagnostics:
 
 Those client metrics are emitted by `ClientLiveAudioPipeline`, copied into
 `ClientStreamHealthState`, sent through `/quality/report`, stored by
-`ClientQualityTracker`, and exposed in `/test/status` under client audio
-pipeline diagnostics.
+`ClientQualityTracker`, and exposed in authenticated `/status` stream health.
 
 Audio invariants:
 
 - microphone failure is best-effort and must not silently disappear
 - video can work while audio reports a permission/capture reason
-- `/test/audio-tone` must verify audio transport without microphone permission
-- `/test/probe` must fail clearly if WAV header arrives but PCM does not
+- production `/audio` scenario tests must verify WAV header and emitted PCM
+- notification tests must feed PCM through the real analyzer and `/ws/events`
 - native write errors must be visible in client metrics
 
 ## Native PCM Output
@@ -1342,8 +1322,9 @@ Instrumented signals include:
 - decoder coalescing, audio underrun and reconnect counters
 
 MJPEG multipart metadata carries trace/sequence and capture/send timestamps for
-cross-device receive estimates. `/test/status` publishes `sessionTelemetry`;
-the sample bound prevents a long-running monitor from growing telemetry memory.
+cross-device receive estimates. Authenticated `/status` publishes telemetry in
+`streamHealth.sessionTelemetry`; the sample bound prevents a long-running
+monitor from growing telemetry memory.
 
 ## Battery And Transport Status
 
@@ -1503,81 +1484,40 @@ debug, or developer-only values.
 
 - private Bearer route
 - returns runtime state for paired clients
-- includes media profile and health values
+- includes media profile, stream health, resource governor and bounded session
+  telemetry values
 
-`/test/status`:
+## Production-Route Scenario Verification
 
-- private Bearer route except debug dashboard access rules for `/test`
-- returns detailed diagnostics
-- exposes audio/video/event/client/battery/transport/feature state
-- exposes `sessionTelemetry`, `deviceResources`, `resourceGovernor` and room
-  audio output status
-- intended for proof and support debugging
-
-Audio fields in `/test/status` include both server-side capture and client-side
-pipeline reports when quality report has supplied them.
-
-## Test Dashboard And `/test/*`
-
-Dashboard assets:
-
-- `assets/test_dashboard/index.html`
-- `assets/test_dashboard/dashboard.js`
-- served by `TestDashboardAssets`
-
-Diagnostic endpoints:
-
-| Route | Purpose |
-| --- | --- |
-| `/test` | Browser dashboard |
-| `/test/dashboard.js` | Browser test script |
-| `/test/status` | Full diagnostics JSON |
-| `/test/start` | Start media runtime |
-| `/test/reset` | Reset streams, test counters and diagnostics |
-| `/test/probe` | End-to-end media/event loopback |
-| `/test/alert` | Synthetic WebSocket alert |
-| `/test/audio-tone` | Deterministic WAV tone |
-
-`/test/probe` behavior:
+There is no browser dashboard, synthetic alert route or `/test/*` API in the
+runtime. Automated tests exercise the same boundaries used by paired phones:
 
 ```text
-read JSON body
-  -> optionally start runtime
-  -> optionally emit test alert
-  -> wait for video/audio/event counters
-  -> optionally create loopback session
-  -> read /video first MJPEG payload
-  -> read /audio WAV header + PCM payload
-  -> return checks, video, audio, alerts, profile, diagnostics
+deterministic PCM/JPEG source
+  -> MimiCamServer analysis and stream services
+  -> /audio, /video or /ws/events
+  -> production client parser/listener
 ```
 
-Audio probe modes:
+Notification scenarios additionally verify quiet-room calibration, configured
+cry threshold/minimum duration, episode gap handling, comfort/talk self-audio
+suppression, continuous parent audio, structured alert delivery, history
+persistence and the platform-notification handoff. Physical runs capture
+authenticated `/status`; they do not trigger synthetic media or notifications.
 
-- `audioMode: "microphone"` or default: uses current runtime audio source
-- `useAudioTone: true` or `audioMode: "tone"`: pushes deterministic PCM into
-  the `/audio` stream path without microphone permission
+Proof criteria for audio and alerts:
 
-`/test/audio-tone` behavior:
-
-- produces deterministic sine PCM
-- wraps it in a WAV header
-- returns finite `audio/wav` response
-- proves parser/header path independent of microphone capture
-
-Proof criteria for audio:
-
-- WAV header valid
-- PCM bytes received after header
-- client parser emits PCM chunk
-- native PCM sink write is attempted
-- native bytes written are visible in client metrics where a real client report
-  is present
+- WAV header is valid and PCM arrives after it
+- the client parser emits PCM chunks
+- calibrated sustained cry-like PCM traverses the production alert pipeline
+- room-generated comfort/talk audio never becomes a cry notification
+- the client listener receives exactly one structured event for one episode
 
 ## End-To-End Media Seams
 
 The strongest non-device media tests use:
 
-- `DeterministicServerMediaSource`
+- the `test/support/DeterministicServerMediaSource` fixture
 - real `MimiCamServer`
 - real `/session/start`
 - real `/video`
@@ -1657,7 +1597,7 @@ Current protections:
 - secure client token storage
 - short-lived media stream tokens
 - stream tokens rejected by control endpoints
-- test dashboard is debug-open but otherwise protected
+- WebSocket authentication accepts only the Bearer header, never URL tokens
 - pair confirm rate limiting
 - nonce pruning
 
@@ -1685,7 +1625,6 @@ General rules:
 - cancel stream subscriptions
 - force-close long-lived media test clients after first payload
 - close HTTP responses on error paths
-- reset diagnostics during `/test/reset`
 - keep media start best-effort for audio
 - stop runtime when no active demand remains
 
@@ -1740,19 +1679,19 @@ flutter test test/features/client/client_room_controls_test.dart
 Audio-specific proof:
 
 ```bash
-flutter test test/features/server/test_endpoints_test.dart --plain-name "/test/audio-tone"
-flutter test test/features/server/media_stream_end_to_end_test.dart --plain-name "/test/probe audio-tone"
-flutter test test/features/server/media_stream_end_to_end_test.dart --plain-name "/test/probe loopback video ve audio"
-flutter test test/features/server/test_endpoints_test.dart --plain-name "/test/status client audio pipeline"
+flutter test test/features/server/media_stream_end_to_end_test.dart
+flutter test test/features/server/server_alert_delivery_scenario_test.dart
+flutter test test/analysis/audio/cry_audio_analyzer_v2_test.dart
+flutter test test/analysis/alert/episode_notification_aggregator_test.dart
 ```
 
 What these tests prove:
 
-- `/test/audio-tone` returns valid WAV + PCM
-- `/test/probe` can verify audio without microphone via tone mode
-- `/test/probe` can verify real `/audio` stream path with deterministic source
-- `/test/status` can expose client audio pipeline metrics
-- full media endpoint tests use real HTTP server and parsers
+- `/session/start`, `/video` and `/audio` use the real HTTP server and parsers
+- WAV framing yields live PCM without a synthetic tone endpoint
+- calibrated cry-like PCM reaches `/ws/events` through the real analyzer
+- comfort and talk output are suppressed from cry classification
+- notification profiles and packet gaps affect the episode decision correctly
 - pilot tests prove signaling auth/session ownership and automatic fallback;
   they do not prove physical codec/ICE behavior
 - platform contract tests prove serialized pause/recovery policy; simulators do
@@ -1760,7 +1699,7 @@ What these tests prove:
 
 Physical release evidence is defined in
 `docs/physical_device_test_matrix.md`. `tool/benchmarks/device_soak_harness.dart`
-records `/test/status` JSONL, but the matrix is not complete until the named
+records authenticated `/status` JSONL, but the matrix is not complete until the named
 physical device/network lanes have produced archived results.
 
 ## Release And Store Notes
@@ -1809,7 +1748,7 @@ When touching media:
 3. Do not introduce unbounded queues.
 4. Verify `/audio` with WAV header + PCM bytes.
 5. Verify `/video` with a real MJPEG payload.
-6. Verify `/test/probe` after endpoint changes.
+6. Run the production media and alert scenario tests after endpoint changes.
 7. Run Android debug build if native PCM or plugin paths changed.
 
 When touching docs:
@@ -1839,5 +1778,5 @@ contract, UI integration, diagnostics and tests:
 - release-grade Apple/Google server-side purchase verification
 - completed physical-device matrix evidence
 
-The safe rule is simple: if `/test/status`, `/test/probe` or focused tests
-cannot prove it, it should not be documented as shipped behavior.
+The safe rule is simple: if production-route scenario tests or physical-device
+evidence cannot prove it, it should not be documented as shipped behavior.
