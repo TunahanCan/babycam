@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="MimiCam gizlilik bildirimi: kamera, mikrofon, yerel ağ verileri, cihazda saklama, izinler ve kullanıcı kontrolleri."
+    />
+    <meta name="theme-color" content="#f8fafc" />
+    <meta name="color-scheme" content="light" />
+    <meta name="robots" content="noindex, follow" />
+    <title>Gizlilik Bildirimi Taslağı | MimiCam</title>
+    <link rel="icon" type="image/png" href="assets/brand/favicon-32.png" />
+    <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png" />
+    <link rel="manifest" href="site.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="legal-page">
+    <a class="skip-link" href="#legal-content">İçeriğe geç</a>
+    <div class="page-progress" aria-hidden="true"><span></span></div>
+
+    <header class="site-header" data-header>
+      <div class="container header-inner">
+        <a
+          class="brand"
+          href="index.html"
+          aria-label="MimiCam ana sayfa"
+          data-i18n="nav.home"
+          data-i18n-target="aria-label"
+        >
+          <img
+            src="assets/brand/wordmark.webp"
+            alt="MimiCam"
+            width="760"
+            height="139"
+          />
+        </a>
+
+        <button
+          class="menu-toggle"
+          type="button"
+          aria-expanded="false"
+          aria-controls="primary-navigation"
+          aria-label="Menüyü aç"
+          data-menu-toggle
+        >
+          <span></span><span></span><span></span>
+        </button>
+
+        <nav id="primary-navigation" class="primary-nav" aria-label="Ana menü" data-nav>
+          <a href="index.html#nasil-calisir">Nasıl çalışır?</a>
+          <a href="index.html#ozellikler">Özellikler</a>
+          <a href="index.html#ekranlar">Ekranlar</a>
+          <a href="index.html#sss">SSS</a>
+          <div class="language-picker">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21M12 3C9.6 5.5 8.4 8.5 8.4 12s1.2 6.5 3.6 9"></path>
+            </svg>
+            <select data-language-selector aria-label="Site dili">
+              <option value="tr">Türkçe</option>
+              <option value="en">English</option>
+              <option value="de">Deutsch</option>
+              <option value="fr">Français</option>
+              <option value="es">Español</option>
+              <option value="zh">中文</option>
+              <option value="hi">हिन्दी</option>
+              <option value="ar">العربية</option>
+            </select>
+          </div>
+          <a class="button button-small button-primary nav-cta" href="index.html">
+            Ana sayfaya dön
+            <span aria-hidden="true">→</span>
+          </a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="legal-main">
+      <div class="container">
+        <header class="legal-hero" data-reveal>
+          <span class="kicker">MimiCam</span>
+          <h1>Gizlilik bildirimi taslağı</h1>
+          <p>
+            Hangi verinin neden işlendiğini, nerede kaldığını ve hangi kontrollerin
+            sende olduğunu açıkça anlatıyoruz.
+          </p>
+          <span class="legal-meta">Yayın öncesi taslak · Son güncelleme: 15 Temmuz 2026</span>
+        </header>
+
+        <div class="legal-layout">
+          <nav class="legal-nav" aria-label="Gizlilik bildirimi bölümleri">
+            <strong>Bu sayfada</strong>
+            <a href="#genel-bakis">Genel bakış</a>
+            <a href="#islenen-veriler">İşlenen veriler</a>
+            <a href="#yerel-ag">Yerel ağ ve güvenlik</a>
+            <a href="#internet">İnternet ve üçüncü taraflar</a>
+            <a href="#saklama">Saklama ve silme</a>
+            <a href="#izinler">İzinler</a>
+            <a href="#cocuk-guvenligi">Çocuk güvenliği</a>
+            <a href="#iletisim">İletişim</a>
+          </nav>
+
+          <article id="legal-content" class="legal-content" data-reveal data-reveal-delay="100">
+            <p class="legal-intro">
+              <strong>Yayın notu:</strong> Bu metin mevcut teknik davranışı açıklar ancak
+              mağaza yayını öncesi taslaktır. Veri sorumlusu/geliştirici kimliği ve özel
+              başvuru kanalı eklenmeden nihai gizlilik bildirimi sayılmaz.
+              <br /><br />
+              MimiCam, bebek odası ile ebeveyn cihazı arasında aynı erişilebilir yerel
+              ağ üzerinden çalışan bir kamera ve ses izleme uygulamasıdır. Varsayılan
+              kullanımda hesap, reklam, analiz SDK’sı veya MimiCam bulut medya aktarımı
+              kullanılmaz.
+            </p>
+
+            <section id="genel-bakis">
+              <h2>1. Genel bakış</h2>
+              <p>
+                Bu bildirim MimiCam mobil uygulamasının temel izleme işlevlerinde
+                işlediği verileri kapsar. Oda rolündeki cihaz kamera ve mikrofon verisini
+                işler; ebeveyn rolündeki eşleştirilmiş cihaz ise bu akışı aynı yerel ağ
+                üzerinden görüntüler ve oda kontrollerini yönetir.
+              </p>
+              <p>
+                MimiCam’in çalışma modeli yerel ağ önceliklidir: temel medya akışı için
+                zorunlu bir MimiCam hesabı veya internet üzerindeki medya sunucusu
+                bulunmaz.
+              </p>
+            </section>
+
+            <section id="islenen-veriler">
+              <h2>2. İşlenen veriler</h2>
+              <h3>Kamera ve mikrofon</h3>
+              <ul>
+                <li>
+                  Kamera görüntüsü ve mikrofon sesi, canlı yayın ile yerel ağlama benzeri
+                  ses, yüksek ses, hareket ve ışık değişimi analizi için oda cihazında
+                  işlenir.
+                </li>
+                <li>
+                  Canlı görüntü, ses, kontrol mesajları ve uyarılar yalnızca kullanıcının
+                  eşleştirdiği ve erişilebilir yerel ağdaki cihazlara gönderilir.
+                </li>
+              </ul>
+
+              <h3>Cihazda tutulan bilgiler</h3>
+              <ul>
+                <li>Eşleşme bilgileri ve cihaz tercihleri.</li>
+                <li>Uygulamada gösterilen olay ve bildirim geçmişi.</li>
+                <li>Bağlantıyı doğrulamak için kullanılan erişim anahtarı bilgileri.</li>
+              </ul>
+
+              <h3>Erişim anahtarları</h3>
+              <p>
+                Ebeveyn cihazındaki erişim anahtarları işletim sisteminin güvenli anahtar
+                deposunda saklanır. Oda cihazında ham erişim anahtarı yerine doğrulama
+                özeti tutulur.
+              </p>
+            </section>
+
+            <section id="yerel-ag">
+              <h2>3. Yerel ağ ve güvenlik sınırları</h2>
+              <p>
+                MimiCam medya ve kontrol trafiğini iki eşleştirilmiş cihaz arasında yerel
+                HTTP ve WebSocket bağlantılarıyla iletir. Bağlantı, eşleşme sırasında
+                oluşturulan erişim anahtarıyla doğrulanır.
+              </p>
+              <div class="legal-callout">
+                <strong>Önemli:</strong> Mevcut yerel aktarım TLS veya uçtan uca şifreleme
+                sunmaz. MimiCam yalnızca güvendiğin, güçlü parola kullanan ve erişimini
+                kontrol ettiğin bir Wi-Fi ağında kullanılmalıdır. Açık veya ortak ağlar
+                uygun değildir.
+              </div>
+            </section>
+
+            <section id="internet">
+              <h2>4. İnternet ve üçüncü taraflar</h2>
+              <p>
+                MimiCam’in temel izleme işlevi internet bağlantısı olmadan çalışır.
+                Varsayılan ürün akışında reklam veya kullanıcı davranışı analiz SDK’sı
+                bulunmaz ve kamera ya da mikrofon medyası MimiCam’e ait bir bulut
+                sunucusuna gönderilmez.
+              </p>
+              <p>
+                İsteğe bağlı uygulama içi satın alma etkinleştirilirse Apple App Store
+                veya Google Play ödeme altyapısı kullanılabilir. Satın alma doğrulama
+                verisi yalnızca yapılandırılmış güvenilir HTTPS doğrulama servisine
+                gönderilebilir; kamera ve mikrofon medyası bu servise gönderilmez. Bu
+                servisler kendi gizlilik koşullarına tabidir.
+              </p>
+            </section>
+
+            <section id="saklama">
+              <h2>5. Saklama ve silme</h2>
+              <ul>
+                <li>
+                  Eşleşmeler uygulama içinden kaldırıldığında ilgili güvenli erişim
+                  anahtarları da silinir.
+                </li>
+                <li>Olay ve bildirim geçmişi uygulama içinden temizlenebilir.</li>
+                <li>
+                  Güvenli erişim anahtarları cihaz yedeklerine veya başka bir cihaza
+                  taşınacak şekilde yapılandırılmaz.
+                </li>
+                <li>
+                  iOS bir uygulama kaldırıldığında Keychain kayıtlarını korursa, MimiCam
+                  temiz kurulumun ilk açılışında önceki kuruluma ait kayıtları temizler.
+                </li>
+              </ul>
+              <p>
+                Uygulama kaldırıldığında işletim sisteminin uygulama verisi yönetimi
+                kapsamındaki yerel veriler de platformun kurallarına göre silinir.
+              </p>
+            </section>
+
+            <section id="izinler">
+              <h2>6. İzinler</h2>
+              <p>MimiCam aşağıdaki izinleri yalnızca ilgili işlev için ister:</p>
+              <ul>
+                <li data-i18n="privacyPage.permissionCamera" data-i18n-target="label">
+                  <strong>Kamera:</strong> oda görüntüsünü yakalamak ve QR kod okumak.
+                </li>
+                <li data-i18n="privacyPage.permissionMic" data-i18n-target="label">
+                  <strong>Mikrofon:</strong> oda sesini ve bas-konuş sesini iletmek.
+                </li>
+                <li data-i18n="privacyPage.permissionNetwork" data-i18n-target="label">
+                  <strong>Yerel ağ:</strong> iki cihazı keşfetmek ve bağlamak.
+                </li>
+                <li data-i18n="privacyPage.permissionNotification" data-i18n-target="label">
+                  <strong>Bildirim:</strong> bağlı ebeveyn cihazında olay uyarısı göstermek.
+                </li>
+                <li data-i18n="privacyPage.permissionService" data-i18n-target="label">
+                  <strong>Android ön plan servisi:</strong> desteklenen oda rolü oturumunu
+                  işletim sistemi kurallarına uygun sürdürmek.
+                </li>
+              </ul>
+              <p>
+                İzinler işletim sistemi ayarlarından geri alınabilir. Geri alınan izne
+                bağlı özellikler çalışmayı durdurur.
+              </p>
+            </section>
+
+            <section id="cocuk-guvenligi">
+              <h2>7. Çocuk güvenliği</h2>
+              <p>
+                MimiCam yetişkin gözetiminin, tıbbi cihazların veya acil durum
+                hizmetlerinin yerini almaz. Ses ve hareket uyarıları yardımcı sinyaldir;
+                tanı veya güvenlik garantisi değildir. Kullanıcı cihazın güvenli
+                yerleşiminden, kabloların çocuğun erişemeyeceği konumda tutulmasından ve
+                uygun gözetimden sorumludur.
+              </p>
+            </section>
+
+            <section id="iletisim">
+              <h2>8. İletişim ve değişiklikler</h2>
+              <p>
+                Teknik geri bildirim için MimiCam’in
+                <a
+                  class="text-link"
+                  href="https://github.com/TunahanCan/babycam/issues"
+                  target="_blank"
+                  rel="noreferrer"
+                  >GitHub Issues sayfası <span aria-hidden="true">↗</span></a
+                >
+                kullanılabilir. Bu kanal herkese açıktır; kişisel, hassas veya çocuğa ait
+                veri paylaşılmamalıdır. Mağaza yayınıyla birlikte özel geliştirici destek
+                kanalı ayrıca duyurulacaktır.
+              </p>
+              <p>
+                Uygulamanın veri işleme biçimi değişirse bu bildirim ve güncelleme tarihi
+                yenilenir.
+              </p>
+            </section>
+          </article>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-main">
+        <div class="footer-brand">
+          <a
+            class="brand"
+            href="index.html"
+            aria-label="MimiCam ana sayfa"
+            data-i18n="nav.home"
+            data-i18n-target="aria-label"
+          >
+            <img
+              src="assets/brand/wordmark.webp"
+              alt="MimiCam"
+              width="760"
+              height="139"
+              loading="lazy"
+            />
+          </a>
+          <p>İki telefon. Tek Wi-Fi. Bulutsuz bebek takibi.</p>
+        </div>
+        <div class="footer-links">
+          <div>
+            <strong>Keşfet</strong>
+            <a href="index.html#nasil-calisir">Nasıl çalışır?</a>
+            <a href="index.html#ozellikler">Özellikler</a>
+            <a href="index.html#ekranlar">Ekranlar</a>
+          </div>
+          <div>
+            <strong>Bilgi</strong>
+            <a href="privacy.html" aria-current="page">Gizlilik taslağı</a>
+            <a href="index.html#sss">Sık sorulanlar</a>
+            <a
+              href="https://github.com/TunahanCan/babycam"
+              target="_blank"
+              rel="noreferrer"
+              >GitHub <span aria-hidden="true">↗</span></a
+            >
+          </div>
+        </div>
+      </div>
+      <div class="container footer-bottom">
+        <p data-i18n="footer.copyright">© 2026 MimiCam. Tüm hakları saklıdır.</p>
+        <p>MimiCam tıbbi cihaz veya yetişkin gözetimi yerine geçen bir hizmet değildir.</p>
+      </div>
+    </footer>
+
+    <script src="i18n.js" defer></script>
+    <script src="app.js" defer></script>
+  </body>
+</html>

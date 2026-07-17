@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <title>MimiCam sosyal paylaşım kartı</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { width: 1200px; height: 630px; margin: 0; overflow: hidden; }
+      body {
+        color: #162033;
+        background:
+          radial-gradient(circle at 4% 8%, rgba(255,112,139,.16), transparent 25%),
+          radial-gradient(circle at 90% 16%, rgba(57,168,139,.2), transparent 28%),
+          linear-gradient(135deg, #fbfbff, #f2f4ff 62%, #edf9f5);
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .card { position: relative; display: grid; height: 100%; padding: 65px 78px; grid-template-columns: 1.35fr .65fr; align-items: center; }
+      .logo { width: 215px; margin-bottom: 42px; }
+      .eyebrow { margin-bottom: 17px; color: #4343b8; font-size: 17px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+      h1 { max-width: 720px; margin: 0 0 25px; font-size: 66px; line-height: 1.02; letter-spacing: -.055em; }
+      h1 span { color: #5b5bd6; }
+      p { max-width: 660px; margin: 0; color: #526075; font-size: 22px; line-height: 1.5; }
+      .trust { display: flex; gap: 12px; margin-top: 31px; }
+      .trust span { padding: 9px 13px; border: 1px solid #dce2eb; border-radius: 99px; color: #4b576b; background: rgba(255,255,255,.68); font-size: 13px; font-weight: 700; }
+      .visual { position: relative; align-self: stretch; }
+      .halo { position: absolute; top: 30px; right: -40px; width: 430px; height: 430px; border: 1px solid rgba(91,91,214,.13); border-radius: 50%; box-shadow: inset 0 0 0 55px rgba(91,91,214,.035); }
+      .phone { position: absolute; z-index: 2; top: 18px; right: 84px; width: 230px; overflow: hidden; border: 7px solid #1b1e2a; border-radius: 35px; background: #1b1e2a; box-shadow: 0 35px 70px rgba(25,30,68,.28); transform: rotate(4deg); }
+      .phone::before { position: absolute; z-index: 3; top: 6px; left: 50%; width: 70px; height: 15px; border-radius: 99px; background: #1b1e2a; content: ""; transform: translateX(-50%); }
+      .phone img { display: block; width: 100%; }
+      .mascot { position: absolute; z-index: 4; right: -85px; bottom: -90px; width: 285px; filter: drop-shadow(0 20px 22px rgba(40,35,70,.18)); transform: rotate(4deg); }
+      .badge { position: absolute; z-index: 5; right: 237px; bottom: 93px; min-width: 190px; padding: 14px 17px; border: 1px solid rgba(255,255,255,.9); border-radius: 16px; background: rgba(255,255,255,.91); box-shadow: 0 18px 40px rgba(35,42,78,.14); font-size: 13px; }
+      .badge strong { display: block; margin-bottom: 2px; color: #167d69; font-size: 15px; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <section>
+        <img class="logo" src="../assets/brand/wordmark.webp" alt="" />
+        <div class="eyebrow">İki telefon · Tek Wi-Fi</div>
+        <h1>Eski telefonun, <span>bulutsuz bebek monitörün.</span></h1>
+        <p>Canlı görüntü, oda sesi ve anlamlı uyarılar. Hesap açmadan, aynı ev ağında.</p>
+        <div class="trust"><span>Hesap yok</span><span>Zorunlu internet yok</span><span>Bulut aktarımı yok</span></div>
+      </section>
+      <section class="visual">
+        <div class="halo"></div>
+        <div class="phone"><img src="../assets/screens/client-live.webp" alt="" /></div>
+        <div class="badge"><strong>● Yerel bağlantı</strong>Aynı Wi-Fi üzerinde</div>
+        <img class="mascot" src="../assets/brand/mascot.webp" alt="" />
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tunahancan.github.io/babycam/sitemap.xml
