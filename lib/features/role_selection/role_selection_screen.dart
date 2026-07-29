@@ -101,7 +101,7 @@ class _BrandHeader extends StatelessWidget {
         label: 'MiuCam',
         image: true,
         child: Image.asset(
-          'assets/branding/miucam_wordmark_v2.png',
+          'assets/branding/miucam_wordmark_v3.png',
           key: const ValueKey('role-wordmark'),
           width: 210,
           height: 64,

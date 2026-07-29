@@ -51,13 +51,14 @@ void main() {
     );
     expect(
       (wordmark.image as AssetImage).assetName,
-      'assets/branding/miucam_wordmark_v2.png',
+      'assets/branding/miucam_wordmark_v3.png',
     );
 
     for (final asset in [
       'assets/branding/miucam_wordmark.png',
       'assets/branding/miucam_bear_mascot.png',
       'assets/branding/miucam_wordmark_v2.png',
+      'assets/branding/miucam_wordmark_v3.png',
     ]) {
       final data = await rootBundle.load(asset);
       expect(data.lengthInBytes, greaterThan(0));

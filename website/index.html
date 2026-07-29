@@ -53,6 +53,14 @@
     <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png" />
     <link rel="manifest" href="site.webmanifest" />
     <link rel="canonical" href="https://tunahancan.github.io/babycam/" />
+    <link
+      rel="preload"
+      as="image"
+      href="assets/screens/client-live.webp"
+      type="image/webp"
+      fetchpriority="high"
+    />
+    <script src="language-init.js"></script>
     <link rel="stylesheet" href="styles.css" />
 
     <script type="application/ld+json">
@@ -84,7 +92,7 @@
           data-i18n-target="aria-label"
         >
           <img
-            src="assets/brand/wordmark.webp"
+            src="assets/brand/wordmark-pink.webp"
             alt="MiuCam"
             width="760"
             height="252"
@@ -106,8 +114,8 @@
 
         <nav id="primary-navigation" class="primary-nav" aria-label="Ana menü" data-nav>
           <a href="#nasil-calisir">Nasıl çalışır?</a>
-          <a href="#ozellikler">Özellikler</a>
           <a href="#ekranlar">Ekranlar</a>
+          <a href="#ozellikler">Özellikler</a>
           <a href="#gizlilik">Gizlilik</a>
           <a href="#sss">SSS</a>
           <div class="language-picker">
@@ -132,7 +140,7 @@
             target="_blank"
             rel="noreferrer"
           >
-            Projeyi incele
+            GitHub’da incele
             <span aria-hidden="true">↗</span>
           </a>
         </nav>
@@ -147,11 +155,11 @@
           <div class="hero-copy" data-reveal>
             <div class="eyebrow">
               <span class="eyebrow-dot" aria-hidden="true"></span>
-              İki telefon · Tek Wi-Fi
+              <span data-i18n="hero.eyebrow">İki telefon · Aynı Wi-Fi · Tek uygulama</span>
             </div>
             <h1>
-              Eski telefonun,
-              <span>bulutsuz bebek monitörün.</span>
+              <span class="hero-title-lead" data-i18n="hero.titleLead">Eski telefonunu</span>
+              <span data-i18n="hero.titleAccent">evdeki bebek monitörüne dönüştür.</span>
             </h1>
             <p class="hero-lead">
               Bir telefonu bebek odasına bırak, diğerinden canlı görüntüyü ve oda
@@ -160,17 +168,15 @@
             </p>
             <div class="hero-actions">
               <a class="button button-primary" href="#nasil-calisir">
-                Nasıl çalıştığını gör
+                <span data-i18n="hero.primaryCta">3 adımda nasıl çalışır?</span>
                 <span aria-hidden="true">↓</span>
               </a>
               <a
                 class="button button-secondary"
-                href="https://github.com/TunahanCan/babycam"
-                target="_blank"
-                rel="noreferrer"
+                href="#ekranlar"
               >
-                Gelişimi takip et
-                <span aria-hidden="true">↗</span>
+                <span data-i18n="hero.secondaryCta">Gerçek ekranları gör</span>
+                <span aria-hidden="true">→</span>
               </a>
             </div>
             <ul class="hero-assurances" aria-label="MiuCam kullanım avantajları">
@@ -193,10 +199,28 @@
                 Temel izlemede bulut aktarımı yok
               </li>
             </ul>
+            <p class="release-status">
+              <span class="release-status-dot" aria-hidden="true"></span>
+              <span data-i18n="cta.kicker">Mağaza sürümü hazırlanıyor</span>
+            </p>
           </div>
 
           <div class="hero-visual">
             <div class="hero-halo" aria-hidden="true"></div>
+            <div class="phone phone-hero-secondary" aria-hidden="true">
+              <div class="phone-speaker"></div>
+              <img
+                src="assets/screens/role-selection.webp"
+                alt=""
+                width="480"
+                height="960"
+                decoding="async"
+                fetchpriority="low"
+              />
+            </div>
+            <div class="hero-device-link" aria-hidden="true">
+              <span></span><i></i><span></span>
+            </div>
             <div class="phone phone-hero">
               <div class="phone-speaker" aria-hidden="true"></div>
               <img
@@ -205,6 +229,7 @@
                 width="480"
                 height="960"
                 fetchpriority="high"
+                decoding="async"
               />
             </div>
 
@@ -238,21 +263,42 @@
         </div>
 
         <div class="container trust-bar" data-reveal>
-          <div>
-            <strong>2</strong>
-            <span>telefon, tek uygulama</span>
+          <div class="trust-item">
+            <span class="trust-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <rect x="3" y="4" width="8" height="16" rx="2" />
+                <rect x="13" y="4" width="8" height="16" rx="2" />
+                <path d="M6 7h2M16 7h2M7 17h.01M17 17h.01" />
+              </svg>
+            </span>
+            <span data-i18n="trust.twoPhones">İki telefon, tek uygulama</span>
           </div>
-          <div>
-            <strong>3</strong>
-            <span>kolay eşleşme yolu</span>
+          <div class="trust-item">
+            <span class="trust-icon trust-icon-violet" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" />
+                <path d="M14 14h2v2h-2zM18 14h2v6h-2zM14 18h2v2h-2z" />
+              </svg>
+            </span>
+            <span data-i18n="trust.pairingWays">QR ile kolay eşleşme</span>
           </div>
-          <div>
-            <strong>9</strong>
-            <span>dil/bölge seçeneği</span>
+          <div class="trust-item">
+            <span class="trust-icon trust-icon-coral" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8" />
+                <path d="M4 12h16M12 4a13 13 0 0 1 0 16M12 4a13 13 0 0 0 0 16" />
+              </svg>
+            </span>
+            <span data-i18n="trust.locales">8 dil desteği</span>
           </div>
-          <div>
-            <strong>0</strong>
-            <span>zorunlu hesap</span>
+          <div class="trust-item">
+            <span class="trust-icon trust-icon-amber" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <circle cx="9" cy="8" r="3" />
+                <path d="M3.5 19c.8-4 2.6-6 5.5-6s4.7 2 5.5 6M16 12h5" />
+              </svg>
+            </span>
+            <span data-i18n="trust.accounts">Zorunlu hesap yok</span>
           </div>
         </div>
       </section>
@@ -281,7 +327,7 @@
         <div class="container">
           <div class="section-heading centered" data-reveal>
             <span class="kicker">Üç adımda hazır</span>
-            <h2>Kur, eşleştir, içini rahat ettir.</h2>
+            <h2>Kur. Eşleştir. İzlemeye başla.</h2>
             <p>Her iki telefonda da aynı uygulama; yalnızca roller farklı.</p>
           </div>
 
@@ -333,6 +379,105 @@
               </p>
             </article>
           </div>
+        </div>
+      </section>
+
+      <section id="ekranlar" class="screens section-pad section-dark">
+        <div class="container">
+          <div class="section-heading split-heading light-heading" data-reveal>
+            <div>
+              <span class="kicker">Gerçek uygulama ekranları</span>
+              <h2>Sakin, okunaklı ve tek elle yönetilebilir.</h2>
+            </div>
+            <p>
+              Bağlantı durumundan oda kontrollerine kadar en önemli bilgi her zaman
+              göz hizasında.
+            </p>
+          </div>
+          <p class="screenshot-language-note">
+            <span aria-hidden="true">TR</span>
+            <span data-i18n="screens.previewLanguageNote">
+              Ekran görüntüleri Türkçe örneklerden gösterilir; uygulama arayüzü 8 dili
+              destekler.
+            </span>
+          </p>
+
+          <div
+            class="screen-showcase"
+            role="region"
+            aria-label="MiuCam uygulama ekranları"
+            tabindex="0"
+            data-screen-showcase
+          >
+            <article class="screen-item screen-item-offset" data-reveal>
+              <div class="phone phone-showcase">
+                <div class="phone-speaker" aria-hidden="true"></div>
+                <img
+                  src="assets/screens/role-selection.webp"
+                  alt="MiuCam bebek odası ve ebeveyn rol seçimi ekranı"
+                  width="480"
+                  height="960"
+                  loading="lazy"
+                />
+              </div>
+              <div class="screen-caption">
+                <span>01</span>
+                <div><strong>Rolünü seç</strong><small>Tek uygulama, iki sade yol</small></div>
+              </div>
+            </article>
+
+            <article class="screen-item" data-reveal data-reveal-delay="70">
+              <div class="phone phone-showcase">
+                <div class="phone-speaker" aria-hidden="true"></div>
+                <img
+                  src="assets/screens/client-live.webp"
+                  alt="MiuCam canlı görüntü ve oda sesi izleme ekranı"
+                  width="480"
+                  height="960"
+                  loading="lazy"
+                />
+              </div>
+              <div class="screen-caption">
+                <span>02</span>
+                <div><strong>Canlı izle</strong><small>Görüntü, ses ve durum bir arada</small></div>
+              </div>
+            </article>
+
+            <article class="screen-item screen-item-offset" data-reveal data-reveal-delay="140">
+              <div class="phone phone-showcase">
+                <div class="phone-speaker" aria-hidden="true"></div>
+                <img
+                  src="assets/screens/room-controls.webp"
+                  alt="MiuCam konuşma ve rahatlatıcı oda sesleri kontrol ekranı"
+                  width="480"
+                  height="960"
+                  loading="lazy"
+                />
+              </div>
+              <div class="screen-caption">
+                <span>03</span>
+                <div><strong>Odayı rahatlat</strong><small>Konuş ve sesleri yönet</small></div>
+              </div>
+            </article>
+
+            <article class="screen-item" data-reveal data-reveal-delay="210">
+              <div class="phone phone-showcase">
+                <div class="phone-speaker" aria-hidden="true"></div>
+                <img
+                  src="assets/screens/connection-recovery.webp"
+                  alt="MiuCam bağlantı durumu ve yeniden bağlanma ekranı"
+                  width="480"
+                  height="960"
+                  loading="lazy"
+                />
+              </div>
+              <div class="screen-caption">
+                <span>04</span>
+                <div><strong>Durumu bil</strong><small>Şeffaf bağlantı geri bildirimi</small></div>
+              </div>
+            </article>
+          </div>
+          <p class="swipe-hint">Diğer ekranları görmek için yatay kaydır →</p>
         </div>
       </section>
 
@@ -429,129 +574,7 @@
               </p>
             </article>
 
-            <article class="feature-card feature-pairing" data-reveal>
-              <div class="feature-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <path d="M8.5 14.5 6 17a3.5 3.5 0 0 0 5 5l3-3" />
-                  <path d="m15.5 9.5 2.5-2.5a3.5 3.5 0 0 0-5-5l-3 3" />
-                  <path d="m8 16 8-8" />
-                </svg>
-              </div>
-              <span class="feature-label">Kolay eşleşme</span>
-              <h3>QR, otomatik keşif veya manuel IP</h3>
-              <p>
-                Ev ağının koşuluna göre üç bağlantı yolundan birini seç; eşleşme
-                erişim anahtarıyla korunur.
-              </p>
-            </article>
-
-            <article class="feature-card feature-platform" data-reveal data-reveal-delay="80">
-              <div class="feature-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <rect x="5" y="2" width="14" height="20" rx="3" />
-                  <path d="M9 5h6M11 19h2" />
-                </svg>
-              </div>
-              <span class="feature-label">Tek uygulama, iki rol</span>
-              <h3>Android ve iOS birlikte</h3>
-              <p>
-                Android 6.0+ ve iOS 13+ cihazları oda veya ebeveyn rolünde kullan.
-                Platform notlarını aşağıda açıkça gör.
-              </p>
-            </article>
           </div>
-        </div>
-      </section>
-
-      <section id="ekranlar" class="screens section-pad section-dark">
-        <div class="container">
-          <div class="section-heading split-heading light-heading" data-reveal>
-            <div>
-              <span class="kicker">Gerçek uygulama ekranları</span>
-              <h2>Sakin, okunaklı ve tek elle yönetilebilir.</h2>
-            </div>
-            <p>
-              Bağlantı durumundan oda kontrollerine kadar en önemli bilgi her zaman
-              göz hizasında.
-            </p>
-          </div>
-
-          <div
-            class="screen-showcase"
-            role="region"
-            aria-label="MiuCam uygulama ekranları"
-            tabindex="0"
-            data-screen-showcase
-          >
-            <article class="screen-item screen-item-offset" data-reveal>
-              <div class="phone phone-showcase">
-                <div class="phone-speaker" aria-hidden="true"></div>
-                <img
-                  src="assets/screens/role-selection.webp"
-                  alt="MiuCam bebek odası ve ebeveyn rol seçimi ekranı"
-                  width="480"
-                  height="960"
-                  loading="lazy"
-                />
-              </div>
-              <div class="screen-caption">
-                <span>01</span>
-                <div><strong>Rolünü seç</strong><small>Tek uygulama, iki sade yol</small></div>
-              </div>
-            </article>
-
-            <article class="screen-item" data-reveal data-reveal-delay="70">
-              <div class="phone phone-showcase">
-                <div class="phone-speaker" aria-hidden="true"></div>
-                <img
-                  src="assets/screens/client-live.webp"
-                  alt="MiuCam canlı görüntü ve oda sesi izleme ekranı"
-                  width="480"
-                  height="960"
-                  loading="lazy"
-                />
-              </div>
-              <div class="screen-caption">
-                <span>02</span>
-                <div><strong>Canlı izle</strong><small>Görüntü, ses ve durum bir arada</small></div>
-              </div>
-            </article>
-
-            <article class="screen-item screen-item-offset" data-reveal data-reveal-delay="140">
-              <div class="phone phone-showcase">
-                <div class="phone-speaker" aria-hidden="true"></div>
-                <img
-                  src="assets/screens/room-controls.webp"
-                  alt="MiuCam konuşma ve rahatlatıcı oda sesleri kontrol ekranı"
-                  width="480"
-                  height="960"
-                  loading="lazy"
-                />
-              </div>
-              <div class="screen-caption">
-                <span>03</span>
-                <div><strong>Odayı rahatlat</strong><small>Konuş ve sesleri yönet</small></div>
-              </div>
-            </article>
-
-            <article class="screen-item" data-reveal data-reveal-delay="210">
-              <div class="phone phone-showcase">
-                <div class="phone-speaker" aria-hidden="true"></div>
-                <img
-                  src="assets/screens/connection-recovery.webp"
-                  alt="MiuCam bağlantı durumu ve yeniden bağlanma ekranı"
-                  width="480"
-                  height="960"
-                  loading="lazy"
-                />
-              </div>
-              <div class="screen-caption">
-                <span>04</span>
-                <div><strong>Durumu bil</strong><small>Şeffaf bağlantı geri bildirimi</small></div>
-              </div>
-            </article>
-          </div>
-          <p class="swipe-hint">Diğer ekranları görmek için yatay kaydır →</p>
         </div>
       </section>
 
@@ -781,11 +804,11 @@
           <div class="cta-card" data-reveal>
             <div class="cta-orb" aria-hidden="true"></div>
             <div class="cta-copy">
-              <span class="kicker kicker-light">Yakında · Yerel · Senin kontrolünde</span>
-              <h2>Eski telefonun çekmecede beklemesin.</h2>
+              <span class="kicker kicker-light">Mağaza sürümü hazırlanıyor</span>
+              <h2>MiuCam yayın yolunda.</h2>
               <p>
-                MiuCam’in gelişimini incele, teknik detaylara göz at ve yayına hazırlık
-                sürecini takip et.
+                İndirme bağlantıları hazır olduğunda burada yer alacak. Şimdilik gerçek
+                uygulama ekranlarını ve geliştirme notlarını inceleyebilirsin.
               </p>
               <div class="cta-actions">
                 <a
@@ -794,18 +817,21 @@
                   target="_blank"
                   rel="noreferrer"
                 >
-                  GitHub’da incele <span aria-hidden="true">↗</span>
+                  GitHub’da teknik ayrıntılar <span aria-hidden="true">↗</span>
                 </a>
+              </div>
+              <div class="cta-meta">
+                <p class="release-note">MiuCam aktif geliştirme aşamasındadır; mağaza bağlantıları yayınlandığında burada yer alacaktır.</p>
                 <a
-                  class="button button-ghost-light"
+                  class="cta-report-link"
                   href="https://raw.githubusercontent.com/TunahanCan/babycam/master/docs/reports/miucam_cok_dilli_ekranlar_usecase_raporu.pdf"
                   target="_blank"
                   rel="noreferrer"
                 >
                   Ürün raporu <small>PDF · 30 MB</small>
+                  <span aria-hidden="true">↗</span>
                 </a>
               </div>
-              <p class="release-note">MiuCam aktif geliştirme aşamasındadır; mağaza bağlantıları yayınlandığında burada yer alacaktır.</p>
             </div>
             <img
               src="assets/brand/mascot.webp"
@@ -831,7 +857,7 @@
             data-i18n-target="aria-label"
           >
             <img
-              src="assets/brand/wordmark.webp"
+              src="assets/brand/wordmark-pink.webp"
               alt="MiuCam"
               width="760"
               height="252"
@@ -844,8 +870,8 @@
           <div>
             <strong>Keşfet</strong>
             <a href="#nasil-calisir">Nasıl çalışır?</a>
-            <a href="#ozellikler">Özellikler</a>
             <a href="#ekranlar">Ekranlar</a>
+            <a href="#ozellikler">Özellikler</a>
           </div>
           <div>
             <strong>Bilgi</strong>

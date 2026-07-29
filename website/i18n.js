@@ -241,7 +241,20 @@
   };
 
   const initialize = async () => {
-    const sourceCatalog = await loadCatalog(defaultLanguage);
+    const initialLanguage = resolveInitialLanguage();
+    const sourceCatalogRequest = loadCatalog(defaultLanguage);
+    const initialCatalogRequest =
+      initialLanguage === defaultLanguage
+        ? sourceCatalogRequest
+        : loadCatalog(initialLanguage).catch((error) => {
+            console.error(error);
+            return sourceCatalogRequest;
+          });
+    const [sourceCatalog, initialCatalog] = await Promise.all([
+      sourceCatalogRequest,
+      initialCatalogRequest,
+    ]);
+
     addExplicitBindings();
     addAutomaticBindings(sourceCatalog);
 
@@ -249,13 +262,11 @@
       selector.addEventListener("change", (event) => changeLanguage(event.target.value));
     });
 
-    const initialLanguage = resolveInitialLanguage();
-    if (initialLanguage === defaultLanguage) {
-      catalogs.set(defaultLanguage, sourceCatalog);
-      applyLanguage(defaultLanguage, sourceCatalog);
-    } else {
-      await changeLanguage(initialLanguage);
-    }
+    const appliedLanguage =
+      initialLanguage !== defaultLanguage && initialCatalog !== sourceCatalog
+        ? initialLanguage
+        : defaultLanguage;
+    applyLanguage(appliedLanguage, initialCatalog);
 
     window.MiuCamI18n.ready = true;
     window.dispatchEvent(new CustomEvent("miucam:i18nready"));

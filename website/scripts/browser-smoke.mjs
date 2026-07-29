@@ -213,6 +213,27 @@ const runScenario = async ({
     width: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
     headings: document.querySelectorAll('h1, h2, h3').length,
+    languageBootstrapped:
+      document.documentElement.classList.contains('js')
+      && document.documentElement.dataset.language === document.documentElement.lang,
+    homeConversionReady: (() => {
+      const hero = document.querySelector('.hero');
+      if (!hero) return true;
+      const secondaryCta = hero.querySelector('.hero-actions .button-secondary');
+      const screens = document.querySelector('#ekranlar');
+      const features = document.querySelector('#ozellikler');
+      const trustItems = [...document.querySelectorAll('.trust-bar .trust-item')];
+      const primaryHeroImage = document.querySelector('.phone-hero img');
+      const secondaryHeroImage = document.querySelector('.phone-hero-secondary img');
+      return secondaryCta?.hash === '#ekranlar'
+        && primaryHeroImage?.fetchPriority === 'high'
+        && secondaryHeroImage?.fetchPriority === 'low'
+        && Boolean(
+          screens?.compareDocumentPosition(features) & Node.DOCUMENT_POSITION_FOLLOWING,
+        )
+        && trustItems.length === 4
+        && trustItems.every((item) => item.textContent.trim() && !item.querySelector('strong'));
+    })(),
     brokenImages: [...document.images]
       .filter((image) => image.complete && image.naturalWidth === 0)
       .map((image) => image.currentSrc || image.src),
@@ -274,6 +295,12 @@ const runScenario = async ({
   }
   if (!diagnostics.firstHeading?.includes(expectedHeading)) {
     failures.push(`${name}: beklenen çeviri başlıkta yok: ${expectedHeading}`);
+  }
+  if (!diagnostics.languageBootstrapped) {
+    failures.push(`${name}: erken dil/RTL başlangıç durumu kurulmadı`);
+  }
+  if (!diagnostics.homeConversionReady) {
+    failures.push(`${name}: hero CTA, fayda şeridi veya ürün kanıtı sırası bozuk`);
   }
   if (diagnostics.mismatchedInternalPageLinks.length > 0) {
     failures.push(
@@ -519,7 +546,7 @@ try {
     mobile: true,
     expectedLanguage: "en",
     expectedDirection: "ltr",
-    expectedHeading: "Your old phone",
+    expectedHeading: "Turn your old phone",
   });
   await runScenario({
     name: "mobile-home",
@@ -541,7 +568,7 @@ try {
     mobile: true,
     expectedLanguage: "de",
     expectedDirection: "ltr",
-    expectedHeading: "Dein altes Smartphone",
+    expectedHeading: "Mach dein altes Smartphone",
     testCompactLayout: true,
   });
   await runScenario({

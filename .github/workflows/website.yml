@@ -39,6 +39,7 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check website/app.js
+          node --check website/language-init.js
           node --check website/i18n.js
           node --check website/scripts/validate.mjs
           node --check website/scripts/browser-smoke.mjs

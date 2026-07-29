@@ -58,6 +58,7 @@ güncellenmelidir.
 
 ```bash
 node --check website/app.js
+node --check website/language-init.js
 node --check website/i18n.js
 node website/scripts/validate.mjs
 ```

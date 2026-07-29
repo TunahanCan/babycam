@@ -220,6 +220,7 @@ for (const icon of manifest?.icons || []) {
 for (const file of [
   "styles.css",
   "app.js",
+  "language-init.js",
   "i18n.js",
   "site.webmanifest",
   "robots.txt",
