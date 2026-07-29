@@ -9,6 +9,7 @@ import 'media/media_resource_counter.dart';
 import 'media/media_runtime_controller.dart';
 import 'media/server_power_mode.dart';
 import 'media/webrtc/webrtc_server_gateway.dart';
+import 'pairing/trusted_client_repository.dart';
 
 class ServerRuntimeState {
   const ServerRuntimeState({
@@ -102,6 +103,9 @@ class ServerRuntime implements AppRuntime {
     Future<void> Function(bool enabled)? onVideoEncodingDemandChanged,
     Future<void> Function(String reason)? onPauseExternalMedia,
     Future<void> Function(String reason)? onRecoverExternalMedia,
+    List<TrustedClientRecord> Function()? trustedClients,
+    Future<void> Function(String clientId)? onRevokeTrustedClient,
+    Future<void> Function()? onRevokeAllTrustedClients,
   })  : _mediaRuntime = mediaRuntime,
         _onStartPairing = onStartPairing,
         _onStopPairing = onStopPairing,
@@ -114,7 +118,10 @@ class ServerRuntime implements AppRuntime {
         _onMediaDemandChanged = onMediaDemandChanged,
         _onVideoEncodingDemandChanged = onVideoEncodingDemandChanged,
         _onPauseExternalMedia = onPauseExternalMedia,
-        _onRecoverExternalMedia = onRecoverExternalMedia {
+        _onRecoverExternalMedia = onRecoverExternalMedia,
+        _trustedClients = trustedClients,
+        _onRevokeTrustedClient = onRevokeTrustedClient,
+        _onRevokeAllTrustedClients = onRevokeAllTrustedClients {
     _platformLifecycle?.start();
   }
 
@@ -132,6 +139,9 @@ class ServerRuntime implements AppRuntime {
   final Future<void> Function(bool enabled)? _onVideoEncodingDemandChanged;
   final Future<void> Function(String reason)? _onPauseExternalMedia;
   final Future<void> Function(String reason)? _onRecoverExternalMedia;
+  final List<TrustedClientRecord> Function()? _trustedClients;
+  final Future<void> Function(String clientId)? _onRevokeTrustedClient;
+  final Future<void> Function()? _onRevokeAllTrustedClients;
   final _states = StreamController<ServerRuntimeState>.broadcast();
   final _activeSessions = <String, StreamSessionOptions>{};
   final _externalCaptureOwners = <String>{};
@@ -150,6 +160,22 @@ class ServerRuntime implements AppRuntime {
   ServerRuntimeState get currentState => _state;
   Object? get previewSource => _previewSource?.call();
   MediaQualityProfile? get mediaProfile => _mediaProfile?.call();
+  bool get canManageTrustedClients =>
+      _trustedClients != null &&
+      _onRevokeTrustedClient != null &&
+      _onRevokeAllTrustedClients != null;
+  List<TrustedClientRecord> get trustedClients =>
+      List.unmodifiable(_trustedClients?.call() ?? const []);
+
+  Future<void> revokeTrustedClient(String clientId) async {
+    if (_disposed) return;
+    await _onRevokeTrustedClient?.call(clientId);
+  }
+
+  Future<void> revokeAllTrustedClients() async {
+    if (_disposed) return;
+    await _onRevokeAllTrustedClients?.call();
+  }
 
   Future<void> refreshBroadcastAccess() async {
     final access = _broadcastAccess;

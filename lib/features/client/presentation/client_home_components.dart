@@ -186,6 +186,10 @@ class _ClientHeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    final connected = paired &&
+        (phase == ClientRuntimePhase.pairedIdle ||
+            phase == ClientRuntimePhase.watching ||
+            phase == ClientRuntimePhase.alertOnly);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -201,7 +205,9 @@ class _ClientHeroCard extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          paired ? strings.ui('roomConnectedTitle') : _titleFor(strings, phase),
+          connected
+              ? strings.ui('roomConnectedTitle')
+              : _titleFor(strings, phase),
           style: const TextStyle(
             color: MiuCamDesignTokens.nightPlum,
             fontSize: 26,
@@ -211,9 +217,9 @@ class _ClientHeroCard extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Text(
-          paired
+          connected
               ? strings.ui('liveAndAlertsParentText')
-              : strings.ui('clientSubtitleDefault'),
+              : _subtitleFor(strings, phase),
           style: const TextStyle(
             color: MiuCamDesignTokens.slate,
             fontSize: 14.5,
@@ -238,6 +244,24 @@ class _ClientHeroCard extends StatelessWidget {
       ClientRuntimePhase.offline => strings.ui('clientTitleOffline'),
       ClientRuntimePhase.revoked => strings.ui('clientTitleRevoked'),
       ClientRuntimePhase.error => strings.ui('clientTitleError'),
+    };
+  }
+
+  static String _subtitleFor(
+    AppStrings strings,
+    ClientRuntimePhase phase,
+  ) {
+    return switch (phase) {
+      ClientRuntimePhase.reconnecting ||
+      ClientRuntimePhase.offline =>
+        strings.ui('clientSubtitleOffline'),
+      ClientRuntimePhase.revoked ||
+      ClientRuntimePhase.error =>
+        strings.ui('clientSubtitleError'),
+      ClientRuntimePhase.watching ||
+      ClientRuntimePhase.alertOnly =>
+        strings.ui('clientSubtitleWatching'),
+      _ => strings.ui('clientSubtitleDefault'),
     };
   }
 }

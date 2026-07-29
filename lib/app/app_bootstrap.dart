@@ -230,6 +230,13 @@ class _AppBootstrapState extends State<AppBootstrap> {
           context: ErrorDescription('while switching application roles'),
         ),
       );
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger
+        ?..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+              content: Text(AppStrings.of(context).ui('roleSwitchFailed'))),
+        );
     }
   }
 

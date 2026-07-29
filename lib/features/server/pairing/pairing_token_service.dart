@@ -308,6 +308,17 @@ class PairingTokenService {
   String hashToken(String token) =>
       sha256.convert(utf8.encode(token)).toString();
   TrustedClientRecord? recordForClient(String clientId) => _clients[clientId];
+  List<TrustedClientRecord> get trustedClients {
+    final nowMs = _now().millisecondsSinceEpoch;
+    final clients = _clients.values
+        .where(
+          (client) => client.revokedAtMs == null && client.expiresAtMs > nowMs,
+        )
+        .toList(growable: false)
+      ..sort((a, b) => b.lastSeenAtMs.compareTo(a.lastSeenAtMs));
+    return List.unmodifiable(clients);
+  }
+
   int get pairedClientCount => _clients.values
       .where(
         (client) =>
@@ -344,6 +355,12 @@ class PairingTokenService {
     }
   }
 
+  Future<void> revokeClientPersisted(String clientId) =>
+      _trustedClientMutations.run(() async {
+        revokeClient(clientId);
+        await flushPersistence();
+      });
+
   void revokeAll() {
     final nowMs = _now().millisecondsSinceEpoch;
     for (final entry in _clients.entries) {
@@ -352,6 +369,11 @@ class PairingTokenService {
     _streamTokens.clear();
     _persistTrustedClients();
   }
+
+  Future<void> revokeAllPersisted() => _trustedClientMutations.run(() async {
+        revokeAll();
+        await flushPersistence();
+      });
 
   void clearEphemeralState() {
     _nonces.clear();

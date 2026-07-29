@@ -247,7 +247,7 @@ class _AlertTimeline extends StatelessWidget {
             '--:--',
             strings.ui('waitingLatestStatus'),
             strings.ui('pairedServerAlertAppears'),
-            _mint,
+            _timelineMint,
           )
         else
           for (final alert in items) ...[
@@ -294,9 +294,9 @@ String _alertTitle(AppStrings strings, AlertEventDto alert) {
 Color _alertColor(AlertEventDto alert) {
   final family = alert.category;
   return switch (family) {
-    AlertCategory.motion => _amber,
-    AlertCategory.audio => _pink,
-    AlertCategory.system => _mint,
+    AlertCategory.motion => _timelineAmber,
+    AlertCategory.audio => _timelinePink,
+    AlertCategory.system => _timelineMint,
   };
 }
 
@@ -463,14 +463,20 @@ class _Filter extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Text(
-              text,
-              style: TextStyle(
-                color: active ? Colors.white : _slate,
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Center(
+                widthFactor: 1,
+                child: Text(
+                  text,
+                  style: TextStyle(
+                    color: active ? Colors.white : _slate,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ),
             ),
           ),
@@ -689,7 +695,9 @@ const _slate = Color(0xFF6E7686);
 const _pink = Color(0xFFFF708B);
 const _mint = Color(0xFF87D8CC);
 const _mintSoft = Color(0xFFD9F7F1);
-const _amber = Color(0xFFFFD37B);
+const _timelinePink = Color(0xFFA83355);
+const _timelineMint = Color(0xFF167D69);
+const _timelineAmber = Color(0xFF8A5A00);
 
 const _title = TextStyle(
     color: _navy, fontSize: 30, height: 1.08, fontWeight: FontWeight.w900);

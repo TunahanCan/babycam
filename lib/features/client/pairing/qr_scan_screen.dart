@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/media/camera_permission_gateway.dart';
+import '../../../core/protocol/pairing_payload.dart';
 import '../../../l10n/app_strings.dart';
 
 class QRScanScreen extends StatefulWidget {
@@ -113,7 +114,8 @@ class _QRScanScreenState extends State<QRScanScreen>
         status = await widget.permissionGateway.request();
       }
     } catch (error) {
-      _markCameraUnavailable('$error');
+      _reportCameraError(error);
+      _markCameraUnavailable();
       return;
     }
 
@@ -167,12 +169,14 @@ class _QRScanScreenState extends State<QRScanScreen>
       } else {
         unawaited(_barcodeSubscription?.cancel());
         _barcodeSubscription = null;
-        _markCameraUnavailable(error.errorDetails?.message);
+        _reportCameraError(error);
+        _markCameraUnavailable();
       }
     } catch (error) {
       unawaited(_barcodeSubscription?.cancel());
       _barcodeSubscription = null;
-      _markCameraUnavailable('$error');
+      _reportCameraError(error);
+      _markCameraUnavailable();
     } finally {
       _startingScanner = false;
     }
@@ -184,7 +188,8 @@ class _QRScanScreenState extends State<QRScanScreen>
       _onDetect,
       onError: (Object error) {
         if (_handled) return;
-        _markCameraUnavailable('$error');
+        _reportCameraError(error);
+        _markCameraUnavailable();
       },
       cancelOnError: false,
     );
@@ -203,12 +208,22 @@ class _QRScanScreenState extends State<QRScanScreen>
     }
   }
 
-  void _markCameraUnavailable(String? message) {
+  void _markCameraUnavailable([String? message]) {
     if (!mounted) return;
     setState(() {
       _cameraState = _QrCameraState.unavailable;
       _cameraErrorMessage = message;
     });
+  }
+
+  void _reportCameraError(Object error) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        library: 'MiuCam QR scanner',
+        context: ErrorDescription('while preparing or running the QR camera'),
+      ),
+    );
   }
 
   Future<void> _openSettings() async {
@@ -239,6 +254,18 @@ class _QRScanScreenState extends State<QRScanScreen>
   }
 
   Future<void> _completeWithCode(String code) async {
+    final trimmed = code.trim();
+    if (PairingPayload.parseUri(trimmed) == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(content: Text(AppStrings.of(context).ui('invalidQrCode'))),
+        );
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+      if (mounted) setState(() => _handled = false);
+      return;
+    }
     await _barcodeSubscription?.cancel();
     _barcodeSubscription = null;
     if (!mounted) return;
@@ -247,7 +274,7 @@ class _QRScanScreenState extends State<QRScanScreen>
     await Future<void>.delayed(const Duration(milliseconds: 80));
     await _stopScanner();
     if (!mounted) return;
-    Navigator.of(context).pop(code.trim());
+    Navigator.of(context).pop(trimmed);
   }
 
   @override
@@ -269,15 +296,25 @@ class _QRScanScreenState extends State<QRScanScreen>
                 children: [
                   _buildCameraStage(strings),
                   if (_cameraState == _QrCameraState.ready)
-                    Center(
-                      child: Container(
-                        width: 250,
-                        height: 250,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.white, width: 3),
-                          borderRadius: BorderRadius.circular(26),
-                        ),
-                      ),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final shortestSide =
+                            constraints.biggest.shortestSide.isFinite
+                                ? constraints.biggest.shortestSide
+                                : 250.0;
+                        final overlaySize =
+                            (shortestSide - 32).clamp(72.0, 250.0).toDouble();
+                        return Center(
+                          child: Container(
+                            width: overlaySize,
+                            height: overlaySize,
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.white, width: 3),
+                              borderRadius: BorderRadius.circular(26),
+                            ),
+                          ),
+                        );
+                      },
                     ),
                 ],
               ),
@@ -292,6 +329,13 @@ class _QRScanScreenState extends State<QRScanScreen>
                       controller: _manualController,
                       minLines: 1,
                       maxLines: 2,
+                      keyboardType: TextInputType.url,
+                      textInputAction: TextInputAction.done,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      smartDashesType: SmartDashesType.disabled,
+                      smartQuotesType: SmartQuotesType.disabled,
+                      onSubmitted: (value) => unawaited(_submit(value)),
                       decoration: InputDecoration(
                         labelText: strings.ui('qrCodeText'),
                         border: const OutlineInputBorder(),
@@ -299,12 +343,23 @@ class _QRScanScreenState extends State<QRScanScreen>
                     ),
                   ),
                   const SizedBox(width: 12),
-                  SizedBox(
-                    height: 56,
-                    child: FilledButton(
-                      onPressed: () =>
-                          unawaited(_submit(_manualController.text)),
-                      child: const Icon(Icons.check_rounded),
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _manualController,
+                    builder: (context, value, _) => Tooltip(
+                      message: strings.ui('connectDiscoveredRoom'),
+                      child: SizedBox(
+                        height: 56,
+                        child: FilledButton(
+                          key: const ValueKey('qr-manual-submit'),
+                          onPressed: value.text.trim().isEmpty || _handled
+                              ? null
+                              : () => unawaited(_submit(value.text)),
+                          child: Icon(
+                            Icons.arrow_forward_rounded,
+                            semanticLabel: strings.ui('connectDiscoveredRoom'),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -362,7 +417,8 @@ class _QRScanScreenState extends State<QRScanScreen>
     if (error.errorCode == MobileScannerErrorCode.permissionDenied) {
       return strings.ui('qrScanCameraPermissionRequired');
     }
-    return error.errorDetails?.message ?? strings.ui('qrScanCameraError');
+    _reportCameraError(error);
+    return strings.ui('qrScanCameraError');
   }
 }
 
@@ -385,68 +441,80 @@ class _CameraStatePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return ColoredBox(
       color: const Color(0xFF07111F),
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (busy)
-                  const SizedBox.square(
-                    dimension: 28,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 3,
-                      color: Colors.white,
-                    ),
-                  )
-                else
-                  const Icon(
-                    Icons.camera_alt_outlined,
-                    color: Colors.white,
-                    size: 34,
-                  ),
-                const SizedBox(height: 16),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    height: 1.35,
-                  ),
-                ),
-                if (onOpenSettings != null || onRetry != null) ...[
-                  const SizedBox(height: 18),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 10,
-                    alignment: WrapAlignment.center,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const padding = 16.0;
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(padding),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: (constraints.maxHeight - padding * 2)
+                    .clamp(0.0, double.infinity)
+                    .toDouble(),
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (onOpenSettings != null)
-                        FilledButton.icon(
-                          onPressed: onOpenSettings,
-                          icon: const Icon(Icons.settings_rounded),
-                          label: Text(strings.ui('openAppSettings')),
-                        ),
-                      if (onRetry != null)
-                        OutlinedButton.icon(
-                          onPressed: onRetry,
-                          icon: const Icon(Icons.refresh_rounded),
-                          label: Text(strings.ui('tryAgain')),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Colors.white70),
+                      if (busy)
+                        const SizedBox.square(
+                          dimension: 28,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 3,
+                            color: Colors.white,
                           ),
+                        )
+                      else
+                        const Icon(
+                          Icons.camera_alt_outlined,
+                          color: Colors.white,
+                          size: 34,
                         ),
+                      const SizedBox(height: 16),
+                      Text(
+                        message,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          height: 1.35,
+                        ),
+                      ),
+                      if (onOpenSettings != null || onRetry != null) ...[
+                        const SizedBox(height: 18),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 10,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            if (onOpenSettings != null)
+                              FilledButton.icon(
+                                onPressed: onOpenSettings,
+                                icon: const Icon(Icons.settings_rounded),
+                                label: Text(strings.ui('openAppSettings')),
+                              ),
+                            if (onRetry != null)
+                              OutlinedButton.icon(
+                                onPressed: onRetry,
+                                icon: const Icon(Icons.refresh_rounded),
+                                label: Text(strings.ui('tryAgain')),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  side: const BorderSide(color: Colors.white70),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
-                ],
-              ],
+                ),
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }

@@ -34,6 +34,8 @@ const _deUiText = <String, String>{
   'bootstrapFailedText':
       'Beim Vorbereiten der App-Daten ist ein Fehler aufgetreten. Versuche es erneut.',
   'roleSwitching': 'Rolle wird gewechselt...',
+  'roleSwitchFailed':
+      'Die Rolle konnte nicht gewechselt werden. Der vorherige Bildschirm wurde wiederhergestellt.',
   'confirmLeaveServerTitle': 'Server-Modus verlassen?',
   'confirmLeaveServerBody':
       'Wenn du in den Client-Modus wechselst, werden der Babyzimmer-Stream und lokale Dienste beendet.',
@@ -53,7 +55,7 @@ const _deUiText = <String, String>{
   'viewer': 'Zuschauer',
   'setupPermissionsTitle': 'Berechtigungen bei der Einrichtung',
   'setupPermissionsText':
-      'Nach der Auswahl werden Kamera-, Mikrofon-, Benachrichtigungs- und Akku-/Hintergrundberechtigungen angefragt.',
+      'Berechtigungen werden erst beim Einrichten der jeweiligen Funktion mit einer klaren Erklärung angefragt.',
   'securityNoteTitle': 'Kein Internet nötig',
   'securityNoteText':
       'Beide Telefone brauchen nur dasselbe WLAN. Der Stream bleibt zu Hause.',
@@ -289,7 +291,7 @@ const _deUiText = <String, String>{
       'QR konnte nicht erneuert werden. Prüfe das WLAN und versuche es erneut.',
   'qrTicketRefreshed': 'QR-Ticket erneuert.',
   'refreshQr': 'QR erneuern',
-  'ticketCopied': 'Ticket kopiert.',
+  'ticketCopied': 'Verbindungsadresse kopiert.',
   'copyAddress': 'Adresse kopieren',
   'camera': 'Kamera',
   'microphone': 'Mikrofon',
@@ -445,6 +447,8 @@ const _deUiText = <String, String>{
   'talkingNow': 'Stimme wird ins Zimmer übertragen',
   'talkHelp':
       'Beim Loslassen werden Mikrofon und Sprechverbindung geschlossen.',
+  'talkAccessibilityHint':
+      'Mit Screenreader aktivieren, um das Sprechen zu starten oder zu beenden.',
   'roomVolume': 'Raumlautstärke',
   'platformRuntimeContractTitle': 'Hintergrund-Laufzeitvertrag',
   'iosForegroundOnlyContract':
@@ -487,6 +491,20 @@ const _deUiText = <String, String>{
   'advancedSettings': 'Erweiterte Einstellungen',
   'advancedSettingsDescription': 'Schwellen und Zeiträume fein einstellen.',
   'resetSettingsTitle': 'Einstellungen zurücksetzen?',
+  'trustedDevicesTitle': 'Vertrauenswürdige Eltern-Geräte',
+  'trustedDevicesDescription':
+      'Verwalte Geräte, die sich ohne neuen QR-Code wieder mit diesem Raum verbinden können.',
+  'noTrustedDevices': 'Noch keine vertrauenswürdigen Eltern-Geräte vorhanden.',
+  'revokeDevice': 'Zugriff entziehen',
+  'revokeDeviceConfirmTitle': 'Zugriff dieses Geräts entziehen?',
+  'revokeDeviceConfirmBody':
+      '{name} muss einen neuen QR-Code scannen, um sich wieder zu verbinden.',
+  'revokeAllDevices': 'Alle Zugriffe entziehen',
+  'revokeAllDevicesConfirmBody':
+      'Jedes Eltern-Gerät muss vor dem erneuten Verbinden einen neuen QR-Code scannen.',
+  'trustedDeviceRevokeFailed':
+      'Der Gerätezugriff konnte nicht entzogen werden. Bitte erneut versuchen.',
+  'trustedDeviceRevoked': 'Der Gerätezugriff wurde entzogen.',
   'settingsSaveFailed':
       'Die Einstellung konnte nicht gespeichert werden. Bitte erneut versuchen.',
   'resetSettingsDescription':
@@ -501,6 +519,7 @@ const _arUiText = <String, String>{
   'bootstrapFailedText':
       'حدثت مشكلة أثناء تجهيز بيانات التطبيق. يمكنك المحاولة مرة أخرى.',
   'roleSwitching': 'يتم تبديل الدور...',
+  'roleSwitchFailed': 'تعذر تبديل الدور. تمت استعادة الشاشة السابقة.',
   'confirmLeaveServerTitle': 'مغادرة وضع الخادم؟',
   'confirmLeaveServerBody':
       'إذا انتقلت إلى وضع العميل، سيتوقف بث غرفة الطفل والخدمات المحلية.',
@@ -519,7 +538,7 @@ const _arUiText = <String, String>{
   'viewer': 'مشاهد',
   'setupPermissionsTitle': 'أذونات الإعداد الأول',
   'setupPermissionsText':
-      'بعد الاختيار، يتم طلب أذونات الكاميرا والميكروفون والإشعارات والبطارية/الخلفية.',
+      'تُطلب الأذونات فقط عند إعداد الميزة المرتبطة بها مع توضيح سبب الحاجة إليها.',
   'securityNoteTitle': 'لا حاجة إلى الإنترنت',
   'securityNoteText':
       'يكفي اتصال الهاتفين بشبكة Wi‑Fi نفسها. يبقى البث داخل منزلك.',
@@ -736,7 +755,7 @@ const _arUiText = <String, String>{
   'qrTicketRefreshFailed': 'تعذر تحديث QR. تحقق من شبكة Wi-Fi وحاول مرة أخرى.',
   'qrTicketRefreshed': 'تم تحديث تذكرة QR.',
   'refreshQr': 'تحديث QR',
-  'ticketCopied': 'تم نسخ التذكرة.',
+  'ticketCopied': 'تم نسخ عنوان الاتصال.',
   'copyAddress': 'نسخ العنوان',
   'camera': 'الكاميرا',
   'microphone': 'الميكروفون',
@@ -879,6 +898,8 @@ const _arUiText = <String, String>{
   'holdToTalk': 'اضغط مطولاً للتحدث',
   'talkingNow': 'يتم إرسال الصوت إلى الغرفة',
   'talkHelp': 'عند إفلات الزر يتوقف الميكروفون واتصال التحدث.',
+  'talkAccessibilityHint':
+      'فعّل الزر لبدء التحدث أو إيقافه عند استخدام قارئ الشاشة.',
   'roomVolume': 'مستوى صوت الغرفة',
   'platformRuntimeContractTitle': 'عقد التشغيل في الخلفية',
   'iosForegroundOnlyContract':
@@ -918,6 +939,20 @@ const _arUiText = <String, String>{
   'advancedSettings': 'إعدادات متقدمة',
   'advancedSettingsDescription': 'ضبط الحدود والمدد بدقة.',
   'resetSettingsTitle': 'إعادة ضبط الإعدادات؟',
+  'trustedDevicesTitle': 'أجهزة الوالدين الموثوقة',
+  'trustedDevicesDescription':
+      'إدارة الأجهزة التي يمكنها إعادة الاتصال بهذه الغرفة دون مسح رمز QR جديد.',
+  'noTrustedDevices': 'لا توجد أجهزة والدين موثوقة بعد.',
+  'revokeDevice': 'إلغاء الوصول',
+  'revokeDeviceConfirmTitle': 'هل تريد إلغاء وصول هذا الجهاز؟',
+  'revokeDeviceConfirmBody':
+      'سيحتاج {name} إلى مسح رمز QR جديد لإعادة الاتصال بهذه الغرفة.',
+  'revokeAllDevices': 'إلغاء جميع صلاحيات الوصول',
+  'revokeAllDevicesConfirmBody':
+      'سيحتاج كل جهاز والدين إلى مسح رمز QR جديد قبل إعادة الاتصال.',
+  'trustedDeviceRevokeFailed':
+      'تعذر إلغاء وصول الجهاز. يرجى المحاولة مرة أخرى.',
+  'trustedDeviceRevoked': 'تم إلغاء وصول الجهاز.',
   'settingsSaveFailed': 'تعذر حفظ الإعداد. يرجى المحاولة مرة أخرى.',
   'resetSettingsDescription': 'سيعود الاكتشاف إلى الملف المتوازن الموصى به.',
 };

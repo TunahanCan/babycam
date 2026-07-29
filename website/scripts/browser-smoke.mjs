@@ -175,6 +175,7 @@ const runScenario = async ({
   expectedDirection,
   expectedHeading,
   testAllLanguages = false,
+  testCompactLayout = false,
   testMenu = false,
   switchToLanguage,
 }) => {
@@ -319,6 +320,62 @@ const runScenario = async ({
       !menuResult.closed
     ) {
       failures.push(`${name}: mobil menü veya klavye odağı davranışı bozuk`);
+    }
+  }
+
+  if (testCompactLayout) {
+    const compactLayoutResult = await evaluate(`(() => {
+      const releaseNote = document.querySelector('.release-note')?.getBoundingClientRect();
+      const ctaMascot = document.querySelector('.cta-card > img')?.getBoundingClientRect();
+      const ctaOverlaps = releaseNote && ctaMascot
+        ? !(
+            releaseNote.right <= ctaMascot.left
+            || ctaMascot.right <= releaseNote.left
+            || releaseNote.bottom <= ctaMascot.top
+            || ctaMascot.bottom <= releaseNote.top
+          )
+        : true;
+
+      const previousRootFontSize = document.documentElement.style.fontSize;
+      document.documentElement.style.fontSize = '200%';
+      const viewportWidth = document.documentElement.clientWidth;
+      const resizedScrollWidth = document.documentElement.scrollWidth;
+      const visible = (element) => {
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== 'none'
+          && style.visibility !== 'hidden'
+          && rect.width > 0
+          && rect.height > 0;
+      };
+      const clippedControls = [
+        ...document.querySelectorAll('a[href], button, select, summary, [tabindex]'),
+      ]
+        .filter(visible)
+        .filter((element) => {
+          if (element.closest('.screen-showcase, .legal-nav')) return false;
+          const rect = element.getBoundingClientRect();
+          return rect.left < -1 || rect.right > viewportWidth + 1;
+        })
+        .map((element) => element.id || element.className || element.tagName);
+      document.documentElement.style.fontSize = previousRootFontSize;
+
+      return { ctaOverlaps, viewportWidth, resizedScrollWidth, clippedControls };
+    })()`);
+
+    if (compactLayoutResult.ctaOverlaps) {
+      failures.push(`${name}: CTA maskotu yayın notunun üstünü kapatıyor`);
+    }
+    if (
+      compactLayoutResult.resizedScrollWidth > compactLayoutResult.viewportWidth + 1
+      || compactLayoutResult.clippedControls.length > 0
+    ) {
+      failures.push(
+        `${name}: %200 metin boyutunda yeniden akış bozuk `
+        + `(${compactLayoutResult.resizedScrollWidth}px > `
+        + `${compactLayoutResult.viewportWidth}px; `
+        + `${compactLayoutResult.clippedControls.join(", ")})`,
+      );
     }
   }
 
@@ -475,6 +532,17 @@ try {
     expectedHeading: "هاتفك القديم",
     testMenu: true,
     switchToLanguage: "es",
+  });
+  await runScenario({
+    name: "compact-home",
+    path: "/?lang=de",
+    width: 320,
+    height: 568,
+    mobile: true,
+    expectedLanguage: "de",
+    expectedDirection: "ltr",
+    expectedHeading: "Dein altes Smartphone",
+    testCompactLayout: true,
   });
   await runScenario({
     name: "desktop-privacy",

@@ -216,7 +216,7 @@ class _RoleChoiceCard extends StatelessWidget {
     final background =
         roomDevice ? const Color(0xFFECF7F4) : const Color(0xFFEDEAFF);
     final accent =
-        roomDevice ? MiuCamDesignTokens.mint : MiuCamDesignTokens.pink;
+        roomDevice ? MiuCamDesignTokens.serverCyan : MiuCamDesignTokens.pink;
     return Semantics(
       button: true,
       label: '${role.choiceTitle}. ${role.choiceDescription}',

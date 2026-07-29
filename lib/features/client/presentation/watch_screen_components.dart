@@ -38,91 +38,119 @@ class _WatchNightClockViewState extends State<_WatchNightClockView> {
     final strings = AppStrings.of(context);
     final state = widget.state;
     final quality = state.networkQuality?.tier ?? NetworkQualityTier.unknown;
-    final alert =
-        widget.runtime.alerts.isEmpty ? null : widget.runtime.alerts.first;
     final time = '${_now.hour.toString().padLeft(2, '0')}:'
         '${_now.minute.toString().padLeft(2, '0')}';
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(22),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                _RoundIconButton(
-                  icon: Icons.close_rounded,
-                  tooltip: strings.ui('exitNightClock'),
-                  onTap: widget.onExit,
-                ),
-                const Spacer(),
-                _ConnectedBadge(
-                  text: _VideoPanel._networkLabel(strings, quality),
-                  dark: true,
-                ),
-              ],
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          padding: const EdgeInsets.all(22),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: (constraints.maxHeight - 44)
+                  .clamp(0.0, double.infinity)
+                  .toDouble(),
             ),
-            const Spacer(),
-            Text(
-              time,
-              maxLines: 1,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 72,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              !state.alertsActive
-                  ? strings.ui('notificationsOff')
-                  : widget.runtime.alertTransportConnected
-                      ? widget.runtime.systemNotificationsEnabled == false
-                          ? strings.ui('notificationsInAppOnly')
-                          : strings.ui('nightClockAudioAlertsOn')
-                      : strings.ui('clientTitleReconnecting'),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const Spacer(),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: .08),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.white24),
-              ),
-              child: Row(
+            child: IntrinsicHeight(
+              child: Column(
                 children: [
-                  const Icon(
-                    Icons.notifications_active_rounded,
-                    color: _mint,
-                    size: 22,
+                  Row(
+                    children: [
+                      _RoundIconButton(
+                        icon: Icons.close_rounded,
+                        tooltip: strings.ui('exitNightClock'),
+                        onTap: widget.onExit,
+                      ),
+                      const Spacer(),
+                      _ConnectedBadge(
+                        text: _VideoPanel._networkLabel(strings, quality),
+                        dark: true,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      alert == null
-                          ? strings.ui('waitingLatestStatus')
-                          : '${_formatAlertTime(alert.timestampMs)} · '
-                              '${_alertTitle(strings, alert)}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                  const Spacer(),
+                  Semantics(
+                    label: time,
+                    child: ExcludeSemantics(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          time,
+                          maxLines: 1,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 72,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    !state.alertsActive
+                        ? strings.ui('notificationsOff')
+                        : widget.runtime.alertTransportConnected
+                            ? widget.runtime.systemNotificationsEnabled == false
+                                ? strings.ui('notificationsInAppOnly')
+                                : strings.ui('nightClockAudioAlertsOn')
+                            : strings.ui('clientTitleReconnecting'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  StreamBuilder<List<AlertEventDto>>(
+                    stream: widget.runtime.alertUpdates,
+                    initialData: widget.runtime.alerts,
+                    builder: (context, snapshot) {
+                      final alerts = snapshot.data ?? const <AlertEventDto>[];
+                      final alert = alerts.isEmpty ? null : alerts.first;
+                      return Semantics(
+                        liveRegion: true,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: .08),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: Colors.white24),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.notifications_active_rounded,
+                                color: _mint,
+                                size: 22,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  alert == null
+                                      ? strings.ui('waitingLatestStatus')
+                                      : '${_formatAlertTime(alert.timestampMs)} · '
+                                          '${_alertTitle(strings, alert)}',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

@@ -137,8 +137,14 @@ class _RoomControlsPanelState extends State<RoomControlsPanel> {
             ),
             const SizedBox(height: 14),
             Semantics(
+              container: true,
               button: true,
-              label: strings.ui('holdToTalk'),
+              enabled: !_talkBusy,
+              toggled: talking,
+              label: strings.ui(talking ? 'talkingNow' : 'holdToTalk'),
+              hint: strings.ui('talkAccessibilityHint'),
+              onTap: _talkBusy ? null : _toggleTalkingFromSemantics,
+              excludeSemantics: true,
               child: Listener(
                 onPointerDown: _startTalking,
                 onPointerUp: _stopTalking,
@@ -149,7 +155,7 @@ class _RoomControlsPanelState extends State<RoomControlsPanel> {
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   decoration: BoxDecoration(
                     color: talking
-                        ? const Color(0xFFD84E78)
+                        ? const Color(0xFFC44870)
                         : const Color(0xFF182B49),
                     borderRadius: BorderRadius.circular(16),
                   ),
@@ -198,17 +204,21 @@ class _RoomControlsPanelState extends State<RoomControlsPanel> {
   }
 
   Widget _trackChip(AppStrings strings, String id, String labelKey) =>
-      ChoiceChip(
-        label: Text(strings.ui(labelKey)),
-        selected: _trackId == id,
-        onSelected: _comfortBusy
-            ? null
-            : (_) {
-                setState(() => _trackId = id);
-                if (_snapshot.comfort?.playing == true) {
-                  unawaited(_playComfort());
-                }
-              },
+      ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: ChoiceChip(
+          materialTapTargetSize: MaterialTapTargetSize.padded,
+          label: Text(strings.ui(labelKey)),
+          selected: _trackId == id,
+          onSelected: _comfortBusy
+              ? null
+              : (_) {
+                  setState(() => _trackId = id);
+                  if (_snapshot.comfort?.playing == true) {
+                    unawaited(_playComfort());
+                  }
+                },
+        ),
       );
 
   void _listen() {
@@ -273,8 +283,12 @@ class _RoomControlsPanelState extends State<RoomControlsPanel> {
   }
 
   void _startTalking(PointerDownEvent event) {
+    _beginTalking(event.pointer);
+  }
+
+  void _beginTalking(int pointer) {
     if (_talkPointer != null || _talkBusy || _snapshot.talking) return;
-    _talkPointer = event.pointer;
+    _talkPointer = pointer;
     setState(() => _talkBusy = true);
     unawaited(widget.controls.startTalking(widget.session).then((_) {
       if (mounted) setState(() => _talkBusy = false);
@@ -287,6 +301,22 @@ class _RoomControlsPanelState extends State<RoomControlsPanel> {
 
   void _stopTalking(PointerEvent event) {
     if (_talkPointer != event.pointer) return;
+    _endTalking();
+  }
+
+  void _toggleTalkingFromSemantics() {
+    if (_talkBusy) return;
+    if (_snapshot.talking || _talkPointer != null) {
+      _endTalking();
+    } else {
+      // A synthetic pointer identifier keeps the same single-flight ownership
+      // as touch while allowing TalkBack and VoiceOver to toggle talk mode.
+      _beginTalking(-1);
+    }
+  }
+
+  void _endTalking() {
+    if (_talkPointer == null && !_snapshot.talking) return;
     _talkPointer = null;
     unawaited(widget.controls.stopTalking().catchError((Object error) {
       widget.onError?.call(error);

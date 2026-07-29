@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../../core/network/lan_endpoint.dart';
+import '../../../core/protocol/pairing_payload.dart';
 import '../../../l10n/app_strings.dart';
 import '../../shared/presentation/miucam_design_tokens.dart';
 import '../../shared/presentation/miucam_shells.dart';
@@ -24,6 +28,55 @@ class ServerPairingSection extends StatefulWidget {
 
 class _ServerPairingSectionState extends State<ServerPairingSection> {
   bool _refreshing = false;
+  Timer? _ticketExpiryTimer;
+  String? _autoRefreshAttemptedPayload;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleTicketRefresh();
+  }
+
+  @override
+  void didUpdateWidget(covariant ServerPairingSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state.qrPayload != widget.state.qrPayload) {
+      _scheduleTicketRefresh();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticketExpiryTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleTicketRefresh() {
+    _ticketExpiryTimer?.cancel();
+    final rawPayload = widget.state.qrPayload;
+    final ticket = rawPayload == null
+        ? null
+        : PairingPayload.parseUri(rawPayload, allowExpired: true);
+    if (rawPayload == null || ticket == null) return;
+    final remaining = DateTime.fromMillisecondsSinceEpoch(ticket.expiresAtMs)
+        .difference(DateTime.now());
+    if (remaining <= Duration.zero) {
+      if (_autoRefreshAttemptedPayload == rawPayload) return;
+      _autoRefreshAttemptedPayload = rawPayload;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_refreshPairingTicket());
+      });
+      return;
+    }
+    _ticketExpiryTimer = Timer(
+      remaining + const Duration(milliseconds: 250),
+      () {
+        if (!mounted || _autoRefreshAttemptedPayload == rawPayload) return;
+        _autoRefreshAttemptedPayload = rawPayload;
+        unawaited(_refreshPairingTicket());
+      },
+    );
+  }
 
   Future<bool> _refreshPairingTicket() async {
     if (_refreshing || !mounted) return false;
@@ -41,6 +94,15 @@ class _ServerPairingSectionState extends State<ServerPairingSection> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final payload = widget.state.qrPayload;
+    final ticket = payload == null
+        ? null
+        : PairingPayload.parseUri(payload, allowExpired: true);
+    final invalidTicket = payload != null && ticket == null;
+    final ticketExpired = ticket?.isExpired ?? false;
+    final visiblePayload = ticket != null && !ticketExpired ? payload : null;
+    final address = ticket == null || ticketExpired
+        ? null
+        : LanEndpoint(host: ticket.host, port: ticket.port).authority;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -50,13 +112,16 @@ class _ServerPairingSectionState extends State<ServerPairingSection> {
         ),
         const SizedBox(height: 10),
         _ConnectionCard(
-          qrPayload: payload,
+          qrPayload: visiblePayload,
+          address: address,
           loading: _refreshing,
-          failed: payload == null && widget.state.errorMessage != null,
+          failed: visiblePayload == null &&
+              !_refreshing &&
+              (widget.state.errorMessage != null || invalidTicket),
         ),
         const SizedBox(height: 10),
         _QrIpActions(
-          payload: payload,
+          address: address,
           refreshing: _refreshing,
           onRefresh: _refreshPairingTicket,
         ),
@@ -68,11 +133,13 @@ class _ServerPairingSectionState extends State<ServerPairingSection> {
 class _ConnectionCard extends StatelessWidget {
   const _ConnectionCard({
     required this.qrPayload,
+    required this.address,
     required this.loading,
     required this.failed,
   });
 
   final String? qrPayload;
+  final String? address;
   final bool loading;
   final bool failed;
 
@@ -115,10 +182,9 @@ class _ConnectionCard extends StatelessWidget {
                   fontSize: 14.5,
                 ),
               ),
-              if (!isCompact) ...[
+              if (address != null) ...[
                 const SizedBox(height: 12),
-                if (qrPayload case final payload?)
-                  _PayloadBox(payload: payload),
+                _AddressBox(address: address!),
                 const SizedBox(height: 12),
               ] else
                 const SizedBox(height: 8),
@@ -226,10 +292,10 @@ class _QrPlaceholder extends StatelessWidget {
   }
 }
 
-class _PayloadBox extends StatelessWidget {
-  const _PayloadBox({required this.payload});
+class _AddressBox extends StatelessWidget {
+  const _AddressBox({required this.address});
 
-  final String payload;
+  final String address;
 
   @override
   Widget build(BuildContext context) {
@@ -243,7 +309,8 @@ class _PayloadBox extends StatelessWidget {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: SelectableText(
-          payload,
+          address,
+          key: const ValueKey('server-manual-address'),
           maxLines: 1,
           style: const TextStyle(
             color: MiuCamDesignTokens.serverText,
@@ -291,12 +358,12 @@ class _QrPanel extends StatelessWidget {
 
 class _QrIpActions extends StatelessWidget {
   const _QrIpActions({
-    required this.payload,
+    required this.address,
     required this.refreshing,
     required this.onRefresh,
   });
 
-  final String? payload;
+  final String? address;
   final bool refreshing;
   final Future<bool> Function() onRefresh;
 
@@ -356,10 +423,10 @@ class _QrIpActions extends StatelessWidget {
           SizedBox(
             height: 48,
             child: OutlinedButton.icon(
-              onPressed: payload == null || refreshing
+              onPressed: address == null || refreshing
                   ? null
                   : () async {
-                      await Clipboard.setData(ClipboardData(text: payload!));
+                      await Clipboard.setData(ClipboardData(text: address!));
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context)
                         ..clearSnackBars()

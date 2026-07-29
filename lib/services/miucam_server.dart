@@ -475,6 +475,43 @@ class MiuCamServer {
     }
   }
 
+  List<TrustedClientRecord> get trustedClients => tokenService.trustedClients;
+
+  Future<void> revokeTrustedClient(String clientId) async {
+    if (_disposed) return;
+    await tokenService.revokeClientPersisted(clientId);
+    await _disconnectRevokedClient(clientId);
+  }
+
+  Future<void> revokeAllTrustedClients() async {
+    if (_disposed) return;
+    final clientIds = tokenService.trustedClients
+        .map((client) => client.clientId)
+        .toList(growable: false);
+    await tokenService.revokeAllPersisted();
+    for (final clientId in clientIds) {
+      await _disconnectRevokedClient(clientId);
+    }
+  }
+
+  Future<void> _disconnectRevokedClient(String clientId) async {
+    await _eventSockets.closeClient(clientId);
+    try {
+      await _features.stopTalk(clientId: clientId);
+    } catch (error) {
+      onLog('Revoked client talk cleanup failed ($clientId): $error');
+    }
+    final errors = await _sessionOperations.run(
+      () => _cleanupClientSession(clientId, closeWebRtc: true),
+    );
+    if (errors.isNotEmpty) {
+      onLog(
+        'Revoked client cleanup completed with errors ($clientId): '
+        '${errors.join(' | ')}',
+      );
+    }
+  }
+
   Future<void> startMediaRuntime() async {
     await startVideoRuntime();
     await startAudioRuntime();

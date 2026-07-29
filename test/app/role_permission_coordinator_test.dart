@@ -7,22 +7,20 @@ import 'package:permission_handler/permission_handler.dart';
 
 void main() {
   group('RolePermissionPolicy', () {
-    test('iOS client için QR kamera iznini seçer', () {
+    test('client izinleri ilgili özellik açılana kadar istemez', () {
       final permissions = const RolePermissionPolicy()
           .permissionsFor(AppRole.client, isAndroid: false);
 
-      expect(permissions, [Permission.camera]);
+      expect(permissions, isEmpty);
     });
 
-    test('server Android için mikrofon ve pil optimizasyon izni ekler', () {
+    test('server Android için yalnız capture izinlerini seçer', () {
       final permissions = const RolePermissionPolicy()
           .permissionsFor(AppRole.server, isAndroid: true);
 
       expect(permissions, [
-        Permission.notification,
         Permission.camera,
         Permission.microphone,
-        Permission.ignoreBatteryOptimizations,
       ]);
     });
   });
@@ -30,10 +28,8 @@ void main() {
   group('RolePermissionCoordinator', () {
     test('yalnızca gerekli izinleri gateway üzerinden ister', () async {
       final gateway = _FakePermissionGateway({
-        Permission.notification: PermissionStatus.denied,
         Permission.camera: PermissionStatus.granted,
         Permission.microphone: PermissionStatus.permanentlyDenied,
-        Permission.ignoreBatteryOptimizations: PermissionStatus.restricted,
       });
       final coordinator = RolePermissionCoordinator(
         gateway: gateway,
@@ -44,15 +40,8 @@ void main() {
 
       await coordinator.requestFor(AppRole.server);
 
-      expect(gateway.statusChecks, [
-        Permission.notification,
-        Permission.microphone,
-        Permission.ignoreBatteryOptimizations,
-      ]);
-      expect(gateway.requests, [
-        Permission.notification,
-        Permission.ignoreBatteryOptimizations,
-      ]);
+      expect(gateway.statusChecks, [Permission.microphone]);
+      expect(gateway.requests, isEmpty);
     });
 
     test('platform gateway hatası rol seçimini kırmaz', () async {
@@ -84,7 +73,8 @@ void main() {
       expect(localNetworkGateway.requestCount, 1);
     });
 
-    test('kamera iznini native camera gateway üzerinden ister', () async {
+    test('server kamera iznini native camera gateway üzerinden ister',
+        () async {
       final cameraGateway = _FakeCameraPermissionGateway();
       final coordinator = RolePermissionCoordinator(
         gateway: _FakePermissionGateway({
@@ -95,10 +85,25 @@ void main() {
         isAndroid: () => false,
       );
 
-      await coordinator.requestFor(AppRole.client);
+      await coordinator.requestFor(AppRole.server);
 
       expect(cameraGateway.statusCalls, 1);
       expect(cameraGateway.requestCalls, 1);
+    });
+
+    test('client rol seçimi kamera gatewayini tetiklemez', () async {
+      final cameraGateway = _FakeCameraPermissionGateway();
+      final coordinator = RolePermissionCoordinator(
+        gateway: _FakePermissionGateway({}),
+        cameraGateway: cameraGateway,
+        localNetworkGateway: _FakeLocalNetworkPermissionGateway(),
+        isAndroid: () => true,
+      );
+
+      await coordinator.requestFor(AppRole.client);
+
+      expect(cameraGateway.statusCalls, 0);
+      expect(cameraGateway.requestCalls, 0);
     });
   });
 }

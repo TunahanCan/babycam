@@ -65,16 +65,97 @@ void main() {
     expect(find.text('Kamera bulunamadı.'), findsOneWidget);
     expect(find.text('QR kod metni'), findsOneWidget);
   });
+
+  testWidgets(
+      'manuel QR girişi boşken gönderilemez ve erişilebilir etiketi var',
+      (tester) async {
+    final gateway = _FakeQRCameraPermissionGateway(
+      statusResult: CameraPermissionStatus.denied,
+      requestResult: CameraPermissionStatus.denied,
+    );
+
+    await tester.pumpWidget(_App(gateway: gateway));
+    await tester.pump();
+    await tester.pump();
+
+    final submitFinder = find.byKey(const ValueKey('qr-manual-submit'));
+    expect(tester.widget<FilledButton>(submitFinder).onPressed, isNull);
+    expect(find.byTooltip('Bağlan'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), '  miucam://pair?x=1  ');
+    await tester.pump();
+
+    expect(tester.widget<FilledButton>(submitFinder).onPressed, isNotNull);
+    expect(
+      tester.getSemantics(find.byIcon(Icons.arrow_forward_rounded)).label,
+      contains('Bağlan'),
+    );
+  });
+
+  testWidgets('geçersiz manuel QR tarayıcı ekranını kapatmaz', (tester) async {
+    final gateway = _FakeQRCameraPermissionGateway(
+      statusResult: CameraPermissionStatus.denied,
+      requestResult: CameraPermissionStatus.denied,
+    );
+
+    await tester.pumpWidget(_App(gateway: gateway));
+    await tester.pump();
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'https://example.com');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('qr-manual-submit')));
+    await tester.pump();
+
+    expect(find.byType(QRScanScreen), findsOneWidget);
+    expect(
+      find.text('Geçersiz veya süresi dolmuş MiuCam QR kodu.'),
+      findsOneWidget,
+    );
+
+    await tester.pump(const Duration(seconds: 1));
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('qr-manual-submit')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('dar yatay ekranda ve büyük metinde içerik taşmaz',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(667, 320));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final gateway = _FakeQRCameraPermissionGateway(
+      statusResult: CameraPermissionStatus.denied,
+      requestResult: CameraPermissionStatus.denied,
+    );
+
+    await tester.pumpWidget(
+      _App(
+        gateway: gateway,
+        textScaler: const TextScaler.linear(2),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('QR kod metni'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 class _App extends StatelessWidget {
   const _App({
     required this.gateway,
     this.cameraAvailabilityGateway,
+    this.textScaler,
   });
 
   final CameraPermissionGateway gateway;
   final QRCameraAvailabilityGateway? cameraAvailabilityGateway;
+  final TextScaler? textScaler;
 
   @override
   Widget build(BuildContext context) {
@@ -87,6 +168,12 @@ class _App extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      builder: textScaler == null
+          ? null
+          : (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+                child: child!,
+              ),
       home: QRScanScreen(
         permissionGateway: gateway,
         cameraAvailabilityGateway: cameraAvailabilityGateway ??

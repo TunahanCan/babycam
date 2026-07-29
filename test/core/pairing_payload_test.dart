@@ -59,12 +59,18 @@ void main() {
   });
 
   test('expired QR payload reddedilir', () {
-    final parsed = PairingPayload.parseUri(payload(
-            expiresAtMs: DateTime.now()
-                .subtract(const Duration(seconds: 1))
-                .millisecondsSinceEpoch)
-        .toUriString());
+    final expired = payload(
+      expiresAtMs: DateTime.now()
+          .subtract(const Duration(seconds: 1))
+          .millisecondsSinceEpoch,
+    );
+    final parsed = PairingPayload.parseUri(expired.toUriString());
     expect(parsed, isNull);
+    expect(
+      PairingPayload.parseUri(expired.toUriString(), allowExpired: true)
+          ?.isExpired,
+      isTrue,
+    );
   });
 
   test('invalid schema reddedilir', () {

@@ -195,8 +195,7 @@ class _ControllableBrowser extends MiuCamServiceBrowser {
   Future<void> dispose() => _controller.close();
 }
 
-MiuCamServiceBrowser _browser(nsd.Discovery discovery) =>
-    MiuCamServiceBrowser(
+MiuCamServiceBrowser _browser(nsd.Discovery discovery) => MiuCamServiceBrowser(
       startDiscovery: (_) async => discovery,
       stopDiscovery: (_) async {},
       retryPolicy: _noDelayRetry,

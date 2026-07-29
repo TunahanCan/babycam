@@ -113,6 +113,21 @@ class MiuCamEventSocketController {
 
   int broadcastText(String data) => _broadcast(data);
 
+  Future<void> closeClient(String clientId) async {
+    final sockets = _clientIds.entries
+        .where((entry) => entry.value == clientId)
+        .map((entry) => entry.key)
+        .toList(growable: false);
+    for (final socket in sockets) {
+      try {
+        await socket.close();
+      } catch (_) {}
+      // The socket callback and this explicit path may race. Both [release]
+      // and its connection lease are idempotent.
+      await release(socket);
+    }
+  }
+
   int _broadcast(Object data) {
     var delivered = 0;
     for (final socket in _sockets.toList()) {

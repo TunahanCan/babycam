@@ -29,8 +29,7 @@ class ServerCompositionRoot {
       Future<String> Function()? startPairingOverride,
       Future<void> Function()? startMediaOverride,
       Future<void> Function()? stopOverride,
-      bool broadcastPaywallEnabled =
-          MiuCamFeatureFlags.broadcastPaywallEnabled,
+      bool broadcastPaywallEnabled = MiuCamFeatureFlags.broadcastPaywallEnabled,
       TransportConfig transportConfig = TransportConfig.local}) {
     createCount++;
     final tokenService = PairingTokenService(
@@ -186,6 +185,9 @@ class ServerCompositionRoot {
             },
       onPauseExternalMedia: server.pauseExternalMediaForPlatform,
       onRecoverExternalMedia: server.recoverExternalMediaForPlatform,
+      trustedClients: () => server.trustedClients,
+      onRevokeTrustedClient: server.revokeTrustedClient,
+      onRevokeAllTrustedClients: server.revokeAllTrustedClients,
       onStartPairing: startPairingOverride ??
           () async {
             // Publish server ownership before advertising. Android acquires its

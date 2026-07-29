@@ -49,6 +49,14 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'Cambiando rol…',
     'fr': 'Changement de rôle…',
   },
+  'roleSwitchFailed': {
+    'tr': 'Rol değiştirilemedi. Önceki ekrana geri dönüldü.',
+    'en': 'The role could not be changed. The previous screen was restored.',
+    'zh': '无法切换角色，已恢复到上一个界面。',
+    'hi': 'भूमिका नहीं बदली जा सकी। पिछली स्क्रीन बहाल कर दी गई है।',
+    'es': 'No se pudo cambiar el rol. Se restauró la pantalla anterior.',
+    'fr': 'Impossible de changer de rôle. L’écran précédent a été restauré.',
+  },
   'confirmLeaveServerTitle': {
     'tr': 'Server modundan çıkılsın mı?',
     'en': 'Leave Server mode?',
@@ -168,16 +176,16 @@ const appUiTextCatalog = <String, Map<String, String>>{
   },
   'setupPermissionsText': {
     'tr':
-        'Seçimden sonra gerekli kamera, mikrofon, bildirim ve pil/arka plan izinleri istenir.',
+        'İzinler yalnız ilgili özellik kurulurken, neden gerektiği açıkça gösterilerek istenir.',
     'en':
-        'After selection, required camera, microphone, notification, and battery/background permissions are requested.',
-    'zh': '选择后会请求必要的摄像头、麦克风、通知以及电池/后台权限。',
+        'Permissions are requested only when setting up the related feature, with a clear explanation.',
+    'zh': '仅在设置相关功能时请求权限，并会清楚说明原因。',
     'hi':
-        'चयन के बाद कैमरा, माइक्रोफ़ोन, सूचना और बैटरी/बैकग्राउंड अनुमतियाँ माँगी जाती हैं।',
+        'अनुमतियाँ केवल संबंधित सुविधा सेट करते समय स्पष्ट कारण के साथ माँगी जाती हैं।',
     'es':
-        'Después de elegir, se piden permisos de cámara, micrófono, notificaciones y batería/segundo plano.',
+        'Los permisos se solicitan solo al configurar la función correspondiente y explicando el motivo.',
     'fr':
-        'Après le choix, les autorisations caméra, micro, notifications et batterie/arrière-plan sont demandées.',
+        'Les autorisations ne sont demandées qu’au réglage de la fonction concernée, avec une explication claire.',
   },
   'securityNoteTitle': {
     'tr': 'İnternet gerekmez',
@@ -1851,12 +1859,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Actualiser QR'
   },
   'ticketCopied': {
-    'tr': 'Bağlantı bileti kopyalandı.',
-    'en': 'Connection ticket copied.',
-    'zh': '连接票据已复制。',
-    'hi': 'कनेक्शन टिकट कॉपी हुआ।',
-    'es': 'Ticket de conexión copiado.',
-    'fr': 'Ticket de connexion copié.'
+    'tr': 'Bağlantı adresi kopyalandı.',
+    'en': 'Connection address copied.',
+    'zh': '连接地址已复制。',
+    'hi': 'कनेक्शन पता कॉपी हुआ।',
+    'es': 'Dirección de conexión copiada.',
+    'fr': 'Adresse de connexion copiée.'
   },
   'copyAddress': {
     'tr': 'Adresi kopyala',
@@ -2949,6 +2957,18 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'Al soltar el botón se cierran el micrófono y la conexión de voz.',
     'fr': 'Relâcher le bouton ferme le micro et la connexion vocale.',
   },
+  'talkAccessibilityHint': {
+    'tr':
+        'Ekran okuyucuyla konuşmayı başlatmak veya durdurmak için etkinleştirin.',
+    'en': 'Activate to start or stop talking when using a screen reader.',
+    'zh': '使用屏幕阅读器时，激活即可开始或停止说话。',
+    'hi':
+        'स्क्रीन रीडर का उपयोग करते समय बोलना शुरू या बंद करने के लिए सक्रिय करें।',
+    'es':
+        'Activa para empezar o dejar de hablar al usar un lector de pantalla.',
+    'fr':
+        'Activez pour commencer ou arrêter de parler avec un lecteur d’écran.',
+  },
   'roomVolume': {
     'tr': 'Oda ses düzeyi',
     'en': 'Room volume',
@@ -3209,6 +3229,99 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'hi': 'सेटिंग रीसेट करें?',
     'es': '¿Restablecer ajustes?',
     'fr': 'Réinitialiser les réglages ?',
+  },
+  'trustedDevicesTitle': {
+    'tr': 'Güvenilen ebeveyn cihazları',
+    'en': 'Trusted parent devices',
+    'zh': '受信任的家长设备',
+    'hi': 'विश्वसनीय अभिभावक डिवाइस',
+    'es': 'Dispositivos parentales de confianza',
+    'fr': 'Appareils parent de confiance',
+  },
+  'trustedDevicesDescription': {
+    'tr':
+        'Yeni bir QR kod taramadan bu odaya yeniden bağlanabilen cihazları yönetin.',
+    'en':
+        'Manage devices that can reconnect to this room without scanning a new QR code.',
+    'zh': '管理无需扫描新二维码即可重新连接此房间的设备。',
+    'hi':
+        'उन डिवाइस को प्रबंधित करें जो नया QR कोड स्कैन किए बिना इस कमरे से दोबारा जुड़ सकते हैं।',
+    'es':
+        'Gestiona los dispositivos que pueden volver a conectarse sin escanear un nuevo código QR.',
+    'fr':
+        'Gérez les appareils qui peuvent se reconnecter sans scanner un nouveau code QR.',
+  },
+  'noTrustedDevices': {
+    'tr': 'Henüz güvenilen bir ebeveyn cihazı yok.',
+    'en': 'There are no trusted parent devices yet.',
+    'zh': '还没有受信任的家长设备。',
+    'hi': 'अभी कोई विश्वसनीय अभिभावक डिवाइस नहीं है।',
+    'es': 'Aún no hay dispositivos parentales de confianza.',
+    'fr': 'Aucun appareil parent de confiance pour le moment.',
+  },
+  'revokeDevice': {
+    'tr': 'Erişimi kaldır',
+    'en': 'Revoke access',
+    'zh': '撤销访问权限',
+    'hi': 'पहुँच हटाएँ',
+    'es': 'Revocar acceso',
+    'fr': 'Révoquer l’accès',
+  },
+  'revokeDeviceConfirmTitle': {
+    'tr': 'Cihaz erişimi kaldırılsın mı?',
+    'en': 'Revoke this device’s access?',
+    'zh': '撤销此设备的访问权限？',
+    'hi': 'इस डिवाइस की पहुँच हटाएँ?',
+    'es': '¿Revocar el acceso de este dispositivo?',
+    'fr': 'Révoquer l’accès de cet appareil ?',
+  },
+  'revokeDeviceConfirmBody': {
+    'tr': '{name}, bu odaya yeniden bağlanmak için yeni bir QR kod taramalı.',
+    'en': '{name} will need to scan a new QR code to reconnect to this room.',
+    'zh': '{name} 需要扫描新的二维码才能重新连接此房间。',
+    'hi':
+        'इस कमरे से दोबारा जुड़ने के लिए {name} को नया QR कोड स्कैन करना होगा।',
+    'es':
+        '{name} tendrá que escanear un nuevo código QR para volver a conectarse.',
+    'fr':
+        '{name} devra scanner un nouveau code QR pour se reconnecter à cette chambre.',
+  },
+  'revokeAllDevices': {
+    'tr': 'Tüm erişimleri kaldır',
+    'en': 'Revoke all access',
+    'zh': '撤销所有访问权限',
+    'hi': 'सभी पहुँच हटाएँ',
+    'es': 'Revocar todos los accesos',
+    'fr': 'Révoquer tous les accès',
+  },
+  'revokeAllDevicesConfirmBody': {
+    'tr':
+        'Tüm ebeveyn cihazlarının yeniden bağlanmak için yeni bir QR kod taraması gerekecek.',
+    'en':
+        'Every parent device will need to scan a new QR code before reconnecting.',
+    'zh': '所有家长设备都需要扫描新的二维码才能重新连接。',
+    'hi':
+        'दोबारा जुड़ने से पहले हर अभिभावक डिवाइस को नया QR कोड स्कैन करना होगा।',
+    'es':
+        'Todos los dispositivos parentales tendrán que escanear un nuevo código QR antes de volver a conectarse.',
+    'fr':
+        'Chaque appareil parent devra scanner un nouveau code QR avant de se reconnecter.',
+  },
+  'trustedDeviceRevokeFailed': {
+    'tr': 'Cihaz erişimi kaldırılamadı. Lütfen tekrar deneyin.',
+    'en': 'Device access could not be revoked. Please try again.',
+    'zh': '无法撤销设备访问权限。请重试。',
+    'hi': 'डिवाइस की पहुँच नहीं हटाई जा सकी। कृपया फिर कोशिश करें।',
+    'es': 'No se pudo revocar el acceso. Inténtalo de nuevo.',
+    'fr': 'L’accès n’a pas pu être révoqué. Réessayez.',
+  },
+  'trustedDeviceRevoked': {
+    'tr': 'Cihaz erişimi kaldırıldı.',
+    'en': 'Device access was revoked.',
+    'zh': '设备访问权限已撤销。',
+    'hi': 'डिवाइस की पहुँच हटा दी गई।',
+    'es': 'Se revocó el acceso del dispositivo.',
+    'fr': 'L’accès de l’appareil a été révoqué.',
   },
   'settingsSaveFailed': {
     'tr': 'Ayar kaydedilemedi. Lütfen tekrar deneyin.',

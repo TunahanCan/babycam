@@ -44,7 +44,7 @@ class _ClientSettingsList extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.end,
               style: const TextStyle(
-                color: Color(0xFF4CB89E),
+                color: Color(0xFF0D6755),
                 fontWeight: FontWeight.w900,
               ),
             ),
@@ -223,7 +223,7 @@ class _FilterChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(999),
           onTap: onTap,
           child: Ink(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 18),
             decoration: ShapeDecoration(
               color: active ? MiuCamDesignTokens.pink : Colors.white,
               shape: StadiumBorder(
@@ -235,12 +235,18 @@ class _FilterChip extends StatelessWidget {
                 ),
               ),
             ),
-            child: Text(
-              text,
-              style: TextStyle(
-                color: active ? Colors.white : MiuCamDesignTokens.nightPlum,
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Center(
+                widthFactor: 1,
+                child: Text(
+                  text,
+                  style: TextStyle(
+                    color: active ? Colors.white : MiuCamDesignTokens.nightPlum,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ),
             ),
           ),

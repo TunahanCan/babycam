@@ -28,7 +28,7 @@ class _BroadcastAccessCard extends StatelessWidget {
         : locked
             ? strings.ui('broadcastAccessLockedBody')
             : strings.uiFormat('broadcastAccessTrialBody', {
-                'remaining': _remainingText(snapshot.remaining),
+                'remaining': _remainingText(strings, snapshot.remaining),
                 'price': snapshot.priceLabel,
               });
     return Container(
@@ -125,13 +125,20 @@ class _BroadcastAccessCard extends StatelessWidget {
     );
   }
 
-  static String _remainingText(Duration duration) {
+  static String _remainingText(AppStrings strings, Duration duration) {
     final totalMinutes = duration.inMinutes.clamp(0, 24 * 60);
     final hours = totalMinutes ~/ 60;
     final minutes = totalMinutes % 60;
-    if (hours == 0) return '$minutes dk';
-    if (minutes == 0) return '$hours sa';
-    return '$hours sa $minutes dk';
+    if (hours == 0) {
+      return strings.uiFormat('durationMinutesShort', {'minutes': minutes});
+    }
+    if (minutes == 0) {
+      return strings.uiFormat('durationHoursShort', {'hours': hours});
+    }
+    return strings.uiFormat(
+      'durationHoursMinutesShort',
+      {'hours': hours, 'minutes': minutes},
+    );
   }
 }
 

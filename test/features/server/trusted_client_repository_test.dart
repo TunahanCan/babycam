@@ -20,6 +20,7 @@ void main() {
       deviceId: 'parent-1',
     );
     await first.flushPersistence();
+    expect(first.trustedClients.single.clientName, 'Parent');
 
     final stored = preferences.getString(
       SharedPreferencesTrustedClientRepository.defaultStorageKey,
@@ -51,8 +52,8 @@ void main() {
       deviceId: 'parent-1',
     );
     await first.flushPersistence();
-    first.revokeClient(token.clientId);
-    await first.flushPersistence();
+    await first.revokeClientPersisted(token.clientId);
+    expect(first.trustedClients, isEmpty);
 
     final restarted = PairingTokenService(
       trustedClientRepository: SharedPreferencesTrustedClientRepository(
@@ -62,6 +63,27 @@ void main() {
 
     expect(restarted.validateTrustedClientToken(token.token), isNull);
     expect(restarted.pairedClientCount, 0);
+  });
+
+  test('tüm güvenilen cihazlar kalıcı olarak iptal edilebilir', () async {
+    final repository = InMemoryTrustedClientRepository();
+    final service = PairingTokenService(trustedClientRepository: repository);
+    await service.issueTrustedClientTokenPersisted(
+      clientName: 'Parent one',
+      deviceId: 'parent-1',
+    );
+    await service.issueTrustedClientTokenPersisted(
+      clientName: 'Parent two',
+      deviceId: 'parent-2',
+    );
+
+    expect(service.trustedClients.map((client) => client.clientId),
+        containsAll(['parent-1', 'parent-2']));
+
+    await service.revokeAllPersisted();
+
+    expect(service.trustedClients, isEmpty);
+    expect(repository.readAll().every((client) => client.revoked), isTrue);
   });
 
   test('expired persisted client aktif slotu bloke etmez', () async {

@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miucam/app/app_role.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
 import 'package:miucam/features/client/client_home_screen.dart';
 import 'package:miucam/features/client/client_runtime.dart';
 import 'package:miucam/features/server/media/media_runtime_controller.dart';
@@ -87,6 +89,53 @@ void main() {
     expect(find.textContaining('yayınını durdur'), findsNothing);
   });
 
+  testWidgets('erişimi iptal edilen oda bağlı gibi gösterilmez',
+      (tester) async {
+    final expiring = PairingSession(
+      payload: PairingPayload(
+        schemaVersion: 2,
+        host: '192.168.1.20',
+        port: 8080,
+        deviceId: 'server',
+        deviceName: 'Bebek Odası',
+        pairingNonce: 'nonce',
+        expiresAtMs: DateTime.now()
+            .add(const Duration(minutes: 1))
+            .millisecondsSinceEpoch,
+        capabilities: const {},
+      ),
+      sessionToken: 'expired-token',
+      trustedClientTokenExpiresAtMs: DateTime.now()
+          .subtract(const Duration(minutes: 1))
+          .millisecondsSinceEpoch,
+    );
+    final runtime = ClientRuntime(
+      pair: (_) async => expiring,
+      renew: (_) async => null,
+    );
+    addTearDown(runtime.dispose);
+
+    await runtime.restoreSession(expiring);
+    expect(runtime.currentState.phase, ClientRuntimePhase.revoked);
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: ClientHomeScreen(
+          runtime: runtime,
+          activeRole: AppRole.client,
+          onRoleSelected: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Eşleşme iptal edildi'), findsWidgets);
+    expect(find.text('Bebek odasına bağlısın.'), findsNothing);
+    expect(find.text('Canlı izlemeyi aç'), findsNothing);
+  });
+
   testWidgets('Server bottom nav server alanına kilitlidir', (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -99,7 +148,7 @@ void main() {
       mediaRuntime: MediaRuntimeController(),
       onStartPairing: () async {
         pairingStarts++;
-        return 'miucam://pair?payload=x';
+        return _validPairingTicket('initial-$pairingStarts');
       },
       onStop: () async {
         streamStops++;
@@ -186,7 +235,7 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     final runtime = ServerRuntime(
       mediaRuntime: MediaRuntimeController(),
-      onStartPairing: () async => 'miucam://pair?payload=x',
+      onStartPairing: () async => _validPairingTicket('primary-action'),
     );
 
     await tester.pumpWidget(
@@ -224,7 +273,7 @@ void main() {
         onStart: () async => mediaStarts++,
         onStop: () async => mediaStops++,
       ),
-      onStartPairing: () async => 'miucam://pair?payload=x',
+      onStartPairing: () async => _validPairingTicket('preview'),
     );
 
     await tester.pumpWidget(
@@ -320,7 +369,7 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     final runtime = ServerRuntime(
       mediaRuntime: MediaRuntimeController(),
-      onStartPairing: () async => 'miucam://pair?payload=x',
+      onStartPairing: () async => _validPairingTicket('paired-parent'),
     );
 
     await tester.pumpWidget(
@@ -366,7 +415,7 @@ void main() {
       mediaRuntime: MediaRuntimeController(
         onStart: () async => throw StateError('camera-driver-secret'),
       ),
-      onStartPairing: () async => 'miucam://pair?payload=x',
+      onStartPairing: () async => _validPairingTicket('technical-error'),
     );
 
     await tester.pumpWidget(
@@ -426,7 +475,7 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     final runtime = ServerRuntime(
       mediaRuntime: MediaRuntimeController(),
-      onStartPairing: () async => 'miucam://pair?payload=x',
+      onStartPairing: () async => _validPairingTicket('qr-tab'),
     );
 
     await tester.pumpWidget(
@@ -468,7 +517,7 @@ void main() {
       mediaRuntime: MediaRuntimeController(
         onStart: () async => throw StateError('camera unavailable'),
       ),
-      onStartPairing: () async => 'miucam://pair?payload=x',
+      onStartPairing: () async => _validPairingTicket('retry'),
     );
 
     await tester.pumpWidget(
@@ -585,7 +634,18 @@ void main() {
       mediaRuntime: MediaRuntimeController(),
       onStartPairing: () async {
         pairingStarts++;
-        return 'miucam://pair?ticket=$pairingStarts';
+        return PairingPayload(
+          schemaVersion: 1,
+          host: '192.168.1.20',
+          port: 8080,
+          deviceId: 'server',
+          deviceName: 'Bebek Odası',
+          pairingNonce: 'nonce-$pairingStarts',
+          expiresAtMs: DateTime.now()
+              .add(const Duration(minutes: 10))
+              .millisecondsSinceEpoch,
+          capabilities: const {},
+        ).toUriString();
       },
     );
 
@@ -620,10 +680,24 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Adresi kopyala'));
     await tester.pumpAndSettle();
-    expect(clipboardText, 'miucam://pair?ticket=$pairingStarts');
-    expect(find.text('Bağlantı bileti kopyalandı.'), findsOneWidget);
+    expect(find.text('192.168.1.20:8080'), findsOneWidget);
+    expect(clipboardText, '192.168.1.20:8080');
+    expect(find.text('Bağlantı adresi kopyalandı.'), findsOneWidget);
   });
 }
+
+String _validPairingTicket(String nonce) => PairingPayload(
+      schemaVersion: 1,
+      host: '192.168.1.20',
+      port: 8080,
+      deviceId: 'server',
+      deviceName: 'Bebek Odası',
+      pairingNonce: nonce,
+      expiresAtMs: DateTime.now()
+          .add(const Duration(minutes: 10))
+          .millisecondsSinceEpoch,
+      capabilities: const {},
+    ).toUriString();
 
 const _localizationsDelegates = [
   AppStrings.delegate,

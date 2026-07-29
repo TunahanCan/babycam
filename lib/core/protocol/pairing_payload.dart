@@ -83,7 +83,10 @@ class PairingPayload {
         'payload': base64UrlEncode(utf8.encode(jsonEncode(toJson())))
       }).toString();
 
-  static PairingPayload? parseUri(String value) {
+  static PairingPayload? parseUri(
+    String value, {
+    bool allowExpired = false,
+  }) {
     try {
       final uri = Uri.parse(value);
       if (uri.scheme != 'miucam' || uri.host != 'pair') return null;
@@ -92,7 +95,7 @@ class PairingPayload {
       final decoded = jsonDecode(utf8.decode(base64Url.decode(payload)));
       if (decoded is! Map<String, Object?>) return null;
       final parsed = fromJson(decoded);
-      if (parsed == null || parsed.isExpired) return null;
+      if (parsed == null || (!allowExpired && parsed.isExpired)) return null;
       return parsed;
     } catch (_) {
       return null;

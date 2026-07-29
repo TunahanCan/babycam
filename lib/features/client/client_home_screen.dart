@@ -146,6 +146,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
 
   Widget _buildTab(BuildContext context, ClientRuntimeState state) {
     final strings = AppStrings.of(context);
+    final watchAvailable =
+        state.session != null && state.phase != ClientRuntimePhase.revoked;
     return switch (_tab) {
       _ClientHomeTab.watch => _ClientTabFrame(
           key: const ValueKey('client-watch'),
@@ -165,16 +167,19 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
             else ...[
               _RoomCard(
                 title: state.session!.payload.deviceName,
-                status: strings.ui('pairedWithQr'),
-                tone: MiuCamDesignTokens.mint,
+                status: _clientRoomStatus(strings, state.phase),
+                tone: _clientRoomTone(state.phase),
                 alertsActive: state.alertsActive,
                 alertsConnected: widget.runtime.alertTransportConnected,
                 systemNotificationsEnabled:
                     widget.runtime.systemNotificationsEnabled,
-                onWatch: () => _openWatch(context, state),
+                onWatch:
+                    watchAvailable ? () => _openWatch(context, state) : null,
               ),
-              const SizedBox(height: 16),
-              _ClientWatchSummary(onWatch: () => _openWatch(context, state)),
+              if (watchAvailable) ...[
+                const SizedBox(height: 16),
+                _ClientWatchSummary(onWatch: () => _openWatch(context, state)),
+              ],
             ],
           ],
         ),
@@ -222,6 +227,47 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
             ),
           ],
         ),
+    };
+  }
+
+  String _clientRoomStatus(
+    AppStrings strings,
+    ClientRuntimePhase phase,
+  ) {
+    return switch (phase) {
+      ClientRuntimePhase.pairedIdle ||
+      ClientRuntimePhase.watching ||
+      ClientRuntimePhase.alertOnly =>
+        strings.ui('pairedWithQr'),
+      ClientRuntimePhase.scanningQr => strings.ui('clientTitleScanningQr'),
+      ClientRuntimePhase.pairing => strings.ui('clientTitlePairing'),
+      ClientRuntimePhase.renewingToken =>
+        strings.ui('clientTitleRenewingToken'),
+      ClientRuntimePhase.reconnecting => strings.ui('clientTitleReconnecting'),
+      ClientRuntimePhase.offline => strings.ui('clientTitleOffline'),
+      ClientRuntimePhase.revoked => strings.ui('clientTitleRevoked'),
+      ClientRuntimePhase.error => strings.ui('clientTitleError'),
+      ClientRuntimePhase.unpaired => strings.ui('clientTitleUnpaired'),
+    };
+  }
+
+  Color _clientRoomTone(ClientRuntimePhase phase) {
+    return switch (phase) {
+      ClientRuntimePhase.pairedIdle ||
+      ClientRuntimePhase.watching ||
+      ClientRuntimePhase.alertOnly =>
+        MiuCamDesignTokens.mint,
+      ClientRuntimePhase.renewingToken ||
+      ClientRuntimePhase.reconnecting ||
+      ClientRuntimePhase.offline =>
+        MiuCamDesignTokens.amberSoft,
+      ClientRuntimePhase.revoked ||
+      ClientRuntimePhase.error =>
+        MiuCamDesignTokens.blushSoft,
+      ClientRuntimePhase.unpaired ||
+      ClientRuntimePhase.scanningQr ||
+      ClientRuntimePhase.pairing =>
+        MiuCamDesignTokens.lavenderSoft,
     };
   }
 

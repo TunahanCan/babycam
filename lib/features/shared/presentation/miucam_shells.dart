@@ -350,41 +350,45 @@ class MiuCamBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RepaintBoundary(
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: dark
-              ? MiuCamDesignTokens.serverPanel.withValues(alpha: .98)
-              : Colors.white.withValues(alpha: .96),
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.only(bottom: 4),
+      child: RepaintBoundary(
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
             color: dark
-                ? MiuCamDesignTokens.serverOutline.withValues(alpha: .78)
-                : const Color(0xFFEEDFD8),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: dark ? const Color(0x1824493D) : const Color(0x1F111827),
-              blurRadius: dark ? 16 : 16,
-              offset: const Offset(0, 6),
+                ? MiuCamDesignTokens.serverPanel.withValues(alpha: .98)
+                : Colors.white.withValues(alpha: .96),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(
+              color: dark
+                  ? MiuCamDesignTokens.serverOutline.withValues(alpha: .78)
+                  : const Color(0xFFEEDFD8),
             ),
-          ],
-        ),
-        child: Row(
-          children: [
-            for (var index = 0; index < items.length; index++)
-              Expanded(
-                child: _BottomNavButton(
-                  item: items[index],
-                  selected: index == currentIndex,
-                  activeColor: activeColor,
-                  dark: dark,
-                  onTap: () => onTap(index),
-                ),
+            boxShadow: [
+              BoxShadow(
+                color: dark ? const Color(0x1824493D) : const Color(0x1F111827),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
               ),
-          ],
+            ],
+          ),
+          child: Row(
+            children: [
+              for (var index = 0; index < items.length; index++)
+                Expanded(
+                  child: _BottomNavButton(
+                    item: items[index],
+                    selected: index == currentIndex,
+                    activeColor: activeColor,
+                    dark: dark,
+                    onTap: () => onTap(index),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -415,36 +419,48 @@ class _BottomNavButton extends StatelessWidget {
     final scaledLabelSize = MediaQuery.textScalerOf(context).scale(12);
     final buttonHeight =
         58.0 + (scaledLabelSize - 12).clamp(0.0, 8.0).toDouble();
-    return InkWell(
-      borderRadius: BorderRadius.circular(24),
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: item.label,
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOutCubic,
-        height: buttonHeight,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        decoration: BoxDecoration(
-          color:
-              selected ? activeColor.withValues(alpha: dark ? .22 : .25) : null,
+      child: ExcludeSemantics(
+        child: InkWell(
           borderRadius: BorderRadius.circular(24),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(item.icon,
-                color: selected ? activeColor : baseColor, size: 22),
-            const SizedBox(height: 4),
-            Text(
-              item.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: selected ? selectedTextColor : baseColor,
-                fontSize: 12,
-                fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
-              ),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOutCubic,
+            height: buttonHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              color: selected
+                  ? activeColor.withValues(alpha: dark ? .22 : .25)
+                  : null,
+              borderRadius: BorderRadius.circular(24),
             ),
-          ],
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  item.icon,
+                  color: selected ? activeColor : baseColor,
+                  size: 22,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: selected ? selectedTextColor : baseColor,
+                    fontSize: 12,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

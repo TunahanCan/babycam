@@ -68,14 +68,12 @@ class RolePermissionPolicy {
 
   List<Permission> permissionsFor(AppRole role, {required bool isAndroid}) {
     return [
-      // iOS notification permission is intentionally requested only when the
-      // parent enables alert delivery after pairing. Asking it while choosing a
-      // role is context-free, consumes Apple's single prompt, and makes a
-      // later denial impossible to recover from inside the app.
-      if (isAndroid) Permission.notification,
-      Permission.camera,
+      // Client permissions are requested at the feature that needs them: the
+      // QR scanner owns camera permission and alert setup owns notification
+      // permission. The room role needs capture immediately, so asking for
+      // camera and microphone here is contextual.
+      if (role == AppRole.server) Permission.camera,
       if (role == AppRole.server) Permission.microphone,
-      if (isAndroid) Permission.ignoreBatteryOptimizations,
     ];
   }
 }

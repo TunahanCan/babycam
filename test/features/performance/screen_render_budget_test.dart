@@ -461,8 +461,20 @@ PairingPayload _payload() => PairingPayload(
     );
 
 String _longHttpWsQrPayload() {
-  final noisyPayload = List.filled(720, 'a').join();
-  return 'miucam://pair?payload=$noisyPayload';
+  return PairingPayload(
+    schemaVersion: 1,
+    host: '192.168.100.200',
+    port: 8080,
+    deviceId: 'server-with-a-long-stable-device-identifier',
+    deviceName: 'Bebek Odası',
+    pairingNonce: List.filled(64, 'a').join(),
+    expiresAtMs:
+        DateTime.now().add(const Duration(minutes: 10)).millisecondsSinceEpoch,
+    capabilities: {
+      'transport': 'http_ws',
+      'diagnostics': List.filled(420, 'b').join(),
+    },
+  ).toUriString();
 }
 
 const _localizationsDelegates = [
