@@ -29,7 +29,7 @@ void main() {
       expect(event, isNotNull);
       expect(event!.type, AlertType.cryDetected);
       expect(event.severity, AlertSeverity.warning);
-      expect(event.message, 'Ağlama algılandı');
+      expect(event.message, 'Ağlama benzeri bir ses olabilir');
       expect(event.id, 'cryDetected-1000-0');
     });
 
@@ -44,6 +44,32 @@ void main() {
       expect(engine.onAudioResult(fakeAudioResult(timestampMs: 1500)), isNull);
       expect(
           engine.onAudioResult(fakeAudioResult(timestampMs: 2000)), isNotNull);
+    });
+
+    test('ayar reloadu cooldown geçmişini koruyup duplicate uyarı üretmez', () {
+      final beforeReload = AlertEngine(
+        config: const AlertConfig(cryCooldownMs: 5000),
+      );
+      addTearDown(beforeReload.dispose);
+      expect(
+        beforeReload.onAudioResult(fakeAudioResult(timestampMs: 1000)),
+        isNotNull,
+      );
+
+      final afterReload = AlertEngine(
+        config: const AlertConfig(cryCooldownMs: 5000),
+      );
+      addTearDown(afterReload.dispose);
+      afterReload.restoreCooldowns(beforeReload.cooldownSnapshot);
+
+      expect(
+        afterReload.onAudioResult(fakeAudioResult(timestampMs: 2000)),
+        isNull,
+      );
+      expect(
+        afterReload.onAudioResult(fakeAudioResult(timestampMs: 6000)),
+        isNotNull,
+      );
     });
 
     test(
@@ -74,6 +100,66 @@ void main() {
       }
 
       expect(emittedAt, [2000, 7000]);
+    });
+
+    test('kısa doğrulanmamış ses sessizlikte ağlama bildirimi olmaz', () {
+      final engine = AlertEngine(
+        episodeAggregator: EpisodeBasedNotificationAggregator(
+          suspectedCryMs: 500,
+          confirmedCryMs: 1500,
+          resolveQuietMs: 1000,
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      expect(
+        engine.onAudioResult(fakeAudioResult(timestampMs: 1000)),
+        isNull,
+      );
+      expect(
+        engine.onAudioResult(
+          fakeAudioResult(
+            timestampMs: 2500,
+            cryScore: .05,
+            isCryLikely: false,
+          ),
+        ),
+        isNull,
+      );
+      expect(engine.drainPending(), isEmpty);
+    });
+
+    test('doğrulanmış episode bir kez bildirilir, kapanışı tekrar bildirilmez',
+        () {
+      final engine = AlertEngine(
+        episodeAggregator: EpisodeBasedNotificationAggregator(
+          suspectedCryMs: 500,
+          confirmedCryMs: 1500,
+          resolveQuietMs: 1000,
+        ),
+      );
+      addTearDown(engine.dispose);
+      final emitted = <AlertEvent>[];
+
+      for (final timestampMs in [1000, 1500, 2000, 2500]) {
+        final event =
+            engine.onAudioResult(fakeAudioResult(timestampMs: timestampMs));
+        if (event != null) emitted.add(event);
+      }
+      expect(emitted, hasLength(1));
+      expect(emitted.single.metadata['confirmed'], isTrue);
+
+      expect(
+        engine.onAudioResult(
+          fakeAudioResult(
+            timestampMs: 4000,
+            cryScore: .05,
+            isCryLikely: false,
+          ),
+        ),
+        isNull,
+      );
+      expect(engine.drainPending(), hasLength(1));
     });
 
     test('metadata contains basic audio features', () {
@@ -112,6 +198,23 @@ void main() {
           isLoudSound: true,
           isCalibrated: false,
           calibrationState: AudioCalibrationState.calibrating,
+        ),
+      );
+
+      expect(event, isNull);
+    });
+
+    test('clipped PCM cry veya loud sound bildirimi üretmez', () {
+      final engine = AlertEngine(
+        config: const AlertConfig(emitLoudSoundAlerts: true),
+      );
+      addTearDown(engine.dispose);
+
+      final event = engine.onAudioResult(
+        fakeAudioResult(
+          isClipped: true,
+          isLoudSound: true,
+          dbfs: -1,
         ),
       );
 
@@ -356,6 +459,7 @@ AudioAnalysisResult fakeAudioResult({
   bool isCalibrated = true,
   AudioCalibrationState calibrationState = AudioCalibrationState.calibrated,
   double dbfs = -30,
+  bool isClipped = false,
   bool isLoudSound = false,
 }) =>
     AudioAnalysisResult(
@@ -379,6 +483,7 @@ AudioAnalysisResult fakeAudioResult({
       spectralFlux: 0.5,
       invalidChunk: false,
       processingTimeMicros: 10,
+      isClipped: isClipped,
       isLoudSound: isLoudSound,
     );
 

@@ -20,7 +20,13 @@ void drawRectOnLuma(Uint8List frame, int width, int height, int left, int top,
   }
 }
 
-LumaFrame makeFrame(Uint8List data, int width, int height, int timestampMs) =>
+LumaFrame makeFrame(
+  Uint8List data,
+  int width,
+  int height,
+  int timestampMs, {
+  int? monotonicTimestampMs,
+}) =>
     LumaFrame(
       yPlane: data,
       width: width,
@@ -28,6 +34,7 @@ LumaFrame makeFrame(Uint8List data, int width, int height, int timestampMs) =>
       rowStride: width,
       pixelStride: 1,
       timestampMs: timestampMs,
+      monotonicTimestampMs: monotonicTimestampMs,
     );
 
 MotionAnalysisConfig fastConfig({NormalizedRect? roi}) => MotionAnalysisConfig(
@@ -171,6 +178,160 @@ void main() {
         600));
     expect(result.isGlobalLightChange, isTrue);
     expect(result.isMotion, isFalse);
+  });
+
+  test('başlangıç exposure yerleşirken karar karantinası motion üretmez', () {
+    final analyzer = MotionAnalyzerV2(config: fastConfig());
+    final results = <MotionAnalysisResult>[];
+
+    for (var index = 0; index < 5; index++) {
+      final data =
+          makeLumaFrame(width: width, height: height, value: 70 + index * 5);
+      drawRectOnLuma(
+        data,
+        width,
+        height,
+        8 + index,
+        8,
+        30,
+        20,
+        120 + index * 10,
+      );
+      results.add(analyzer.analyze(
+        makeFrame(data, width, height, index * 100),
+      ));
+    }
+
+    expect(results.any((result) => result.isMotion), isFalse);
+    expect(analyzer.diagnostics()['warmingUp'], isFalse);
+  });
+
+  test('uzun frame boşluğu minimum motion süresini tek sıçramada doldurmaz',
+      () {
+    final analyzer = MotionAnalyzerV2(config: fastConfig());
+    prime(analyzer, width, height);
+    final moving = makeLumaFrame(width: width, height: height, value: 80);
+    drawRectOnLuma(moving, width, height, 10, 10, 30, 20, 180);
+
+    expect(
+      analyzer.analyze(makeFrame(moving, width, height, 600)).isMotion,
+      isFalse,
+    );
+    final afterGap = analyzer.analyze(makeFrame(moving, width, height, 5000));
+
+    expect(afterGap.isMotion, isFalse);
+    expect(afterGap.score, 0);
+    expect(analyzer.diagnostics()['analyzedFrames'], 1);
+  });
+
+  test('invalid frame eski motion adayını sonraki kareye taşımaz', () {
+    final analyzer = MotionAnalyzerV2(config: fastConfig());
+    prime(analyzer, width, height);
+    final moving = makeLumaFrame(width: width, height: height, value: 80);
+    drawRectOnLuma(moving, width, height, 10, 10, 30, 20, 180);
+
+    expect(
+      analyzer.analyze(makeFrame(moving, width, height, 600)).isMotion,
+      isFalse,
+    );
+    expect(
+      analyzer.analyze(makeFrame(moving, width, height, 900)).isMotion,
+      isFalse,
+    );
+    final invalid = analyzer.analyze(LumaFrame(
+      yPlane: Uint8List(4),
+      width: 2,
+      height: 2,
+      rowStride: 2,
+      pixelStride: 1,
+      timestampMs: 1000,
+    ));
+    final afterInvalid =
+        analyzer.analyze(makeFrame(moving, width, height, 1200));
+
+    expect(invalid.invalidFrame, isTrue);
+    expect(afterInvalid.isMotion, isFalse);
+    expect(afterInvalid.score, 0);
+    expect(analyzer.diagnostics()['analyzedFrames'], 1);
+  });
+
+  test('wall clock sıçraması monotonic motion süresini değiştirmez', () {
+    final analyzer = MotionAnalyzerV2(config: fastConfig());
+    for (var index = 0; index < 5; index++) {
+      analyzer.analyze(makeFrame(
+        makeLumaFrame(width: width, height: height, value: 80),
+        width,
+        height,
+        10000 + index * 100,
+        monotonicTimestampMs: index * 100,
+      ));
+    }
+
+    MotionAnalysisResult? result;
+    final wallTimes = [20000, 50000, 100000];
+    final monotonicTimes = [600, 900, 1200];
+    for (var index = 0; index < wallTimes.length; index++) {
+      final data = makeLumaFrame(width: width, height: height, value: 80);
+      drawRectOnLuma(data, width, height, 10, 10, 30, 20, 180);
+      result = analyzer.analyze(makeFrame(
+        data,
+        width,
+        height,
+        wallTimes[index],
+        monotonicTimestampMs: monotonicTimes[index],
+      ));
+    }
+
+    expect(result!.timestampMs, 100000);
+    expect(result.isMotion, isTrue);
+  });
+
+  test('global ışık değişimi backgroundu hemen rebasing ile toparlar', () {
+    final analyzer = MotionAnalyzerV2(config: fastConfig());
+    prime(analyzer, width, height);
+
+    final changed = analyzer.analyze(makeFrame(
+      makeLumaFrame(width: width, height: height, value: 160),
+      width,
+      height,
+      600,
+    ));
+    final settled = analyzer.analyze(makeFrame(
+      makeLumaFrame(width: width, height: height, value: 160),
+      width,
+      height,
+      900,
+    ));
+
+    expect(changed.isGlobalLightChange, isTrue);
+    expect(settled.isGlobalLightChange, isFalse);
+    expect(settled.score, lessThan(.05));
+
+    MotionAnalysisResult? motion;
+    for (final timestampMs in [1200, 1500, 1800]) {
+      final data = makeLumaFrame(width: width, height: height, value: 160);
+      drawRectOnLuma(data, width, height, 10, 10, 30, 20, 70);
+      motion = analyzer.analyze(
+        makeFrame(data, width, height, timestampMs),
+      );
+    }
+    expect(motion!.isMotion, isTrue);
+  });
+
+  test('büyük heterojen sahne değişimi uniform ışık değişimi sayılmaz', () {
+    final analyzer = MotionAnalyzerV2(config: fastConfig());
+    prime(analyzer, width, height);
+    final data = makeLumaFrame(width: width, height: height, value: 80);
+    for (var y = 0; y < height; y++) {
+      for (var x = 0; x < width; x++) {
+        data[y * width + x] = ((x ~/ 4 + y ~/ 4).isEven) ? 0 : 200;
+      }
+    }
+
+    final result = analyzer.analyze(makeFrame(data, width, height, 600));
+
+    expect(result.isGlobalLightChange, isFalse);
+    expect(result.rawScore, greaterThan(.25));
   });
 
   test('hysteresis keeps motion until score falls below off threshold', () {

@@ -11,6 +11,7 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
     if (cameras.isEmpty) throw StateError(strings.cameraNotFound);
 
     _initializeAnalysisPipeline();
+    _analysisCoordinator?.markVideoDiscontinuity();
 
     final controller = CameraController(
       cameras.first,
@@ -44,6 +45,14 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
     bool? video,
     bool? audio,
   }) {
+    final videoDemandChanged = video != null && video != _injectedVideoDemand;
+    final audioDemandChanged = audio != null && audio != _injectedAudioDemand;
+    if (videoDemandChanged) {
+      _analysisCoordinator?.markVideoDiscontinuity();
+    }
+    if (audioDemandChanged) {
+      _analysisCoordinator?.markAudioDiscontinuity();
+    }
     if (video != null) _injectedVideoDemand = video;
     if (audio != null) _injectedAudioDemand = audio;
     return _injectedMediaOperations.run(
@@ -55,12 +64,23 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
     if (_injectedVideoDemand || _injectedAudioDemand) {
       _initializeAnalysisPipeline();
     }
+    final ServerAudioChunkMetadataSource? metadataSource =
+        source is ServerAudioChunkMetadataSource
+            ? source as ServerAudioChunkMetadataSource
+            : null;
     await source.reconcile(
       video: _injectedVideoDemand,
       audio: _injectedAudioDemand,
       onVideoFrame: _handleInjectedVideoFrame,
-      onAudioChunk: _handleInjectedAudioChunk,
+      onAudioChunk: (pcm16le) => _handleInjectedAudioChunk(
+        pcm16le,
+        metadata: metadataSource?.currentAudioChunkMetadata,
+      ),
       onError: (error, _) {
+        // A native event-channel/capture error is a media boundary. Reset both
+        // analyzers so a fast reconnect cannot join pre/post-failure evidence.
+        _analysisCoordinator?.markAudioDiscontinuity();
+        _analysisCoordinator?.markVideoDiscontinuity();
         _analysisMetrics?.recordAudioError();
         onLog('Medya kaynağı hata verdi: $error');
       },
@@ -69,7 +89,10 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
     await _disposeAnalysisIfIdle();
   }
 
-  void _initializeAnalysisPipeline() {
+  void _initializeAnalysisPipeline({
+    double? calibratedAmbientDbfs,
+    Map<AlertType, int>? cooldownSnapshot,
+  }) {
     if (_analysisCoordinator != null) return;
     final motionConfig = MotionAnalysisConfig(
       motionOnThreshold: config.motionThreshold,
@@ -92,31 +115,35 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
       motionAlertThreshold: config.motionThreshold,
     );
     final audioAnalyzer = CryAudioAnalyzerV2(config: audioConfig);
-    if (enableAudioAutoCalibration) {
+    if (calibratedAmbientDbfs != null) {
+      audioAnalyzer.restoreCalibratedAmbient(calibratedAmbientDbfs);
+    } else if (enableAudioAutoCalibration) {
       // Anchor calibration to the first media timestamp. This keeps batched
       // PCM and delayed capture startup on the same monotonic signal timeline.
       audioAnalyzer.startCalibration();
     }
     final metrics =
         MediaAnalysisMetrics(motionTargetFps: motionConfig.analysisFps);
+    final alertEngine = AlertEngine(
+      config: alertConfig,
+      strings: strings,
+      episodeAggregator: EpisodeBasedNotificationAggregator(
+        cryThreshold: config.cryScoreThreshold,
+        suspectedCryMs: min(
+          config.cryMinDurationMs,
+          max(0, config.cryMinDurationMs ~/ 2),
+        ),
+        confirmedCryMs: config.cryMinDurationMs,
+      ),
+      networkTierProvider: _activeClientRegistry.effectiveTier,
+    );
+    if (cooldownSnapshot != null) {
+      alertEngine.restoreCooldowns(cooldownSnapshot);
+    }
     final coordinator = MediaAnalysisCoordinator(
       motionAnalyzer: MotionAnalyzerV2(config: motionConfig),
       audioAnalyzer: audioAnalyzer,
-      alertEngine: AlertEngine(
-        config: alertConfig,
-        strings: strings,
-        episodeAggregator: EpisodeBasedNotificationAggregator(
-          cryThreshold: config.cryScoreThreshold,
-          suspectedCryMs: min(
-            config.cryMinDurationMs,
-            max(0, config.cryMinDurationMs ~/ 2),
-          ),
-          confirmedCryMs: config.cryMinDurationMs,
-        ),
-        networkTierProvider: _activeClientRegistry.effectiveTier,
-        audioReliableProvider: _isAudioReliable,
-        videoReliableProvider: _isVideoReliable,
-      ),
+      alertEngine: alertEngine,
       metrics: metrics,
       onLog: onLog,
       onAudioResult: _handleAudioAnalysisResult,
@@ -133,15 +160,21 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
         mediaSource?.isActive != true) {
       return;
     }
+    final calibratedAmbientDbfs = _analysisCoordinator?.calibratedAmbientDbfs;
+    final cooldownSnapshot = _analysisCoordinator?.cooldownSnapshot;
     await _alertSubscription?.cancel();
     _alertSubscription = null;
     await _analysisCoordinator?.dispose();
     _analysisCoordinator = null;
     _analysisMetrics?.reset();
-    _initializeAnalysisPipeline();
+    _initializeAnalysisPipeline(
+      calibratedAmbientDbfs: calibratedAmbientDbfs,
+      cooldownSnapshot: cooldownSnapshot,
+    );
   }
 
   Future<bool> _startAudioAnalysis() async {
+    _analysisCoordinator?.markAudioDiscontinuity();
     final started = await _microphoneCapture.start(
       onChunk: (chunk) {
         _handleCapturedAudioChunk(
@@ -153,6 +186,7 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
         );
       },
       onError: (error, _) {
+        _analysisCoordinator?.markAudioDiscontinuity();
         _analysisMetrics?.recordAudioError();
         onLog('Ses akışında hata: $error');
       },
@@ -192,7 +226,13 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
     if (!_frameBudget.shouldProcess(nowMs)) return;
 
     try {
-      _analysisCoordinator?.onCameraFrame(_toLumaFrame(frame, nowMs));
+      _analysisCoordinator?.onCameraFrame(
+        _toLumaFrame(
+          frame,
+          nowMs,
+          monotonicTimestampMs: capturedAtMonoUs ~/ 1000,
+        ),
+      );
       final shouldEncodeJpeg = _encodingPolicy.shouldEncodeJpeg(
         hasMjpegClients: _videoStreamService.hasClients,
         legacyWebSocketEnabled: enableLegacyWebSocketMediaPackets,
@@ -320,14 +360,23 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
     _analysisCoordinator?.onCameraFrame(frame);
   }
 
-  void _handleInjectedAudioChunk(Uint8List pcm16le) {
+  void _handleInjectedAudioChunk(
+    Uint8List pcm16le, {
+    ServerAudioChunkMetadata? metadata,
+  }) {
     if (pcm16le.isEmpty) return;
+    if (metadata?.discontinuityBefore == true) {
+      _analysisCoordinator?.markAudioDiscontinuity();
+    }
+    final capturedAtMs = metadata?.capturedAtMs;
     _handleCapturedAudioChunk(
       analysisPcm16le: pcm16le,
       streamPcm16le: pcm16le,
-      sampleRate: MiuCamServer._audioSampleRate,
-      channels: MiuCamServer._audioChannels,
-      timestampMs: DateTime.now().millisecondsSinceEpoch,
+      sampleRate: metadata?.sampleRate ?? MiuCamServer._audioSampleRate,
+      channels: metadata?.channels ?? MiuCamServer._audioChannels,
+      timestampMs: capturedAtMs != null && capturedAtMs > 0
+          ? capturedAtMs
+          : DateTime.now().millisecondsSinceEpoch,
     );
   }
 
@@ -410,7 +459,11 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
     _lastMotionEnergy = result.meanDiff;
   }
 
-  LumaFrame _toLumaFrame(CameraImage frame, int timestampMs) {
+  LumaFrame _toLumaFrame(
+    CameraImage frame,
+    int timestampMs, {
+    int? monotonicTimestampMs,
+  }) {
     final yPlane = frame.planes.first;
     return LumaFrame(
       yPlane: yPlane.bytes,
@@ -419,6 +472,7 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
       rowStride: yPlane.bytesPerRow,
       pixelStride: yPlane.bytesPerPixel ?? 1,
       timestampMs: timestampMs,
+      monotonicTimestampMs: monotonicTimestampMs,
     );
   }
 }
@@ -608,13 +662,6 @@ extension _MiuCamServerMediaPolicyController on MiuCamServer {
         _audioStreamService.backpressureMetrics,
       ]);
 
-  bool _isAudioReliable() =>
-      _audioStreamService.backpressureMetrics.consecutiveSkippedAudioChunks ==
-      0;
-
-  bool _isVideoReliable() =>
-      _videoStreamService.backpressureMetrics.consecutiveSkippedVideoFrames < 3;
-
   Future<void> _setActiveMediaProfile(
     MediaQualityProfile nextProfile, {
     required int applyGeneration,
@@ -655,6 +702,7 @@ extension _MiuCamServerMediaPolicyController on MiuCamServer {
     required int applyGeneration,
   }) async {
     if (!_isCurrentMediaProfileApply(applyGeneration)) return false;
+    _analysisCoordinator?.markVideoDiscontinuity();
     _cameraEncodeGeneration++;
     _pendingCameraEncode = null;
     final previousController = cameraController;

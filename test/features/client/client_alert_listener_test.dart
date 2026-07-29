@@ -63,6 +63,110 @@ void main() {
     expect(health.snapshot().reconnectCount, greaterThanOrEqualTo(1));
   });
 
+  test('teslimat bitmeden ACK atmaz ve reconnect cursorunu son ACKe tasir',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final deliveryStarted = Completer<void>();
+    final releaseDelivery = Completer<void>();
+    final firstAck = Completer<void>();
+    final reconnectCursor = Completer<String?>();
+    var connections = 0;
+
+    server.listen((request) async {
+      final socket = await WebSocketTransformer.upgrade(request);
+      connections++;
+      if (connections == 1) {
+        socket.listen((data) async {
+          final decoded = jsonDecode(data as String) as Map;
+          if (decoded['type'] != MiuCamProtocolV2.alertAckType ||
+              decoded[MiuCamProtocolV2.alertAckId] != 'alert-1') {
+            return;
+          }
+          if (!firstAck.isCompleted) firstAck.complete();
+          await socket.close();
+        });
+        socket.add(_alertJson('alert-1'));
+        return;
+      }
+
+      reconnectCursor.complete(
+        request.uri.queryParameters[MiuCamProtocolV2.alertCursorQuery],
+      );
+      socket.listen((_) {});
+      socket.add(_alertJson('alert-2'));
+    });
+
+    final received = <String>[];
+    final listener = ClientAlertListener(
+      reconnectDelay: const Duration(milliseconds: 20),
+      maxReconnectDelay: const Duration(milliseconds: 40),
+      onAlert: (alert) async {
+        received.add(alert.id);
+        if (alert.id == 'alert-1') {
+          deliveryStarted.complete();
+          await releaseDelivery.future;
+        }
+      },
+    );
+    addTearDown(listener.stop);
+
+    await listener.start(_session(server.port));
+    await deliveryStarted.future.timeout(const Duration(seconds: 2));
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(firstAck.isCompleted, isFalse);
+
+    releaseDelivery.complete();
+    await firstAck.future.timeout(const Duration(seconds: 2));
+
+    expect(
+      await reconnectCursor.future.timeout(const Duration(seconds: 2)),
+      'alert-1',
+    );
+    await _waitUntil(() => received.contains('alert-2'));
+    expect(received, ['alert-1', 'alert-2']);
+  });
+
+  test('failed alert closes socket before a later cumulative ACK can skip it',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final deliveredSecond = Completer<void>();
+    var connections = 0;
+
+    server.listen((request) async {
+      final socket = await WebSocketTransformer.upgrade(request);
+      socket.listen((_) {});
+      connections++;
+      socket.add(_alertJson('alert-1'));
+      socket.add(_alertJson('alert-2'));
+    });
+
+    final attempts = <String>[];
+    var firstAlertFailures = 1;
+    final listener = ClientAlertListener(
+      reconnectDelay: const Duration(milliseconds: 20),
+      maxReconnectDelay: const Duration(milliseconds: 40),
+      onAlert: (alert) async {
+        attempts.add(alert.id);
+        if (alert.id == 'alert-1' && firstAlertFailures > 0) {
+          firstAlertFailures--;
+          throw StateError('local delivery failed');
+        }
+        if (alert.id == 'alert-2' && !deliveredSecond.isCompleted) {
+          deliveredSecond.complete();
+        }
+      },
+    );
+    addTearDown(listener.stop);
+
+    await listener.start(_session(server.port));
+    await deliveredSecond.future.timeout(const Duration(seconds: 2));
+
+    expect(connections, greaterThanOrEqualTo(2));
+    expect(attempts.take(3), ['alert-1', 'alert-1', 'alert-2']);
+  });
+
   test('stop reconnect gecikmesini beklemeden tamamlanir', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
@@ -192,3 +296,11 @@ PairingSession _session(int port) => PairingSession(
       clientId: 'client-1',
       trustedClientTokenExpiresAtMs: 9999,
     );
+
+Future<void> _waitUntil(bool Function() condition) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 2));
+  while (!condition() && DateTime.now().isBefore(deadline)) {
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  expect(condition(), isTrue);
+}

@@ -75,4 +75,5 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.6.1")
     implementation("androidx.lifecycle:lifecycle-service:2.11.0")
     implementation("com.google.guava:guava:33.4.8-android")
+    testImplementation("junit:junit:4.13.2")
 }

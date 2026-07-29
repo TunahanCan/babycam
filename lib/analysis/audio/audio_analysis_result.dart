@@ -20,7 +20,9 @@ class AudioAnalysisResult {
   final double spectralCentroid;
   final double spectralEntropy;
   final double spectralFlux;
+  final double amplitudeModulation;
   final bool invalidChunk;
+  final bool isClipped;
   final bool isLoudSound;
   final int processingTimeMicros;
 
@@ -45,7 +47,9 @@ class AudioAnalysisResult {
     required this.spectralFlux,
     required this.invalidChunk,
     required this.processingTimeMicros,
+    this.isClipped = false,
     this.isLoudSound = false,
+    this.amplitudeModulation = 0,
   });
 
   Map<String, Object?> toJson() => {
@@ -67,7 +71,9 @@ class AudioAnalysisResult {
         'spectralCentroid': spectralCentroid,
         'spectralEntropy': spectralEntropy,
         'spectralFlux': spectralFlux,
+        'amplitudeModulation': amplitudeModulation,
         'invalidChunk': invalidChunk,
+        'isClipped': isClipped,
         'isLoudSound': isLoudSound,
         'processingTimeMicros': processingTimeMicros,
       };

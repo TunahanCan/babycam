@@ -56,7 +56,45 @@ void main() {
       output,
     );
     expect(ok, isTrue);
-    expect(output, [1, 2, 4, 5]);
+    expect(output, [1, 3, 6, 7]);
+  });
+
+  test('area averaging does not replicate one sensor speckle', () {
+    final input = Uint8List(16)..[0] = 255;
+    final output = Uint8List(4);
+
+    final ok =
+        const LumaDownsampler(outputWidth: 2, outputHeight: 2).downsample(
+      LumaFrame(
+        yPlane: input,
+        width: 4,
+        height: 4,
+        rowStride: 4,
+        pixelStride: 1,
+        timestampMs: 0,
+      ),
+      output,
+    );
+
+    expect(ok, isTrue);
+    expect(output, [64, 0, 0, 0]);
+  });
+
+  test('smaller source is rejected instead of being upscaled', () {
+    final ok =
+        const LumaDownsampler(outputWidth: 4, outputHeight: 4).downsample(
+      LumaFrame(
+        yPlane: Uint8List(4),
+        width: 2,
+        height: 2,
+        rowStride: 2,
+        pixelStride: 1,
+        timestampMs: 0,
+      ),
+      Uint8List(16),
+    );
+
+    expect(ok, isFalse);
   });
 
   test('invalid dimensions are safe', () {

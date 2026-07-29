@@ -26,14 +26,31 @@ Uint8List generateCryLikePcm16le(
     {required int sampleRate,
     required int durationMs,
     double amplitude = 0.55,
+    double frequencyOffsetHz = 0,
     int channels = 1}) {
   return _generate(sampleRate, durationMs, channels, (i) {
     final t = i / sampleRate;
     final mod = 0.55 + 0.45 * ((sin(2 * pi * 4 * t) + 1) / 2);
-    final mixed = 0.45 * sin(2 * pi * 600 * t) +
-        0.35 * sin(2 * pi * 900 * t) +
-        0.20 * sin(2 * pi * 1300 * t);
+    final mixed = 0.45 * sin(2 * pi * (600 + frequencyOffsetHz) * t) +
+        0.35 * sin(2 * pi * (900 + frequencyOffsetHz) * t) +
+        0.20 * sin(2 * pi * (1300 + frequencyOffsetHz) * t);
     return mixed * mod * amplitude;
+  });
+}
+
+Uint8List generateAdultVoiceLikePcm16le({
+  required int sampleRate,
+  required int durationMs,
+  double amplitude = 0.65,
+  int channels = 1,
+}) {
+  return _generate(sampleRate, durationMs, channels, (i) {
+    final t = i / sampleRate;
+    final syllableEnvelope = 0.45 + 0.55 * ((sin(2 * pi * 3 * t) + 1) / 2);
+    final voiced = 0.65 * sin(2 * pi * 180 * t) +
+        0.25 * sin(2 * pi * 360 * t) +
+        0.10 * sin(2 * pi * 540 * t);
+    return voiced * syllableEnvelope * amplitude;
   });
 }
 

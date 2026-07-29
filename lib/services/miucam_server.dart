@@ -10,6 +10,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../analysis/alert/alert_config.dart';
 import '../analysis/alert/alert_engine.dart';
 import '../analysis/alert/alert_event.dart';
+import '../analysis/alert/alert_type.dart';
 import '../analysis/alert/episode_notification_aggregator.dart';
 import '../analysis/audio/audio_analysis_result.dart';
 import '../analysis/audio/audio_analysis_config.dart';
@@ -776,6 +777,7 @@ class MiuCamServer {
 
   Future<void> stopVideoRuntime() async {
     _videoCaptureDesired = false;
+    _analysisCoordinator?.markVideoDiscontinuity();
     final source = mediaSource;
     if (source != null) {
       await _reconcileInjectedMediaSource(source, video: false);
@@ -805,6 +807,7 @@ class MiuCamServer {
   }
 
   Future<void> stopAudioRuntime() async {
+    _analysisCoordinator?.markAudioDiscontinuity();
     final source = mediaSource;
     if (source != null) {
       await _reconcileInjectedMediaSource(source, audio: false);

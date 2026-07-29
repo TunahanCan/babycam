@@ -80,9 +80,13 @@ internal class MiuCamServiceMediaCapture(
     private var audioRecord: AudioRecord? = null
     private var audioThread: Thread? = null
     @Volatile
-    private var microphoneRetryAttempt = 0
+    private var microphoneRetryAttempt = 0L
     private var microphoneRetryRunnable: Runnable? = null
     private var microphoneStartedAtElapsedMs = 0L
+    private val microphoneRetryBackoff = ContinuousCappedBackoff(
+        baseDelayMs = MICROPHONE_RETRY_BASE_DELAY_MS,
+        maxDelayMs = MICROPHONE_RETRY_MAX_DELAY_MS
+    )
 
     fun reconcile(camera: Boolean, microphone: Boolean) {
         check(Looper.myLooper() == Looper.getMainLooper()) {
@@ -97,12 +101,12 @@ internal class MiuCamServiceMediaCapture(
         if (microphone) {
             if (!microphoneWasRequested) {
                 cancelMicrophoneRetry()
-                microphoneRetryAttempt = 0
+                microphoneRetryAttempt = 0L
             }
             startMicrophone()
         } else {
             cancelMicrophoneRetry()
-            microphoneRetryAttempt = 0
+            microphoneRetryAttempt = 0L
             stopMicrophone(clearError = true)
         }
         publishState()
@@ -114,7 +118,7 @@ internal class MiuCamServiceMediaCapture(
         cameraRequested = false
         microphoneRequested = false
         cancelMicrophoneRetry()
-        microphoneRetryAttempt = 0
+        microphoneRetryAttempt = 0L
         stopCamera(clearError = true)
         stopMicrophone(clearError = true)
         cameraExecutor.shutdownNow()
@@ -367,14 +371,14 @@ internal class MiuCamServiceMediaCapture(
             if (read > 0) {
                 if (
                     !stabilityReported &&
-                    microphoneRetryAttempt > 0 &&
+                    microphoneRetryAttempt > 0L &&
                     SystemClock.elapsedRealtime() - microphoneStartedAtElapsedMs >=
                     MICROPHONE_RETRY_STABILITY_MS
                 ) {
                     stabilityReported = true
                     mainHandler.post {
                         if (generation == audioGeneration && microphoneActive) {
-                            microphoneRetryAttempt = 0
+                            microphoneRetryAttempt = 0L
                             MiuCamPlatformRuntime.emit(
                                 "nativeMicrophoneRecoveryStable"
                             )
@@ -405,7 +409,7 @@ internal class MiuCamServiceMediaCapture(
                 SystemClock.elapsedRealtime() - microphoneStartedAtElapsedMs >=
                     MICROPHONE_RETRY_STABILITY_MS
             stopMicrophone(clearError = false)
-            if (stableBeforeFailure) microphoneRetryAttempt = 0
+            if (stableBeforeFailure) microphoneRetryAttempt = 0L
             microphoneError = message
             MiuCamServiceMediaBridge.publishCaptureError("microphone", message)
             publishState()
@@ -457,21 +461,9 @@ internal class MiuCamServiceMediaCapture(
     private fun scheduleMicrophoneRetry(reason: String) {
         if (destroyed || !microphoneRequested || microphoneActive) return
         if (reason.contains("permission_denied")) return
-        if (microphoneRetryAttempt >= MICROPHONE_MAX_RETRY_ATTEMPTS) {
-            MiuCamPlatformRuntime.emit(
-                "nativeMicrophoneRetryExhausted",
-                mapOf(
-                    "attempts" to microphoneRetryAttempt,
-                    "reason" to reason
-                )
-            )
-            return
-        }
-        val attempt = ++microphoneRetryAttempt
-        val delayMs = minOf(
-            MICROPHONE_RETRY_BASE_DELAY_MS * (1L shl (attempt - 1)),
-            MICROPHONE_RETRY_MAX_DELAY_MS
-        )
+        val attempt = microphoneRetryBackoff.nextAttempt(microphoneRetryAttempt)
+        microphoneRetryAttempt = attempt
+        val delayMs = microphoneRetryBackoff.delayMs(attempt)
         lateinit var retry: Runnable
         retry = Runnable {
             if (microphoneRetryRunnable !== retry) return@Runnable
@@ -487,8 +479,9 @@ internal class MiuCamServiceMediaCapture(
             "nativeMicrophoneRetryScheduled",
             mapOf(
                 "attempt" to attempt,
-                "maxAttempts" to MICROPHONE_MAX_RETRY_ATTEMPTS,
                 "delayMs" to delayMs,
+                "maxDelayMs" to microphoneRetryBackoff.maxDelayMs,
+                "continuous" to true,
                 "reason" to reason
             )
         )
@@ -627,15 +620,26 @@ internal class MiuCamServiceMediaCapture(
         val output = ByteArray(targetWidth * targetHeight)
         var outputIndex = 0
         for (row in 0 until targetHeight) {
-            val sourceY = crop.top + row * crop.height() / targetHeight
-            val rowOffset = baseOffset + sourceY * plane.rowStride
+            val startY = crop.top + row * crop.height() / targetHeight
+            val endY = crop.top + (row + 1) * crop.height() / targetHeight
             for (column in 0 until targetWidth) {
-                val sourceX = crop.left + column * crop.width() / targetWidth
-                val sourceIndex = rowOffset + sourceX * plane.pixelStride
-                require(sourceIndex < source.limit()) {
-                    "Luma plane buffer ended at $sourceIndex/${source.limit()}"
+                val startX = crop.left + column * crop.width() / targetWidth
+                val endX = crop.left + (column + 1) * crop.width() / targetWidth
+                var sum = 0
+                var samples = 0
+                for (sourceY in startY until endY) {
+                    val rowOffset = baseOffset + sourceY * plane.rowStride
+                    for (sourceX in startX until endX) {
+                        val sourceIndex = rowOffset + sourceX * plane.pixelStride
+                        require(sourceIndex < source.limit()) {
+                            "Luma plane buffer ended at $sourceIndex/${source.limit()}"
+                        }
+                        sum += source.get(sourceIndex).toInt() and 0xFF
+                        samples += 1
+                    }
                 }
-                output[outputIndex++] = source.get(sourceIndex)
+                require(samples > 0) { "Empty luma sampling cell" }
+                output[outputIndex++] = (sum / samples).toByte()
             }
         }
         return output
@@ -694,8 +698,7 @@ internal class MiuCamServiceMediaCapture(
             AUDIO_SAMPLE_RATE * AUDIO_CHANNELS * 2 * AUDIO_CHUNK_DURATION_MS / 1_000
         const val AUDIO_STOP_JOIN_TIMEOUT_MS = 400L
         const val MICROPHONE_RETRY_BASE_DELAY_MS = 250L
-        const val MICROPHONE_RETRY_MAX_DELAY_MS = 4_000L
-        const val MICROPHONE_MAX_RETRY_ATTEMPTS = 5
+        const val MICROPHONE_RETRY_MAX_DELAY_MS = 30_000L
         const val MICROPHONE_RETRY_STABILITY_MS = 10_000L
     }
 }

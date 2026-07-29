@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/services.dart';
 
@@ -49,11 +50,10 @@ class MethodChannelAndroidServiceMediaBridge
 
   final MethodChannel _methodChannel;
   final EventChannel _eventChannel;
-  Stream<Object?>? _events;
 
   @override
   Stream<Object?> get events =>
-      _events ??= _eventChannel.receiveBroadcastStream().cast<Object?>();
+      _eventChannel.receiveBroadcastStream().cast<Object?>();
 
   @override
   Future<Map<Object?, Object?>> attach({
@@ -133,13 +133,16 @@ class AndroidServiceMediaSource extends ServerMediaSource
     implements
         ServerJpegPreviewSource,
         ServerLumaFrameSource,
-        ServerMediaPolicySink {
+        ServerMediaPolicySink,
+        ServerAudioChunkMetadataSource {
   AndroidServiceMediaSource({
     AndroidServiceMediaBridgePort? bridge,
     this.jpegQuality = 68,
     this.maxVideoFps = 8,
     this.readyTimeout = const Duration(seconds: 8),
-  }) : _bridge = bridge ?? MethodChannelAndroidServiceMediaBridge() {
+    List<Duration> reconnectBackoff = _defaultReconnectBackoff,
+  })  : _bridge = bridge ?? MethodChannelAndroidServiceMediaBridge(),
+        reconnectBackoff = List<Duration>.unmodifiable(reconnectBackoff) {
     if (jpegQuality < 35 || jpegQuality > 90) {
       throw ArgumentError.value(jpegQuality, 'jpegQuality', 'must be 35..90');
     }
@@ -154,12 +157,29 @@ class AndroidServiceMediaSource extends ServerMediaSource
         'must be 500ms..15s',
       );
     }
+    if (reconnectBackoff.isEmpty || reconnectBackoff.length > 10) {
+      throw ArgumentError.value(
+        reconnectBackoff,
+        'reconnectBackoff',
+        'must contain 1..10 delays',
+      );
+    }
+    if (reconnectBackoff.any(
+      (delay) => delay.isNegative || delay > const Duration(seconds: 30),
+    )) {
+      throw ArgumentError.value(
+        reconnectBackoff,
+        'reconnectBackoff',
+        'delays must be 0ms..30s',
+      );
+    }
   }
 
   final AndroidServiceMediaBridgePort _bridge;
   final int jpegQuality;
   final int maxVideoFps;
   final Duration readyTimeout;
+  final List<Duration> reconnectBackoff;
   late int _effectiveJpegQuality = jpegQuality;
   late int _effectiveMaxVideoFps = maxVideoFps;
 
@@ -173,6 +193,7 @@ class AndroidServiceMediaSource extends ServerMediaSource
   ServerAudioChunkSink? _audioSink;
   ServerMediaErrorSink? _errorSink;
   bool _attached = false;
+  bool _nativeConsumerAttached = false;
   bool _videoDemand = false;
   bool _audioDemand = false;
   bool _videoEncodingDemand = true;
@@ -184,9 +205,18 @@ class AndroidServiceMediaSource extends ServerMediaSource
   int _lastVideoFrameBytes = 0;
   int? _lastAudioChunkAtMs;
   int _lastAudioChunkBytes = 0;
+  ServerAudioChunkMetadata? _currentAudioChunkMetadata;
+  int? _lastNativeAudioSequence;
+  int? _lastAudioCapturedAtMonoUs;
+  bool _audioDiscontinuityPending = true;
   String? _lastError;
   String? _lastNativeStateErrorKey;
   Uint8List? _latestPreviewFrame;
+  int _demandGeneration = 0;
+  int _eventStreamGeneration = 0;
+  int? _reconnectLoopGeneration;
+  Timer? _reconnectTimer;
+  Completer<bool>? _reconnectDelayCompleter;
 
   @override
   bool get isActive => _videoActive || _audioActive;
@@ -202,6 +232,10 @@ class AndroidServiceMediaSource extends ServerMediaSource
 
   @override
   Stream<LumaFrame> get lumaFrames => _lumaFrames.stream;
+
+  @override
+  ServerAudioChunkMetadata? get currentAudioChunkMetadata =>
+      _currentAudioChunkMetadata;
 
   @override
   ServerMediaSourceSnapshot get snapshot => ServerMediaSourceSnapshot(
@@ -261,20 +295,29 @@ class AndroidServiceMediaSource extends ServerMediaSource
     required ServerAudioChunkSink onAudioChunk,
     ServerMediaErrorSink? onError,
   }) {
+    final generation = _beginDemandGeneration();
     return _operations.run(
-      () => _applyDemand(
-        video: video,
-        audio: audio,
-        onVideoFrame: onVideoFrame,
-        onAudioChunk: onAudioChunk,
-        onError: onError,
-      ),
+      () async {
+        if (generation != _demandGeneration) return;
+        await _applyDemand(
+          generation: generation,
+          video: video,
+          audio: audio,
+          onVideoFrame: onVideoFrame,
+          onAudioChunk: onAudioChunk,
+          onError: onError,
+        );
+      },
     );
   }
 
   @override
   Future<void> stop() {
-    return _operations.run(_stopConsumer);
+    final generation = _beginDemandGeneration();
+    return _operations.run(() async {
+      if (generation != _demandGeneration) return;
+      await _stopConsumer();
+    });
   }
 
   @override
@@ -292,12 +335,16 @@ class AndroidServiceMediaSource extends ServerMediaSource
   }
 
   Future<void> _applyDemand({
+    required int generation,
     required bool video,
     required bool audio,
     required ServerVideoFrameSink onVideoFrame,
     required ServerAudioChunkSink onAudioChunk,
     required ServerMediaErrorSink? onError,
   }) async {
+    if (audio != _audioDemand) {
+      _resetAudioContinuity();
+    }
     _videoSink = onVideoFrame;
     _audioSink = onAudioChunk;
     _errorSink = onError;
@@ -310,7 +357,7 @@ class AndroidServiceMediaSource extends ServerMediaSource
     }
 
     try {
-      await _ensureAttached();
+      await _ensureAttached(generation);
       await _bridge.setConsumerDemand(
         video: video,
         audio: audio,
@@ -321,6 +368,11 @@ class AndroidServiceMediaSource extends ServerMediaSource
         audio: audio,
         timeout: readyTimeout,
       );
+      if (generation != _demandGeneration || !_attached) {
+        throw StateError(
+          'Android service media demand changed during native readiness.',
+        );
+      }
       _videoActive = video;
       _audioActive = audio;
       _lastError = null;
@@ -331,25 +383,16 @@ class AndroidServiceMediaSource extends ServerMediaSource
     }
   }
 
-  Future<void> _ensureAttached() async {
+  Future<void> _ensureAttached(int generation) async {
     if (_attached) return;
+    final eventStreamGeneration = ++_eventStreamGeneration;
     _eventSubscription = _bridge.events.listen(
       _handleNativeEvent,
       onError: (Object error, StackTrace stack) => _recordError(error, stack),
-      onDone: () {
-        if (isActive) {
-          _recordError(
-            StateError('Android service media event stream closed.'),
-            StackTrace.current,
-          );
-        }
-        _attached = false;
-        _videoDemand = false;
-        _audioDemand = false;
-        _latestPreviewFrame = null;
-        _videoActive = false;
-        _audioActive = false;
-      },
+      onDone: () => _handleEventStreamDone(
+        demandGeneration: generation,
+        eventStreamGeneration: eventStreamGeneration,
+      ),
       cancelOnError: false,
     );
     try {
@@ -357,8 +400,15 @@ class AndroidServiceMediaSource extends ServerMediaSource
         jpegQuality: _effectiveJpegQuality,
         maxVideoFps: _effectiveMaxVideoFps,
       );
+      _nativeConsumerAttached = true;
+      if (eventStreamGeneration != _eventStreamGeneration) {
+        throw StateError(
+          'Android service media event stream closed while attaching.',
+        );
+      }
       _attached = true;
     } catch (_) {
+      _eventStreamGeneration += 1;
       await _eventSubscription?.cancel();
       _eventSubscription = null;
       rethrow;
@@ -368,7 +418,7 @@ class AndroidServiceMediaSource extends ServerMediaSource
   Future<void> _stopConsumer() async {
     Object? firstError;
     StackTrace? firstStack;
-    if (_attached) {
+    if (_nativeConsumerAttached) {
       try {
         await _bridge.setConsumerDemand(
           video: false,
@@ -386,9 +436,11 @@ class AndroidServiceMediaSource extends ServerMediaSource
         firstStack ??= stack;
       }
     }
+    _eventStreamGeneration += 1;
     await _eventSubscription?.cancel();
     _eventSubscription = null;
     _attached = false;
+    _nativeConsumerAttached = false;
     _videoDemand = false;
     _audioDemand = false;
     _videoActive = false;
@@ -396,6 +448,7 @@ class AndroidServiceMediaSource extends ServerMediaSource
     _latestPreviewFrame = null;
     _videoSink = null;
     _audioSink = null;
+    _resetAudioContinuity();
     _errorSink = null;
     _lastNativeStateErrorKey = null;
     if (firstError != null) {
@@ -405,7 +458,7 @@ class AndroidServiceMediaSource extends ServerMediaSource
 
   Future<void> _bestEffortDetach() async {
     try {
-      if (_attached) {
+      if (_nativeConsumerAttached) {
         await _bridge.setConsumerDemand(
           video: false,
           audio: false,
@@ -416,15 +469,201 @@ class AndroidServiceMediaSource extends ServerMediaSource
     } catch (_) {
       // Preserve the acquisition error that caused cleanup.
     }
+    _eventStreamGeneration += 1;
     await _eventSubscription?.cancel();
     _eventSubscription = null;
     _attached = false;
+    _nativeConsumerAttached = false;
     _videoDemand = false;
     _audioDemand = false;
     _videoActive = false;
     _audioActive = false;
     _latestPreviewFrame = null;
+    _resetAudioContinuity();
     _lastNativeStateErrorKey = null;
+  }
+
+  int _beginDemandGeneration() {
+    final generation = ++_demandGeneration;
+    _cancelReconnectDelay();
+    return generation;
+  }
+
+  bool _hasDemandFor(int generation) =>
+      generation == _demandGeneration && (_videoDemand || _audioDemand);
+
+  void _handleEventStreamDone({
+    required int demandGeneration,
+    required int eventStreamGeneration,
+  }) {
+    if (eventStreamGeneration != _eventStreamGeneration) return;
+    _eventStreamGeneration += 1;
+    _eventSubscription = null;
+    _attached = false;
+    _resetMediaContinuity();
+    if (!_hasDemandFor(demandGeneration)) return;
+
+    _recordError(
+      const ServerMediaStreamDiscontinuity(
+        'Android service media event stream closed unexpectedly.',
+      ),
+      StackTrace.current,
+    );
+    _startReconnectLoop(demandGeneration);
+  }
+
+  void _startReconnectLoop(int generation) {
+    if (_reconnectLoopGeneration == generation) return;
+    _reconnectLoopGeneration = generation;
+    unawaited(_runReconnectLoop(generation));
+  }
+
+  Future<void> _runReconnectLoop(int generation) async {
+    try {
+      var attempt = 0;
+      while (_hasDemandFor(generation)) {
+        final backoffIndex = min(attempt, reconnectBackoff.length - 1);
+        final shouldRetry = await _waitForReconnectDelay(
+          reconnectBackoff[backoffIndex],
+          generation,
+        );
+        if (!shouldRetry) return;
+
+        attempt += 1;
+        final result = await _operations.run(
+          () => _tryReconnect(
+            generation: generation,
+            attempt: attempt,
+          ),
+        );
+        if (result == _ReconnectResult.succeeded &&
+            _hasDemandFor(generation) &&
+            !_attached) {
+          // The replacement stream may close between native readiness and
+          // this loop resuming. Keep this generation's recovery alive.
+          continue;
+        }
+        if (result != _ReconnectResult.failed) return;
+      }
+    } finally {
+      if (_reconnectLoopGeneration == generation) {
+        _reconnectLoopGeneration = null;
+      }
+    }
+  }
+
+  Future<bool> _waitForReconnectDelay(
+    Duration delay,
+    int generation,
+  ) async {
+    if (!_hasDemandFor(generation)) return false;
+    if (delay == Duration.zero) {
+      await Future<void>.delayed(Duration.zero);
+      return _hasDemandFor(generation);
+    }
+
+    final completer = Completer<bool>();
+    _reconnectDelayCompleter = completer;
+    _reconnectTimer = Timer(delay, () {
+      if (!completer.isCompleted) completer.complete(true);
+    });
+    final elapsed = await completer.future;
+    if (identical(_reconnectDelayCompleter, completer)) {
+      _reconnectDelayCompleter = null;
+      _reconnectTimer = null;
+    }
+    return elapsed && _hasDemandFor(generation);
+  }
+
+  void _cancelReconnectDelay() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    final completer = _reconnectDelayCompleter;
+    _reconnectDelayCompleter = null;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(false);
+    }
+  }
+
+  Future<_ReconnectResult> _tryReconnect({
+    required int generation,
+    required int attempt,
+  }) async {
+    if (!_hasDemandFor(generation)) return _ReconnectResult.cancelled;
+    try {
+      await _ensureAttached(generation);
+      if (!_hasDemandFor(generation)) {
+        await _detachPreservingDemand();
+        return _ReconnectResult.cancelled;
+      }
+      await _bridge.setConsumerDemand(
+        video: _videoDemand,
+        audio: _audioDemand,
+        encodeVideo: _videoDemand && _videoEncodingDemand,
+      );
+      await _bridge.awaitReady(
+        video: _videoDemand,
+        audio: _audioDemand,
+        timeout: readyTimeout,
+      );
+      if (!_hasDemandFor(generation)) {
+        await _detachPreservingDemand();
+        return _ReconnectResult.cancelled;
+      }
+      if (!_attached) {
+        throw StateError(
+          'Android service media event stream closed during recovery.',
+        );
+      }
+      _videoActive = _videoDemand;
+      _audioActive = _audioDemand;
+      _lastError = null;
+      _lastNativeStateErrorKey = null;
+      return _ReconnectResult.succeeded;
+    } catch (error, stack) {
+      if (_hasDemandFor(generation)) {
+        _recordError(
+          StateError(
+            'Android service media recovery attempt '
+            '$attempt failed: $error',
+          ),
+          stack,
+        );
+      }
+      await _detachPreservingDemand();
+      return _hasDemandFor(generation)
+          ? _ReconnectResult.failed
+          : _ReconnectResult.cancelled;
+    }
+  }
+
+  Future<void> _detachPreservingDemand() async {
+    try {
+      if (_nativeConsumerAttached) {
+        await _bridge.setConsumerDemand(
+          video: false,
+          audio: false,
+          encodeVideo: false,
+        );
+        await _bridge.detach();
+      }
+    } catch (_) {
+      // The retry telemetry already carries the actionable acquisition error.
+    }
+    _eventStreamGeneration += 1;
+    await _eventSubscription?.cancel();
+    _eventSubscription = null;
+    _attached = false;
+    _nativeConsumerAttached = false;
+    _resetMediaContinuity();
+    _lastNativeStateErrorKey = null;
+  }
+
+  void _resetMediaContinuity() {
+    _videoActive = false;
+    _audioActive = false;
+    _latestPreviewFrame = null;
+    _resetAudioContinuity();
   }
 
   void _handleNativeEvent(Object? rawEvent) {
@@ -457,13 +696,17 @@ class AndroidServiceMediaSource extends ServerMediaSource
         final bytes = _bytes(event['bytes']);
         final sink = _audioSink;
         if (bytes == null || bytes.isEmpty || sink == null) return;
+        final metadata = _audioMetadata(event, bytes.length);
         try {
+          _currentAudioChunkMetadata = metadata;
           sink(bytes);
           _audioChunks += 1;
-          _lastAudioChunkAtMs = _eventTimestamp(event);
+          _lastAudioChunkAtMs = metadata.capturedAtMs;
           _lastAudioChunkBytes = bytes.length;
         } catch (error, stack) {
           _recordError(error, stack);
+        } finally {
+          _currentAudioChunkMetadata = null;
         }
         break;
       case 'error':
@@ -487,6 +730,9 @@ class AndroidServiceMediaSource extends ServerMediaSource
 
     _videoActive = _videoDemand && cameraActive;
     _audioActive = _audioDemand && microphoneActive;
+    if (previousAudioActive != _audioActive) {
+      _resetAudioContinuity();
+    }
     if (_videoDemand && cameraError != null && cameraError.isNotEmpty) {
       _recordNativeStateError('camera', cameraError);
     } else if (_audioDemand &&
@@ -521,6 +767,7 @@ class AndroidServiceMediaSource extends ServerMediaSource
       rowStride: width,
       pixelStride: 1,
       timestampMs: _eventTimestamp(event),
+      monotonicTimestampMs: _eventMonotonicTimestamp(event),
     ));
   }
 
@@ -545,8 +792,86 @@ class AndroidServiceMediaSource extends ServerMediaSource
       (event['timestampMs'] as num?)?.toInt() ??
       DateTime.now().millisecondsSinceEpoch;
 
+  int? _eventMonotonicTimestamp(Map<Object?, Object?> event) {
+    final capturedAtMonoUs = event['capturedAtMonoUs'];
+    return capturedAtMonoUs is num ? capturedAtMonoUs.toInt() ~/ 1000 : null;
+  }
+
+  ServerAudioChunkMetadata _audioMetadata(
+    Map<Object?, Object?> event,
+    int byteLength,
+  ) {
+    final capturedAtMs = _eventTimestamp(event);
+    final capturedAtMonoUs = _positiveInt(event['capturedAtMonoUs']);
+    final sequence = _positiveInt(event['audioSequence']);
+    final sampleRate = _positiveInt(event['sampleRate']);
+    final channels = _positiveInt(event['channels']);
+    var discontinuityBefore = _audioDiscontinuityPending;
+
+    final lastSequence = _lastNativeAudioSequence;
+    if (lastSequence != null &&
+        (sequence == null || sequence != lastSequence + 1)) {
+      discontinuityBefore = true;
+    }
+
+    final lastCapturedAtMonoUs = _lastAudioCapturedAtMonoUs;
+    if (lastCapturedAtMonoUs != null && capturedAtMonoUs != null) {
+      final durationUs = sampleRate == null || channels == null
+          ? 0
+          : byteLength * 1000000 ~/ max(1, sampleRate * channels * 2);
+      final gapUs = capturedAtMonoUs - durationUs - lastCapturedAtMonoUs;
+      if (gapUs.abs() > _maxContinuousAudioGapUs) {
+        discontinuityBefore = true;
+      }
+    }
+
+    _lastNativeAudioSequence = sequence;
+    _lastAudioCapturedAtMonoUs = capturedAtMonoUs;
+    _audioDiscontinuityPending = false;
+    return ServerAudioChunkMetadata(
+      capturedAtMs: capturedAtMs,
+      capturedAtMonoUs: capturedAtMonoUs,
+      sequence: sequence,
+      sampleRate: sampleRate,
+      channels: channels,
+      discontinuityBefore: discontinuityBefore,
+    );
+  }
+
+  int? _positiveInt(Object? value) {
+    if (value is! num) return null;
+    final parsed = value.toInt();
+    return parsed > 0 ? parsed : null;
+  }
+
+  void _resetAudioContinuity() {
+    _currentAudioChunkMetadata = null;
+    _lastNativeAudioSequence = null;
+    _lastAudioCapturedAtMonoUs = null;
+    _audioDiscontinuityPending = true;
+  }
+
   void _recordError(Object error, StackTrace stack) {
     _lastError = error.toString();
-    _errorSink?.call(error, stack);
+    try {
+      _errorSink?.call(error, stack);
+    } catch (_) {
+      // Diagnostics must not interrupt capture recovery.
+    }
   }
 }
+
+const _maxContinuousAudioGapUs = 250000;
+const _defaultReconnectBackoff = <Duration>[
+  Duration(milliseconds: 100),
+  Duration(milliseconds: 200),
+  Duration(milliseconds: 400),
+  Duration(milliseconds: 800),
+  Duration(milliseconds: 1600),
+  Duration(milliseconds: 3200),
+  Duration(milliseconds: 6400),
+  Duration(milliseconds: 12800),
+  Duration(seconds: 30),
+];
+
+enum _ReconnectResult { succeeded, failed, cancelled }

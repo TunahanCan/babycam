@@ -156,6 +156,7 @@ void main() {
     expect(android?.playSound, isTrue);
     expect(android?.enableVibration, isTrue);
     expect(android?.autoCancel, isTrue);
+    expect(android?.onlyAlertOnce, isTrue);
     expect(android?.groupKey, isNotEmpty);
     expect(android?.styleInformation, isA<BigTextStyleInformation>());
   });

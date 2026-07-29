@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'luma_frame.dart';
 
-/// Nearest-neighbor Y-plane downsampler with stride-aware safe reads.
+/// Area-average Y-plane downsampler with stride-aware safe reads.
 class LumaDownsampler {
   const LumaDownsampler(
       {required this.outputWidth, required this.outputHeight});
@@ -13,6 +13,9 @@ class LumaDownsampler {
   bool canDownsample(LumaFrame frame) {
     if (outputWidth <= 0 || outputHeight <= 0) return false;
     if (frame.width <= 0 || frame.height <= 0) return false;
+    // Upscaling repeats one sensor sample into connected output pixels and can
+    // turn a single low-light speckle into apparent motion.
+    if (frame.width < outputWidth || frame.height < outputHeight) return false;
     if (frame.rowStride <= 0 || frame.pixelStride <= 0) return false;
     if (frame.yPlane.isEmpty) return false;
     final lastOffset = (frame.height - 1) * frame.rowStride +
@@ -27,12 +30,22 @@ class LumaDownsampler {
     }
     var outIndex = 0;
     for (var y = 0; y < outputHeight; y++) {
-      final srcY = (y * frame.height) ~/ outputHeight;
-      final rowStart = srcY * frame.rowStride;
+      final startY = (y * frame.height) ~/ outputHeight;
+      final endY = ((y + 1) * frame.height) ~/ outputHeight;
       for (var x = 0; x < outputWidth; x++) {
-        final srcX = (x * frame.width) ~/ outputWidth;
-        final offset = rowStart + srcX * frame.pixelStride;
-        output[outIndex++] = frame.yPlane[offset];
+        final startX = (x * frame.width) ~/ outputWidth;
+        final endX = ((x + 1) * frame.width) ~/ outputWidth;
+        var sum = 0;
+        var count = 0;
+        for (var sourceY = startY; sourceY < endY; sourceY++) {
+          final rowStart = sourceY * frame.rowStride;
+          for (var sourceX = startX; sourceX < endX; sourceX++) {
+            sum += frame.yPlane[rowStart + sourceX * frame.pixelStride];
+            count++;
+          }
+        }
+        if (count == 0) return false;
+        output[outIndex++] = (sum / count).round();
       }
     }
     return true;

@@ -65,11 +65,13 @@ void main() {
       expect(policy.canEmit(AlertType.motionDetected, 1100), isTrue);
     });
 
-    test('timestamp moving backwards does not crash and remains safe', () {
+    test('timestamp moving backwards re-anchors one bounded cooldown', () {
       policy.markEmitted(AlertType.cryDetected, 1000);
 
       expect(() => policy.canEmit(AlertType.cryDetected, 900), returnsNormally);
       expect(policy.canEmit(AlertType.cryDetected, 900), isFalse);
+      expect(policy.canEmit(AlertType.cryDetected, 1899), isFalse);
+      expect(policy.canEmit(AlertType.cryDetected, 1900), isTrue);
     });
 
     test('zero cooldown always permits emission', () {

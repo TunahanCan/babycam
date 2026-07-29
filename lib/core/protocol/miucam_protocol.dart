@@ -19,6 +19,12 @@ class MiuCamProtocolV2 {
   static const webRtcIce = '/webrtc/ice';
   static const webRtcClose = '/webrtc/close';
   static const events = '/ws/events';
+  static const alertReplayVersionQuery = 'alertReplayV';
+  static const alertReplayVersion = '1';
+  static const alertCursorQuery = 'afterAlertId';
+  static const alertAckType = 'alertAck';
+  static const alertAckId = 'alertId';
+  static const alertDetachType = 'alertDetach';
   static const status = '/status';
   static const statusPublic = '/status/public';
 }

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miucam/analysis/video/luma_frame.dart';
+import 'package:miucam/features/server/media/server_media_source.dart';
 import 'package:miucam/services/platform/android_service_media_source.dart';
 
 void main() {
@@ -87,6 +88,115 @@ void main() {
     await bridge.close();
   });
 
+  test(
+      'preserves native audio timing and marks a dropped audio sequence as a gap',
+      () async {
+    final bridge = _FakeBridge();
+    final source = AndroidServiceMediaSource(bridge: bridge);
+    final metadata = <ServerAudioChunkMetadata>[];
+
+    await source.reconcile(
+      video: false,
+      audio: true,
+      onVideoFrame: (_) {},
+      onAudioChunk: (_) {
+        metadata.add(source.currentAudioChunkMetadata!);
+      },
+    );
+    expect(source.currentAudioChunkMetadata, isNull);
+
+    bridge.emit({
+      'type': 'audio',
+      'audioSequence': 41,
+      'timestampMs': 10020,
+      'capturedAtMonoUs': 5020000,
+      'sampleRate': 16000,
+      'channels': 1,
+      'bytes': Uint8List(640),
+    });
+    bridge.emit({
+      'type': 'audio',
+      'audioSequence': 42,
+      'timestampMs': 10040,
+      'capturedAtMonoUs': 5040000,
+      'sampleRate': 16000,
+      'channels': 1,
+      'bytes': Uint8List(640),
+    });
+    bridge.emit({
+      'type': 'audio',
+      'audioSequence': 44,
+      'timestampMs': 10080,
+      'capturedAtMonoUs': 5080000,
+      'sampleRate': 16000,
+      'channels': 1,
+      'bytes': Uint8List(640),
+    });
+
+    expect(metadata, hasLength(3));
+    expect(metadata[0].capturedAtMs, 10020);
+    expect(metadata[0].capturedAtMonoUs, 5020000);
+    expect(metadata[0].sampleRate, 16000);
+    expect(metadata[0].channels, 1);
+    expect(metadata[0].discontinuityBefore, isTrue);
+    expect(metadata[1].discontinuityBefore, isFalse);
+    expect(metadata[2].sequence, 44);
+    expect(metadata[2].discontinuityBefore, isTrue);
+    expect(source.currentAudioChunkMetadata, isNull);
+
+    await source.stop();
+    await bridge.close();
+  });
+
+  test('monotonic capture stall and microphone restart break audio continuity',
+      () async {
+    final bridge = _FakeBridge();
+    final source = AndroidServiceMediaSource(bridge: bridge);
+    final discontinuities = <bool>[];
+
+    await source.reconcile(
+      video: false,
+      audio: true,
+      onVideoFrame: (_) {},
+      onAudioChunk: (_) {
+        discontinuities
+            .add(source.currentAudioChunkMetadata!.discontinuityBefore);
+      },
+    );
+
+    void emitAudio(int sequence, int capturedAtMonoUs) {
+      bridge.emit({
+        'type': 'audio',
+        'audioSequence': sequence,
+        'timestampMs': 20000 + sequence * 20,
+        'capturedAtMonoUs': capturedAtMonoUs,
+        'sampleRate': 16000,
+        'channels': 1,
+        'bytes': Uint8List(640),
+      });
+    }
+
+    emitAudio(1, 1000000);
+    emitAudio(2, 1020000);
+    emitAudio(3, 1400000);
+    bridge.emit({
+      'type': 'captureState',
+      'cameraActive': false,
+      'microphoneActive': false,
+    });
+    bridge.emit({
+      'type': 'captureState',
+      'cameraActive': false,
+      'microphoneActive': true,
+    });
+    emitAudio(4, 1420000);
+
+    expect(discontinuities, [true, false, true, true]);
+
+    await source.stop();
+    await bridge.close();
+  });
+
   test('native readiness failure cleans up and a later demand can retry',
       () async {
     final bridge = _FakeBridge()..readyFailuresRemaining = 1;
@@ -115,6 +225,176 @@ void main() {
     );
     expect(source.isActive, isTrue);
     expect(bridge.attachCalls, 2);
+
+    await source.stop();
+    await bridge.close();
+  });
+
+  test(
+      'unexpected event stream close reattaches and restores exact media demand',
+      () async {
+    final bridge = _FakeBridge();
+    final source = AndroidServiceMediaSource(
+      bridge: bridge,
+      reconnectBackoff: const [Duration.zero],
+    );
+    final errors = <Object>[];
+    final videoFrames = <Uint8List>[];
+    final audioChunks = <Uint8List>[];
+    final audioDiscontinuities = <bool>[];
+
+    await source.reconcile(
+      video: true,
+      audio: true,
+      onVideoFrame: videoFrames.add,
+      onAudioChunk: (bytes) {
+        audioChunks.add(bytes);
+        audioDiscontinuities
+            .add(source.currentAudioChunkMetadata!.discontinuityBefore);
+      },
+      onError: (error, _) => errors.add(error),
+    );
+    bridge.emit({
+      'type': 'video',
+      'timestampMs': 100,
+      'bytes': Uint8List.fromList([1]),
+    });
+    bridge.emit({
+      'type': 'audio',
+      'audioSequence': 7,
+      'timestampMs': 100,
+      'capturedAtMonoUs': 1000000,
+      'sampleRate': 16000,
+      'channels': 1,
+      'bytes': Uint8List(640),
+    });
+
+    bridge.readyFailuresRemaining = 2;
+    await bridge.closeCurrentEventStream();
+    await bridge.waitForReadyCalls(4);
+    await pumpEventQueue();
+
+    expect(bridge.attachCalls, 4);
+    expect(
+      bridge.consumerDemands.last,
+      (video: true, audio: true, encodeVideo: true),
+    );
+    expect(bridge.readyDemands.last, (video: true, audio: true));
+    expect(source.videoActive, isTrue);
+    expect(source.audioActive, isTrue);
+    expect(
+      errors.map((error) => error.toString()),
+      contains(contains('event stream closed unexpectedly')),
+    );
+    expect(
+      errors.map((error) => error.toString()),
+      contains(contains('recovery attempt 1 failed')),
+    );
+    expect(
+      errors.map((error) => error.toString()),
+      contains(contains('recovery attempt 2 failed')),
+    );
+
+    bridge.emit({
+      'type': 'video',
+      'timestampMs': 200,
+      'bytes': Uint8List.fromList([2]),
+    });
+    bridge.emit({
+      'type': 'audio',
+      'audioSequence': 8,
+      'timestampMs': 200,
+      'capturedAtMonoUs': 1020000,
+      'sampleRate': 16000,
+      'channels': 1,
+      'bytes': Uint8List(640),
+    });
+
+    expect(videoFrames, hasLength(2));
+    expect(audioChunks, hasLength(2));
+    expect(audioDiscontinuities, [true, true]);
+
+    await source.stop();
+    await bridge.close();
+  });
+
+  test('stop cancels a pending event stream recovery retry', () async {
+    final bridge = _FakeBridge();
+    final source = AndroidServiceMediaSource(
+      bridge: bridge,
+      reconnectBackoff: const [Duration(seconds: 10)],
+    );
+    final errors = <Object>[];
+
+    await source.reconcile(
+      video: true,
+      audio: true,
+      onVideoFrame: (_) {},
+      onAudioChunk: (_) {},
+      onError: (error, _) => errors.add(error),
+    );
+    await bridge.closeCurrentEventStream();
+    await source.stop();
+    await pumpEventQueue();
+
+    expect(bridge.attachCalls, 1);
+    expect(bridge.readyDemands, hasLength(1));
+    expect(bridge.detachCalls, 1);
+    expect(
+      bridge.consumerDemands.last,
+      (video: false, audio: false, encodeVideo: false),
+    );
+    expect(
+      errors.map((error) => error.toString()),
+      contains(contains('event stream closed unexpectedly')),
+    );
+
+    await bridge.close();
+  });
+
+  test('new reconcile replaces a pending recovery generation', () async {
+    final bridge = _FakeBridge();
+    final source = AndroidServiceMediaSource(
+      bridge: bridge,
+      reconnectBackoff: const [Duration(seconds: 10)],
+    );
+    final videoFrames = <Uint8List>[];
+    final audioChunks = <Uint8List>[];
+
+    await source.reconcile(
+      video: true,
+      audio: false,
+      onVideoFrame: videoFrames.add,
+      onAudioChunk: audioChunks.add,
+    );
+    await bridge.closeCurrentEventStream();
+    await source.reconcile(
+      video: false,
+      audio: true,
+      onVideoFrame: videoFrames.add,
+      onAudioChunk: audioChunks.add,
+    );
+    await pumpEventQueue();
+
+    expect(bridge.attachCalls, 2);
+    expect(bridge.readyDemands, [
+      (video: true, audio: false),
+      (video: false, audio: true),
+    ]);
+    expect(
+      bridge.consumerDemands.last,
+      (video: false, audio: true, encodeVideo: false),
+    );
+    bridge.emit({
+      'type': 'video',
+      'bytes': Uint8List.fromList([1]),
+    });
+    bridge.emit({
+      'type': 'audio',
+      'bytes': Uint8List.fromList([1, 0]),
+    });
+    expect(videoFrames, isEmpty);
+    expect(audioChunks, hasLength(1));
 
     await source.stop();
     await bridge.close();
@@ -270,7 +550,9 @@ void main() {
 }
 
 class _FakeBridge implements AndroidServiceMediaBridgePort {
-  final _events = StreamController<Object?>.broadcast(sync: true);
+  final _eventControllers = <StreamController<Object?>>[];
+  final _readyCallNotifications = StreamController<int>.broadcast(sync: true);
+  StreamController<Object?>? _currentEvents;
   final consumerDemands = <({bool video, bool audio, bool encodeVideo})>[];
   final readyDemands = <({bool video, bool audio})>[];
   final mediaPolicies = <({int jpegQuality, int maxVideoFps})>[];
@@ -280,11 +562,33 @@ class _FakeBridge implements AndroidServiceMediaBridgePort {
   int readyFailuresRemaining = 0;
 
   @override
-  Stream<Object?> get events => _events.stream;
+  Stream<Object?> get events {
+    final events = StreamController<Object?>.broadcast(sync: true);
+    _eventControllers.add(events);
+    _currentEvents = events;
+    return events.stream;
+  }
 
-  void emit(Map<Object?, Object?> event) => _events.add(event);
+  void emit(Map<Object?, Object?> event) => _currentEvents!.add(event);
 
-  Future<void> close() => _events.close();
+  Future<void> closeCurrentEventStream() async {
+    final events = _currentEvents;
+    if (events != null && !events.isClosed) await events.close();
+  }
+
+  Future<void> waitForReadyCalls(int count) async {
+    if (readyDemands.length >= count) return;
+    await _readyCallNotifications.stream.firstWhere(
+      (currentCount) => currentCount >= count,
+    );
+  }
+
+  Future<void> close() async {
+    for (final events in _eventControllers) {
+      if (!events.isClosed) await events.close();
+    }
+    await _readyCallNotifications.close();
+  }
 
   @override
   Future<Map<Object?, Object?>> attach({
@@ -306,6 +610,7 @@ class _FakeBridge implements AndroidServiceMediaBridgePort {
     required Duration timeout,
   }) async {
     readyDemands.add((video: video, audio: audio));
+    _readyCallNotifications.add(readyDemands.length);
     if (readyFailuresRemaining > 0) {
       readyFailuresRemaining--;
       throw StateError('native camera failed');

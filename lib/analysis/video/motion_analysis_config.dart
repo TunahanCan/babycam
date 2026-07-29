@@ -3,8 +3,8 @@ import 'normalized_rect.dart';
 /// Immutable configuration for [MotionAnalyzerV2].
 class MotionAnalysisConfig {
   const MotionAnalysisConfig({
-    this.downsampleWidth = 80,
-    this.downsampleHeight = 60,
+    this.downsampleWidth = 64,
+    this.downsampleHeight = 48,
     this.analysisFps = 3,
     this.stableBackgroundAlpha = 0.02,
     this.motionBackgroundAlpha = 0.002,
@@ -18,6 +18,9 @@ class MotionAnalysisConfig {
     this.minActiveAreaRatio = 0.015,
     this.globalLightChangeRatio = 0.70,
     this.smoothingAlpha = 0.25,
+    this.initializationFrames = 5,
+    this.maxFrameGapMs = 1000,
+    this.minMotionFrames = 3,
     this.roi,
   });
 
@@ -39,6 +42,16 @@ class MotionAnalysisConfig {
   final double minActiveAreaRatio;
   final double globalLightChangeRatio;
   final double smoothingAlpha;
+
+  /// Valid frames used only to settle exposure/focus and the background model
+  /// after startup or a capture discontinuity.
+  final int initializationFrames;
+
+  /// A larger timestamp gap is missing evidence, not sustained movement.
+  final int maxFrameGapMs;
+
+  /// Prevents two widely spaced frames from satisfying a duration threshold.
+  final int minMotionFrames;
   final NormalizedRect? roi;
 
   MotionAnalysisConfig copyWith({
@@ -57,6 +70,9 @@ class MotionAnalysisConfig {
     double? minActiveAreaRatio,
     double? globalLightChangeRatio,
     double? smoothingAlpha,
+    int? initializationFrames,
+    int? maxFrameGapMs,
+    int? minMotionFrames,
     NormalizedRect? roi,
     bool clearRoi = false,
   }) =>
@@ -80,6 +96,9 @@ class MotionAnalysisConfig {
         globalLightChangeRatio:
             globalLightChangeRatio ?? this.globalLightChangeRatio,
         smoothingAlpha: smoothingAlpha ?? this.smoothingAlpha,
+        initializationFrames: initializationFrames ?? this.initializationFrames,
+        maxFrameGapMs: maxFrameGapMs ?? this.maxFrameGapMs,
+        minMotionFrames: minMotionFrames ?? this.minMotionFrames,
         roi: clearRoi ? null : roi ?? this.roi,
       );
 
@@ -99,6 +118,9 @@ class MotionAnalysisConfig {
         'minActiveAreaRatio': minActiveAreaRatio,
         'globalLightChangeRatio': globalLightChangeRatio,
         'smoothingAlpha': smoothingAlpha,
+        'initializationFrames': initializationFrames,
+        'maxFrameGapMs': maxFrameGapMs,
+        'minMotionFrames': minMotionFrames,
         'roi': roi?.toJson(),
       };
 }

@@ -31,6 +31,10 @@ class CooldownPolicy {
 
     final elapsedMs = timestampMs - lastEmittedAt;
     if (elapsedMs < 0) {
+      // Wall time can move backwards after NTP/manual correction. Re-anchor
+      // once so the safety cooldown is preserved without muting alerts until
+      // the clock eventually catches its old value.
+      _lastEmittedAtByType[type] = timestampMs;
       return cooldownMs;
     }
 
@@ -45,5 +49,14 @@ class CooldownPolicy {
     } else {
       _lastEmittedAtByType.remove(type);
     }
+  }
+
+  Map<AlertType, int> snapshot() =>
+      Map<AlertType, int>.unmodifiable(_lastEmittedAtByType);
+
+  void restore(Map<AlertType, int> snapshot) {
+    _lastEmittedAtByType
+      ..clear()
+      ..addAll(snapshot);
   }
 }

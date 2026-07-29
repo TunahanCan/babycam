@@ -29,6 +29,8 @@ class BabyEventEpisode {
     this.severity = AlertSeverity.info,
     this.intensity = 'low',
     this.resolved = false,
+    this.confirmed = false,
+    this.activeEvidenceRatio = 0,
   });
 
   final String episodeId;
@@ -45,6 +47,8 @@ class BabyEventEpisode {
   final AlertSeverity severity;
   final String intensity;
   final bool resolved;
+  final bool confirmed;
+  final double activeEvidenceRatio;
 
   int? lastMotionAgoMs() =>
       lastMotionAtMs == null ? null : lastUpdatedAtMs - lastMotionAtMs!;
@@ -66,6 +70,8 @@ class BabyEventEpisode {
         'severity': severity.name,
         'intensity': intensity,
         'resolved': resolved,
+        'confirmed': confirmed,
+        'activeEvidenceRatio': activeEvidenceRatio,
       };
 }
 
@@ -76,23 +82,27 @@ class EpisodeBasedNotificationAggregator {
     this.confirmedCryMs = 5000,
     this.resolveQuietMs = 10000,
     this.maxActiveGapMs = 1500,
+    this.minActiveEvidenceRatio = 0.70,
   })  : assert(cryThreshold >= 0 && cryThreshold <= 1),
         assert(suspectedCryMs >= 0),
         assert(confirmedCryMs >= suspectedCryMs),
         assert(resolveQuietMs >= 0),
-        assert(maxActiveGapMs > 0);
+        assert(maxActiveGapMs > 0),
+        assert(minActiveEvidenceRatio >= 0 && minActiveEvidenceRatio <= 1);
 
   final double cryThreshold;
   final int suspectedCryMs;
   final int confirmedCryMs;
   final int resolveQuietMs;
   final int maxActiveGapMs;
+  final double minActiveEvidenceRatio;
   static const _motionAssociationWindowMs = 5000;
 
   BabyEventEpisodeState _state = BabyEventEpisodeState.quiet;
   int _sequence = 0;
   int? _episodeStartedAtMs;
   int? _lastCryAtMs;
+  int? _lastSampleAtMs;
   int? _lastMotionAtMs;
   int _totalCryDurationMs = 0;
   int _motionBursts = 0;
@@ -100,6 +110,7 @@ class EpisodeBasedNotificationAggregator {
   double _scoreSum = 0;
   double _maxScore = 0;
   bool _confirmedDelivered = false;
+  bool _lastSampleWasActive = false;
 
   BabyEventEpisodeState get state => _state;
 
@@ -128,12 +139,19 @@ class EpisodeBasedNotificationAggregator {
     // a loud room, microphone gain change, or startup transient must not start
     // an episode that can later be promoted to a phone notification.
     if (result.invalidChunk ||
+        result.isClipped ||
         !result.isCalibrated ||
         result.calibrationState != AudioCalibrationState.calibrated) {
       if (_state != BabyEventEpisodeState.quiet) reset();
       return null;
     }
     final nowMs = result.timestampMs;
+    final lastSampleAtMs = _lastSampleAtMs;
+    if (lastSampleAtMs != null && nowMs < lastSampleAtMs) {
+      // A capture restart or clock reset must not turn old and new evidence
+      // into one continuous episode.
+      reset();
+    }
     // CryAudioAnalyzerV2 already owns feature extraction and score smoothing.
     // Re-scoring the same window here made screen thresholds behave
     // differently from the analyzer and could apply the duration gate twice.
@@ -148,16 +166,24 @@ class EpisodeBasedNotificationAggregator {
         reset();
       }
       _startIfNeeded(nowMs);
-      final lastCryAtMs = _lastCryAtMs;
-      if (lastCryAtMs != null && nowMs >= lastCryAtMs) {
-        _totalCryDurationMs += nowMs - lastCryAtMs;
+      final previousSampleAtMs = _lastSampleAtMs;
+      if (_lastSampleWasActive &&
+          previousSampleAtMs != null &&
+          nowMs >= previousSampleAtMs) {
+        final activeIntervalMs = nowMs - previousSampleAtMs;
+        if (activeIntervalMs <= maxActiveGapMs) {
+          _totalCryDurationMs += activeIntervalMs;
+        }
       }
+      _lastSampleAtMs = nowMs;
+      _lastSampleWasActive = true;
       _lastCryAtMs = nowMs;
       _sampleCount++;
       _scoreSum += cryScore;
       if (cryScore > _maxScore) _maxScore = cryScore;
-      final activeDuration = nowMs - _episodeStartedAtMs!;
-      if (activeDuration >= confirmedCryMs) {
+      final activeRatio = _activeEvidenceRatio(nowMs);
+      if (_totalCryDurationMs >= confirmedCryMs &&
+          activeRatio >= minActiveEvidenceRatio) {
         _state = _confirmedDelivered
             ? BabyEventEpisodeState.ongoingCry
             : BabyEventEpisodeState.confirmedCry;
@@ -169,12 +195,15 @@ class EpisodeBasedNotificationAggregator {
             videoReliable: videoReliable,
           );
         }
-      } else if (activeDuration >= suspectedCryMs) {
+      } else if (_totalCryDurationMs >= suspectedCryMs &&
+          activeRatio >= minActiveEvidenceRatio) {
         _state = BabyEventEpisodeState.suspectedCry;
       }
       return null;
     }
 
+    _lastSampleAtMs = nowMs;
+    _lastSampleWasActive = false;
     final lastCryAtMs = _lastCryAtMs;
     if (_episodeStartedAtMs != null &&
         lastCryAtMs != null &&
@@ -204,10 +233,17 @@ class EpisodeBasedNotificationAggregator {
     _state = BabyEventEpisodeState.ongoingCry;
   }
 
+  /// Drops camera evidence without disturbing an in-progress audio episode.
+  void markVideoDiscontinuity() {
+    _lastMotionAtMs = null;
+    _motionBursts = 0;
+  }
+
   void reset() {
     _state = BabyEventEpisodeState.quiet;
     _episodeStartedAtMs = null;
     _lastCryAtMs = null;
+    _lastSampleAtMs = null;
     _lastMotionAtMs = null;
     _totalCryDurationMs = 0;
     _motionBursts = 0;
@@ -215,6 +251,7 @@ class EpisodeBasedNotificationAggregator {
     _scoreSum = 0;
     _maxScore = 0;
     _confirmedDelivered = false;
+    _lastSampleWasActive = false;
   }
 
   void _startIfNeeded(int nowMs) {
@@ -248,6 +285,12 @@ class EpisodeBasedNotificationAggregator {
         : durationMs >= confirmedCryMs
             ? AlertSeverity.attention
             : AlertSeverity.info;
+    final activeEvidenceRatio = _activeEvidenceRatio(nowMs);
+    final confirmed = _confirmedDelivered ||
+        _state == BabyEventEpisodeState.confirmedCry ||
+        _state == BabyEventEpisodeState.ongoingCry ||
+        (durationMs >= confirmedCryMs &&
+            activeEvidenceRatio >= minActiveEvidenceRatio);
     return BabyEventEpisode(
       episodeId: 'episode-$_sequence',
       startedAtMs: _episodeStartedAtMs ?? nowMs,
@@ -263,7 +306,19 @@ class EpisodeBasedNotificationAggregator {
       severity: severity,
       intensity: intensity,
       resolved: resolved,
+      confirmed: confirmed,
+      activeEvidenceRatio: activeEvidenceRatio,
     );
+  }
+
+  double _activeEvidenceRatio(int nowMs) {
+    final startedAtMs = _episodeStartedAtMs;
+    if (startedAtMs == null || nowMs <= startedAtMs) {
+      return _lastSampleWasActive ? 1 : 0;
+    }
+    return (_totalCryDurationMs / (nowMs - startedAtMs))
+        .clamp(0.0, 1.0)
+        .toDouble();
   }
 }
 

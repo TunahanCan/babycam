@@ -7,6 +7,56 @@ typedef ServerVideoFrameSink = void Function(Uint8List jpeg);
 typedef ServerAudioChunkSink = void Function(Uint8List pcm16le);
 typedef ServerMediaErrorSink = void Function(Object error, StackTrace stack);
 
+/// Signals that media delivery lost temporal continuity even if native capture
+/// recovers automatically.
+///
+/// Consumers must reset both audio and video evidence before accepting frames
+/// from the replacement stream. This prevents an alert episode from spanning
+/// an unobserved capture interval.
+class ServerMediaStreamDiscontinuity implements Exception {
+  const ServerMediaStreamDiscontinuity(this.reason);
+
+  final String reason;
+
+  @override
+  String toString() => 'ServerMediaStreamDiscontinuity: $reason';
+}
+
+/// Capture metadata for the audio chunk currently being delivered by a
+/// [ServerMediaSource].
+///
+/// [discontinuityBefore] means temporal evidence from earlier chunks must not
+/// be joined to this chunk. Native sources set it when capture restarts, a
+/// bounded transport queue drops audio, or the monotonic capture clock reveals
+/// a gap.
+class ServerAudioChunkMetadata {
+  const ServerAudioChunkMetadata({
+    required this.capturedAtMs,
+    this.capturedAtMonoUs,
+    this.sequence,
+    this.sampleRate,
+    this.channels,
+    this.discontinuityBefore = false,
+  });
+
+  final int capturedAtMs;
+  final int? capturedAtMonoUs;
+  final int? sequence;
+  final int? sampleRate;
+  final int? channels;
+  final bool discontinuityBefore;
+}
+
+/// Optional timing plane for sources whose capture metadata would otherwise be
+/// lost by the byte-only [ServerAudioChunkSink] compatibility API.
+///
+/// The value is non-null only during the synchronous [ServerAudioChunkSink]
+/// invocation. This keeps existing media sources unchanged while allowing
+/// service-owned/native capture to preserve timestamps and drop boundaries.
+abstract interface class ServerAudioChunkMetadataSource {
+  ServerAudioChunkMetadata? get currentAudioChunkMetadata;
+}
+
 abstract class ServerMediaSource {
   bool get isActive;
   ServerMediaSourceSnapshot get snapshot;

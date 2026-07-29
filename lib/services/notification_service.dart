@@ -231,7 +231,10 @@ class NotificationService {
             visibility: NotificationVisibility.private,
             groupKey: _groupKey,
             autoCancel: true,
-            onlyAlertOnce: false,
+            // The delivery coordinator filters duplicate event ids before
+            // reaching the plugin. Keep Android's same-id behavior quiet as a
+            // second line of defence for lifecycle/plugin re-delivery.
+            onlyAlertOnce: true,
             ticker: contentTitle,
             styleInformation: BigTextStyleInformation(
               message,

@@ -9,6 +9,7 @@ class LumaFrame {
     required this.rowStride,
     required this.pixelStride,
     required this.timestampMs,
+    this.monotonicTimestampMs,
   });
 
   final Uint8List yPlane;
@@ -17,4 +18,9 @@ class LumaFrame {
   final int rowStride;
   final int pixelStride;
   final int timestampMs;
+  final int? monotonicTimestampMs;
+
+  /// Stable capture time for duration/gap decisions; wall time remains the
+  /// user-facing event timestamp.
+  int get analysisTimestampMs => monotonicTimestampMs ?? timestampMs;
 }

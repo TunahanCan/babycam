@@ -70,11 +70,10 @@ class ClientCompositionRoot {
     final alerts = alertListener ??
         ClientAlertListener(
           healthState: streamHealth,
-          onAlert: (alert) {
-            unawaited(alertDelivery.deliver(alert).catchError((_) {
-              // Keep processing later alerts if the platform rejects one post.
-            }));
-          },
+          // The listener acknowledges only after this future finishes. That
+          // lets a reconnect replay an event whose local persistence/post was
+          // interrupted, while the delivery coordinator keeps retries quiet.
+          onAlert: alertDelivery.deliver,
         );
 
     Future<void> stopAlerts() async {

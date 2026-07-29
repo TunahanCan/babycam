@@ -25,6 +25,7 @@ object MiuCamServiceMediaBridge : EventChannel.StreamHandler {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val eventSequence = AtomicLong(0)
+    private val audioEventSequence = AtomicLong(0)
     private val waiterSequence = AtomicLong(0)
     private val eventQueue = ArrayDeque<QueuedEvent>()
     private val readyWaiters = mutableListOf<ReadyWaiter>()
@@ -260,6 +261,10 @@ object MiuCamServiceMediaBridge : EventChannel.StreamHandler {
             payload = mapOf(
                 "type" to "audio",
                 "sequence" to eventSequence.incrementAndGet(),
+                // Dedicated to audio because the global sequence also contains
+                // video/control events and therefore cannot prove that no PCM
+                // chunk was dropped by the bounded platform-channel queue.
+                "audioSequence" to audioEventSequence.incrementAndGet(),
                 "timestampMs" to timestampMs,
                 "capturedAtMonoUs" to capturedAtMonoUs,
                 "sampleRate" to sampleRate,

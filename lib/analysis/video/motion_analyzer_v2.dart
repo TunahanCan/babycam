@@ -27,6 +27,8 @@ class MotionAnalyzerV2 {
   double _noiseFloor = 0;
   bool _isMotion = false;
   int? _candidateStartMs;
+  int _candidateFrames = 0;
+  int? _lastFrameTimestampMs;
   MotionAnalysisResult? _lastResult;
   int _analyzedFrames = 0;
 
@@ -35,7 +37,16 @@ class MotionAnalyzerV2 {
   /// Analyzes a luma frame and returns deterministic metrics/flags.
   MotionAnalysisResult analyze(LumaFrame frame) {
     final sw = Stopwatch()..start();
-    if (!_gate.shouldRun(frame.timestampMs)) {
+    final analysisTimestampMs = frame.analysisTimestampMs;
+    final previousFrameTimestampMs = _lastFrameTimestampMs;
+    if (previousFrameTimestampMs != null &&
+        (analysisTimestampMs < previousFrameTimestampMs ||
+            analysisTimestampMs - previousFrameTimestampMs >
+                _config.maxFrameGapMs)) {
+      reset();
+    }
+    _lastFrameTimestampMs = analysisTimestampMs;
+    if (!_gate.shouldRun(analysisTimestampMs)) {
       final last = _lastResult;
       return MotionAnalysisResult(
         timestampMs: frame.timestampMs,
@@ -59,6 +70,7 @@ class MotionAnalyzerV2 {
       outputHeight: _config.downsampleHeight,
     );
     if (!downsampler.downsample(frame, _current)) {
+      reset();
       return _finish(_invalid(frame.timestampMs, sw.elapsedMicroseconds));
     }
 
@@ -83,6 +95,7 @@ class MotionAnalyzerV2 {
       }
     }
     if (total == 0) {
+      reset();
       return _finish(_invalid(frame.timestampMs, sw.elapsedMicroseconds));
     }
 
@@ -95,6 +108,8 @@ class MotionAnalyzerV2 {
     var rawActive = 0;
     var diffSum = 0.0;
     var allDiffSum = 0.0;
+    var positiveRawChanges = 0;
+    var negativeRawChanges = 0;
 
     for (var i = 0; i < count; i++) {
       if (!_inRoi(i)) {
@@ -105,7 +120,14 @@ class MotionAnalyzerV2 {
         continue;
       }
       final rawDiff = (_current[i] - _background[i]).abs().toDouble();
-      if (rawDiff > threshold) rawActive++;
+      if (rawDiff > threshold) {
+        rawActive++;
+        if (_current[i] >= _background[i]) {
+          positiveRawChanges++;
+        } else {
+          negativeRawChanges++;
+        }
+      }
       final diff =
           (_current[i] - globalShift - _background[i]).abs().toDouble();
       allDiffSum += diff;
@@ -145,19 +167,34 @@ class MotionAnalyzerV2 {
     final activeAreaRatio = active / total;
     final rawActiveRatio = rawActive / total;
     final meanDiff = diffSum / max(active, 1);
+    final residualMean = allDiffSum / total;
+    final directionConsistency = rawActive == 0
+        ? 0.0
+        : max(positiveRawChanges, negativeRawChanges) / rawActive;
     var rawScore = activeAreaRatio < _config.minActiveAreaRatio
         ? 0.0
         : _clamp01(0.65 * (activeAreaRatio / 0.10) + 0.35 * (meanDiff / 64.0));
-    final isGlobalLightChange =
-        rawActiveRatio > _config.globalLightChangeRatio ||
-            (rawActiveRatio > 0.40 && activeAreaRatio < rawActiveRatio * 0.25);
+    final globalResidualLimit = max(threshold * 1.5, globalShift.abs() * 0.35);
+    final isGlobalLightChange = rawActiveRatio > 0.40 &&
+        rawActiveRatio >= _config.globalLightChangeRatio * 0.60 &&
+        globalShift.abs() >= threshold &&
+        directionConsistency >= 0.88 &&
+        residualMean <= globalResidualLimit;
     if (isGlobalLightChange) rawScore = 0;
 
-    _smoothedScore = _clamp01(
-      _smoothedScore * (1 - _config.smoothingAlpha) +
-          rawScore * _config.smoothingAlpha,
-    );
-    _updateMotionState(frame.timestampMs, isGlobalLightChange);
+    final warmingUp = _analyzedFrames < _config.initializationFrames;
+    if (warmingUp) {
+      _smoothedScore = 0;
+      _isMotion = false;
+      _candidateStartMs = null;
+      _candidateFrames = 0;
+    } else {
+      _smoothedScore = _clamp01(
+        _smoothedScore * (1 - _config.smoothingAlpha) +
+            rawScore * _config.smoothingAlpha,
+      );
+      _updateMotionState(analysisTimestampMs, isGlobalLightChange);
+    }
 
     if (!_isMotion &&
         !isGlobalLightChange &&
@@ -166,15 +203,22 @@ class MotionAnalyzerV2 {
       _noiseFloor = _noiseFloor * 0.90 + observedNoise * 0.10;
     }
 
-    final alpha = isGlobalLightChange
-        ? _config.stableBackgroundAlpha * 0.5
-        : (_isMotion
-            ? _config.motionBackgroundAlpha
-            : _config.stableBackgroundAlpha);
-    final initAlpha = _analyzedFrames < 5 ? _config.initializationAlpha : alpha;
-    for (var i = 0; i < count; i++) {
-      _background[i] =
-          _background[i] * (1 - initAlpha) + _current[i] * initAlpha;
+    if (isGlobalLightChange) {
+      // Rebase by the coherent global offset. This preserves local scene
+      // structure while avoiding a ~minute-long global-light blind period.
+      for (var i = 0; i < count; i++) {
+        _background[i] =
+            (_background[i] + globalShift).clamp(0.0, 255.0).toDouble();
+      }
+    } else {
+      final alpha = _isMotion
+          ? _config.motionBackgroundAlpha
+          : _config.stableBackgroundAlpha;
+      final initAlpha = warmingUp ? _config.initializationAlpha : alpha;
+      for (var i = 0; i < count; i++) {
+        _background[i] =
+            _background[i] * (1 - initAlpha) + _current[i] * initAlpha;
+      }
     }
     _analyzedFrames++;
 
@@ -203,6 +247,8 @@ class MotionAnalyzerV2 {
     _noiseFloor = _config.minPixelDiff / _config.noiseMultiplier;
     _isMotion = false;
     _candidateStartMs = null;
+    _candidateFrames = 0;
+    _lastFrameTimestampMs = null;
     _lastResult = null;
     _analyzedFrames = 0;
   }
@@ -214,7 +260,10 @@ class MotionAnalyzerV2 {
         'noiseFloor': _noiseFloor,
         'isMotion': _isMotion,
         'candidateStartMs': _candidateStartMs,
+        'candidateFrames': _candidateFrames,
+        'lastFrameTimestampMs': _lastFrameTimestampMs,
         'analyzedFrames': _analyzedFrames,
+        'warmingUp': _analyzedFrames < _config.initializationFrames,
         'effectiveMotionOffThreshold': _effectiveMotionOffThreshold,
         'config': _config.toJson(),
       };
@@ -245,22 +294,31 @@ class MotionAnalyzerV2 {
     if (isGlobalLightChange) {
       _isMotion = false;
       _candidateStartMs = null;
+      _candidateFrames = 0;
       return;
     }
     if (_isMotion) {
       if (_smoothedScore <= offThreshold) {
         _isMotion = false;
         _candidateStartMs = null;
+        _candidateFrames = 0;
       }
       return;
     }
     if (_smoothedScore >= _config.motionOnThreshold) {
-      _candidateStartMs ??= timestampMs;
-      if (timestampMs - _candidateStartMs! >= _config.minMotionDurationMs) {
+      if (_candidateStartMs == null) {
+        _candidateStartMs = timestampMs;
+        _candidateFrames = 1;
+      } else {
+        _candidateFrames++;
+      }
+      if (timestampMs - _candidateStartMs! >= _config.minMotionDurationMs &&
+          _candidateFrames >= _config.minMotionFrames) {
         _isMotion = true;
       }
     } else if (_smoothedScore <= offThreshold) {
       _candidateStartMs = null;
+      _candidateFrames = 0;
     }
   }
 

@@ -49,7 +49,7 @@ void main() {
       cryThreshold: .50,
       cooldownMs: 45000,
       motionDurationMs: 1000,
-      cryDurationMs: 1000,
+      cryDurationMs: 1500,
     );
 
     await _selectPreset(tester, 'Dengeli');

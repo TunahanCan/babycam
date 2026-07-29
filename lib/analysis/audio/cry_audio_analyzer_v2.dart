@@ -10,6 +10,8 @@ import 'goertzel_band_analyzer.dart';
 import 'pcm16le_reader.dart';
 
 const _centers = [
+  120.0,
+  180.0,
   250.0,
   400.0,
   600.0,
@@ -22,6 +24,7 @@ const _centers = [
 ];
 const _minDbfs = -120.0;
 const _fallbackAmbientDbfs = -55.0;
+const _minimumUsableAmbientDbfs = -65.0;
 
 /// Ambient-aware, deterministic cry-likelihood analyzer for PCM16LE chunks.
 class CryAudioAnalyzerV2 {
@@ -42,18 +45,27 @@ class CryAudioAnalyzerV2 {
   AudioCalibrationState _state = AudioCalibrationState.uncalibrated;
   int? _calibrationStartMs;
   final List<double> _calibrationDbfs = [];
+  int _calibrationAcceptedMs = 0;
+  int? _lastCalibrationAcceptedAtMs;
+  bool _calibrationTimedOut = false;
   double _ambientDbfs = _fallbackAmbientDbfs;
   double _previousCryScore = 0;
   List<double>? _previousBandVector;
   bool _candidateActive = false;
   int? _candidateStartMs;
+  int? _lastChunkEndMs;
 
   AudioCalibrationState get calibrationState => _state;
+  double? get calibratedAmbientDbfs =>
+      _state == AudioCalibrationState.calibrated ? _ambientDbfs : null;
 
   void startCalibration({int? timestampMs}) {
     _state = AudioCalibrationState.calibrating;
     _calibrationStartMs = timestampMs;
     _calibrationDbfs.clear();
+    _calibrationAcceptedMs = 0;
+    _lastCalibrationAcceptedAtMs = null;
+    _calibrationTimedOut = false;
     _candidateActive = false;
     _candidateStartMs = null;
   }
@@ -62,7 +74,25 @@ class CryAudioAnalyzerV2 {
     _state = AudioCalibrationState.uncalibrated;
     _calibrationStartMs = null;
     _calibrationDbfs.clear();
+    _calibrationAcceptedMs = 0;
+    _lastCalibrationAcceptedAtMs = null;
+    _calibrationTimedOut = false;
     _ambientDbfs = _fallbackAmbientDbfs;
+  }
+
+  /// Reuses a trusted room baseline when only thresholds/cooldowns change.
+  ///
+  /// This avoids a new 30-second notification blackout after every settings
+  /// adjustment. Capture restarts still use [startCalibration].
+  void restoreCalibratedAmbient(double ambientDbfs) {
+    _state = AudioCalibrationState.calibrated;
+    _calibrationStartMs = null;
+    _calibrationDbfs.clear();
+    _calibrationAcceptedMs = config.calibrationMs;
+    _lastCalibrationAcceptedAtMs = null;
+    _calibrationTimedOut = false;
+    _ambientDbfs = ambientDbfs.clamp(_minimumUsableAmbientDbfs, 0).toDouble();
+    markDiscontinuity();
   }
 
   void reset() {
@@ -79,15 +109,43 @@ class CryAudioAnalyzerV2 {
     _previousBandVector = null;
     _candidateActive = false;
     _candidateStartMs = null;
+    _lastChunkEndMs = null;
+    if (_state == AudioCalibrationState.calibrating) {
+      // A calibration interval must contain continuous room audio. Do not let
+      // talkback/comfort-audio suppression or a capture drop make a handful
+      // of old samples look like a complete 30-second baseline.
+      _calibrationStartMs = null;
+      _calibrationDbfs.clear();
+      _calibrationAcceptedMs = 0;
+      _lastCalibrationAcceptedAtMs = null;
+      _calibrationTimedOut = false;
+    }
   }
 
   List<AudioAnalysisResult> addChunk(AudioChunk chunk) {
+    if (chunk.sampleRate != config.sampleRate || chunk.channels <= 0) {
+      markDiscontinuity();
+      return [_invalidResult(chunk.timestampMs)];
+    }
+    if (chunk.pcm16le.isEmpty) {
+      markDiscontinuity();
+      return [_invalidResult(chunk.timestampMs)];
+    }
+    final frameBytes = chunk.channels * 2;
+    if (chunk.pcm16le.length % frameBytes != 0) {
+      markDiscontinuity();
+      return [_invalidResult(chunk.timestampMs)];
+    }
     final samples = Pcm16LeReader.readMonoSamples(
       chunk.pcm16le,
       channels: chunk.channels,
     );
     final results = <AudioAnalysisResult>[];
-    if (chunk.pcm16le.isNotEmpty && samples.isEmpty) {
+    if (samples.isEmpty) {
+      // A truncated frame is a capture discontinuity. Keeping the previous
+      // ring/candidate would allow evidence on either side of corrupt PCM to
+      // be joined into one apparently continuous cry.
+      markDiscontinuity();
       results.add(_invalidResult(chunk.timestampMs));
       return results;
     }
@@ -96,6 +154,16 @@ class CryAudioAnalyzerV2 {
         ? 0
         : (samples.length * 1000 / max(1, chunk.sampleRate)).round();
     final chunkStartMs = chunk.timestampMs - chunkDurationMs;
+    final lastChunkEndMs = _lastChunkEndMs;
+    final discontinuityToleranceMs = max(500, config.hopMs * 2);
+    if (lastChunkEndMs != null) {
+      final gapMs = chunkStartMs - lastChunkEndMs;
+      if (gapMs > discontinuityToleranceMs ||
+          gapMs < -discontinuityToleranceMs) {
+        markDiscontinuity();
+      }
+    }
+    _lastChunkEndMs = chunk.timestampMs;
     var offset = 0;
     while (offset < samples.length) {
       final end = min(samples.length, offset + _ring.hopSamples);
@@ -114,6 +182,8 @@ class CryAudioAnalyzerV2 {
   Map<String, Object?> diagnostics() => {
         'calibrationState': _state.name,
         'ambientDbfs': _ambientDbfs,
+        'calibrationAcceptedMs': _calibrationAcceptedMs,
+        'calibrationTimedOut': _calibrationTimedOut,
         'previousCryScore': _previousCryScore,
         'candidateActive': _candidateActive,
         'config': config.toJson(),
@@ -154,14 +224,34 @@ class CryAudioAnalyzerV2 {
     }
 
     final lowRatio = bandRatio((f) => f >= 250 && f <= 600);
+    final subCryVoiceRatio = bandRatio((f) => f < 300);
     final cryRatio = bandRatio((f) => f >= 400 && f <= 1500);
     final highRatio = bandRatio((f) => f >= 1500 && f <= 4000);
     final centroid = total <= 0 ? 0.0 : _weightedCentroid(vector, total);
     final entropy = _entropy(vector, total);
     final flux = _spectralFlux(vector, _previousBandVector);
-    _previousBandVector = vector;
+    final amplitudeModulation = _amplitudeModulation(normalized);
+    final isClipped = peak >= .98;
 
-    _updateCalibration(dbfs, timestampMs);
+    final isBroadbandNoise =
+        entropy >= 0.80 && highRatio >= 0.25 && cryRatio < 0.85;
+    final hasCrySpectralShape = !isBroadbandNoise &&
+        cryRatio >= 0.40 &&
+        subCryVoiceRatio <= 0.35 &&
+        zcr >= 0.015 &&
+        zcr <= 0.38 &&
+        centroid >= 300 &&
+        centroid <= 3000 &&
+        (entropy >= 0.10 || amplitudeModulation >= 0.06) &&
+        entropy <= 0.95;
+    final wasCalibrating = _state == AudioCalibrationState.calibrating;
+    final calibrationContaminated = isClipped ||
+        (dbfs >= config.minDbfsForCryCandidate && hasCrySpectralShape);
+    _updateCalibration(
+      dbfs,
+      timestampMs,
+      acceptSample: !calibrationContaminated,
+    );
     final ambient = _state == AudioCalibrationState.uncalibrated
         ? _fallbackAmbientDbfs
         : _ambientDbfs;
@@ -185,27 +275,45 @@ class CryAudioAnalyzerV2 {
             config.fluxWeight * fluxScore) /
         weightSum;
     if (dbfs < config.minDbfsForCryCandidate) raw *= 0.35;
+    // Energy alone is not cry evidence. This gate rejects common steady tones,
+    // broad-band fan/white-noise steps, and sensor hiss before the temporal
+    // episode logic sees them. Adult speech can still overlap this envelope,
+    // which is why duration and duty-cycle confirmation remain mandatory.
+    if (!hasCrySpectralShape) raw *= 0.25;
+    // Saturated PCM no longer represents the room waveform reliably. It must
+    // not become cry evidence (or keep an earlier candidate alive) merely
+    // because clipping spreads energy across the watched bands.
+    if (isClipped) raw = 0;
     raw = raw.clamp(0.0, 1.0).toDouble();
     final alpha = config.smoothingAlpha.clamp(0.0, 1.0).toDouble();
-    final score = (_previousCryScore * (1 - alpha) + raw * alpha)
-        .clamp(0.0, 1.0)
-        .toDouble();
-    _previousCryScore = score;
+    final score = isClipped
+        ? 0.0
+        : (_previousCryScore * (1 - alpha) + raw * alpha)
+            .clamp(0.0, 1.0)
+            .toDouble();
+    _previousCryScore = wasCalibrating || isClipped ? 0 : score;
+    _previousBandVector = wasCalibrating || isClipped ? null : vector;
     final isLoud = dbfs >= config.loudSoundDbfs;
-    final likely = _updateDecision(score, timestampMs) &&
-        _state != AudioCalibrationState.calibrating;
+    final likely = wasCalibrating || isClipped
+        ? false
+        : _updateDecision(score, timestampMs);
+    if (wasCalibrating || isClipped) {
+      _candidateActive = false;
+      _candidateStartMs = null;
+    }
     if (_state == AudioCalibrationState.calibrated &&
+        !wasCalibrating &&
         !likely &&
         !isLoud &&
-        score < config.cryOffThreshold) {
+        raw < config.cryOffThreshold) {
       _ambientDbfs = _ambientDbfs * (1 - config.ambientUpdateAlpha) +
           dbfs * config.ambientUpdateAlpha;
     }
     sw.stop();
     return AudioAnalysisResult(
       timestampMs: timestampMs,
-      cryScore: score,
-      rawCryScore: raw,
+      cryScore: wasCalibrating ? 0 : score,
+      rawCryScore: wasCalibrating ? 0 : raw,
       isCryLikely: likely,
       isCalibrated: _state == AudioCalibrationState.calibrated,
       calibrationState: _state,
@@ -221,23 +329,70 @@ class CryAudioAnalyzerV2 {
       spectralCentroid: centroid,
       spectralEntropy: entropy,
       spectralFlux: flux,
+      amplitudeModulation: amplitudeModulation,
       invalidChunk: false,
+      isClipped: isClipped,
       isLoudSound: isLoud,
       processingTimeMicros: sw.elapsedMicroseconds,
     );
   }
 
-  void _updateCalibration(double dbfs, int timestampMs) {
+  void _updateCalibration(
+    double dbfs,
+    int timestampMs, {
+    required bool acceptSample,
+  }) {
     if (_state != AudioCalibrationState.calibrating) return;
     _calibrationStartMs ??= timestampMs;
-    _calibrationDbfs.add(dbfs);
-    if (timestampMs - _calibrationStartMs! >= config.calibrationMs) {
-      _ambientDbfs = _calibrationDbfs.isEmpty
-          ? _fallbackAmbientDbfs
-          : _calibrationDbfs.reduce((a, b) => a + b) / _calibrationDbfs.length;
-      _state = AudioCalibrationState.calibrated;
-      _calibrationDbfs.clear();
+    if (!acceptSample) {
+      _finishCalibrationIfExpired(timestampMs);
+      return;
     }
+    _calibrationAcceptedMs +=
+        _lastCalibrationAcceptedAtMs == null ? config.windowMs : config.hopMs;
+    _lastCalibrationAcceptedAtMs = timestampMs;
+    _calibrationDbfs.add(dbfs);
+    if (_calibrationAcceptedMs >= config.calibrationMs) {
+      _finishCalibration(timedOut: false);
+      return;
+    }
+    _finishCalibrationIfExpired(timestampMs);
+  }
+
+  void _finishCalibrationIfExpired(int timestampMs) {
+    final startedAtMs = _calibrationStartMs;
+    if (startedAtMs == null) return;
+    final maxElapsedMs = max(
+      config.calibrationMs * 2,
+      config.calibrationMs + 5000,
+    );
+    if (timestampMs - startedAtMs < maxElapsedMs) return;
+    _finishCalibration(timedOut: true);
+  }
+
+  void _finishCalibration({required bool timedOut}) {
+    _ambientDbfs = _robustAmbientDbfs(_calibrationDbfs);
+    _state = AudioCalibrationState.calibrated;
+    _calibrationTimedOut = timedOut;
+    _calibrationStartMs = null;
+    _calibrationDbfs.clear();
+    _lastCalibrationAcceptedAtMs = null;
+  }
+
+  double _robustAmbientDbfs(List<double> samples) {
+    final sorted = samples.where((value) => value.isFinite).toList()..sort();
+    if (sorted.isEmpty) return _fallbackAmbientDbfs;
+
+    // Cry-shaped/clipped windows are rejected before this point, so the
+    // ordinary median is robust to isolated room transients without the
+    // downward bias caused by trimming the loudest fifth first. A
+    // digital-silence baseline is still floored so the first fan sample cannot
+    // gain an artificial 80 dB energy advantage.
+    final middle = sorted.length ~/ 2;
+    final median = sorted.length.isOdd
+        ? sorted[middle]
+        : (sorted[middle - 1] + sorted[middle]) / 2;
+    return median.clamp(_minimumUsableAmbientDbfs, 0).toDouble();
   }
 
   bool _updateDecision(double score, int timestampMs) {
@@ -284,6 +439,31 @@ class CryAudioAnalyzerV2 {
     return sum;
   }
 
+  double _amplitudeModulation(List<double> samples) {
+    if (samples.isEmpty) return 0;
+    final blockSize = max(1, config.sampleRate ~/ 20);
+    final envelope = <double>[];
+    for (var start = 0; start < samples.length; start += blockSize) {
+      final end = min(samples.length, start + blockSize);
+      if (end - start < blockSize ~/ 2) break;
+      var sumSq = 0.0;
+      for (var index = start; index < end; index++) {
+        sumSq += samples[index] * samples[index];
+      }
+      envelope.add(sqrt(sumSq / (end - start)));
+    }
+    if (envelope.length < 3) return 0;
+    final mean =
+        envelope.reduce((first, second) => first + second) / envelope.length;
+    if (mean <= 1e-9) return 0;
+    var variance = 0.0;
+    for (final value in envelope) {
+      final delta = value - mean;
+      variance += delta * delta;
+    }
+    return (sqrt(variance / envelope.length) / mean).clamp(0.0, 1.0).toDouble();
+  }
+
   AudioAnalysisResult _invalidResult(int timestampMs) => AudioAnalysisResult(
         timestampMs: timestampMs,
         cryScore: _previousCryScore,
@@ -303,6 +483,7 @@ class CryAudioAnalyzerV2 {
         spectralCentroid: 0,
         spectralEntropy: 0,
         spectralFlux: 0,
+        amplitudeModulation: 0,
         invalidChunk: true,
         processingTimeMicros: 0,
       );

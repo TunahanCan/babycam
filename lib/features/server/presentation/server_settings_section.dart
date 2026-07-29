@@ -61,15 +61,15 @@ class _ServerSettingsSectionState extends State<ServerSettingsSection> {
   }
 
   void _loadSettings() {
-    _motionThreshold = widget.config.motionThreshold.clamp(.05, .60).toDouble();
+    _motionThreshold = widget.config.motionThreshold.clamp(.10, .60).toDouble();
     _cryScoreThreshold =
-        widget.config.cryScoreThreshold.clamp(.20, .95).toDouble();
+        widget.config.cryScoreThreshold.clamp(.45, .95).toDouble();
     _notifyCooldownSeconds =
         (widget.config.notifyCooldownMs / 1000).clamp(10, 180).toDouble();
     _motionDurationSeconds =
-        (widget.config.motionMinDurationMs / 1000).clamp(.5, 6).toDouble();
+        (widget.config.motionMinDurationMs / 1000).clamp(1, 6).toDouble();
     _cryDurationSeconds =
-        (widget.config.cryMinDurationMs / 1000).clamp(.5, 6).toDouble();
+        (widget.config.cryMinDurationMs / 1000).clamp(1.5, 6).toDouble();
   }
 
   Future<bool> _runMutation(Future<void> Function() mutation) async {
@@ -497,7 +497,7 @@ enum _DetectionPreset {
             cryScoreThreshold: .50,
             notifyCooldownSeconds: 45,
             motionDurationSeconds: 1,
-            cryDurationSeconds: 1,
+            cryDurationSeconds: 1.5,
           ),
         balanced => const _DetectionPresetSettings(
             motionThreshold: .22,
@@ -732,9 +732,9 @@ class _ServerSettingsCard extends StatelessWidget {
         description: strings.ui('cryThresholdDescription'),
         valueLabel: (value) => '%${(value * 100).round()}',
         value: cryScoreThreshold,
-        min: .20,
+        min: .45,
         max: .95,
-        divisions: 75,
+        divisions: 50,
         color: MiuCamDesignTokens.serverCyan,
         onChangeEnd: onCryScoreThresholdChangeEnd,
       ),
@@ -743,9 +743,9 @@ class _ServerSettingsCard extends StatelessWidget {
         description: strings.ui('motionThresholdDescription'),
         valueLabel: (value) => '%${(value * 100).round()}',
         value: motionThreshold,
-        min: .05,
+        min: .10,
         max: .60,
-        divisions: 55,
+        divisions: 50,
         color: MiuCamDesignTokens.serverViolet,
         onChangeEnd: onMotionThresholdChangeEnd,
       ),
@@ -769,9 +769,9 @@ class _ServerSettingsCard extends StatelessWidget {
           fractionDigits: 1,
         ),
         value: cryDurationSeconds,
-        min: .5,
+        min: 1.5,
         max: 6,
-        divisions: 11,
+        divisions: 9,
         color: MiuCamDesignTokens.serverCyan,
         onChangeEnd: onCryDurationChangeEnd,
       ),
@@ -784,9 +784,9 @@ class _ServerSettingsCard extends StatelessWidget {
           fractionDigits: 1,
         ),
         value: motionDurationSeconds,
-        min: .5,
+        min: 1,
         max: 6,
-        divisions: 11,
+        divisions: 10,
         color: MiuCamDesignTokens.serverViolet,
         onChangeEnd: onMotionDurationChangeEnd,
       ),

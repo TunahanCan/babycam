@@ -28,7 +28,7 @@ class ClientAlertListener {
   final ClientStreamHealthState? healthState;
   final Duration reconnectDelay;
   final Duration maxReconnectDelay;
-  final void Function(AlertEventDto alert)? onAlert;
+  final FutureOr<void> Function(AlertEventDto alert)? onAlert;
   final HttpClient Function(PairingSession session)? _clientFactory;
   final RetryPolicy _retryPolicy;
 
@@ -56,12 +56,18 @@ class ClientAlertListener {
   var _generation = 0;
   var _intentionalStop = false;
   String? _sessionKey;
+  String? _cursorSessionKey;
+  String? _lastDeliveredAlertId;
 
   Future<void> start(
     PairingSession session, {
     bool waitForFirstConnection = true,
   }) async {
     final sessionKey = _keyForSession(session);
+    if (_cursorSessionKey != sessionKey) {
+      _cursorSessionKey = sessionKey;
+      _lastDeliveredAlertId = null;
+    }
     if (isListening) {
       if (_sessionKey == sessionKey) {
         if (!waitForFirstConnection) return;
@@ -91,7 +97,12 @@ class ClientAlertListener {
     final socket = _socket;
     _socket = null;
     _cancelRetryDelay();
-    await socket?.close();
+    if (socket != null) {
+      try {
+        socket.add(jsonEncode({'type': MiuCamProtocolV2.alertDetachType}));
+      } catch (_) {}
+      await socket.close();
+    }
     _client?.close(force: true);
     _client = null;
     final first = _firstConnection;
@@ -125,7 +136,15 @@ class ClientAlertListener {
   Future<void> _connectAndRead(int generation, PairingSession session) async {
     final client = _clientFactory?.call(session) ?? HttpClient();
     client.connectionTimeout = maxReconnectDelay;
-    final uri = ServerEndpointBuilder(session).ws(MiuCamProtocolV2.events);
+    final cursor = _lastDeliveredAlertId;
+    final uri = ServerEndpointBuilder(session).ws(
+      MiuCamProtocolV2.events,
+      query: {
+        MiuCamProtocolV2.alertReplayVersionQuery:
+            MiuCamProtocolV2.alertReplayVersion,
+        if (cursor != null) MiuCamProtocolV2.alertCursorQuery: cursor,
+      },
+    );
     _client = client;
     WebSocket? socket;
     try {
@@ -148,7 +167,15 @@ class ClientAlertListener {
       if (first != null && !first.isCompleted) first.complete();
       await for (final data in socket) {
         if (!_isCurrent(generation)) return;
-        _handleSocketMessage(data);
+        try {
+          await _handleSocketMessage(socket, data);
+        } catch (_) {
+          // ACKs are cumulative cursors. Continuing to a later event after one
+          // failed delivery would let that later ACK permanently skip the
+          // failed event. Close and replay from the last contiguous ACK.
+          await socket.close();
+          break;
+        }
       }
     } finally {
       if (socket != null && _socket == socket) _socket = null;
@@ -195,9 +222,16 @@ class ClientAlertListener {
     if (delay != null && !delay.isCompleted) delay.complete();
   }
 
-  void _handleSocketMessage(dynamic data) {
+  Future<void> _handleSocketMessage(WebSocket socket, dynamic data) async {
     final alert = _parseAlert(data);
-    if (alert != null) onAlert?.call(alert);
+    if (alert == null) return;
+    await onAlert?.call(alert);
+    _lastDeliveredAlertId = alert.id;
+    if (socket.readyState != WebSocket.open) return;
+    socket.add(jsonEncode({
+      'type': MiuCamProtocolV2.alertAckType,
+      MiuCamProtocolV2.alertAckId: alert.id,
+    }));
   }
 
   AlertEventDto? _parseAlert(dynamic data) {

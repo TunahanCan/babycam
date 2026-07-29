@@ -29,6 +29,8 @@ void main() {
     expect(episode.streamQualityTier, NetworkQualityTier.weak);
     expect(episode.videoReliable, isFalse);
     expect(episode.motionBursts, 1);
+    expect(episode.confirmed, isTrue);
+    expect(episode.activeEvidenceRatio, 1);
     expect(episode.toJson()['event'], 'baby_event');
     expect(episode.toJson()['lastMotionAgoMs'], 3500);
   });
@@ -77,6 +79,19 @@ void main() {
     expect(aggregator.state, BabyEventEpisodeState.quiet);
   });
 
+  test('clipped PCM önceki cry adayını temizler', () {
+    final aggregator = EpisodeBasedNotificationAggregator(
+      suspectedCryMs: 500,
+      confirmedCryMs: 1500,
+    );
+
+    aggregator.onAudioResult(_audio(timestampMs: 1000));
+    aggregator.onAudioResult(_audio(timestampMs: 1500));
+    aggregator.onAudioResult(_audio(timestampMs: 2000, isClipped: true));
+
+    expect(aggregator.state, BabyEventEpisodeState.quiet);
+  });
+
   test('uzun audio paket boşluğu iki sesi tek episode gibi birleştirmez', () {
     final aggregator = EpisodeBasedNotificationAggregator(
       confirmedCryMs: 2000,
@@ -94,6 +109,28 @@ void main() {
     );
 
     expect(aggregator.state, BabyEventEpisodeState.suspectedCry);
+  });
+
+  test('aralıklı seslerin sessiz araları aktif ağlama süresine eklenmez', () {
+    final aggregator = EpisodeBasedNotificationAggregator(
+      suspectedCryMs: 500,
+      confirmedCryMs: 1000,
+      maxActiveGapMs: 1500,
+      minActiveEvidenceRatio: .70,
+    );
+    BabyEventEpisode? episode;
+
+    for (var timestampMs = 1000; timestampMs <= 4000; timestampMs += 250) {
+      final active = ((timestampMs - 1000) ~/ 250).isEven;
+      episode = aggregator.onAudioResult(
+            _audio(timestampMs: timestampMs, active: active),
+          ) ??
+          episode;
+    }
+
+    expect(episode, isNull);
+    expect(aggregator.state, isNot(BabyEventEpisodeState.confirmedCry));
+    expect(aggregator.state, isNot(BabyEventEpisodeState.ongoingCry));
   });
 
   test('ekran profilinden gelen eşik ve süre bildirim kararını değiştirir', () {
@@ -180,6 +217,7 @@ AudioAnalysisResult _audio({
   double? cryScore,
   bool isCryLikely = false,
   bool isCalibrated = true,
+  bool isClipped = false,
   AudioCalibrationState calibrationState = AudioCalibrationState.calibrated,
 }) =>
     AudioAnalysisResult(
@@ -202,6 +240,7 @@ AudioAnalysisResult _audio({
       spectralEntropy: 0.4,
       spectralFlux: active ? 0.01 : 0.2,
       invalidChunk: false,
+      isClipped: isClipped,
       processingTimeMicros: 10,
     );
 

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../analysis/alert/alert_engine.dart';
 import '../../analysis/alert/alert_event.dart';
+import '../../analysis/alert/alert_type.dart';
 import '../../analysis/audio/audio_analysis_result.dart';
 import '../../analysis/audio/audio_chunk.dart';
 import '../../analysis/audio/cry_audio_analyzer_v2.dart';
@@ -43,13 +44,26 @@ class MediaAnalysisCoordinator {
   bool _disposed = false;
   int _lastMotionErrorLog = 0;
   int _lastAudioErrorLog = 0;
+  int? _lastVideoAnalysisTimestampMs;
 
   Stream<AlertEvent> get alerts => _alertEngine.alerts;
+  double? get calibratedAmbientDbfs => _audioAnalyzer.calibratedAmbientDbfs;
+  Map<AlertType, int> get cooldownSnapshot => _alertEngine.cooldownSnapshot;
 
   void onCameraFrame(LumaFrame frame) {
     if (_disposed) return;
     _metrics.recordVideoFrameReceived();
-    if (!_motionFrameGate.shouldRun(frame.timestampMs)) {
+    final analysisTimestampMs = frame.analysisTimestampMs;
+    final lastVideoAnalysisTimestampMs = _lastVideoAnalysisTimestampMs;
+    if (lastVideoAnalysisTimestampMs != null &&
+        (analysisTimestampMs < lastVideoAnalysisTimestampMs ||
+            analysisTimestampMs - lastVideoAnalysisTimestampMs >
+                _motionAnalyzer.config.maxFrameGapMs)) {
+      _motionFrameGate.reset();
+      _alertEngine.markVideoDiscontinuity();
+    }
+    _lastVideoAnalysisTimestampMs = analysisTimestampMs;
+    if (!_motionFrameGate.shouldRun(analysisTimestampMs)) {
       _metrics.recordMotionSkippedByFpsGate();
       return;
     }
@@ -63,6 +77,11 @@ class MediaAnalysisCoordinator {
       _metrics.recordMotion(result);
       _onMotionResult?.call(result);
       _alertEngine.onMotionResult(result);
+      if (result.invalidFrame) {
+        _motionFrameGate.reset();
+        _lastVideoAnalysisTimestampMs = null;
+        _alertEngine.markVideoDiscontinuity();
+      }
     } catch (error) {
       _metrics.recordMotionError();
       _throttledLog('Motion analysis failed: $error', isAudio: false);
@@ -91,6 +110,14 @@ class MediaAnalysisCoordinator {
     if (_disposed) return;
     _audioAnalyzer.markDiscontinuity();
     _alertEngine.markAudioDiscontinuity();
+  }
+
+  void markVideoDiscontinuity() {
+    if (_disposed) return;
+    _motionFrameGate.reset();
+    _motionAnalyzer.reset();
+    _lastVideoAnalysisTimestampMs = null;
+    _alertEngine.markVideoDiscontinuity();
   }
 
   Map<String, Object?> diagnostics() => {

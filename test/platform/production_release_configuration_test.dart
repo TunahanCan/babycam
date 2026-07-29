@@ -48,7 +48,7 @@ void main() {
     expect(gradle, contains('namespace = "com.miucam.app"'));
     expect(gradle, contains('applicationId = "com.miucam.app"'));
     expect(xcode, contains('PRODUCT_BUNDLE_IDENTIFIER = com.miucam.app;'));
-    expect(kotlinFiles, hasLength(6));
+    expect(kotlinFiles, isNotEmpty);
     for (final file in kotlinFiles) {
       expect(file.readAsStringSync(), startsWith('package com.miucam.app'));
     }

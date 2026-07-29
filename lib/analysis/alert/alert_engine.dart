@@ -66,6 +66,7 @@ class AlertEngine {
 
   /// Broadcast stream of emitted alerts.
   Stream<AlertEvent> get alerts => _controller.stream;
+  Map<AlertType, int> get cooldownSnapshot => _cooldownPolicy.snapshot();
 
   /// Handles one motion analysis result and returns the emitted alert, if any.
   AlertEvent? onMotionResult(MotionAnalysisResult result) {
@@ -115,6 +116,12 @@ class AlertEngine {
       videoReliable: _videoReliableProvider?.call() ?? true,
     );
     if (episode != null) {
+      // Resolved episodes are state/diagnostic updates, not fresh evidence.
+      // In particular, a brief unconfirmed sound used to become a misleading
+      // cry notification only after the room had gone quiet.
+      if (episode.resolved || !episode.confirmed) {
+        return null;
+      }
       final event = _tryEmit(
         type: AlertType.cryDetected,
         severity: episode.severity,
@@ -133,6 +140,7 @@ class AlertEngine {
     // is known. This also covers loud-sound alerts when the episode
     // aggregator is enabled but still warming up.
     if (result.invalidChunk ||
+        result.isClipped ||
         !result.isCalibrated ||
         result.calibrationState != AudioCalibrationState.calibrated) {
       return null;
@@ -188,6 +196,13 @@ class AlertEngine {
 
   /// Breaks only the active audio episode while preserving cooldown history.
   void markAudioDiscontinuity() => _episodeAggregator?.reset();
+
+  /// Drops stale camera association while preserving audio and cooldown state.
+  void markVideoDiscontinuity() => _episodeAggregator?.markVideoDiscontinuity();
+
+  /// Retains anti-spam history when settings rebuild the analysis pipeline.
+  void restoreCooldowns(Map<AlertType, int> snapshot) =>
+      _cooldownPolicy.restore(snapshot);
 
   /// Closes the alert stream. Future result handling becomes a safe no-op.
   Future<void> dispose() async {
@@ -292,7 +307,7 @@ class AlertEngine {
         cryBandPercent: _percent(result.cryBandRatio),
         calibrated: result.isCalibrated,
       ) ??
-      'Ağlama algılandı';
+      'Ağlama benzeri bir ses olabilir';
 
   String _loudSoundMessage(AudioAnalysisResult result) =>
       _strings?.parentLoudSoundAlert(
