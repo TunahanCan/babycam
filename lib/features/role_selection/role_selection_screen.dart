@@ -218,8 +218,11 @@ class _RoleChoiceCard extends StatelessWidget {
     final accent =
         roomDevice ? MiuCamDesignTokens.serverCyan : MiuCamDesignTokens.pink;
     return Semantics(
+      key: ValueKey('role-choice-card-${role.role.name}'),
       button: true,
+      excludeSemantics: true,
       label: '${role.choiceTitle}. ${role.choiceDescription}',
+      onTap: onPressed,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -242,14 +245,9 @@ class _RoleChoiceCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Container(
-                  width: 58,
-                  height: 58,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: .78),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Icon(role.choiceIcon, color: accent, size: 29),
+                _RoleChoiceIllustration(
+                  role: role,
+                  accent: accent,
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -313,6 +311,72 @@ class _RoleChoiceCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _RoleChoiceIllustration extends StatelessWidget {
+  const _RoleChoiceIllustration({
+    required this.role,
+    required this.accent,
+  });
+
+  final MiuCamRolePresentation role;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final roomDevice = role.role == AppRole.server;
+    final detailIcon =
+        roomDevice ? Icons.nightlight_round_rounded : Icons.favorite_rounded;
+
+    return Container(
+      key: ValueKey('role-choice-illustration-${role.role.name}'),
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white,
+            accent.withValues(alpha: .08),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accent.withValues(alpha: .12)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D162033),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(role.choiceIcon, color: accent, size: 30),
+          Positioned(
+            right: 4,
+            bottom: 4,
+            child: Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                color: accent,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: Icon(
+                detailIcon,
+                color: Colors.white,
+                size: roomDevice ? 12.5 : 11.5,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

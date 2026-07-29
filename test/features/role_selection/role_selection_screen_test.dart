@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -28,6 +30,7 @@ void main() {
 
   testWidgets('son kullanıcıya uygun iki kurulum seçeneği gösterir',
       (tester) async {
+    final semantics = tester.ensureSemantics();
     AppRole? selected;
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -42,9 +45,63 @@ void main() {
     expect(find.text('Yanımda kullan'), findsOneWidget);
     expect(find.text('BEBEK ODASI'), findsOneWidget);
     expect(find.text('İZLEME CİHAZI'), findsOneWidget);
-    expect(find.byIcon(Icons.child_care), findsWidgets);
-    expect(find.byIcon(Icons.monitor_heart), findsWidgets);
+    expect(find.byIcon(Icons.videocam_rounded), findsWidgets);
+    expect(find.byIcon(Icons.smartphone_rounded), findsWidgets);
+    expect(find.byIcon(Icons.nightlight_round_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.child_care), findsNothing);
+    expect(find.byIcon(Icons.monitor_heart), findsNothing);
+    expect(
+      find.byKey(const ValueKey('role-choice-illustration-server')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('role-choice-illustration-client')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('role-choice-illustration-server')),
+        matching: find.byIcon(Icons.videocam_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('role-choice-illustration-server')),
+        matching: find.byIcon(Icons.nightlight_round_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('role-choice-illustration-client')),
+        matching: find.byIcon(Icons.smartphone_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('role-choice-illustration-client')),
+        matching: find.byIcon(Icons.favorite_rounded),
+      ),
+      findsOneWidget,
+    );
     expect(find.byIcon(Icons.wifi_rounded), findsWidgets);
+
+    final roomSemantics = tester
+        .getSemantics(
+          find.byKey(const ValueKey('role-choice-card-server')),
+        )
+        .getSemanticsData();
+    expect(
+      roomSemantics.label,
+      'Bebek odasına kur. Bu telefon bebeğinizi görüntüler, sesi dinler '
+      've uyarı gönderir.',
+    );
+    expect(roomSemantics.flagsCollection.isButton, isTrue);
+    expect(roomSemantics.hasAction(ui.SemanticsAction.tap), isTrue);
+    semantics.dispose();
 
     final wordmark = tester.widget<Image>(
       find.byKey(const ValueKey('role-wordmark')),
