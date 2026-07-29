@@ -8,7 +8,7 @@ import '../../core/protocol/pairing_payload.dart';
 import '../../core/protocol/pairing_session.dart';
 import '../../l10n/app_strings.dart';
 import '../../services/monetization/broadcast_access_service.dart';
-import '../../services/discovery/mimicam_service_discovery.dart';
+import '../../services/discovery/miucam_service_discovery.dart';
 import 'alerts/client_alert_history.dart';
 import 'controls/client_room_controls.dart';
 import 'media/active_stream_session.dart';
@@ -120,7 +120,7 @@ class ClientRuntime implements AppRuntime {
   final ClientAlertHistory alertHistory;
   final ClientStreamHealthState? streamHealthState;
   final ClientRoomControls? roomControls;
-  final MimiCamServiceBrowser? serviceBrowser;
+  final MiuCamServiceBrowser? serviceBrowser;
   final _states = StreamController<ClientRuntimeState>.broadcast();
   ClientRuntimeState _state =
       const ClientRuntimeState(phase: ClientRuntimePhase.unpaired);
@@ -159,9 +159,9 @@ class ClientRuntime implements AppRuntime {
       );
   List<AlertEventDto> get alerts => alertHistory.alerts;
   Stream<List<AlertEventDto>> get alertUpdates => alertHistory.changes;
-  List<MimiCamDiscoveredService> get discoveredServices =>
+  List<MiuCamDiscoveredService> get discoveredServices =>
       serviceBrowser?.services ?? const [];
-  Stream<List<MimiCamDiscoveredService>> get discoveryUpdates =>
+  Stream<List<MiuCamDiscoveredService>> get discoveryUpdates =>
       serviceBrowser?.updates ?? const Stream.empty();
   bool get canManageBroadcastPurchase => _broadcastAccess != null;
 

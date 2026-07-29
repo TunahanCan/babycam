@@ -4,11 +4,11 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/features/server/pairing/pairing_token_service.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/configuration_service.dart';
-import 'package:mimicam/services/mimicam_server.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/features/server/pairing/pairing_token_service.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/configuration_service.dart';
+import 'package:miucam/services/miucam_server.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -26,7 +26,7 @@ void main() {
       scheme: 'http',
       host: InternetAddress.loopbackIPv4.address,
       port: base.port,
-      path: MimiCamProtocolV2.statusPublic,
+      path: MiuCamProtocolV2.statusPublic,
     ));
     final status = jsonDecode(
       await utf8.decoder.bind(await statusRequest.close()).join(),
@@ -35,7 +35,7 @@ void main() {
       scheme: 'http',
       host: InternetAddress.loopbackIPv4.address,
       port: base.port,
-      path: MimiCamProtocolV2.pairConfirm,
+      path: MiuCamProtocolV2.pairConfirm,
     ));
     pairRequest.headers.contentType = ContentType.json;
     pairRequest.write(jsonEncode({
@@ -71,7 +71,7 @@ void main() {
       scheme: 'http',
       host: InternetAddress.loopbackIPv4.address,
       port: base.port,
-      path: MimiCamProtocolV2.statusPublic,
+      path: MiuCamProtocolV2.statusPublic,
     ));
     final status = jsonDecode(
       await utf8.decoder.bind(await statusResponse.close()).join(),
@@ -80,7 +80,7 @@ void main() {
       scheme: 'http',
       host: InternetAddress.loopbackIPv4.address,
       port: base.port,
-      path: MimiCamProtocolV2.pairConfirm,
+      path: MiuCamProtocolV2.pairConfirm,
     ));
     pairRequest.headers.contentType = ContentType.json;
     pairRequest.write(jsonEncode({
@@ -125,20 +125,20 @@ void main() {
     addTearDown(() => client.close(force: true));
 
     expect(
-      await _getStatusCode(client, base.port, MimiCamProtocolV2.status),
+      await _getStatusCode(client, base.port, MiuCamProtocolV2.status),
       HttpStatus.unauthorized,
     );
     expect(
       await _getStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.status,
+        MiuCamProtocolV2.status,
         query: {'token': token},
       ),
       HttpStatus.unauthorized,
     );
     expect(
-      await _getStatusCode(client, base.port, MimiCamProtocolV2.video,
+      await _getStatusCode(client, base.port, MiuCamProtocolV2.video,
           query: {'token': token}),
       HttpStatus.unauthorized,
     );
@@ -146,7 +146,7 @@ void main() {
       await _getStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.status,
+        MiuCamProtocolV2.status,
         bearerToken: token,
       ),
       HttpStatus.ok,
@@ -169,7 +169,7 @@ void main() {
       scheme: 'http',
       host: InternetAddress.loopbackIPv4.address,
       port: base.port,
-      path: MimiCamProtocolV2.sessionStart,
+      path: MiuCamProtocolV2.sessionStart,
     ));
     request.headers
       ..contentType = ContentType.json
@@ -216,7 +216,7 @@ void main() {
       scheme: 'http',
       host: InternetAddress.loopbackIPv4.address,
       port: base.port,
-      path: MimiCamProtocolV2.sessionStart,
+      path: MiuCamProtocolV2.sessionStart,
     ));
     request.headers
       ..contentType = ContentType.json
@@ -263,7 +263,7 @@ void main() {
       await _getStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.status,
+        MiuCamProtocolV2.status,
         query: {'streamToken': streamToken},
       ),
       HttpStatus.unauthorized,
@@ -272,7 +272,7 @@ void main() {
       await _getStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.status,
+        MiuCamProtocolV2.status,
         bearerToken: trusted.token,
       ),
       HttpStatus.ok,
@@ -308,7 +308,7 @@ void main() {
       await _getStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.video,
+        MiuCamProtocolV2.video,
         bearerToken: anne.token,
       ),
       HttpStatus.unauthorized,
@@ -317,7 +317,7 @@ void main() {
       await _getStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.audio,
+        MiuCamProtocolV2.audio,
         bearerToken: baba.token,
         query: {'streamToken': streamToken},
       ),
@@ -355,7 +355,7 @@ void main() {
       await _getStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.video,
+        MiuCamProtocolV2.video,
         query: {'streamToken': streamToken},
       ),
       HttpStatus.unauthorized,
@@ -364,7 +364,7 @@ void main() {
       await _getStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.audio,
+        MiuCamProtocolV2.audio,
         query: {'streamToken': streamToken},
       ),
       HttpStatus.unauthorized,
@@ -444,7 +444,7 @@ void main() {
       scheme: 'http',
       host: InternetAddress.loopbackIPv4.address,
       port: base.port,
-      path: MimiCamProtocolV2.qualityReport,
+      path: MiuCamProtocolV2.qualityReport,
       queryParameters: {'streamToken': start['streamToken'] as String},
     ));
     request.headers.contentType = ContentType.json;
@@ -489,7 +489,7 @@ class _RejectingTrustedClientRepository implements TrustedClientRepository {
   }
 }
 
-Future<MimiCamServer> _testServer(
+Future<MiuCamServer> _testServer(
   PairingTokenService tokenService, {
   FutureOr<void> Function(
     String clientId, {
@@ -501,7 +501,7 @@ Future<MimiCamServer> _testServer(
 }) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
-  return MimiCamServer(
+  return MiuCamServer(
     config: ConfigurationService(preferences),
     strings: AppStrings(const Locale('tr')),
     onLog: (_) {},
@@ -546,7 +546,7 @@ Future<Map<String, Object?>> _postSessionStart(
     scheme: 'http',
     host: InternetAddress.loopbackIPv4.address,
     port: port,
-    path: MimiCamProtocolV2.sessionStart,
+    path: MiuCamProtocolV2.sessionStart,
   ));
   request.headers
     ..contentType = ContentType.json
@@ -568,7 +568,7 @@ Future<({int statusCode, Map<String, Object?> body})> _postQualityReport(
     scheme: 'http',
     host: InternetAddress.loopbackIPv4.address,
     port: port,
-    path: MimiCamProtocolV2.qualityReport,
+    path: MiuCamProtocolV2.qualityReport,
   ));
   request.headers
     ..contentType = ContentType.json

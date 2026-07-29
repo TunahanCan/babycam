@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
-import 'package:mimicam/services/monetization/broadcast_access_service.dart';
+import 'package:miucam/services/monetization/broadcast_access_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

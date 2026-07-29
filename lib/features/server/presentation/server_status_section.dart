@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/app_strings.dart';
 import '../../shared/presentation/media_profile_text.dart';
-import '../../shared/presentation/mimicam_design_tokens.dart';
-import '../../shared/presentation/mimicam_shells.dart';
+import '../../shared/presentation/miucam_design_tokens.dart';
+import '../../shared/presentation/miucam_shells.dart';
 import '../server_runtime.dart';
 import 'server_home_components.dart';
 
@@ -51,18 +51,18 @@ class ServerLiveStatusCard extends StatelessWidget {
                         {'count': connectedParents},
                       );
     final accent = failed
-        ? MimiCamDesignTokens.serverError
+        ? MiuCamDesignTokens.serverError
         : stopped
-            ? MimiCamDesignTokens.serverDisabled
+            ? MiuCamDesignTokens.serverDisabled
             : preparing
-                ? MimiCamDesignTokens.serverBlue
-                : MimiCamDesignTokens.serverSuccess;
+                ? MiuCamDesignTokens.serverBlue
+                : MiuCamDesignTokens.serverSuccess;
 
     return Container(
       key: const ValueKey('server-live-status-card'),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: MimiCamDesignTokens.serverPanel,
+        color: MiuCamDesignTokens.serverPanel,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: accent.withValues(alpha: .38)),
         boxShadow: const [
@@ -124,9 +124,9 @@ class ServerLiveStatusCard extends StatelessWidget {
                 onPressed: onConnectParent,
                 icon: const Icon(Icons.add_link_rounded),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: MimiCamDesignTokens.serverText,
+                  foregroundColor: MiuCamDesignTokens.serverText,
                   side: const BorderSide(
-                    color: MimiCamDesignTokens.serverOutline,
+                    color: MiuCamDesignTokens.serverOutline,
                   ),
                 ),
                 label: Text(strings.ui('connectAnotherParent')),
@@ -139,8 +139,8 @@ class ServerLiveStatusCard extends StatelessWidget {
   }
 
   ButtonStyle _primaryButtonStyle() => FilledButton.styleFrom(
-        backgroundColor: MimiCamDesignTokens.serverCyan,
-        foregroundColor: MimiCamDesignTokens.serverOnAccent,
+        backgroundColor: MiuCamDesignTokens.serverCyan,
+        foregroundColor: MiuCamDesignTokens.serverOnAccent,
       );
 }
 
@@ -177,7 +177,7 @@ class _StatusHeadline extends StatelessWidget {
                     : preparing
                         ? Icons.hourglass_top_rounded
                         : Icons.sensors_rounded,
-            color: MimiCamDesignTokens.serverOnAccent,
+            color: MiuCamDesignTokens.serverOnAccent,
             size: 24,
           ),
         ),
@@ -189,7 +189,7 @@ class _StatusHeadline extends StatelessWidget {
               Text(
                 title,
                 style: const TextStyle(
-                  color: MimiCamDesignTokens.serverText,
+                  color: MiuCamDesignTokens.serverText,
                   fontSize: 20,
                   height: 1.1,
                   fontWeight: FontWeight.w900,
@@ -199,7 +199,7 @@ class _StatusHeadline extends StatelessWidget {
               Text(
                 summary,
                 style: const TextStyle(
-                  color: MimiCamDesignTokens.serverTextMuted,
+                  color: MiuCamDesignTokens.serverTextMuted,
                   fontSize: 13.5,
                   height: 1.3,
                 ),
@@ -230,7 +230,7 @@ class _ServerHealthStrip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 11),
       decoration: BoxDecoration(
-        color: MimiCamDesignTokens.serverSurfaceRaised,
+        color: MiuCamDesignTokens.serverSurfaceRaised,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -248,12 +248,12 @@ class _ServerHealthStrip extends StatelessWidget {
                           ? strings.ui('preparing')
                           : strings.ui('waiting'),
               color: state.cameraActive
-                  ? MimiCamDesignTokens.serverSuccess
+                  ? MiuCamDesignTokens.serverSuccess
                   : stopped || failed
-                      ? MimiCamDesignTokens.serverDisabled
+                      ? MiuCamDesignTokens.serverDisabled
                       : cameraPreparing
-                          ? MimiCamDesignTokens.serverBlue
-                          : MimiCamDesignTokens.serverDisabled,
+                          ? MiuCamDesignTokens.serverBlue
+                          : MiuCamDesignTokens.serverDisabled,
             ),
           ),
           const _ServerHealthDivider(),
@@ -267,10 +267,10 @@ class _ServerHealthStrip extends StatelessWidget {
                       ? strings.ui('off')
                       : strings.ui('waiting'),
               color: state.microphoneActive
-                  ? MimiCamDesignTokens.serverSuccess
+                  ? MiuCamDesignTokens.serverSuccess
                   : stopped || failed
-                      ? MimiCamDesignTokens.serverDisabled
-                      : MimiCamDesignTokens.serverBlue,
+                      ? MiuCamDesignTokens.serverDisabled
+                      : MiuCamDesignTokens.serverBlue,
             ),
           ),
           const _ServerHealthDivider(),
@@ -299,14 +299,14 @@ class _ServerHealthStrip extends StatelessWidget {
 
   Color _alertColor() {
     if (state.cryAnalyzerActive && state.motionAnalyzerActive) {
-      return MimiCamDesignTokens.serverSuccess;
+      return MiuCamDesignTokens.serverSuccess;
     }
     if (state.cryAnalyzerActive || state.motionAnalyzerActive) {
-      return MimiCamDesignTokens.serverWarning;
+      return MiuCamDesignTokens.serverWarning;
     }
     return stopped || failed
-        ? MimiCamDesignTokens.serverDisabled
-        : MimiCamDesignTokens.serverBlue;
+        ? MiuCamDesignTokens.serverDisabled
+        : MiuCamDesignTokens.serverBlue;
   }
 }
 
@@ -336,7 +336,7 @@ class _ServerHealthIndicator extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: MimiCamDesignTokens.serverTextMuted,
+              color: MiuCamDesignTokens.serverTextMuted,
               fontSize: 11.5,
             ),
           ),
@@ -365,7 +365,7 @@ class _ServerHealthDivider extends StatelessWidget {
     return Container(
       width: 1,
       height: 56,
-      color: MimiCamDesignTokens.serverOutline.withValues(alpha: .55),
+      color: MiuCamDesignTokens.serverOutline.withValues(alpha: .55),
     );
   }
 }
@@ -376,7 +376,7 @@ class ServerSafeRoomSetupCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    return MimiCamCard(
+    return MiuCamCard(
       key: const ValueKey('server-safe-room-setup'),
       dark: true,
       child: Column(
@@ -385,10 +385,10 @@ class ServerSafeRoomSetupCard extends StatelessWidget {
           Row(
             children: [
               const CircleAvatar(
-                backgroundColor: MimiCamDesignTokens.serverCyan,
+                backgroundColor: MiuCamDesignTokens.serverCyan,
                 child: Icon(
                   Icons.health_and_safety_rounded,
-                  color: MimiCamDesignTokens.serverOnAccent,
+                  color: MiuCamDesignTokens.serverOnAccent,
                 ),
               ),
               const SizedBox(width: 12),
@@ -396,7 +396,7 @@ class ServerSafeRoomSetupCard extends StatelessWidget {
                 child: Text(
                   strings.ui('safeRoomSetupTitle'),
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.serverText,
+                    color: MiuCamDesignTokens.serverText,
                     fontSize: 17,
                     fontWeight: FontWeight.w900,
                   ),
@@ -414,7 +414,7 @@ class ServerSafeRoomSetupCard extends StatelessWidget {
           Text(
             strings.ui('adultSupervisionNotice'),
             style: const TextStyle(
-              color: MimiCamDesignTokens.serverTextMuted,
+              color: MiuCamDesignTokens.serverTextMuted,
               fontSize: 12.5,
               height: 1.3,
             ),
@@ -439,7 +439,7 @@ class _SafeSetupItem extends StatelessWidget {
           padding: EdgeInsets.only(top: 1),
           child: Icon(
             Icons.chevron_right_rounded,
-            color: MimiCamDesignTokens.serverCyan,
+            color: MiuCamDesignTokens.serverCyan,
             size: 19,
           ),
         ),
@@ -448,7 +448,7 @@ class _SafeSetupItem extends StatelessWidget {
           child: Text(
             text,
             style: const TextStyle(
-              color: MimiCamDesignTokens.serverTextMuted,
+              color: MiuCamDesignTokens.serverTextMuted,
               fontSize: 13.5,
               height: 1.3,
             ),
@@ -473,7 +473,7 @@ class ServerStreamDetailsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final profile = state.mediaProfile;
-    return MimiCamCard(
+    return MiuCamCard(
       key: const ValueKey('server-stream-details'),
       dark: true,
       child: Material(
@@ -483,16 +483,16 @@ class ServerStreamDetailsCard extends StatelessWidget {
           child: ExpansionTile(
             tilePadding: EdgeInsets.zero,
             childrenPadding: const EdgeInsets.only(top: 8),
-            iconColor: MimiCamDesignTokens.serverCyan,
-            collapsedIconColor: MimiCamDesignTokens.serverTextMuted,
+            iconColor: MiuCamDesignTokens.serverCyan,
+            collapsedIconColor: MiuCamDesignTokens.serverTextMuted,
             leading: const Icon(
               Icons.tune_rounded,
-              color: MimiCamDesignTokens.serverCyan,
+              color: MiuCamDesignTokens.serverCyan,
             ),
             title: Text(
               strings.ui('streamDetails'),
               style: const TextStyle(
-                color: MimiCamDesignTokens.serverText,
+                color: MiuCamDesignTokens.serverText,
                 fontSize: 16,
                 fontWeight: FontWeight.w900,
               ),
@@ -500,7 +500,7 @@ class ServerStreamDetailsCard extends StatelessWidget {
             subtitle: Text(
               strings.ui('streamDetailsSubtitle'),
               style: const TextStyle(
-                color: MimiCamDesignTokens.serverTextMuted,
+                color: MiuCamDesignTokens.serverTextMuted,
                 fontSize: 12.5,
               ),
             ),
@@ -563,7 +563,7 @@ class ServerStopRoomStreamButton extends StatelessWidget {
         onPressed: onPressed,
         icon: const Icon(Icons.stop_circle_outlined, size: 20),
         style: TextButton.styleFrom(
-          foregroundColor: MimiCamDesignTokens.serverTextMuted,
+          foregroundColor: MiuCamDesignTokens.serverTextMuted,
           minimumSize: const Size(48, 48),
         ),
         label: Text(

@@ -4,11 +4,11 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/features/server/pairing/pairing_token_service.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/configuration_service.dart';
-import 'package:mimicam/services/mimicam_server.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/features/server/pairing/pairing_token_service.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/configuration_service.dart';
+import 'package:miucam/services/miucam_server.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -39,7 +39,7 @@ void main() {
     final first = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       trusted.token,
       {'clientId': trusted.clientId},
     );
@@ -50,7 +50,7 @@ void main() {
     final second = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       repaired.token,
       {'clientId': repaired.clientId},
     );
@@ -90,21 +90,21 @@ void main() {
     final first = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       trusted.token,
       {'clientId': trusted.clientId, 'video': true, 'audio': false},
     );
     final failedReplacement = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       trusted.token,
       {'clientId': trusted.clientId, 'video': true, 'audio': true},
     );
     final recovered = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       trusted.token,
       {'clientId': trusted.clientId, 'video': true, 'audio': false},
     );
@@ -136,14 +136,14 @@ void main() {
     final start = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       trusted.token,
       {'clientId': trusted.clientId},
     );
     final report = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.qualityReport,
+      MiuCamProtocolV2.qualityReport,
       trusted.token,
       {
         'clientId': trusted.clientId,
@@ -176,7 +176,7 @@ void main() {
       final response = await _postJson(
         client,
         base.port,
-        MimiCamProtocolV2.sessionStart,
+        MiuCamProtocolV2.sessionStart,
         token.token,
         {'clientId': token.clientId},
       );
@@ -191,7 +191,7 @@ void main() {
     final rejected = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       sixth.token,
       {'clientId': sixth.clientId},
     );
@@ -202,7 +202,7 @@ void main() {
     final stop = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStop,
+      MiuCamProtocolV2.sessionStop,
       tokenService.recordForClient('client_0') == null
           ? ''
           : tokenService
@@ -218,7 +218,7 @@ void main() {
     final acceptedAfterStop = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       sixth.token,
       {'clientId': sixth.clientId},
     );
@@ -226,7 +226,7 @@ void main() {
   });
 }
 
-Future<MimiCamServer> _testServer(
+Future<MiuCamServer> _testServer(
   PairingTokenService tokenService, {
   FutureOr<void> Function(
     String clientId, {
@@ -237,7 +237,7 @@ Future<MimiCamServer> _testServer(
 }) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
-  return MimiCamServer(
+  return MiuCamServer(
     config: ConfigurationService(preferences),
     strings: AppStrings(const Locale('tr')),
     onLog: (_) {},

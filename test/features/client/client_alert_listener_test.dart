@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/alerts/client_alert_listener.dart';
-import 'package:mimicam/features/client/media/client_stream_health_state.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/features/client/alerts/client_alert_listener.dart';
+import 'package:miucam/features/client/media/client_stream_health_state.dart';
 
 void main() {
   test(
@@ -18,7 +18,7 @@ void main() {
     var connections = 0;
     final secondAlert = Completer<void>();
     server.listen((request) async {
-      if (request.uri.path != MimiCamProtocolV2.events ||
+      if (request.uri.path != MiuCamProtocolV2.events ||
           !WebSocketTransformer.isUpgradeRequest(request)) {
         request.response.statusCode = HttpStatus.notFound;
         await request.response.close();
@@ -67,7 +67,7 @@ void main() {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     server.listen((request) async {
-      if (request.uri.path != MimiCamProtocolV2.events ||
+      if (request.uri.path != MiuCamProtocolV2.events ||
           !WebSocketTransformer.isUpgradeRequest(request)) {
         request.response.statusCode = HttpStatus.notFound;
         await request.response.close();
@@ -177,7 +177,7 @@ String _alertJson(String id) => jsonEncode({
 
 PairingSession _session(int port) => PairingSession(
       payload: PairingPayload(
-        schemaVersion: MimiCamProtocolV2.schemaVersion,
+        schemaVersion: MiuCamProtocolV2.schemaVersion,
         host: InternetAddress.loopbackIPv4.address,
         port: port,
         deviceId: 'server',

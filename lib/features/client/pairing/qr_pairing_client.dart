@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../../../core/protocol/mimicam_protocol.dart';
+import '../../../core/protocol/miucam_protocol.dart';
 import '../../../core/protocol/pairing_payload.dart';
 import '../../../core/protocol/pairing_session.dart';
 import 'pairing_failure.dart';
@@ -36,7 +36,7 @@ class QRPairingClient {
           scheme: payload.httpScheme,
           host: payload.host,
           port: payload.port,
-          path: MimiCamProtocolV2.pairConfirm,
+          path: MiuCamProtocolV2.pairConfirm,
         ),
       );
       request.headers.contentType = ContentType.json;

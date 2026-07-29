@@ -5,25 +5,25 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/alert_event_dto.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/core/security/trusted_client_token.dart';
-import 'package:mimicam/features/client/alerts/client_alert_delivery_coordinator.dart';
-import 'package:mimicam/features/client/alerts/client_alert_history.dart';
-import 'package:mimicam/features/client/alerts/client_alert_listener.dart';
-import 'package:mimicam/features/client/alerts/client_notification_service.dart';
-import 'package:mimicam/features/client/media/wav_pcm_stream_parser.dart';
-import 'package:mimicam/features/server/media/server_media_source.dart';
-import 'package:mimicam/features/server/pairing/pairing_token_service.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/configuration_service.dart';
-import 'package:mimicam/services/mimicam_server.dart';
-import 'package:mimicam/services/platform/pcm_audio_output.dart';
-import 'package:mimicam/services/server/baby_monitor_feature_controller.dart';
-import 'package:mimicam/services/server/room_audio_coordinator.dart';
-import 'package:mimicam/services/notification_service.dart';
+import 'package:miucam/core/protocol/alert_event_dto.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/core/security/trusted_client_token.dart';
+import 'package:miucam/features/client/alerts/client_alert_delivery_coordinator.dart';
+import 'package:miucam/features/client/alerts/client_alert_history.dart';
+import 'package:miucam/features/client/alerts/client_alert_listener.dart';
+import 'package:miucam/features/client/alerts/client_notification_service.dart';
+import 'package:miucam/features/client/media/wav_pcm_stream_parser.dart';
+import 'package:miucam/features/server/media/server_media_source.dart';
+import 'package:miucam/features/server/pairing/pairing_token_service.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/configuration_service.dart';
+import 'package:miucam/services/miucam_server.dart';
+import 'package:miucam/services/platform/pcm_audio_output.dart';
+import 'package:miucam/services/server/baby_monitor_feature_controller.dart';
+import 'package:miucam/services/server/room_audio_coordinator.dart';
+import 'package:miucam/services/notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../analysis/audio/test_audio_generators.dart';
@@ -42,7 +42,7 @@ void main() {
     final roomAudio = RoomAudioCoordinator(sink: _RecordingPcmAudioSink());
     final features = BabyMonitorFeatureController(roomAudio: roomAudio);
     final localAlerts = <String>[];
-    final server = MimiCamServer(
+    final server = MiuCamServer(
       config: ConfigurationService(preferences),
       strings: AppStrings(const Locale('tr')),
       onLog: (_) {},
@@ -86,7 +86,7 @@ void main() {
     final session = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       {'clientId': trusted.clientId, 'video': false, 'audio': true},
       bearerToken: trusted.token,
     );
@@ -100,7 +100,7 @@ void main() {
     final comfortStarted = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.comfortCommand,
+      MiuCamProtocolV2.comfortCommand,
       const {'action': 'play', 'trackId': 'white_noise', 'volume': .3},
       bearerToken: trusted.token,
     );
@@ -118,7 +118,7 @@ void main() {
     final comfortStopped = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.comfortCommand,
+      MiuCamProtocolV2.comfortCommand,
       const {'action': 'stop'},
       bearerToken: trusted.token,
     );
@@ -126,7 +126,7 @@ void main() {
     final talkStarted = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.talkStart,
+      MiuCamProtocolV2.talkStart,
       const {},
       bearerToken: trusted.token,
     );
@@ -140,7 +140,7 @@ void main() {
     final talkStopped = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.talkStop,
+      MiuCamProtocolV2.talkStop,
       {'talkToken': talkToken},
       bearerToken: trusted.token,
     );
@@ -153,7 +153,7 @@ void main() {
     final status = await _getJson(
       client,
       base.port,
-      MimiCamProtocolV2.status,
+      MiuCamProtocolV2.status,
       trusted.token,
     );
 
@@ -180,7 +180,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     final tokenService = PairingTokenService();
-    final server = MimiCamServer(
+    final server = MiuCamServer(
       config: ConfigurationService(preferences),
       strings: AppStrings(const Locale('tr')),
       onLog: (_) {},
@@ -202,7 +202,7 @@ void main() {
           scheme: 'ws',
           host: '127.0.0.1',
           port: base.port,
-          path: MimiCamProtocolV2.events,
+          path: MiuCamProtocolV2.events,
           queryParameters: {'token': trusted.token},
         ).toString(),
       ),
@@ -213,7 +213,7 @@ void main() {
 
 PairingSession _session(int port, TrustedClientToken trusted) => PairingSession(
       payload: PairingPayload(
-        schemaVersion: MimiCamProtocolV2.schemaVersion,
+        schemaVersion: MiuCamProtocolV2.schemaVersion,
         host: '127.0.0.1',
         port: port,
         deviceId: 'server',
@@ -317,7 +317,7 @@ class _AudioStreamProbe {
       scheme: 'http',
       host: InternetAddress.loopbackIPv4.address,
       port: port,
-      path: MimiCamProtocolV2.audio,
+      path: MiuCamProtocolV2.audio,
       queryParameters: {'streamToken': streamToken},
     ));
     final response = await request.close();

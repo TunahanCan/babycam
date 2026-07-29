@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/device_feature_models.dart';
-import 'package:mimicam/services/platform/battery_snapshot_provider.dart';
+import 'package:miucam/core/protocol/device_feature_models.dart';
+import 'package:miucam/services/platform/battery_snapshot_provider.dart';
 
 void main() {
   test('TTL icinde platform battery okumasini cache eder', () async {

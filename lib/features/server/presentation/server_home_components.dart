@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../app/app_role.dart';
 import '../../../l10n/app_strings.dart';
-import '../../shared/presentation/mimicam_design_tokens.dart';
-import '../../shared/presentation/mimicam_shells.dart';
+import '../../shared/presentation/miucam_design_tokens.dart';
+import '../../shared/presentation/miucam_shells.dart';
 import '../server_runtime.dart';
 
 enum ServerHomeDestination {
@@ -26,8 +26,8 @@ enum ServerHomeDestination {
     return values[index.clamp(0, values.length - 1).toInt()];
   }
 
-  MimiCamBottomNavItem navigationItem(AppStrings strings) {
-    return MimiCamBottomNavItem(icon: icon, label: strings.ui(labelKey));
+  MiuCamBottomNavItem navigationItem(AppStrings strings) {
+    return MiuCamBottomNavItem(icon: icon, label: strings.ui(labelKey));
   }
 }
 
@@ -48,11 +48,11 @@ class ServerTabFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: MimiCamDesignTokens.screenPadding.copyWith(top: 6, bottom: 18),
+      padding: MiuCamDesignTokens.screenPadding.copyWith(top: 6, bottom: 18),
       children: [
         Align(
           alignment: Alignment.topRight,
-          child: MimiCamRoleBadge(
+          child: MiuCamRoleBadge(
             activeRole: activeRole,
             onRoleSelected: onRoleSelected,
             enabled: !switchingRole,
@@ -84,7 +84,7 @@ class ServerSectionHeader extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-            color: MimiCamDesignTokens.serverText,
+            color: MiuCamDesignTokens.serverText,
             fontSize: 22,
             fontWeight: FontWeight.w900,
           ),
@@ -93,7 +93,7 @@ class ServerSectionHeader extends StatelessWidget {
         Text(
           subtitle,
           style: const TextStyle(
-            color: MimiCamDesignTokens.serverTextMuted,
+            color: MiuCamDesignTokens.serverTextMuted,
             fontSize: 14.5,
             height: 1.25,
           ),
@@ -118,7 +118,7 @@ class ServerKeyValue extends StatelessWidget {
             label,
             style: const TextStyle(
               fontSize: 15,
-              color: MimiCamDesignTokens.serverTextMuted,
+              color: MiuCamDesignTokens.serverTextMuted,
             ),
           ),
         ),
@@ -130,7 +130,7 @@ class ServerKeyValue extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 15,
-              color: MimiCamDesignTokens.serverText,
+              color: MiuCamDesignTokens.serverText,
               fontWeight: FontWeight.w900,
             ),
           ),

@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parents[1]
 SCREENS = ROOT / os.environ.get('REPORT_CAPTURE_OUTPUT', 'build/screen_report/i18n')
 MANIFEST = SCREENS / 'manifest.json'
-OUT = ROOT / 'docs/reports/mimicam_cok_dilli_ekranlar_usecase_raporu.pdf'
+OUT = ROOT / 'docs/reports/miucam_cok_dilli_ekranlar_usecase_raporu.pdf'
 OUT.parent.mkdir(parents=True, exist_ok=True)
 
 W, H, M = 1240, 1754, 72
@@ -157,7 +157,7 @@ def rounded(draw, box, radius, fill, outline=None, width=2):
 
 
 def header(draw, title: str, subtitle: str | None = None) -> int:
-    draw.text((M, 48), 'MimiCam', font=F['smallb'], fill=BLUE)
+    draw.text((M, 48), 'MiuCam', font=F['smallb'], fill=BLUE)
     draw.text((M, 84), title, font=F['h1'], fill=INK)
     y = 140
     if subtitle:
@@ -167,7 +167,7 @@ def header(draw, title: str, subtitle: str | None = None) -> int:
 
 
 def footer(draw, page_no: int):
-    draw.text((M, H - 48), 'MimiCam çok dilli ekran ve use-case raporu', font=F['tiny'], fill=SLATE)
+    draw.text((M, H - 48), 'MiuCam çok dilli ekran ve use-case raporu', font=F['tiny'], fill=SLATE)
     draw.text((W - M - 42, H - 48), str(page_no), font=F['tiny'], fill=SLATE)
 
 
@@ -241,12 +241,12 @@ def add(image: Image.Image):
 
 cover = page(INK)
 draw = ImageDraw.Draw(cover)
-icon_path = ROOT / 'assets/branding/mimicam_launcher_icon.png'
+icon_path = ROOT / 'assets/branding/miucam_launcher_icon.png'
 if icon_path.exists():
     icon = Image.open(icon_path).convert('RGBA')
     icon.thumbnail((230, 230), Image.Resampling.LANCZOS)
     cover.paste(icon, (M, 140), icon)
-draw.text((M, 430), 'MimiCam', font=F['cover'], fill=(255, 255, 255))
+draw.text((M, 430), 'MiuCam', font=F['cover'], fill=(255, 255, 255))
 draw_text(
     draw,
     (M, 520),
@@ -281,13 +281,13 @@ add(cover)
 # product handout as well as an engineering appendix.
 p = page(INK)
 draw = ImageDraw.Draw(p)
-wordmark_path = ROOT / 'assets/branding/mimicam_wordmark_v2.png'
+wordmark_path = ROOT / 'assets/branding/miucam_wordmark_v2.png'
 if wordmark_path.exists():
     wordmark = Image.open(wordmark_path).convert('RGBA')
     wordmark.thumbnail((420, 120), Image.Resampling.LANCZOS)
     p.paste(wordmark, (M, 58), wordmark)
 else:
-    draw.text((M, 72), 'MimiCam', font=F['smallb'], fill=CYAN)
+    draw.text((M, 72), 'MiuCam', font=F['smallb'], fill=CYAN)
 draw_text(draw, (M, 170), 'İki telefon. Tek Wi-Fi. Daha sakin bir bebek odası.', F['cover'], (255, 255, 255), W - 2 * M, 10)
 draw_text(draw, (M, 370), 'Eski telefonunu bebek odası kamerasına dönüştür. Görüntüyü, sesi, uyarıları ve oda kontrollerini ebeveyn telefonundan takip et.', F['h2'], (210, 226, 242), W - 2 * M, 8)
 benefits = [
@@ -302,7 +302,7 @@ for title, body in benefits:
     draw.text((M + 24, yy + 20), title, font=F['h3'], fill=CYAN)
     draw_text(draw, (M + 24, yy + 62), body, F['small'], (225, 240, 246), W - 2 * M - 48, 4)
     yy += 170
-draw_text(draw, (M, 1410), 'MimiCam · Yerel. Sade. Senin kontrolünde.', F['h2'], (255, 255, 255), W - 2 * M)
+draw_text(draw, (M, 1410), 'MiuCam · Yerel. Sade. Senin kontrolünde.', F['h2'], (255, 255, 255), W - 2 * M)
 footer(draw, len(pages) + 1)
 add(p)
 

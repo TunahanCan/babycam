@@ -1,11 +1,11 @@
-# MimiCam Gizlilik Bildirimi
+# MiuCam Gizlilik Bildirimi
 
 Son güncelleme: 15 Temmuz 2026
 
 > Bu metin mağaza yayını öncesi taslaktır. Nihai yayında geliştirici/veri
 > sorumlusu kimliği ve özel gizlilik başvuru kanalı eklenecektir.
 
-MimiCam, bebek odası ile ebeveyn cihazı arasında aynı yerel ağ üzerinden
+MiuCam, bebek odası ile ebeveyn cihazı arasında aynı yerel ağ üzerinden
 çalışan bir kamera ve ses izleme uygulamasıdır. Varsayılan kullanımda hesap,
 reklam, analiz SDK'sı veya bulut medya aktarımı kullanılmaz.
 
@@ -22,7 +22,7 @@ reklam, analiz SDK'sı veya bulut medya aktarımı kullanılmaz.
 
 ## İnternet ve üçüncü taraflar
 
-MimiCam'in temel izleme işlevi internet bağlantısı olmadan çalışır. İsteğe bağlı
+MiuCam'in temel izleme işlevi internet bağlantısı olmadan çalışır. İsteğe bağlı
 uygulama içi satın alma etkinleştirilirse Apple App Store veya Google Play ödeme
 altyapısı kullanılır. Satın alma doğrulama verisi yalnızca yapılandırılmış,
 güvenilir HTTPS doğrulama servisine gönderilebilir. Kamera ve mikrofon medyası bu
@@ -34,18 +34,18 @@ Eşleşmeler uygulama içinden kaldırıldığında ilgili güvenli erişim anah
 silinir. Bildirim geçmişi uygulama içinden temizlenebilir. Güvenli erişim
 anahtarları cihaz yedeklerine veya başka bir cihaza taşınacak şekilde
 yapılandırılmaz. iOS bir uygulama kaldırıldığında Keychain kayıtlarını korursa,
-MimiCam temiz kurulumun ilk açılışında önceki kuruluma ait kayıtları temizler.
+MiuCam temiz kurulumun ilk açılışında önceki kuruluma ait kayıtları temizler.
 
 ## İzinler
 
 Kamera, mikrofon, yerel ağ, bildirim ve Android arka plan servisi izinleri
-yalnızca ilgili MimiCam işlevleri için kullanılır. İzinler işletim sistemi
+yalnızca ilgili MiuCam işlevleri için kullanılır. İzinler işletim sistemi
 ayarlarından geri alınabilir; geri alınan izne bağlı özellikler çalışmayı
 durdurur.
 
 ## Çocuk güvenliği
 
-MimiCam yetişkin gözetiminin, tıbbi cihazların veya acil durum hizmetlerinin
+MiuCam yetişkin gözetiminin, tıbbi cihazların veya acil durum hizmetlerinin
 yerini almaz. Kullanıcı, cihaz yerleşimi ve güvenli kullanımından sorumludur.
 
 ## İletişim

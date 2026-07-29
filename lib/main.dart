@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'app/mimicam_app.dart';
+import 'app/miucam_app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const MimiCamApp());
+  runApp(const MiuCamApp());
 }

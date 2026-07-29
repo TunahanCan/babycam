@@ -1,10 +1,10 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/services/platform/pcm_audio_output.dart';
-import 'package:mimicam/services/server/baby_monitor_feature_controller.dart';
-import 'package:mimicam/services/server/baby_monitor_feature_services.dart';
-import 'package:mimicam/services/server/room_audio_coordinator.dart';
+import 'package:miucam/services/platform/pcm_audio_output.dart';
+import 'package:miucam/services/server/baby_monitor_feature_controller.dart';
+import 'package:miucam/services/server/baby_monitor_feature_services.dart';
+import 'package:miucam/services/server/room_audio_coordinator.dart';
 
 void main() {
   test('comfort audio generates PCM and resumes after talk', () async {

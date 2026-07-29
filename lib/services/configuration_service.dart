@@ -27,7 +27,7 @@ class ConfigurationService {
       _prefs.getInt('${_generalPrefix}notify_cooldown_ms') ?? 60000;
   bool get webRtcPilotEnabled =>
       _prefs.getBool('${_generalPrefix}webrtc_pilot_enabled') ??
-      const bool.fromEnvironment('MIMICAM_WEBRTC_PILOT');
+      const bool.fromEnvironment('MIUCAM_WEBRTC_PILOT');
 
   Future<void> setMotionThreshold(double threshold) =>
       _prefs.setDouble('${_generalPrefix}motion_threshold', threshold);

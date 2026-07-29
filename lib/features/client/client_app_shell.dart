@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_role.dart';
-import '../../core/theme/mimicam_theme.dart';
+import '../../core/theme/miucam_theme.dart';
 import '../../services/client_preferences_service.dart';
 import 'client_home_screen.dart';
 import 'client_runtime.dart';
@@ -28,7 +28,7 @@ class ClientAppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Theme(
-      data: MimiCamTheme.clientTheme(),
+      data: MiuCamTheme.clientTheme(),
       child: ClientHomeScreen(
         runtime: runtime,
         activeRole: activeRole,

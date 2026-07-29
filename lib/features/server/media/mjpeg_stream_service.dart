@@ -281,12 +281,12 @@ class MjpegStreamService {
     response.add(utf8.encode(
       '--frame\r\nContent-Type: image/jpeg\r\n'
       'Content-Length: ${jpeg.length}\r\n'
-      'X-MimiCam-Sequence: $sequence\r\n'
-      '${capturedAtMs == null ? '' : 'X-MimiCam-Captured-At-Ms: $capturedAtMs\r\n'}'
-      '${capturedAtMonoUs == null ? '' : 'X-MimiCam-Captured-Mono-Us: $capturedAtMonoUs\r\n'}'
-      '${encodeDurationUs == null ? '' : 'X-MimiCam-Encode-Duration-Us: $encodeDurationUs\r\n'}'
-      '${traceId == null ? '' : 'X-MimiCam-Trace-Id: $traceId\r\n'}'
-      'X-MimiCam-Sent-At-Ms: $sentAtMs\r\n\r\n',
+      'X-MiuCam-Sequence: $sequence\r\n'
+      '${capturedAtMs == null ? '' : 'X-MiuCam-Captured-At-Ms: $capturedAtMs\r\n'}'
+      '${capturedAtMonoUs == null ? '' : 'X-MiuCam-Captured-Mono-Us: $capturedAtMonoUs\r\n'}'
+      '${encodeDurationUs == null ? '' : 'X-MiuCam-Encode-Duration-Us: $encodeDurationUs\r\n'}'
+      '${traceId == null ? '' : 'X-MiuCam-Trace-Id: $traceId\r\n'}'
+      'X-MiuCam-Sent-At-Ms: $sentAtMs\r\n\r\n',
     ));
     response.add(jpeg);
     response.add(utf8.encode('\r\n'));

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/media/camera_permission_gateway.dart';
-import 'package:mimicam/features/client/pairing/qr_scan_screen.dart';
-import 'package:mimicam/l10n/app_strings.dart';
+import 'package:miucam/core/media/camera_permission_gateway.dart';
+import 'package:miucam/features/client/pairing/qr_scan_screen.dart';
+import 'package:miucam/l10n/app_strings.dart';
 
 void main() {
   testWidgets('kamera izni reddedilince manuel QR girişi açık kalır',

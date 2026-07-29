@@ -23,7 +23,7 @@
     hi: "hi_IN",
     ar: "ar_SA",
   });
-  const storageKey = "mimicam.website.language";
+  const storageKey = "miucam.website.language";
   const scriptUrl = document.currentScript?.src || new URL("i18n.js", window.location.href).href;
   const localeBaseUrl = new URL("locales/", scriptUrl);
   const catalogs = new Map();
@@ -194,7 +194,7 @@
       value.description = catalog["meta.homeDescription"];
       structuredData.textContent = JSON.stringify(value);
     } catch (error) {
-      console.error("MimiCam structured data could not be localized", error);
+      console.error("MiuCam structured data could not be localized", error);
     }
   };
 
@@ -216,7 +216,7 @@
     updateLocalizedMetadata(language, catalog);
 
     window.dispatchEvent(
-      new CustomEvent("mimicam:languagechange", { detail: { language, catalog } }),
+      new CustomEvent("miucam:languagechange", { detail: { language, catalog } }),
     );
   };
 
@@ -257,11 +257,11 @@
       await changeLanguage(initialLanguage);
     }
 
-    window.MimiCamI18n.ready = true;
-    window.dispatchEvent(new CustomEvent("mimicam:i18nready"));
+    window.MiuCamI18n.ready = true;
+    window.dispatchEvent(new CustomEvent("miucam:i18nready"));
   };
 
-  window.MimiCamI18n = {
+  window.MiuCamI18n = {
     ready: false,
     supportedLanguages,
     get language() {
@@ -273,5 +273,5 @@
     changeLanguage,
   };
 
-  initialize().catch((error) => console.error("MimiCam i18n initialization failed", error));
+  initialize().catch((error) => console.error("MiuCam i18n initialization failed", error));
 })();

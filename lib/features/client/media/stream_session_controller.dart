@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../../../core/protocol/mimicam_protocol.dart';
+import '../../../core/protocol/miucam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
 import '../../../services/monetization/broadcast_access_service.dart';
@@ -42,7 +42,7 @@ class StreamSessionController {
         await _webRtcConnector.initialize();
     var json = await _post(
       session,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       requestBody: {
         'clientId': session.clientId,
         'video': true,
@@ -85,7 +85,7 @@ class StreamSessionController {
       }
       fallbackReason = selection.fallbackReason;
       try {
-        await _post(session, MimiCamProtocolV2.sessionStop);
+        await _post(session, MiuCamProtocolV2.sessionStop);
       } catch (_) {
         // The replacement start is serialized by the server and supersedes the
         // same client id. Continue so a lost stop response does not disable the
@@ -93,7 +93,7 @@ class StreamSessionController {
       }
       json = await _post(
         session,
-        MimiCamProtocolV2.sessionStart,
+        MiuCamProtocolV2.sessionStart,
         requestBody: {
           'clientId': session.clientId,
           'video': true,
@@ -131,7 +131,7 @@ class StreamSessionController {
       }
       _webRtcHandle = null;
       try {
-        await _post(session, MimiCamProtocolV2.sessionStop);
+        await _post(session, MiuCamProtocolV2.sessionStop);
       } catch (error) {
         firstError ??= error;
       }
@@ -147,7 +147,7 @@ class StreamSessionController {
 
   Future<void> _rollbackStartedSession(PairingSession session) async {
     try {
-      await _post(session, MimiCamProtocolV2.sessionStop);
+      await _post(session, MiuCamProtocolV2.sessionStop);
     } catch (_) {
       // The malformed success response is already the primary failure. The
       // server serializes session replacement, so a later start can recover

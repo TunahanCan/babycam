@@ -422,7 +422,7 @@ class ClientLiveAudioPipeline {
     );
     run.onStatus?.call(status);
     if (kDebugMode) {
-      debugPrint('MimiCam live audio ${status.toJson()}');
+      debugPrint('MiuCam live audio ${status.toJson()}');
     }
   }
 

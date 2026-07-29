@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/analysis/video/luma_frame.dart';
-import 'package:mimicam/services/platform/android_service_media_source.dart';
+import 'package:miucam/analysis/video/luma_frame.dart';
+import 'package:miucam/services/platform/android_service_media_source.dart';
 
 void main() {
   test('forwards service JPEG and PCM with exact independent demand', () async {

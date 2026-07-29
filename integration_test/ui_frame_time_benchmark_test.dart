@@ -8,16 +8,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:mimicam/app/app_role.dart';
-import 'package:mimicam/features/server/media/media_runtime_controller.dart';
-import 'package:mimicam/features/server/server_home_screen.dart';
-import 'package:mimicam/features/server/server_runtime.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/configuration_service.dart';
+import 'package:miucam/app/app_role.dart';
+import 'package:miucam/features/server/media/media_runtime_controller.dart';
+import 'package:miucam/features/server/server_home_screen.dart';
+import 'package:miucam/features/server/server_runtime.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/configuration_service.dart';
 
 final _frameP95BudgetMs = double.parse(
   const String.fromEnvironment(
-    'MIMICAM_FRAME_P95_BUDGET_MS',
+    'MIUCAM_FRAME_P95_BUDGET_MS',
     defaultValue: '35',
   ),
 );
@@ -38,7 +38,7 @@ void main() {
       final preferences = await SharedPreferences.getInstance();
       final runtime = ServerRuntime(
         mediaRuntime: MediaRuntimeController(),
-        onStartPairing: () async => 'mimicam://pair?payload=benchmark',
+        onStartPairing: () async => 'miucam://pair?payload=benchmark',
       );
       addTearDown(runtime.dispose);
 
@@ -136,7 +136,7 @@ void main() {
       };
       binding.reportData = report;
       debugPrint(
-        'MIMICAM_FRAME_BENCHMARK ${jsonEncode(report)}',
+        'MIUCAM_FRAME_BENCHMARK ${jsonEncode(report)}',
         wrapWidth: 1024,
       );
 

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/services/server/stream_backpressure_gate.dart';
+import 'package:miucam/services/server/stream_backpressure_gate.dart';
 
 void main() {
   test('busy client ikinci flush tamamlanana kadar frame almaz', () {

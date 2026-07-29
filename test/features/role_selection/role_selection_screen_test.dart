@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/app/app_role.dart';
-import 'package:mimicam/features/role_selection/role_selection_screen.dart';
-import 'package:mimicam/l10n/app_strings.dart';
+import 'package:miucam/app/app_role.dart';
+import 'package:miucam/features/role_selection/role_selection_screen.dart';
+import 'package:miucam/l10n/app_strings.dart';
 
 void main() {
   Future<void> pumpRoleSelection(
@@ -37,7 +37,7 @@ void main() {
       onRoleSelected: (role) => selected = role,
     );
 
-    expect(find.text('MimiCam’i nasıl kullanacaksınız?'), findsOneWidget);
+    expect(find.text('MiuCam’i nasıl kullanacaksınız?'), findsOneWidget);
     expect(find.text('Bebek odasına kur'), findsOneWidget);
     expect(find.text('Yanımda kullan'), findsOneWidget);
     expect(find.text('BEBEK ODASI'), findsOneWidget);
@@ -51,13 +51,13 @@ void main() {
     );
     expect(
       (wordmark.image as AssetImage).assetName,
-      'assets/branding/mimicam_wordmark_v2.png',
+      'assets/branding/miucam_wordmark_v2.png',
     );
 
     for (final asset in [
-      'assets/branding/mimicam_wordmark.png',
-      'assets/branding/mimicam_bear_mascot.png',
-      'assets/branding/mimicam_wordmark_v2.png',
+      'assets/branding/miucam_wordmark.png',
+      'assets/branding/miucam_bear_mascot.png',
+      'assets/branding/miucam_wordmark_v2.png',
     ]) {
       final data = await rootBundle.load(asset);
       expect(data.lengthInBytes, greaterThan(0));

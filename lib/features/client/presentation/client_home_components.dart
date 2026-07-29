@@ -20,7 +20,7 @@ class _ClientFindSection extends StatefulWidget {
   final ClientRuntime runtime;
   final VoidCallback onScanQr;
   final ValueChanged<String> onManualConnect;
-  final ValueChanged<MimiCamDiscoveredService> onConnectDiscovered;
+  final ValueChanged<MiuCamDiscoveredService> onConnectDiscovered;
 
   @override
   State<_ClientFindSection> createState() => _ClientFindSectionState();
@@ -56,7 +56,7 @@ class _ClientFindSectionState extends State<_ClientFindSection> {
               widget.onManualConnect(_manualIpController.text),
         ),
         const SizedBox(height: 14),
-        StreamBuilder<List<MimiCamDiscoveredService>>(
+        StreamBuilder<List<MiuCamDiscoveredService>>(
           stream: widget.runtime.discoveryUpdates,
           initialData: widget.runtime.discoveredServices,
           builder: (context, snapshot) => _DiscoveredRoomsCard(
@@ -128,17 +128,17 @@ class _ClientNotificationSectionState
   }
 }
 
-List<MimiCamBottomNavItem> _clientNavItems(BuildContext context) {
+List<MiuCamBottomNavItem> _clientNavItems(BuildContext context) {
   final strings = AppStrings.of(context);
   return [
-    MimiCamBottomNavItem(
+    MiuCamBottomNavItem(
         icon: Icons.live_tv_rounded, label: strings.ui('navWatch')),
-    MimiCamBottomNavItem(
+    MiuCamBottomNavItem(
         icon: Icons.radar_rounded, label: strings.ui('navFind')),
-    MimiCamBottomNavItem(
+    MiuCamBottomNavItem(
         icon: Icons.notifications_active_rounded,
         label: strings.ui('navNotifications')),
-    MimiCamBottomNavItem(
+    MiuCamBottomNavItem(
         icon: Icons.settings_rounded, label: strings.ui('navSettings')),
   ];
 }
@@ -160,11 +160,11 @@ class _ClientTabFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: MimiCamDesignTokens.screenPadding.copyWith(top: 6, bottom: 18),
+      padding: MiuCamDesignTokens.screenPadding.copyWith(top: 6, bottom: 18),
       children: [
         Align(
           alignment: Alignment.topRight,
-          child: MimiCamRoleBadge(
+          child: MiuCamRoleBadge(
             activeRole: activeRole,
             onRoleSelected: onRoleSelected,
             enabled: !switchingRole,
@@ -194,7 +194,7 @@ class _ClientHeroCard extends StatelessWidget {
         Text(
           strings.ui('babyRoomHeader'),
           style: const TextStyle(
-            color: MimiCamDesignTokens.slate,
+            color: MiuCamDesignTokens.slate,
             fontSize: 12,
             fontWeight: FontWeight.w700,
           ),
@@ -203,7 +203,7 @@ class _ClientHeroCard extends StatelessWidget {
         Text(
           paired ? strings.ui('roomConnectedTitle') : _titleFor(strings, phase),
           style: const TextStyle(
-            color: MimiCamDesignTokens.nightPlum,
+            color: MiuCamDesignTokens.nightPlum,
             fontSize: 26,
             height: 1.08,
             fontWeight: FontWeight.w900,
@@ -215,7 +215,7 @@ class _ClientHeroCard extends StatelessWidget {
               ? strings.ui('liveAndAlertsParentText')
               : strings.ui('clientSubtitleDefault'),
           style: const TextStyle(
-            color: MimiCamDesignTokens.slate,
+            color: MiuCamDesignTokens.slate,
             fontSize: 14.5,
             height: 1.25,
           ),
@@ -263,7 +263,7 @@ class _SectionHeader extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-            color: MimiCamDesignTokens.navy,
+            color: MiuCamDesignTokens.navy,
             fontSize: 22,
             height: 1.12,
             fontWeight: FontWeight.w900,
@@ -273,7 +273,7 @@ class _SectionHeader extends StatelessWidget {
         Text(
           subtitle,
           style: const TextStyle(
-            color: MimiCamDesignTokens.slate,
+            color: MiuCamDesignTokens.slate,
             fontSize: 14.5,
             height: 1.25,
           ),
@@ -309,7 +309,7 @@ class _RoomCard extends StatelessWidget {
     final inAppOnly = alertsReady && systemNotificationsEnabled == false;
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: MimiCamDesignTokens.cardDecoration(),
+      decoration: MiuCamDesignTokens.cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -324,7 +324,7 @@ class _RoomCard extends StatelessWidget {
                 ),
                 child: const Icon(
                   Icons.child_care_rounded,
-                  color: MimiCamDesignTokens.navy,
+                  color: MiuCamDesignTokens.navy,
                   size: 25,
                 ),
               ),
@@ -338,7 +338,7 @@ class _RoomCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: MimiCamDesignTokens.navy,
+                        color: MiuCamDesignTokens.navy,
                         fontSize: 18,
                         fontWeight: FontWeight.w900,
                       ),
@@ -347,7 +347,7 @@ class _RoomCard extends StatelessWidget {
                     Text(
                       status,
                       style: const TextStyle(
-                        color: MimiCamDesignTokens.slate,
+                        color: MiuCamDesignTokens.slate,
                         fontSize: 13.5,
                       ),
                     ),
@@ -368,12 +368,12 @@ class _RoomCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: inAppOnly
-                  ? MimiCamDesignTokens.amberSoft
+                  ? MiuCamDesignTokens.amberSoft
                   : alertsReady
-                      ? MimiCamDesignTokens.mintSoft
+                      ? MiuCamDesignTokens.mintSoft
                       : alertsReconnecting
-                          ? MimiCamDesignTokens.amberSoft
-                          : MimiCamDesignTokens.lavenderSoft,
+                          ? MiuCamDesignTokens.amberSoft
+                          : MiuCamDesignTokens.lavenderSoft,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -387,12 +387,12 @@ class _RoomCard extends StatelessWidget {
                               ? Icons.sync_rounded
                               : Icons.notifications_off_outlined,
                   color: inAppOnly
-                      ? MimiCamDesignTokens.amber
+                      ? MiuCamDesignTokens.amber
                       : alertsReady
-                          ? MimiCamDesignTokens.mint
+                          ? MiuCamDesignTokens.mint
                           : alertsReconnecting
-                              ? MimiCamDesignTokens.amber
-                              : MimiCamDesignTokens.pink,
+                              ? MiuCamDesignTokens.amber
+                              : MiuCamDesignTokens.pink,
                   size: 19,
                 ),
                 const SizedBox(width: 9),
@@ -407,7 +407,7 @@ class _RoomCard extends StatelessWidget {
                                     .ui('clientTitleReconnecting')
                                 : AppStrings.of(context).ui('notificationsOff'),
                     style: const TextStyle(
-                      color: MimiCamDesignTokens.navy,
+                      color: MiuCamDesignTokens.navy,
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
                     ),
@@ -415,7 +415,7 @@ class _RoomCard extends StatelessWidget {
                 ),
                 const Icon(
                   Icons.lock_outline_rounded,
-                  color: MimiCamDesignTokens.slate,
+                  color: MiuCamDesignTokens.slate,
                   size: 17,
                 ),
               ],
@@ -441,7 +441,7 @@ class _NoRoomCard extends StatelessWidget {
           width: double.infinity,
           constraints: const BoxConstraints(minHeight: 246),
           padding: const EdgeInsets.all(22),
-          decoration: MimiCamDesignTokens.cardDecoration(),
+          decoration: MiuCamDesignTokens.cardDecoration(),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -450,7 +450,7 @@ class _NoRoomCard extends StatelessWidget {
                 height: 104,
                 decoration: BoxDecoration(
                   border: Border.all(
-                    color: MimiCamDesignTokens.pink.withValues(alpha: .55),
+                    color: MiuCamDesignTokens.pink.withValues(alpha: .55),
                     width: 2,
                   ),
                   borderRadius: BorderRadius.circular(12),
@@ -458,7 +458,7 @@ class _NoRoomCard extends StatelessWidget {
                 child: const Center(
                   child: Icon(
                     Icons.favorite_rounded,
-                    color: MimiCamDesignTokens.pink,
+                    color: MiuCamDesignTokens.pink,
                     size: 28,
                   ),
                 ),
@@ -468,7 +468,7 @@ class _NoRoomCard extends StatelessWidget {
                 strings.ui('chooseRoomFirst'),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: MimiCamDesignTokens.nightPlum,
+                  color: MiuCamDesignTokens.nightPlum,
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
                 ),
@@ -478,7 +478,7 @@ class _NoRoomCard extends StatelessWidget {
                 strings.ui('noRoomCalmText'),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: MimiCamDesignTokens.slate,
+                  color: MiuCamDesignTokens.slate,
                   fontSize: 13.5,
                   height: 1.3,
                 ),
@@ -494,7 +494,7 @@ class _NoRoomCard extends StatelessWidget {
             child: FilledButton(
               onPressed: onOpenFind,
               style: FilledButton.styleFrom(
-                backgroundColor: MimiCamDesignTokens.pink,
+                backgroundColor: MiuCamDesignTokens.pink,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24),
@@ -529,7 +529,7 @@ class _ClientWatchSummary extends StatelessWidget {
       child: FilledButton(
         onPressed: onWatch,
         style: FilledButton.styleFrom(
-          backgroundColor: MimiCamDesignTokens.pink,
+          backgroundColor: MiuCamDesignTokens.pink,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
@@ -564,7 +564,7 @@ class _FindActionCard extends StatelessWidget {
           icon: Icons.qr_code_2_rounded,
           title: strings.ui('scanQr'),
           text: strings.ui('scanQrSecurely'),
-          backgroundColor: MimiCamDesignTokens.mintSoft,
+          backgroundColor: MiuCamDesignTokens.mintSoft,
           onTap: onScanQr,
         ),
         Padding(
@@ -577,7 +577,7 @@ class _FindActionCard extends StatelessWidget {
                 child: Text(
                   strings.ui('or'),
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.slate,
+                    color: MiuCamDesignTokens.slate,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
@@ -589,7 +589,7 @@ class _FindActionCard extends StatelessWidget {
         ),
         Container(
           padding: const EdgeInsets.all(18),
-          decoration: MimiCamDesignTokens.cardDecoration(
+          decoration: MiuCamDesignTokens.cardDecoration(
             dark: false,
           ).copyWith(color: const Color(0xFFFFFBF7)),
           child: Column(
@@ -603,7 +603,7 @@ class _FindActionCard extends StatelessWidget {
                     backgroundColor: Colors.white,
                     child: Icon(
                       Icons.link_rounded,
-                      color: MimiCamDesignTokens.nightPlum,
+                      color: MiuCamDesignTokens.nightPlum,
                       size: 28,
                     ),
                   ),
@@ -614,13 +614,13 @@ class _FindActionCard extends StatelessWidget {
                       children: [
                         Text(
                           strings.ui('manualIpConnectTitle'),
-                          style: MimiCamDesignTokens.cardTitle,
+                          style: MiuCamDesignTokens.cardTitle,
                         ),
                         const SizedBox(height: 8),
                         Text(
                           strings.ui('manualIpConnectText'),
                           style: const TextStyle(
-                            color: MimiCamDesignTokens.slate,
+                            color: MiuCamDesignTokens.slate,
                             fontSize: 14,
                             height: 1.25,
                           ),
@@ -649,8 +649,8 @@ class _FindActionCard extends StatelessWidget {
                   onPressed: onManualConnect,
                   icon: const Icon(Icons.link_rounded),
                   style: FilledButton.styleFrom(
-                    foregroundColor: MimiCamDesignTokens.nightPlum,
-                    backgroundColor: MimiCamDesignTokens.blushSoft,
+                    foregroundColor: MiuCamDesignTokens.nightPlum,
+                    backgroundColor: MiuCamDesignTokens.blushSoft,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
@@ -678,16 +678,16 @@ class _DiscoveredRoomsCard extends StatelessWidget {
     required this.onConnect,
   });
 
-  final List<MimiCamDiscoveredService> services;
+  final List<MiuCamDiscoveredService> services;
   final Future<void> Function() onRefresh;
-  final ValueChanged<MimiCamDiscoveredService> onConnect;
+  final ValueChanged<MiuCamDiscoveredService> onConnect;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: MimiCamDesignTokens.cardDecoration(),
+      decoration: MiuCamDesignTokens.cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -695,13 +695,13 @@ class _DiscoveredRoomsCard extends StatelessWidget {
             children: [
               const Icon(
                 Icons.wifi_find_rounded,
-                color: MimiCamDesignTokens.pink,
+                color: MiuCamDesignTokens.pink,
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   strings.ui('discoveredRoomsTitle'),
-                  style: MimiCamDesignTokens.cardTitle,
+                  style: MiuCamDesignTokens.cardTitle,
                 ),
               ),
               IconButton(
@@ -717,7 +717,7 @@ class _DiscoveredRoomsCard extends StatelessWidget {
                 ? strings.ui('noRoomsDiscovered')
                 : strings.ui('discoveredRoomsSubtitle'),
             style: const TextStyle(
-              color: MimiCamDesignTokens.slate,
+              color: MiuCamDesignTokens.slate,
               fontSize: 13.5,
             ),
           ),
@@ -727,10 +727,10 @@ class _DiscoveredRoomsCard extends StatelessWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const CircleAvatar(
-                  backgroundColor: MimiCamDesignTokens.mintSoft,
+                  backgroundColor: MiuCamDesignTokens.mintSoft,
                   child: Icon(
                     Icons.child_care_rounded,
-                    color: MimiCamDesignTokens.navy,
+                    color: MiuCamDesignTokens.navy,
                   ),
                 ),
                 title: Text(
@@ -780,7 +780,7 @@ class _ConnectionActionCard extends StatelessWidget {
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.all(18),
-          decoration: MimiCamDesignTokens.cardDecoration().copyWith(
+          decoration: MiuCamDesignTokens.cardDecoration().copyWith(
             color: backgroundColor,
           ),
           child: Row(
@@ -790,7 +790,7 @@ class _ConnectionActionCard extends StatelessWidget {
                 backgroundColor: Colors.white.withValues(alpha: .55),
                 child: Icon(
                   icon,
-                  color: MimiCamDesignTokens.nightPlum,
+                  color: MiuCamDesignTokens.nightPlum,
                   size: 30,
                 ),
               ),
@@ -799,12 +799,12 @@ class _ConnectionActionCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: MimiCamDesignTokens.cardTitle),
+                    Text(title, style: MiuCamDesignTokens.cardTitle),
                     const SizedBox(height: 8),
                     Text(
                       text,
                       style: const TextStyle(
-                        color: MimiCamDesignTokens.slate,
+                        color: MiuCamDesignTokens.slate,
                         fontSize: 14,
                         height: 1.25,
                       ),
@@ -814,7 +814,7 @@ class _ConnectionActionCard extends StatelessWidget {
               ),
               const Icon(
                 Icons.chevron_right_rounded,
-                color: MimiCamDesignTokens.nightPlum,
+                color: MiuCamDesignTokens.nightPlum,
                 size: 28,
               ),
             ],
@@ -835,8 +835,8 @@ class _PrivacyNote extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: MimiCamDesignTokens.cardDecoration().copyWith(
-        color: MimiCamDesignTokens.amberSoft,
+      decoration: MiuCamDesignTokens.cardDecoration().copyWith(
+        color: MiuCamDesignTokens.amberSoft,
       ),
       child: Row(
         children: [
@@ -845,7 +845,7 @@ class _PrivacyNote extends StatelessWidget {
             backgroundColor: Colors.white,
             child: Icon(
               Icons.shield_outlined,
-              color: MimiCamDesignTokens.nightPlum,
+              color: MiuCamDesignTokens.nightPlum,
             ),
           ),
           const SizedBox(width: 12),
@@ -853,7 +853,7 @@ class _PrivacyNote extends StatelessWidget {
             child: Text(
               text,
               style: const TextStyle(
-                color: MimiCamDesignTokens.slate,
+                color: MiuCamDesignTokens.slate,
                 fontSize: 13.5,
                 height: 1.25,
               ),

@@ -21,7 +21,7 @@ import 'pairing/pairing_session_store.dart';
 import 'pairing/qr_pairing_client.dart';
 import 'pairing/trusted_token_renewal_client.dart';
 import '../../l10n/app_strings.dart';
-import '../../services/discovery/mimicam_service_discovery.dart';
+import '../../services/discovery/miucam_service_discovery.dart';
 
 class ClientCompositionRoot {
   static int createCount = 0;
@@ -59,7 +59,7 @@ class ClientCompositionRoot {
     notifications.updateStrings(strings);
     const alertBackground = ClientAlertBackgroundService();
     final roomControls = ClientRoomControls();
-    final serviceBrowser = MimiCamServiceBrowser();
+    final serviceBrowser = MiuCamServiceBrowser();
     final endpointResolver = TrustedSessionEndpointResolver(
       browser: serviceBrowser,
     );

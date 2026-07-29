@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/media/adaptive_media_profile.dart';
-import 'package:mimicam/services/server/media_frame_policy.dart';
+import 'package:miucam/core/media/adaptive_media_profile.dart';
+import 'package:miucam/services/server/media_frame_policy.dart';
 
 void main() {
   group('MediaFrameBudget', () {

@@ -6,8 +6,8 @@ import 'package:flutter/services.dart';
 import '../../app/app_role.dart';
 import '../../l10n/app_strings.dart';
 import '../../services/configuration_service.dart';
-import '../shared/presentation/mimicam_design_tokens.dart';
-import '../shared/presentation/mimicam_shells.dart';
+import '../shared/presentation/miucam_design_tokens.dart';
+import '../shared/presentation/miucam_shells.dart';
 import 'presentation/server_home_components.dart';
 import 'presentation/server_pairing_section.dart';
 import 'presentation/server_preview_section.dart';
@@ -78,8 +78,8 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
 
     final strings = AppStrings.of(context);
     return Scaffold(
-      body: MimiCamGradientShell(
-        variant: MimiCamShellVariant.server,
+      body: MiuCamGradientShell(
+        variant: MiuCamShellVariant.server,
         child: SafeArea(
           child: StreamBuilder<ServerRuntimeState>(
             stream: widget.runtime.states,
@@ -93,13 +93,13 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
         ),
       ),
       // Runtime emissions rebuild the destination body, but not navigation.
-      bottomNavigationBar: MimiCamBottomNav(
+      bottomNavigationBar: MiuCamBottomNav(
         items: [
           for (final destination in ServerHomeDestination.values)
             destination.navigationItem(strings),
         ],
         currentIndex: _destination.index,
-        activeColor: MimiCamDesignTokens.serverCyan,
+        activeColor: MiuCamDesignTokens.serverCyan,
         dark: true,
         onTap: (index) =>
             _selectDestination(ServerHomeDestination.fromIndex(index)),

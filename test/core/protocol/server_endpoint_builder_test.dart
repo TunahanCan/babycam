@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/core/protocol/server_endpoint_builder.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/core/protocol/server_endpoint_builder.dart';
 
 void main() {
   test('http path normalize eder ve query parametrelerini korur', () {

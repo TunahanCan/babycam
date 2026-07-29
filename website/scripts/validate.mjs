@@ -230,7 +230,7 @@ for (const file of [
 }
 
 if (errors.length > 0) {
-  console.error(`MimiCam site doğrulaması başarısız (${errors.length} hata):`);
+  console.error(`MiuCam site doğrulaması başarısız (${errors.length} hata):`);
   errors.forEach((error) => console.error(`- ${error}`));
   process.exit(1);
 }
@@ -241,5 +241,5 @@ const assetCount = [...indexHtml.matchAll(/(?:src|href)="([^"]+)"/gi)].filter(
 
 const localeKeyCount = sourceCatalog ? Object.keys(sourceCatalog).length : 0;
 console.log(
-  `MimiCam site doğrulaması başarılı: ${htmlFiles.length} sayfa, ${assetCount} yerel referans, ${catalogs.size} dil, ${localeKeyCount} çeviri anahtarı.`,
+  `MiuCam site doğrulaması başarılı: ${htmlFiles.length} sayfa, ${assetCount} yerel referans, ${catalogs.size} dil, ${localeKeyCount} çeviri anahtarı.`,
 );

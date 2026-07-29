@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/app/app_role.dart';
-import 'package:mimicam/app/app_runtime.dart';
-import 'package:mimicam/app/role_repository.dart';
-import 'package:mimicam/app/role_switch_transaction.dart';
+import 'package:miucam/app/app_role.dart';
+import 'package:miucam/app/app_runtime.dart';
+import 'package:miucam/app/role_repository.dart';
+import 'package:miucam/app/role_switch_transaction.dart';
 
 void main() {
   test('disposes runtime, clears session, then persists the next role',

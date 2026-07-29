@@ -20,11 +20,11 @@ val releaseSigningConfigured = listOf(
 ).all { !keystoreProperties.getProperty(it).isNullOrBlank() }
 
 android {
-    namespace = "com.mimicam.app"
+    namespace = "com.miucam.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
     defaultConfig {
-        applicationId = "com.mimicam.app"
+        applicationId = "com.miucam.app"
         // CameraX 1.6.x and Lifecycle 2.11 use the AndroidX API 23 baseline.
         // Pin it explicitly so a future Flutter SDK downgrade cannot create a
         // manifest-merge-only failure late in the build.

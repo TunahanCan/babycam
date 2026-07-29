@@ -507,7 +507,7 @@ class ServerRuntime implements AppRuntime {
     Object? serverError;
     StackTrace? serverStack;
     try {
-      // Do not hold the resource mutation queue while MimiCamServer drains its
+      // Do not hold the resource mutation queue while MiuCamServer drains its
       // HTTP session queue: an in-flight session may still need to enqueue its
       // final runtime callback here.
       await _onStop?.call();

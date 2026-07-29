@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/services/server/media_frame_policy.dart';
+import 'package:miucam/services/server/media_frame_policy.dart';
 
 void main() {
   test('MJPEG encode sadece izleyici varken yapılır', () {

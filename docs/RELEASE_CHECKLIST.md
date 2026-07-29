@@ -1,4 +1,4 @@
-# MimiCam Production Release Checklist
+# MiuCam Production Release Checklist
 
 Bu belge mağaza yüklemesinden önce tamamlanması gereken teknik ve operasyonel
 kapıları tanımlar.
@@ -24,7 +24,7 @@ Yerel iOS release doğrulaması:
 ## Yayın kimliği
 
 - Android `applicationId/namespace`, Kotlin paket yolları ve iOS
-  `PRODUCT_BUNDLE_IDENTIFIER` production kimliği olarak `com.mimicam.app`
+  `PRODUCT_BUNDLE_IDENTIFIER` production kimliği olarak `com.miucam.app`
   kullanır.
 - Kimlik ilk Google Play veya App Store kaydından sonra değiştirilmemelidir.
 - Her yüklemede `pubspec.yaml` içindeki build number artırılmalıdır.
@@ -59,8 +59,8 @@ provisioning profile Xcode/App Store Connect üzerinde yapılandırılmalıdır.
 Yayın kilidi etkinleştirilecekse iki define birlikte verilmelidir:
 
 ```bash
---dart-define=MIMICAM_BROADCAST_PAYWALL_ENABLED=true
---dart-define=MIMICAM_PURCHASE_VERIFIER_URL=https://example.com/verify
+--dart-define=MIUCAM_BROADCAST_PAYWALL_ENABLED=true
+--dart-define=MIUCAM_PURCHASE_VERIFIER_URL=https://example.com/verify
 ```
 
 Store product ID, fiyat ve trusted backend doğrulaması production değerleriyle
@@ -77,7 +77,7 @@ hazır değilse paywall kapalı bırakılmalıdır.
 
 ## Güvenlik ve teslimat kapıları
 
-Aşağıdaki maddeler tamamlanmadan MimiCam, güvenilmeyen/ortak ağlar veya
+Aşağıdaki maddeler tamamlanmadan MiuCam, güvenilmeyen/ortak ağlar veya
 "uygulama kapalıyken WhatsApp benzeri bildirim" vaadiyle yayınlanmamalıdır:
 
 - QR ile pinlenen sunucu kimliği ve HTTPS/WSS; bearer token, ses ve video

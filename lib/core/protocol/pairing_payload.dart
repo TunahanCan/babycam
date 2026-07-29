@@ -1,11 +1,11 @@
 import 'dart:convert';
 
-import 'mimicam_protocol.dart';
+import 'miucam_protocol.dart';
 
 class PairingPayload {
   const PairingPayload(
       {required this.schemaVersion,
-      this.scheme = 'mimicam',
+      this.scheme = 'miucam',
       required this.host,
       required this.port,
       required this.deviceId,
@@ -44,7 +44,7 @@ class PairingPayload {
 
   static PairingPayload? fromJson(Map<String, Object?> json) {
     final schemaVersion = json['schemaVersion'];
-    final scheme = json['scheme'] ?? 'mimicam';
+    final scheme = json['scheme'] ?? 'miucam';
     final host = json['host'];
     final port = json['port'];
     final deviceId = json['deviceId'];
@@ -54,7 +54,7 @@ class PairingPayload {
     final transport = json['transport'] ?? 'http_ws';
     final capabilities = json['capabilities'];
     if (schemaVersion is! int ||
-        schemaVersion != MimiCamProtocolV2.schemaVersion ||
+        schemaVersion != MiuCamProtocolV2.schemaVersion ||
         scheme is! String ||
         host is! String ||
         port is! int ||
@@ -79,15 +79,14 @@ class PairingPayload {
         capabilities: Map<String, Object?>.from(capabilities));
   }
 
-  String toUriString() =>
-      Uri(scheme: 'mimicam', host: 'pair', queryParameters: {
+  String toUriString() => Uri(scheme: 'miucam', host: 'pair', queryParameters: {
         'payload': base64UrlEncode(utf8.encode(jsonEncode(toJson())))
       }).toString();
 
   static PairingPayload? parseUri(String value) {
     try {
       final uri = Uri.parse(value);
-      if (uri.scheme != 'mimicam' || uri.host != 'pair') return null;
+      if (uri.scheme != 'miucam' || uri.host != 'pair') return null;
       final payload = uri.queryParameters['payload'];
       if (payload == null) return null;
       final decoded = jsonDecode(utf8.decode(base64Url.decode(payload)));

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../../../core/protocol/mimicam_protocol.dart';
+import '../../../core/protocol/miucam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
 
@@ -18,7 +18,7 @@ class TrustedTokenRenewalClient {
     final client = _createClient(session);
     try {
       final request = await client.postUrl(
-        ServerEndpointBuilder(session).http(MimiCamProtocolV2.authRenew),
+        ServerEndpointBuilder(session).http(MiuCamProtocolV2.authRenew),
       );
       request.headers.set(
         HttpHeaders.authorizationHeader,

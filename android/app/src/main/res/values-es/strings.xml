@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mimicam_server_channel_name">Servidor de MimiCam</string>
-    <string name="mimicam_alert_connection_channel_name">Conexión de avisos de MimiCam</string>
-    <string name="mimicam_server_channel_description">Actividad del servidor local y los medios de MimiCam</string>
-    <string name="mimicam_alert_connection_channel_description">Mantiene activa en segundo plano la conexión de avisos de la habitación</string>
-    <string name="mimicam_runtime_camera_microphone_playback">La cámara, el micrófono y el audio de la habitación están activos en segundo plano.</string>
-    <string name="mimicam_runtime_camera_microphone">La cámara y el micrófono están activos en segundo plano.</string>
-    <string name="mimicam_runtime_camera_playback">La cámara y el audio de la habitación están activos en segundo plano.</string>
-    <string name="mimicam_runtime_microphone_playback">El micrófono y el audio de la habitación están activos en segundo plano.</string>
-    <string name="mimicam_runtime_camera">La cámara está activa en segundo plano.</string>
-    <string name="mimicam_runtime_microphone">El micrófono está activo en segundo plano.</string>
-    <string name="mimicam_runtime_playback">El audio de la habitación está activo en segundo plano.</string>
-    <string name="mimicam_runtime_server">El servidor local y la conexión Wi-Fi se mantienen activos.</string>
-    <string name="mimicam_runtime_alerts">Los avisos de la habitación se supervisan en segundo plano.</string>
-    <string name="mimicam_runtime_stopping">El servicio en segundo plano se está deteniendo.</string>
-    <string name="mimicam_runtime_title_media">La sesión de la habitación de MimiCam está activa</string>
-    <string name="mimicam_runtime_title_server">El servidor local de MimiCam está activo</string>
-    <string name="mimicam_runtime_title_alerts">Los avisos de la habitación de MimiCam están activos</string>
+    <string name="miucam_server_channel_name">Servidor de MiuCam</string>
+    <string name="miucam_alert_connection_channel_name">Conexión de avisos de MiuCam</string>
+    <string name="miucam_server_channel_description">Actividad del servidor local y los medios de MiuCam</string>
+    <string name="miucam_alert_connection_channel_description">Mantiene activa en segundo plano la conexión de avisos de la habitación</string>
+    <string name="miucam_runtime_camera_microphone_playback">La cámara, el micrófono y el audio de la habitación están activos en segundo plano.</string>
+    <string name="miucam_runtime_camera_microphone">La cámara y el micrófono están activos en segundo plano.</string>
+    <string name="miucam_runtime_camera_playback">La cámara y el audio de la habitación están activos en segundo plano.</string>
+    <string name="miucam_runtime_microphone_playback">El micrófono y el audio de la habitación están activos en segundo plano.</string>
+    <string name="miucam_runtime_camera">La cámara está activa en segundo plano.</string>
+    <string name="miucam_runtime_microphone">El micrófono está activo en segundo plano.</string>
+    <string name="miucam_runtime_playback">El audio de la habitación está activo en segundo plano.</string>
+    <string name="miucam_runtime_server">El servidor local y la conexión Wi-Fi se mantienen activos.</string>
+    <string name="miucam_runtime_alerts">Los avisos de la habitación se supervisan en segundo plano.</string>
+    <string name="miucam_runtime_stopping">El servicio en segundo plano se está deteniendo.</string>
+    <string name="miucam_runtime_title_media">La sesión de la habitación de MiuCam está activa</string>
+    <string name="miucam_runtime_title_server">El servidor local de MiuCam está activo</string>
+    <string name="miucam_runtime_title_alerts">Los avisos de la habitación de MiuCam están activos</string>
 </resources>

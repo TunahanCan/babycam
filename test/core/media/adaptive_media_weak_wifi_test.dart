@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/media/adaptive_media_profile.dart';
+import 'package:miucam/core/media/adaptive_media_profile.dart';
 
 void main() {
   test('normal weak critical survival profilleri beklenen bütçeyi taşır', () {

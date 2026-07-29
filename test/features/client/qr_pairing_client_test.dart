@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/features/client/pairing/pairing_failure.dart';
-import 'package:mimicam/features/client/pairing/qr_pairing_client.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/features/client/pairing/pairing_failure.dart';
+import 'package:miucam/features/client/pairing/qr_pairing_client.dart';
 
 void main() {
   test('QRPairingClient HTTP QR payload ile pair confirm gönderir', () async {
@@ -14,7 +14,7 @@ void main() {
 
     server.listen((request) async {
       expect(request.method, 'POST');
-      expect(request.uri.path, MimiCamProtocolV2.pairConfirm);
+      expect(request.uri.path, MiuCamProtocolV2.pairConfirm);
 
       final body = await utf8.decoder.bind(request).join();
       final json = jsonDecode(body);
@@ -34,7 +34,7 @@ void main() {
     });
 
     final payload = PairingPayload(
-      schemaVersion: MimiCamProtocolV2.schemaVersion,
+      schemaVersion: MiuCamProtocolV2.schemaVersion,
       host: InternetAddress.loopbackIPv4.address,
       port: server.port,
       deviceId: 'server_1',
@@ -76,7 +76,7 @@ void main() {
     });
 
     final payload = PairingPayload(
-      schemaVersion: MimiCamProtocolV2.schemaVersion,
+      schemaVersion: MiuCamProtocolV2.schemaVersion,
       host: InternetAddress.loopbackIPv4.address,
       port: server.port,
       deviceId: 'server_1',
@@ -108,7 +108,7 @@ void main() {
       await request.response.close();
     });
     final payload = PairingPayload(
-      schemaVersion: MimiCamProtocolV2.schemaVersion,
+      schemaVersion: MiuCamProtocolV2.schemaVersion,
       host: InternetAddress.loopbackIPv4.address,
       port: server.port,
       deviceId: 'server_1',

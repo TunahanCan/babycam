@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/services/network_address_provider.dart';
+import 'package:miucam/services/network_address_provider.dart';
 
 void main() {
   test('global IPv6 interface candidates produce distinct /64 prefixes', () {

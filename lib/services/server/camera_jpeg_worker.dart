@@ -88,7 +88,7 @@ class _TransferableCameraPlane {
 
 /// A single persistent isolate for CPU-heavy JPEG conversion.
 ///
-/// MimiCamServer owns the capacity-one latest-frame mailbox. Consequently this
+/// MiuCamServer owns the capacity-one latest-frame mailbox. Consequently this
 /// worker receives at most one encode at a time and does not build another
 /// unbounded queue.
 class CameraJpegWorker {
@@ -168,7 +168,7 @@ class CameraJpegWorker {
       _isolate = await Isolate.spawn<SendPort>(
         _cameraJpegWorkerMain,
         responses.sendPort,
-        debugName: 'mimicam-jpeg-worker',
+        debugName: 'miucam-jpeg-worker',
         onError: responses.sendPort,
         onExit: responses.sendPort,
         errorsAreFatal: true,

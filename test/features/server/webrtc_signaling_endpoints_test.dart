@@ -3,13 +3,13 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/core/protocol/webrtc_signaling.dart';
-import 'package:mimicam/features/server/media/webrtc/webrtc_server_gateway.dart';
-import 'package:mimicam/features/server/pairing/pairing_token_service.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/configuration_service.dart';
-import 'package:mimicam/services/mimicam_server.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/core/protocol/webrtc_signaling.dart';
+import 'package:miucam/features/server/media/webrtc/webrtc_server_gateway.dart';
+import 'package:miucam/features/server/pairing/pairing_token_service.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/configuration_service.dart';
+import 'package:miucam/services/miucam_server.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -21,7 +21,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     final tokens = PairingTokenService();
     final gateway = _FakeWebRtcServerGateway();
-    final server = MimiCamServer(
+    final server = MiuCamServer(
       config: ConfigurationService(prefs),
       strings: AppStrings(const Locale('tr')),
       onLog: (_) {},
@@ -42,7 +42,7 @@ void main() {
     final started = await _post(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       {
         'video': true,
         'audio': true,
@@ -55,7 +55,7 @@ void main() {
     final answer = await _post(
       client,
       base.port,
-      MimiCamProtocolV2.webRtcOffer,
+      MiuCamProtocolV2.webRtcOffer,
       {
         'offer': {'type': 'offer', 'sdp': 'v=0\r\n'},
         'video': true,
@@ -67,7 +67,7 @@ void main() {
     await _post(
       client,
       base.port,
-      MimiCamProtocolV2.webRtcIce,
+      MiuCamProtocolV2.webRtcIce,
       {
         'candidate': {
           'candidate': 'candidate:1 1 UDP 1 192.168.1.2 5000 typ host',
@@ -81,14 +81,14 @@ void main() {
     final ice = await _get(
       client,
       base.port,
-      MimiCamProtocolV2.webRtcIce,
+      MiuCamProtocolV2.webRtcIce,
       bearer: trusted.token,
       query: {'streamToken': streamToken, 'peerId': 'peer-1'},
     );
     await _post(
       client,
       base.port,
-      MimiCamProtocolV2.webRtcClose,
+      MiuCamProtocolV2.webRtcClose,
       const {},
       bearer: trusted.token,
       query: {'streamToken': streamToken, 'peerId': 'peer-1'},
@@ -113,7 +113,7 @@ void main() {
       now: () => now,
       streamTokenTtl: const Duration(milliseconds: 10),
     );
-    final server = MimiCamServer(
+    final server = MiuCamServer(
       config: ConfigurationService(prefs),
       strings: AppStrings(const Locale('tr')),
       onLog: (_) {},
@@ -134,7 +134,7 @@ void main() {
     final started = await _post(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       const {
         'video': true,
         'audio': true,
@@ -145,7 +145,7 @@ void main() {
     await _post(
       client,
       base.port,
-      MimiCamProtocolV2.webRtcOffer,
+      MiuCamProtocolV2.webRtcOffer,
       const {
         'offer': {'type': 'offer', 'sdp': 'v=0\r\n'},
         'video': true,
@@ -159,7 +159,7 @@ void main() {
     final status = await _get(
       client,
       base.port,
-      MimiCamProtocolV2.status,
+      MiuCamProtocolV2.status,
       bearer: trusted.token,
     );
 

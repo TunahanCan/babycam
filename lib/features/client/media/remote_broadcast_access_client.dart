@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../../../core/protocol/mimicam_protocol.dart';
+import '../../../core/protocol/miucam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
 import '../../../services/monetization/broadcast_access_service.dart';
@@ -22,7 +22,7 @@ class RemoteBroadcastAccessClient {
     try {
       final request = await client
           .getUrl(
-            ServerEndpointBuilder(session).http(MimiCamProtocolV2.status),
+            ServerEndpointBuilder(session).http(MiuCamProtocolV2.status),
           )
           .timeout(timeout);
       request.headers.set(

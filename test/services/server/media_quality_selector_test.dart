@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/media/adaptive_media_profile.dart';
-import 'package:mimicam/core/media/client_quality_tracker.dart';
-import 'package:mimicam/services/server/media_quality_selector.dart';
+import 'package:miucam/core/media/adaptive_media_profile.dart';
+import 'package:miucam/core/media/client_quality_tracker.dart';
+import 'package:miucam/services/server/media_quality_selector.dart';
 
 void main() {
   test('tek modern client iyi ağda 720p profil seçer', () {

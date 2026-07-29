@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../core/theme/mimicam_theme.dart';
+import '../core/theme/miucam_theme.dart';
 import '../features/client/client_app_shell.dart';
 import '../features/client/client_composition_root.dart';
 import '../features/client/client_runtime.dart';
@@ -106,7 +106,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
         FlutterErrorDetails(
           exception: error,
           stack: stackTrace,
-          library: 'MimiCam bootstrap',
+          library: 'MiuCam bootstrap',
           context: ErrorDescription('while loading application state'),
         ),
       );
@@ -226,7 +226,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
         FlutterErrorDetails(
           exception: switchError,
           stack: switchStackTrace,
-          library: 'MimiCam bootstrap',
+          library: 'MiuCam bootstrap',
           context: ErrorDescription('while switching application roles'),
         ),
       );
@@ -275,7 +275,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
           strings: strings,
         ),
       null => Theme(
-          data: MimiCamTheme.neutralTheme(),
+          data: MiuCamTheme.neutralTheme(),
           child: _buildRoleSelection(strings),
         ),
     };
@@ -376,7 +376,7 @@ class _BootstrapError extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     return Theme(
-      data: MimiCamTheme.neutralTheme(),
+      data: MiuCamTheme.neutralTheme(),
       child: Scaffold(
         body: SafeArea(
           child: Center(
@@ -424,7 +424,7 @@ class _BootstrapProgress extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Theme(
-      data: MimiCamTheme.neutralTheme(),
+      data: MiuCamTheme.neutralTheme(),
       child: Scaffold(
         body: Center(
           child: Column(

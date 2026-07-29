@@ -1,4 +1,4 @@
-# MimiCam Low-Latency Media Algorithms
+# MiuCam Low-Latency Media Algorithms
 
 Bu not, mevcut yerel HTTP/MJPEG/WAV protokolünü değiştirmeden uygulanan
 düşük-gecikme kararlarını ve dayandıkları birincil kaynakları kaydeder.
@@ -88,7 +88,7 @@ Bu pilotun codec/transport ilkeleri için birincil kaynaklar:
 
 ## Resource governor ve ölçüm politikası
 
-- Native `mimicam/device_resources` thermal, low-power, charging ve battery
+- Native `miucam/device_resources` thermal, low-power, charging ve battery
   snapshot üretir; 10 saniye cache ve tek in-flight future aynı platform
   sorgusunu çoğaltmaz.
 - `MediaResourceGovernor` bu snapshot'ı network tier, transport backpressure,

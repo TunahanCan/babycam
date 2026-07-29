@@ -1,4 +1,4 @@
-# MimiCam physical-device release matrix
+# MiuCam physical-device release matrix
 
 This matrix validates the media pipeline on real hardware. Emulator/simulator
 results do not qualify a release because camera, microphone, thermal throttling,
@@ -24,7 +24,7 @@ contact a device nor mutate application/network state:
 dart run tool/device_matrix_runner.dart --self-test
 dart run tool/device_matrix_runner.dart \
   --dry-run \
-  --output /tmp/mimicam-device-matrix.json
+  --output /tmp/miucam-device-matrix.json
 ```
 
 If Flutter is not on `PATH`, set `FLUTTER_BIN` to the SDK's `bin/flutter` or
@@ -63,7 +63,7 @@ dart run tool/device_matrix_runner.dart \
 `--launch` runs `flutter run --no-resident` first for the server and then the
 client. Select/reset the intended room/client role on each device before the
 case. For legacy, use `--media-lane legacy`; for the pilot the runner adds
-`--dart-define=MIMICAM_WEBRTC_PILOT=true`.
+`--dart-define=MIUCAM_WEBRTC_PILOT=true`.
 
 After pairing, `--probe` captures the authenticated production `/status`
 snapshot. Put the token only in the environment and clear it after the command.
@@ -71,7 +71,7 @@ It does not synthesize media or alerts; validate microphone, `/audio` playback
 and notifications through the physical scenarios below.
 
 ```sh
-export MIMICAM_MATRIX_TOKEN='trusted-token-from-this-test-pair'
+export MIUCAM_MATRIX_TOKEN='trusted-token-from-this-test-pair'
 dart run tool/device_matrix_runner.dart \
   --case NET-IPv4-01 \
   --server-device SERVER_ID \
@@ -79,7 +79,7 @@ dart run tool/device_matrix_runner.dart \
   --base-url http://192.168.1.42:8080 \
   --probe \
   --output artifacts/device-matrix/ipv4-probe.json
-unset MIMICAM_MATRIX_TOKEN
+unset MIUCAM_MATRIX_TOKEN
 ```
 
 Record operator checks, numeric gates and evidence without hand-editing JSON:
@@ -128,7 +128,7 @@ Run two media lanes:
 | Media lane | Configuration | Scope |
 | --- | --- | --- |
 | legacy | default build | MJPEG video + PCM16LE/WAV audio |
-| WebRTC pilot | `MIMICAM_WEBRTC_PILOT=true` | one peer, H.264 + Opus with fallback verification |
+| WebRTC pilot | `MIUCAM_WEBRTC_PILOT=true` | one peer, H.264 + Opus with fallback verification |
 
 ## Network scenarios
 

@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/app/app_role.dart';
-import 'package:mimicam/app/role_permission_coordinator.dart';
-import 'package:mimicam/core/media/camera_permission_gateway.dart';
-import 'package:mimicam/core/network/local_network_permission_gateway.dart';
+import 'package:miucam/app/app_role.dart';
+import 'package:miucam/app/role_permission_coordinator.dart';
+import 'package:miucam/core/media/camera_permission_gateway.dart';
+import 'package:miucam/core/network/local_network_permission_gateway.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 void main() {

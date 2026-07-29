@@ -9,10 +9,10 @@ import '../../core/protocol/alert_event_dto.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../l10n/app_strings.dart';
 import '../../services/client_preferences_service.dart';
-import '../../services/discovery/mimicam_service_discovery.dart';
+import '../../services/discovery/miucam_service_discovery.dart';
 import '../../services/notification_service.dart';
-import '../shared/presentation/mimicam_design_tokens.dart';
-import '../shared/presentation/mimicam_shells.dart';
+import '../shared/presentation/miucam_design_tokens.dart';
+import '../shared/presentation/miucam_shells.dart';
 import 'client_runtime.dart';
 import 'media/watch_screen.dart';
 import 'pairing/client_pairing_flow.dart';
@@ -115,8 +115,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: MimiCamGradientShell(
-        variant: MimiCamShellVariant.client,
+      body: MiuCamGradientShell(
+        variant: MiuCamShellVariant.client,
         child: SafeArea(
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 220),
@@ -133,10 +133,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
           ),
         ),
       ),
-      bottomNavigationBar: MimiCamBottomNav(
+      bottomNavigationBar: MiuCamBottomNav(
         items: _clientNavItems(context),
         currentIndex: _tab.index,
-        activeColor: MimiCamDesignTokens.pink,
+        activeColor: MiuCamDesignTokens.pink,
         onTap: (index) => setState(
           () => _tab = _ClientHomeTab.values[index],
         ),
@@ -166,7 +166,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
               _RoomCard(
                 title: state.session!.payload.deviceName,
                 status: strings.ui('pairedWithQr'),
-                tone: MimiCamDesignTokens.mint,
+                tone: MiuCamDesignTokens.mint,
                 alertsActive: state.alertsActive,
                 alertsConnected: widget.runtime.alertTransportConnected,
                 systemNotificationsEnabled:
@@ -283,7 +283,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
 
   Future<void> _connectDiscoveredService(
     BuildContext context,
-    MimiCamDiscoveredService service,
+    MiuCamDiscoveredService service,
   ) async {
     final strings = AppStrings.of(context);
     try {
@@ -362,7 +362,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
           padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
           children: [
             Text(strings.ui('chooseLanguage'),
-                style: MimiCamDesignTokens.cardTitle),
+                style: MiuCamDesignTokens.cardTitle),
             const SizedBox(height: 8),
             ListTile(
               title: Text(strings.ui('systemLanguage')),

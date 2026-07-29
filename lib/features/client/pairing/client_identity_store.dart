@@ -8,7 +8,7 @@ class ClientIdentityStore {
   })  : _secureTokens = secureTokens ?? const FlutterSecureTokenStore(),
         _tokenGenerator = tokenGenerator ?? SecureRandomTokenGenerator();
 
-  static const _clientIdKey = 'mimicam_client_id';
+  static const _clientIdKey = 'miucam_client_id';
 
   final SecureTokenStore _secureTokens;
   final SecureRandomTokenGenerator _tokenGenerator;

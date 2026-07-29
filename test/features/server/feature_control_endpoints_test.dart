@@ -4,15 +4,15 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/features/server/pairing/pairing_token_service.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/configuration_service.dart';
-import 'package:mimicam/services/mimicam_server.dart';
-import 'package:mimicam/services/monetization/broadcast_access_service.dart';
-import 'package:mimicam/services/platform/pcm_audio_output.dart';
-import 'package:mimicam/services/server/baby_monitor_feature_controller.dart';
-import 'package:mimicam/services/server/room_audio_coordinator.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/features/server/pairing/pairing_token_service.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/configuration_service.dart';
+import 'package:miucam/services/miucam_server.dart';
+import 'package:miucam/services/monetization/broadcast_access_service.dart';
+import 'package:miucam/services/platform/pcm_audio_output.dart';
+import 'package:miucam/services/server/baby_monitor_feature_controller.dart';
+import 'package:miucam/services/server/room_audio_coordinator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -32,7 +32,7 @@ void main() {
     final start = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       {'clientId': trusted.clientId},
       bearerToken: trusted.token,
     );
@@ -42,7 +42,7 @@ void main() {
       await _getStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.comfortState,
+        MiuCamProtocolV2.comfortState,
       ),
       HttpStatus.unauthorized,
     );
@@ -50,7 +50,7 @@ void main() {
       (await _postJson(
         client,
         base.port,
-        MimiCamProtocolV2.comfortCommand,
+        MiuCamProtocolV2.comfortCommand,
         {'action': 'play'},
         query: {'streamToken': streamToken},
       ))
@@ -61,7 +61,7 @@ void main() {
       await _getStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.comfortState,
+        MiuCamProtocolV2.comfortState,
         bearerToken: trusted.token,
       ),
       HttpStatus.ok,
@@ -83,14 +83,14 @@ void main() {
     final comfort = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.comfortCommand,
+      MiuCamProtocolV2.comfortCommand,
       {'action': 'play', 'trackId': 'rain', 'volume': 0.7},
       bearerToken: trusted.token,
     );
     final nightLight = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.nightLightCommand,
+      MiuCamProtocolV2.nightLightCommand,
       {'action': 'on', 'mode': 'screenGlow', 'brightness': 0.4},
       bearerToken: trusted.token,
     );
@@ -102,7 +102,7 @@ void main() {
     final shushing = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.comfortCommand,
+      MiuCamProtocolV2.comfortCommand,
       {'action': 'play', 'trackId': 'shushing', 'volume': 0.35},
       bearerToken: trusted.token,
     );
@@ -133,14 +133,14 @@ void main() {
     final start = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.talkStart,
+      MiuCamProtocolV2.talkStart,
       const {},
       bearerToken: anne.token,
     );
     final busy = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.talkStart,
+      MiuCamProtocolV2.talkStart,
       const {},
       bearerToken: baba.token,
     );
@@ -150,21 +150,21 @@ void main() {
     final rejected = await _postBytes(
       client,
       base.port,
-      MimiCamProtocolV2.talkAudio,
+      MiuCamProtocolV2.talkAudio,
       Uint8List.fromList([1, 2, 3]),
       query: {'streamToken': 'not-a-talk-token'},
     );
     final accepted = await _postBytes(
       client,
       base.port,
-      MimiCamProtocolV2.talkAudio,
+      MiuCamProtocolV2.talkAudio,
       Uint8List.fromList([1, 2, 3, 4]),
       query: {'talkToken': talkToken},
     );
     final stop = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.talkStop,
+      MiuCamProtocolV2.talkStop,
       {'talkToken': talkToken},
       bearerToken: anne.token,
     );
@@ -199,7 +199,7 @@ void main() {
     final start = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       {'clientId': trusted.clientId},
       bearerToken: trusted.token,
     );
@@ -239,7 +239,7 @@ void main() {
     final start = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       {'clientId': trusted.clientId},
       bearerToken: trusted.token,
     );
@@ -254,7 +254,7 @@ void main() {
   });
 }
 
-Future<MimiCamServer> _testServer(
+Future<MiuCamServer> _testServer(
   PairingTokenService tokenService, {
   Map<String, Object> initialPreferences = const {},
   bool enableBroadcastAccess = false,
@@ -262,7 +262,7 @@ Future<MimiCamServer> _testServer(
 }) async {
   SharedPreferences.setMockInitialValues(initialPreferences);
   final preferences = await SharedPreferences.getInstance();
-  return MimiCamServer(
+  return MiuCamServer(
     config: ConfigurationService(preferences),
     strings: AppStrings(const Locale('tr')),
     onLog: (_) {},

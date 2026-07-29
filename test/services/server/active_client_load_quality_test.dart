@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/media/adaptive_media_profile.dart';
-import 'package:mimicam/core/media/client_quality_tracker.dart';
-import 'package:mimicam/features/server/pairing/pairing_token_service.dart';
-import 'package:mimicam/services/server/active_client_registry.dart';
-import 'package:mimicam/services/server/media_quality_selector.dart';
+import 'package:miucam/core/media/adaptive_media_profile.dart';
+import 'package:miucam/core/media/client_quality_tracker.dart';
+import 'package:miucam/features/server/pairing/pairing_token_service.dart';
+import 'package:miucam/services/server/active_client_registry.dart';
+import 'package:miucam/services/server/media_quality_selector.dart';
 
 void main() {
   test('1, 2-3 ve 4-5 active client kalite cap uygular', () {

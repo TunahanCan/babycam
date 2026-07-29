@@ -14,7 +14,7 @@ class MethodChannelLocalNetworkPermissionGateway
   })  : _channel = channel,
         _isIOS = isIOS;
 
-  static const _channelName = 'mimicam/local_network_permission';
+  static const _channelName = 'miucam/local_network_permission';
 
   final MethodChannel _channel;
   final bool Function() _isIOS;

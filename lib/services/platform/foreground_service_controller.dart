@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 class ForegroundServiceController {
   const ForegroundServiceController._();
 
-  static const _channel = MethodChannel('mimicam/background_service');
+  static const _channel = MethodChannel('miucam/background_service');
 
   static Future<void> startServer({
     bool camera = false,

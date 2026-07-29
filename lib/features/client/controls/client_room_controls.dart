@@ -5,7 +5,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import '../../../core/protocol/device_feature_models.dart';
-import '../../../core/protocol/mimicam_protocol.dart';
+import '../../../core/protocol/miucam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
 import '../../server/media/microphone_capture_service.dart';
@@ -66,7 +66,7 @@ class ClientRoomControls {
   Future<ComfortAudioState?> refreshComfort(PairingSession session) async {
     final json = await _requestJson(
       session,
-      MimiCamProtocolV2.comfortState,
+      MiuCamProtocolV2.comfortState,
       method: 'GET',
     );
     final comfort = ComfortAudioState.fromJson(json?['state']);
@@ -88,7 +88,7 @@ class ClientRoomControls {
   }) async {
     final json = await _requestJson(
       session,
-      MimiCamProtocolV2.comfortCommand,
+      MiuCamProtocolV2.comfortCommand,
       method: 'POST',
       body: {
         'action': action,
@@ -125,7 +125,7 @@ class ClientRoomControls {
     try {
       final start = await _requestJson(
         session,
-        MimiCamProtocolV2.talkStart,
+        MiuCamProtocolV2.talkStart,
         method: 'POST',
         body: const {
           'sampleRate': 16000,
@@ -158,7 +158,7 @@ class ClientRoomControls {
       final client = _clientFactory()..connectionTimeout = timeout;
       _talkClient = client;
       final uri = ServerEndpointBuilder(session).http(
-        MimiCamProtocolV2.talkAudio,
+        MiuCamProtocolV2.talkAudio,
         query: {'talkToken': token},
       );
       final request = await client.postUrl(uri).timeout(timeout);
@@ -210,7 +210,7 @@ class ClientRoomControls {
       // or malformed after room output already switched to talk mode.
       await _requestJson(
         session,
-        MimiCamProtocolV2.talkStop,
+        MiuCamProtocolV2.talkStop,
         method: 'POST',
         body: const {},
       );
@@ -283,7 +283,7 @@ class ClientRoomControls {
       await attempt(() async {
         await _requestJson(
           session,
-          MimiCamProtocolV2.talkStop,
+          MiuCamProtocolV2.talkStop,
           method: 'POST',
           body: {'talkToken': token},
         );
@@ -368,7 +368,7 @@ class ClientRoomControls {
       try {
         await _requestJson(
           session,
-          MimiCamProtocolV2.talkStop,
+          MiuCamProtocolV2.talkStop,
           method: 'POST',
           body: {'talkToken': token},
         );

@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/features/server/media/media_runtime_controller.dart';
-import 'package:mimicam/features/server/media/webrtc/webrtc_server_gateway.dart';
-import 'package:mimicam/features/server/server_runtime.dart';
-import 'package:mimicam/services/monetization/broadcast_access_service.dart';
+import 'package:miucam/features/server/media/media_runtime_controller.dart';
+import 'package:miucam/features/server/media/webrtc/webrtc_server_gateway.dart';
+import 'package:miucam/features/server/server_runtime.dart';
+import 'package:miucam/services/monetization/broadcast_access_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -75,7 +75,7 @@ void main() {
         onStart: () async => startCount++, onStop: () async => stopCount++);
     final runtime = ServerRuntime(
         mediaRuntime: media,
-        onStartPairing: () async => 'mimicam://pair?payload=x');
+        onStartPairing: () async => 'miucam://pair?payload=x');
 
     await runtime.startPairingMode();
     expect(media.isActive, isFalse);
@@ -126,7 +126,7 @@ void main() {
     expect(runtime.currentState.phase, ServerRuntimePhase.mediaActive);
     expect(runtime.currentState.cameraActive, isTrue);
 
-    pairingResult.complete('mimicam://pair?payload=reopened');
+    pairingResult.complete('miucam://pair?payload=reopened');
     await pairing;
 
     expect(videoStarts, 2);
@@ -135,7 +135,7 @@ void main() {
     expect(runtime.currentState.cameraActive, isTrue);
     expect(
       runtime.currentState.qrPayload,
-      'mimicam://pair?payload=reopened',
+      'miucam://pair?payload=reopened',
     );
   });
 
@@ -666,7 +666,7 @@ void main() {
     await pairingStarted.future;
     final dispose = runtime.dispose();
 
-    pairingResult.complete('mimicam://pair?payload=x');
+    pairingResult.complete('miucam://pair?payload=x');
     await start;
     await dispose;
 

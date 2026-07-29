@@ -15,12 +15,12 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | Runtime graph isolation | Rebuilt | `ServerCompositionRoot`, `ClientCompositionRoot` |
 | Permission policy | Rebuilt | `RolePermissionCoordinator` |
 | Configuration thresholds | Rebuilt | `ConfigurationService` |
-| Protocol constants | Rebuilt | `MimiCamProtocolV2` |
+| Protocol constants | Rebuilt | `MiuCamProtocolV2` |
 | Local address selection | Rebuilt | `NetworkAddressProvider`, IPv4/IPv6 URI-safe selection |
-| DNS-SD/NSD discovery | New | `_mimicam._tcp`, `MimiCamServiceAdvertiser`, `MimiCamServiceBrowser` |
+| DNS-SD/NSD discovery | New | `_miucam._tcp`, `MiuCamServiceAdvertiser`, `MiuCamServiceBrowser` |
 | Dual-stack server bind | New | IPv6 `v6Only:false` attempt with IPv4 fallback |
 | Local network guard | New | `LocalNetworkGuard` |
-| Local HTTP server | Rebuilt | `MimiCamServer` |
+| Local HTTP server | Rebuilt | `MiuCamServer` |
 | Route auth guard | New | `RequestAuthGuard` |
 | Pairing nonce service | New | `PairingTokenService` |
 | QR payload build | Rebuilt | `ServerQrPayloadBuilder` |
@@ -40,7 +40,7 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | Native Android audio output | Rebuilt | `AudioTrack` in `android/app/src/main/.../MainActivity.kt` |
 | Native iOS audio output | Rebuilt | `AVAudioEngine` in `ios/Runner/AppDelegate.swift` |
 | Native audio interruptions | New | Android audio focus/noisy/device callbacks; iOS interruption/route/reset observers |
-| Android background ownership | Rebuilt | Cached Flutter engine owned by non-sticky `MimiCamForegroundService` while demand exists |
+| Android background ownership | Rebuilt | Cached Flutter engine owned by non-sticky `MiuCamForegroundService` while demand exists |
 | iOS background contract | New | Controlled media pause on background and retained-demand recovery on foreground |
 | Camera image analysis | Rebuilt | `analysis/video/`, `MediaAnalysisCoordinator` |
 | Motion scoring | Rebuilt | `MotionAnalyzerV2` |
@@ -71,7 +71,7 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | Server full screen preview | New | `ServerHomeScreen` preview controls |
 | Paid unlock | Hardened | Fail-closed local store-envelope verification, SHA-256 evidence fingerprint, `in_app_purchase` |
 | Localization | Expanded | `AppStrings`, `app_ui_text_catalog.dart`, extras |
-| UI theme tokens | Rebuilt | `MimiCamDesignTokens`, shells, role presentation |
+| UI theme tokens | Rebuilt | `MiuCamDesignTokens`, shells, role presentation |
 
 ## Removed or Out of Scope
 
@@ -99,7 +99,7 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | --- | --- |
 | `ClientRuntime` | Owns client session, watch, alerts, token renewal, quality, and paid access state |
 | `ServerRuntime` | Owns server UI state without mixing widget code into protocol internals |
-| `MimiCamServer` | HTTP composition boundary; diagnostics and room/WebRTC/resource work delegate to focused services |
+| `MiuCamServer` | HTTP composition boundary; diagnostics and room/WebRTC/resource work delegate to focused services |
 | `MediaRuntimeController` | Serializes independent camera/microphone demand and platform pause/recovery |
 | `PlatformRuntimeContract` | Publishes native lifecycle/audio/engine ownership events and snapshots |
 | `MediaResourceGovernor` | Combines thermal, power, codec and transport pressure |
@@ -107,7 +107,7 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | `BabyMonitorFeatureController` | Facade for comfort, night-light and talk routes |
 | `RoomAudioCoordinator` | Gives talk priority over comfort on one native PCM sink |
 | `FlutterWebRtcServerGateway` | Owns pilot peer, local tracks and H.264/Opus preferences |
-| `MimiCamServiceAdvertiser` / `MimiCamServiceBrowser` | Own DNS-SD advertise/browse lifecycle |
+| `MiuCamServiceAdvertiser` / `MiuCamServiceBrowser` | Own DNS-SD advertise/browse lifecycle |
 | `ActiveClientRegistry` | Keeps trusted clients, watch sessions, stream sockets, and quality reports aligned |
 | `PairingSessionStore` | Separates secure tokens from non-secret metadata |
 | `ClientStreamHealthState` | Builds health reports from real streams |
@@ -133,7 +133,7 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | Paid unlock | Google Play envelope validation before local entitlement | App Store envelope validation before local entitlement |
 | Foreground/server presence | Existing Flutter engine owned by non-sticky foreground service | Camera pauses in background and retained demand recovers in foreground |
 | Local network permission | Android network stack | `NSLocalNetworkUsageDescription` and Bonjour config |
-| Discovery | Android NSD through `nsd` | Bonjour through `nsd`, `_mimicam._tcp` declared |
+| Discovery | Android NSD through `nsd` | Bonjour through `nsd`, `_miucam._tcp` declared |
 | Thermal/power snapshot | `PowerManager` + battery state | `ProcessInfo` + `UIDevice` battery state |
 
 ## Tests That Protect the Port
@@ -157,7 +157,7 @@ runtime details, read `README.md`, `ARCHITECT.md`, `lib/`, and `test/`.
 | Resource governor | `test/services/server/media_resource_governor_test.dart` |
 | Session telemetry | `test/core/media/media_session_telemetry_test.dart` |
 | WebRTC pilot/fallback | `test/features/server/webrtc_signaling_endpoints_test.dart`, `test/features/client/stream_session_controller_test.dart` |
-| DNS-SD/IPv6 discovery model | `test/services/discovery/mimicam_service_discovery_test.dart` |
+| DNS-SD/IPv6 discovery model | `test/services/discovery/miucam_service_discovery_test.dart` |
 | Feature controls | `test/features/server/feature_control_endpoints_test.dart` |
 | Comfort/talk native ownership | `test/services/server/room_audio_coordinator_test.dart`, `test/features/client/client_room_controls_test.dart` |
 | Paid access | `test/services/monetization/broadcast_access_service_test.dart`, `test/features/client/client_runtime_lifecycle_test.dart` |

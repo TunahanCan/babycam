@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_role.dart';
-import '../../core/theme/mimicam_theme.dart';
+import '../../core/theme/miucam_theme.dart';
 import '../../services/configuration_service.dart';
 import 'server_home_screen.dart';
 import 'server_runtime.dart';
@@ -26,7 +26,7 @@ class ServerAppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Theme(
-      data: MimiCamTheme.serverTheme(),
+      data: MiuCamTheme.serverTheme(),
       child: ServerHomeScreen(
         runtime: runtime,
         config: config,

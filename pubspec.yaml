@@ -1,4 +1,4 @@
-name: mimicam
+name: miucam
 version: 1.0.0+1
 publish_to: 'none'
 description: LAN tabanli Flutter bebek kamera server/client uygulamasi.
@@ -36,7 +36,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/branding/mimicam_launcher_icon.png
-    - assets/branding/mimicam_bear_mascot.png
-    - assets/branding/mimicam_wordmark.png
-    - assets/branding/mimicam_wordmark_v2.png
+    - assets/branding/miucam_launcher_icon.png
+    - assets/branding/miucam_bear_mascot.png
+    - assets/branding/miucam_wordmark.png
+    - assets/branding/miucam_wordmark_v2.png

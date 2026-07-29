@@ -11,7 +11,7 @@
   const menuLabel = (isOpen) => {
     const key = isOpen ? "menu.close" : "menu.open";
     const fallback = isOpen ? "Menüyü kapat" : "Menüyü aç";
-    return window.MimiCamI18n?.t(key) || fallback;
+    return window.MiuCamI18n?.t(key) || fallback;
   };
 
   const setMenuState = (isOpen, { moveFocus = false } = {}) => {
@@ -78,7 +78,7 @@
 
   desktopNavigation.addEventListener?.("change", closeDesktopMenu);
 
-  window.addEventListener("mimicam:languagechange", () => {
+  window.addEventListener("miucam:languagechange", () => {
     setMenuState(menuToggle?.getAttribute("aria-expanded") === "true");
   });
 

@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:mimicam/features/client/media/client_stream_health_state.dart';
-import 'package:mimicam/features/client/media/webrtc/webrtc_client_connector.dart';
-import 'package:mimicam/features/client/media/webrtc/webrtc_client_media_supervisor.dart';
+import 'package:miucam/features/client/media/client_stream_health_state.dart';
+import 'package:miucam/features/client/media/webrtc/webrtc_client_connector.dart';
+import 'package:miucam/features/client/media/webrtc/webrtc_client_media_supervisor.dart';
 
 void main() {
   test('connected WebRTC stats feed frame/audio liveness', () async {

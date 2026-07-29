@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/media/remote_broadcast_access_client.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/features/client/media/remote_broadcast_access_client.dart';
 
 void main() {
   test('reads authoritative broadcast access with the trusted bearer',
@@ -15,7 +15,7 @@ void main() {
     addTearDown(server.close);
     final handled = Completer<void>();
     server.listen((request) async {
-      expect(request.uri.path, MimiCamProtocolV2.status);
+      expect(request.uri.path, MiuCamProtocolV2.status);
       expect(
         request.headers.value(HttpHeaders.authorizationHeader),
         'Bearer trusted-token',
@@ -29,7 +29,7 @@ void main() {
           'usedMs': 75,
           'remainingMs': 25,
           'priceLabel': r'$9.99',
-          'productId': 'mimicam.broadcast.lifetime',
+          'productId': 'miucam.broadcast.lifetime',
         },
       }));
       await request.response.close();

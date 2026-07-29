@@ -1,11 +1,11 @@
-class MimiCamFeatureFlags {
-  const MimiCamFeatureFlags._();
+class MiuCamFeatureFlags {
+  const MiuCamFeatureFlags._();
 
   /// Paid broadcast/watch access is intentionally hidden in normal test builds.
   /// Enable only for explicit store/paywall verification builds with:
-  /// `--dart-define=MIMICAM_BROADCAST_PAYWALL_ENABLED=true`.
+  /// `--dart-define=MIUCAM_BROADCAST_PAYWALL_ENABLED=true`.
   static const broadcastPaywallEnabled = bool.fromEnvironment(
-    'MIMICAM_BROADCAST_PAYWALL_ENABLED',
+    'MIUCAM_BROADCAST_PAYWALL_ENABLED',
     defaultValue: false,
   );
 }

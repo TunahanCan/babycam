@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/features/server/pairing/pairing_token_service.dart';
+import 'package:miucam/features/server/pairing/pairing_token_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

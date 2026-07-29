@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/features/server/media/media_resource_counter.dart';
+import 'package:miucam/features/server/media/media_resource_counter.dart';
 
 void main() {
   test('server local preview yalnız kamera demandi üretir', () {

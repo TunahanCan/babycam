@@ -1,5 +1,5 @@
 # Copy this file to android/key.properties. Never commit the real file or key.
-storeFile=/absolute/path/to/mimicam-upload-key.jks
+storeFile=/absolute/path/to/miucam-upload-key.jks
 storePassword=replace-me
-keyAlias=mimicam-upload
+keyAlias=miucam-upload
 keyPassword=replace-me

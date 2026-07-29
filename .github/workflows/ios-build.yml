@@ -82,7 +82,7 @@ jobs:
       - name: Upload release bundle
         uses: actions/upload-artifact@v4
         with:
-          name: mimicam-android-release-unsigned
+          name: miucam-android-release-unsigned
           path: build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 7

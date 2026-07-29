@@ -23,7 +23,7 @@ measured 32.181-33.830 ms while the pre-optimization path measured 43.753 ms.
 Override the gate for a faster device class when needed:
 
 ```bash
-MIMICAM_FRAME_P95_BUDGET_MS=24 \
+MIUCAM_FRAME_P95_BUDGET_MS=24 \
   tool/benchmarks/run_ui_frame_benchmark.sh DEVICE_ID
 ```
 

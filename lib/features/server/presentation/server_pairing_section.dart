@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../l10n/app_strings.dart';
-import '../../shared/presentation/mimicam_design_tokens.dart';
-import '../../shared/presentation/mimicam_shells.dart';
+import '../../shared/presentation/miucam_design_tokens.dart';
+import '../../shared/presentation/miucam_shells.dart';
 import '../server_runtime.dart';
 import 'server_home_components.dart';
 
@@ -79,7 +79,7 @@ class _ConnectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    return MimiCamCard(
+    return MiuCamCard(
       dark: true,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -102,7 +102,7 @@ class _ConnectionCard extends StatelessWidget {
               Text(
                 strings.ui('secureQrPairing'),
                 style: const TextStyle(
-                  color: MimiCamDesignTokens.serverText,
+                  color: MiuCamDesignTokens.serverText,
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
                 ),
@@ -111,7 +111,7 @@ class _ConnectionCard extends StatelessWidget {
               Text(
                 strings.ui('parentQrScanText'),
                 style: const TextStyle(
-                  color: MimiCamDesignTokens.serverTextMuted,
+                  color: MiuCamDesignTokens.serverTextMuted,
                   fontSize: 14.5,
                 ),
               ),
@@ -126,7 +126,7 @@ class _ConnectionCard extends StatelessWidget {
                 Text(
                   strings.ui('keepCodeVisible'),
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.serverTextMuted,
+                    color: MiuCamDesignTokens.serverTextMuted,
                     fontSize: 14.5,
                   ),
                 ),
@@ -184,9 +184,9 @@ class _QrPlaceholder extends StatelessWidget {
       width: size + _QrPanel.outerPadding * 2,
       height: size + _QrPanel.outerPadding * 2,
       decoration: BoxDecoration(
-        color: MimiCamDesignTokens.serverSurfaceRaised,
+        color: MiuCamDesignTokens.serverSurfaceRaised,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: MimiCamDesignTokens.serverOutline),
+        border: Border.all(color: MiuCamDesignTokens.serverOutline),
       ),
       child: Center(
         child: Padding(
@@ -202,7 +202,7 @@ class _QrPlaceholder extends StatelessWidget {
               else
                 const Icon(
                   Icons.qr_code_2_rounded,
-                  color: MimiCamDesignTokens.serverError,
+                  color: MiuCamDesignTokens.serverError,
                   size: 42,
                 ),
               const SizedBox(height: 14),
@@ -212,7 +212,7 @@ class _QrPlaceholder extends StatelessWidget {
                 ),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: MimiCamDesignTokens.serverText,
+                  color: MiuCamDesignTokens.serverText,
                   fontSize: 14,
                   height: 1.3,
                   fontWeight: FontWeight.w800,
@@ -237,7 +237,7 @@ class _PayloadBox extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: MimiCamDesignTokens.serverIce,
+        color: MiuCamDesignTokens.serverIce,
         borderRadius: BorderRadius.circular(14),
       ),
       child: SingleChildScrollView(
@@ -246,7 +246,7 @@ class _PayloadBox extends StatelessWidget {
           payload,
           maxLines: 1,
           style: const TextStyle(
-            color: MimiCamDesignTokens.serverText,
+            color: MiuCamDesignTokens.serverText,
             fontSize: 14,
             fontWeight: FontWeight.w800,
           ),
@@ -280,9 +280,9 @@ class _QrPanel extends StatelessWidget {
           data: payload,
           size: size,
           padding: EdgeInsets.zero,
-          eyeStyle: const QrEyeStyle(color: MimiCamDesignTokens.serverText),
+          eyeStyle: const QrEyeStyle(color: MiuCamDesignTokens.serverText),
           dataModuleStyle:
-              const QrDataModuleStyle(color: MimiCamDesignTokens.serverText),
+              const QrDataModuleStyle(color: MiuCamDesignTokens.serverText),
         ),
       ),
     );
@@ -303,7 +303,7 @@ class _QrIpActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    return MimiCamCard(
+    return MiuCamCard(
       dark: true,
       child: Wrap(
         spacing: 12,
@@ -336,13 +336,13 @@ class _QrIpActions extends StatelessWidget {
                       dimension: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.2,
-                        color: MimiCamDesignTokens.serverOnAccent,
+                        color: MiuCamDesignTokens.serverOnAccent,
                       ),
                     )
                   : const Icon(Icons.refresh_rounded),
               style: FilledButton.styleFrom(
-                backgroundColor: MimiCamDesignTokens.serverCyan,
-                foregroundColor: MimiCamDesignTokens.serverOnAccent,
+                backgroundColor: MiuCamDesignTokens.serverCyan,
+                foregroundColor: MiuCamDesignTokens.serverOnAccent,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -369,9 +369,9 @@ class _QrIpActions extends StatelessWidget {
                     },
               icon: const Icon(Icons.copy_rounded),
               style: OutlinedButton.styleFrom(
-                foregroundColor: MimiCamDesignTokens.serverText,
+                foregroundColor: MiuCamDesignTokens.serverText,
                 side: const BorderSide(
-                  color: MimiCamDesignTokens.serverOutline,
+                  color: MiuCamDesignTokens.serverOutline,
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),

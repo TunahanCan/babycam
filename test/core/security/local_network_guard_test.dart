@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/network/local_network_guard.dart';
+import 'package:miucam/core/network/local_network_guard.dart';
 
 void main() {
   test('private IPv4 blokları ve loopback kabul edilir', () {

@@ -16,20 +16,20 @@ const appUiTextCatalog = <String, Map<String, String>>{
         'Alertes de sons proches de pleurs, de sons forts, de mouvement et de changement de lumière dans la chambre.',
   },
   'bootstrapPreparing': {
-    'tr': 'MimiCam hazırlanıyor...',
-    'en': 'Preparing MimiCam...',
-    'zh': 'MimiCam 正在准备…',
-    'hi': 'MimiCam तैयार हो रहा है…',
-    'es': 'Preparando MimiCam…',
-    'fr': 'Préparation de MimiCam…',
+    'tr': 'MiuCam hazırlanıyor...',
+    'en': 'Preparing MiuCam...',
+    'zh': 'MiuCam 正在准备…',
+    'hi': 'MiuCam तैयार हो रहा है…',
+    'es': 'Preparando MiuCam…',
+    'fr': 'Préparation de MiuCam…',
   },
   'bootstrapFailedTitle': {
-    'tr': 'MimiCam başlatılamadı',
-    'en': 'MimiCam could not start',
-    'zh': 'MimiCam 无法启动',
-    'hi': 'MimiCam शुरू नहीं हो सका',
-    'es': 'MimiCam no pudo iniciarse',
-    'fr': 'MimiCam n’a pas pu démarrer',
+    'tr': 'MiuCam başlatılamadı',
+    'en': 'MiuCam could not start',
+    'zh': 'MiuCam 无法启动',
+    'hi': 'MiuCam शुरू नहीं हो सका',
+    'es': 'MiuCam no pudo iniciarse',
+    'fr': 'MiuCam n’a pas pu démarrer',
   },
   'bootstrapFailedText': {
     'tr':
@@ -87,12 +87,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Passer à Client'
   },
   'roleSelectionTitle': {
-    'tr': 'MimiCam’i nasıl kullanacaksınız?',
-    'en': 'How will you use MimiCam?',
-    'zh': '您想如何使用 MimiCam？',
-    'hi': 'आप MimiCam का उपयोग कैसे करेंगे?',
-    'es': '¿Cómo usarás MimiCam?',
-    'fr': 'Comment allez-vous utiliser MimiCam ?',
+    'tr': 'MiuCam’i nasıl kullanacaksınız?',
+    'en': 'How will you use MiuCam?',
+    'zh': '您想如何使用 MiuCam？',
+    'hi': 'आप MiuCam का उपयोग कैसे करेंगे?',
+    'es': '¿Cómo usarás MiuCam?',
+    'fr': 'Comment allez-vous utiliser MiuCam ?',
   },
   'roleSelectionSubtitle': {
     'tr': 'Bir telefonu bebeğinizin yanına bırakın, diğerinden izleyin.',
@@ -408,15 +408,15 @@ const appUiTextCatalog = <String, Map<String, String>>{
   },
   'clientSubtitleDefault': {
     'tr':
-        'MimiCam yakındaki bebek odası cihazını sakin ve güvenli şekilde arar.',
-    'en': 'MimiCam calmly and securely looks for the nearby baby room device.',
-    'zh': 'MimiCam 会安静安全地查找附近的婴儿房设备。',
+        'MiuCam yakındaki bebek odası cihazını sakin ve güvenli şekilde arar.',
+    'en': 'MiuCam calmly and securely looks for the nearby baby room device.',
+    'zh': 'MiuCam 会安静安全地查找附近的婴儿房设备。',
     'hi':
-        'MimiCam पास के बच्चे के कमरे के डिवाइस को शांत और सुरक्षित रूप से ढूँढता है।',
+        'MiuCam पास के बच्चे के कमरे के डिवाइस को शांत और सुरक्षित रूप से ढूँढता है।',
     'es':
-        'MimiCam busca con calma y seguridad el dispositivo cercano de la habitación.',
+        'MiuCam busca con calma y seguridad el dispositivo cercano de la habitación.',
     'fr':
-        'MimiCam cherche calmement et sûrement l’appareil proche de la chambre.'
+        'MiuCam cherche calmement et sûrement l’appareil proche de la chambre.'
   },
   'clientSubtitleError': {
     'tr': 'Ağ bağlantısını kontrol et; QR veya IP ile yeniden deneyebilirsin.',
@@ -746,12 +746,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Connexion par IP'
   },
   'invalidQrCode': {
-    'tr': 'Geçersiz veya süresi dolmuş MimiCam QR kodu.',
-    'en': 'Invalid or expired MimiCam QR code.',
-    'zh': 'MimiCam 二维码无效或已过期。',
-    'hi': 'MimiCam QR कोड अमान्य या समाप्त है।',
-    'es': 'Código QR MimiCam no válido o caducado.',
-    'fr': 'QR code MimiCam invalide ou expiré.'
+    'tr': 'Geçersiz veya süresi dolmuş MiuCam QR kodu.',
+    'en': 'Invalid or expired MiuCam QR code.',
+    'zh': 'MiuCam 二维码无效或已过期。',
+    'hi': 'MiuCam QR कोड अमान्य या समाप्त है।',
+    'es': 'Código QR MiuCam no válido o caducado.',
+    'fr': 'QR code MiuCam invalide ou expiré.'
   },
   'pairedMessage': {
     'tr': '{name} eşleşti.',
@@ -1684,12 +1684,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Vérifiez l’image et le son depuis l’appareil parent.'
   },
   'adultSupervisionNotice': {
-    'tr': 'MimiCam yetişkin gözetiminin yerine geçmez.',
-    'en': 'MimiCam does not replace adult supervision.',
-    'zh': 'MimiCam 不能替代成人看护。',
-    'hi': 'MimiCam वयस्क निगरानी का विकल्प नहीं है।',
-    'es': 'MimiCam no sustituye la supervisión de un adulto.',
-    'fr': 'MimiCam ne remplace pas la surveillance d’un adulte.'
+    'tr': 'MiuCam yetişkin gözetiminin yerine geçmez.',
+    'en': 'MiuCam does not replace adult supervision.',
+    'zh': 'MiuCam 不能替代成人看护。',
+    'hi': 'MiuCam वयस्क निगरानी का विकल्प नहीं है।',
+    'es': 'MiuCam no sustituye la supervisión de un adulto.',
+    'fr': 'MiuCam ne remplace pas la surveillance d’un adulte.'
   },
   'streamDetails': {
     'tr': 'Yayın ayrıntıları',
@@ -3023,12 +3023,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Chambres sur ce réseau',
   },
   'discoveredRoomsSubtitle': {
-    'tr': 'Bonjour / NSD ile bulunan MimiCam cihazları.',
-    'en': 'MimiCam devices found through Bonjour / NSD.',
-    'zh': '通过 Bonjour / NSD 找到的 MimiCam 设备。',
-    'hi': 'Bonjour / NSD से मिले MimiCam डिवाइस।',
-    'es': 'Dispositivos MimiCam encontrados mediante Bonjour / NSD.',
-    'fr': 'Appareils MimiCam trouvés via Bonjour / NSD.',
+    'tr': 'Bonjour / NSD ile bulunan MiuCam cihazları.',
+    'en': 'MiuCam devices found through Bonjour / NSD.',
+    'zh': '通过 Bonjour / NSD 找到的 MiuCam 设备。',
+    'hi': 'Bonjour / NSD से मिले MiuCam डिवाइस।',
+    'es': 'Dispositivos MiuCam encontrados mediante Bonjour / NSD.',
+    'fr': 'Appareils MiuCam trouvés via Bonjour / NSD.',
   },
   'noRoomsDiscovered': {
     'tr': 'Henüz oda bulunamadı; arama yerel ağda sürüyor.',
@@ -3079,12 +3079,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Langue du téléphone',
   },
   'systemLanguageDescription': {
-    'tr': 'Telefonun dil ayarı değişince MimiCam da değişir.',
-    'en': 'MimiCam follows changes to the phone language.',
-    'zh': 'MimiCam 会跟随手机语言变化。',
-    'hi': 'MimiCam फ़ोन की भाषा के साथ बदलता है।',
-    'es': 'MimiCam sigue el idioma del teléfono.',
-    'fr': 'MimiCam suit la langue du téléphone.',
+    'tr': 'Telefonun dil ayarı değişince MiuCam da değişir.',
+    'en': 'MiuCam follows changes to the phone language.',
+    'zh': 'MiuCam 会跟随手机语言变化。',
+    'hi': 'MiuCam फ़ोन की भाषा के साथ बदलता है।',
+    'es': 'MiuCam sigue el idioma del teléfono.',
+    'fr': 'MiuCam suit la langue du téléphone.',
   },
   'watchPreferences': {
     'tr': 'İzleme tercihleri',

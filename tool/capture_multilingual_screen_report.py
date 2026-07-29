@@ -124,7 +124,7 @@ def launch_sequence(locale: str) -> None:
 
 
 def wait_for_sequence_scene(index: int) -> None:
-    marker = f'MIMICAM_REPORT_READY index={index} '
+    marker = f'MIUCAM_REPORT_READY index={index} '
     timeout = float(os.environ.get('REPORT_SEQUENCE_READY_TIMEOUT_SECONDS', '45'))
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:

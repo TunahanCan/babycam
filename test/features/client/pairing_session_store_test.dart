@@ -1,10 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/pairing/pairing_session_store.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/features/client/pairing/pairing_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -136,7 +136,7 @@ PairingSession _session(String token, {String serverId = 'server'}) =>
     );
 
 PairingPayload _payload({String deviceId = 'server'}) => PairingPayload(
-      schemaVersion: MimiCamProtocolV2.schemaVersion,
+      schemaVersion: MiuCamProtocolV2.schemaVersion,
       host: '127.0.0.1',
       port: 8080,
       deviceId: deviceId,

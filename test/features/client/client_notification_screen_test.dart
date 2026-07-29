@@ -3,15 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/app/app_role.dart';
-import 'package:mimicam/core/protocol/alert_event_dto.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/client_home_screen.dart';
-import 'package:mimicam/features/client/client_runtime.dart';
-import 'package:mimicam/features/client/media/watch_screen.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/notification_service.dart';
+import 'package:miucam/app/app_role.dart';
+import 'package:miucam/core/protocol/alert_event_dto.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/features/client/client_home_screen.dart';
+import 'package:miucam/features/client/client_runtime.dart';
+import 'package:miucam/features/client/media/watch_screen.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/notification_service.dart';
 
 void main() {
   testWidgets('bildirim filtreleri ses hareket ve sistem kayitlarini ayirir',

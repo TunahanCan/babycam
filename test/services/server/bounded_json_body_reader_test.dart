@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/services/server/bounded_json_body_reader.dart';
+import 'package:miucam/services/server/bounded_json_body_reader.dart';
 
 void main() {
   test('declared ve streamed byte limitleri fail-fast uygulanır', () async {

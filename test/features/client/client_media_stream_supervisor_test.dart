@@ -5,14 +5,14 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show ValueChanged, VoidCallback;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/media/active_stream_session.dart';
-import 'package:mimicam/features/client/media/client_live_audio_pipeline.dart';
-import 'package:mimicam/features/client/media/client_media_stream_supervisor.dart';
-import 'package:mimicam/features/client/media/client_stream_health_state.dart';
-import 'package:mimicam/features/client/media/pcm_audio_output.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/features/client/media/active_stream_session.dart';
+import 'package:miucam/features/client/media/client_live_audio_pipeline.dart';
+import 'package:miucam/features/client/media/client_media_stream_supervisor.dart';
+import 'package:miucam/features/client/media/client_stream_health_state.dart';
+import 'package:miucam/features/client/media/pcm_audio_output.dart';
 
 void main() {
   test('401 media response session refresh ister ve retry loop yapmaz',
@@ -370,8 +370,8 @@ List<int> _mjpegFrame(List<int> jpeg, {required int sequence}) => [
       ...utf8.encode(
         '--frame\r\nContent-Type: image/jpeg\r\n'
         'Content-Length: ${jpeg.length}\r\n'
-        'X-MimiCam-Sequence: $sequence\r\n'
-        'X-MimiCam-Sent-At-Ms: ${1000 + sequence * 20}\r\n\r\n',
+        'X-MiuCam-Sequence: $sequence\r\n'
+        'X-MiuCam-Sent-At-Ms: ${1000 + sequence * 20}\r\n\r\n',
       ),
       ...jpeg,
       ...utf8.encode('\r\n'),
@@ -379,7 +379,7 @@ List<int> _mjpegFrame(List<int> jpeg, {required int sequence}) => [
 
 PairingSession _session(int port) => PairingSession(
       payload: PairingPayload(
-        schemaVersion: MimiCamProtocolV2.schemaVersion,
+        schemaVersion: MiuCamProtocolV2.schemaVersion,
         host: InternetAddress.loopbackIPv4.address,
         port: port,
         deviceId: 'server',

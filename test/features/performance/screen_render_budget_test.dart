@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/app/app_role.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/client_home_screen.dart';
-import 'package:mimicam/features/client/client_runtime.dart';
-import 'package:mimicam/features/client/media/watch_screen.dart';
-import 'package:mimicam/features/server/media/media_runtime_controller.dart';
-import 'package:mimicam/features/server/server_home_screen.dart';
-import 'package:mimicam/features/server/server_runtime.dart';
-import 'package:mimicam/features/shared/presentation/mimicam_shells.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/configuration_service.dart';
-import 'package:mimicam/services/client_preferences_service.dart';
+import 'package:miucam/app/app_role.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/features/client/client_home_screen.dart';
+import 'package:miucam/features/client/client_runtime.dart';
+import 'package:miucam/features/client/media/watch_screen.dart';
+import 'package:miucam/features/server/media/media_runtime_controller.dart';
+import 'package:miucam/features/server/server_home_screen.dart';
+import 'package:miucam/features/server/server_runtime.dart';
+import 'package:miucam/features/shared/presentation/miucam_shells.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/configuration_service.dart';
+import 'package:miucam/services/client_preferences_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -75,13 +75,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final navigationBefore = tester.widget<MimiCamBottomNav>(
-      find.byType(MimiCamBottomNav),
+    final navigationBefore = tester.widget<MiuCamBottomNav>(
+      find.byType(MiuCamBottomNav),
     );
     await tester.tap(find.text('Ses'));
     await tester.pump();
-    final navigationAfter = tester.widget<MimiCamBottomNav>(
-      find.byType(MimiCamBottomNav),
+    final navigationAfter = tester.widget<MiuCamBottomNav>(
+      find.byType(MiuCamBottomNav),
     );
 
     expect(
@@ -174,7 +174,7 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     final runtime = ServerRuntime(
       mediaRuntime: MediaRuntimeController(),
-      onStartPairing: () async => 'mimicam://pair?payload=x',
+      onStartPairing: () async => 'miucam://pair?payload=x',
     );
 
     await tester.pumpWidget(
@@ -218,7 +218,7 @@ void main() {
       final preferences = await SharedPreferences.getInstance();
       final runtime = ServerRuntime(
         mediaRuntime: MediaRuntimeController(),
-        onStartPairing: () async => 'mimicam://pair?payload=x',
+        onStartPairing: () async => 'miucam://pair?payload=x',
       );
 
       await tester.pumpWidget(
@@ -371,7 +371,7 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     final runtime = ServerRuntime(
       mediaRuntime: MediaRuntimeController(),
-      onStartPairing: () async => 'mimicam://pair?payload=x',
+      onStartPairing: () async => 'miucam://pair?payload=x',
     );
     await tester.pumpWidget(
       MaterialApp(
@@ -389,15 +389,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final navigationBefore = tester.widget<MimiCamBottomNav>(
-      find.byType(MimiCamBottomNav),
+    final navigationBefore = tester.widget<MiuCamBottomNav>(
+      find.byType(MiuCamBottomNav),
     );
     for (var update = 0; update < 12; update++) {
       runtime.refreshMediaProfile();
     }
     await tester.pump();
-    final navigationAfterRuntimeUpdates = tester.widget<MimiCamBottomNav>(
-      find.byType(MimiCamBottomNav),
+    final navigationAfterRuntimeUpdates = tester.widget<MiuCamBottomNav>(
+      find.byType(MiuCamBottomNav),
     );
     expect(
       identical(navigationBefore, navigationAfterRuntimeUpdates),
@@ -418,8 +418,8 @@ void main() {
     await tester.drag(visibleSlider, const Offset(28, 0));
     await tester.pumpAndSettle();
 
-    final navigationAfterSlider = tester.widget<MimiCamBottomNav>(
-      find.byType(MimiCamBottomNav),
+    final navigationAfterSlider = tester.widget<MiuCamBottomNav>(
+      find.byType(MiuCamBottomNav),
     );
     expect(
       identical(navigationBefore, navigationAfterSlider),
@@ -462,7 +462,7 @@ PairingPayload _payload() => PairingPayload(
 
 String _longHttpWsQrPayload() {
   final noisyPayload = List.filled(720, 'a').join();
-  return 'mimicam://pair?payload=$noisyPayload';
+  return 'miucam://pair?payload=$noisyPayload';
 }
 
 const _localizationsDelegates = [

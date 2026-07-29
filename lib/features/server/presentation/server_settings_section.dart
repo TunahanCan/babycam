@@ -6,8 +6,8 @@ import '../../../core/async/serialized_async_executor.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../services/configuration_service.dart';
 import '../../shared/presentation/localized_measurement_text.dart';
-import '../../shared/presentation/mimicam_design_tokens.dart';
-import '../../shared/presentation/mimicam_shells.dart';
+import '../../shared/presentation/miucam_design_tokens.dart';
+import '../../shared/presentation/miucam_shells.dart';
 import '../server_runtime.dart';
 import 'server_home_components.dart';
 
@@ -327,7 +327,7 @@ class _ServerSettingsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    return MimiCamCard(
+    return MiuCamCard(
       dark: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -340,7 +340,7 @@ class _ServerSettingsCard extends StatelessWidget {
               Text(
                 strings.ui('silentSafeDetection'),
                 style: const TextStyle(
-                  color: MimiCamDesignTokens.serverText,
+                  color: MiuCamDesignTokens.serverText,
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
                 ),
@@ -357,7 +357,7 @@ class _ServerSettingsCard extends StatelessWidget {
           Text(
             strings.ui('detectionSettingsSubtitle'),
             style: const TextStyle(
-              color: MimiCamDesignTokens.serverTextMuted,
+              color: MiuCamDesignTokens.serverTextMuted,
               fontSize: 14.5,
               height: 1.25,
             ),
@@ -366,7 +366,7 @@ class _ServerSettingsCard extends StatelessWidget {
           Text(
             strings.ui('quickSetup'),
             style: const TextStyle(
-              color: MimiCamDesignTokens.serverText,
+              color: MiuCamDesignTokens.serverText,
               fontSize: 15,
               fontWeight: FontWeight.w900,
             ),
@@ -382,25 +382,25 @@ class _ServerSettingsCard extends StatelessWidget {
                   onSelected: saving ? null : (_) => onPresetSelected(preset),
                   showCheckmark: false,
                   selectedColor:
-                      MimiCamDesignTokens.serverCyan.withValues(alpha: .18),
-                  backgroundColor: MimiCamDesignTokens.serverSurfaceRaised
+                      MiuCamDesignTokens.serverCyan.withValues(alpha: .18),
+                  backgroundColor: MiuCamDesignTokens.serverSurfaceRaised
                       .withValues(alpha: .74),
                   side: BorderSide(
                     color: activePreset == preset
-                        ? MimiCamDesignTokens.serverCyan
-                        : MimiCamDesignTokens.serverOutline,
+                        ? MiuCamDesignTokens.serverCyan
+                        : MiuCamDesignTokens.serverOutline,
                   ),
                   avatar: Icon(
                     preset.icon,
                     size: 17,
                     color: activePreset == preset
-                        ? MimiCamDesignTokens.serverCyan
-                        : MimiCamDesignTokens.serverTextMuted,
+                        ? MiuCamDesignTokens.serverCyan
+                        : MiuCamDesignTokens.serverTextMuted,
                   ),
                   labelStyle: TextStyle(
                     color: activePreset == preset
-                        ? MimiCamDesignTokens.serverText
-                        : MimiCamDesignTokens.serverTextMuted,
+                        ? MiuCamDesignTokens.serverText
+                        : MiuCamDesignTokens.serverTextMuted,
                     fontWeight: activePreset == preset
                         ? FontWeight.w900
                         : FontWeight.w700,
@@ -414,7 +414,7 @@ class _ServerSettingsCard extends StatelessWidget {
             activePreset?.description(strings) ??
                 strings.ui('customDetectionPresetDescription'),
             style: const TextStyle(
-              color: MimiCamDesignTokens.serverTextMuted,
+              color: MiuCamDesignTokens.serverTextMuted,
               fontSize: 13.5,
               height: 1.25,
             ),
@@ -431,18 +431,18 @@ class _ServerSettingsCard extends StatelessWidget {
                 title: Text(
                   strings.ui('advancedSettings'),
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.serverText,
+                    color: MiuCamDesignTokens.serverText,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
                 subtitle: Text(
                   strings.ui('advancedSettingsDescription'),
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.serverTextMuted,
+                    color: MiuCamDesignTokens.serverTextMuted,
                   ),
                 ),
-                iconColor: MimiCamDesignTokens.serverCyan,
-                collapsedIconColor: MimiCamDesignTokens.serverTextMuted,
+                iconColor: MiuCamDesignTokens.serverCyan,
+                collapsedIconColor: MiuCamDesignTokens.serverTextMuted,
                 children: [
                   for (final spec in _sliderSpecs(strings)) ...[
                     _SettingSlider(
@@ -482,7 +482,7 @@ class _ServerSettingsCard extends StatelessWidget {
         min: .20,
         max: .95,
         divisions: 75,
-        color: MimiCamDesignTokens.serverCyan,
+        color: MiuCamDesignTokens.serverCyan,
         onChangeEnd: onCryScoreThresholdChangeEnd,
       ),
       _SettingSliderSpec(
@@ -493,7 +493,7 @@ class _ServerSettingsCard extends StatelessWidget {
         min: .05,
         max: .60,
         divisions: 55,
-        color: MimiCamDesignTokens.serverViolet,
+        color: MiuCamDesignTokens.serverViolet,
         onChangeEnd: onMotionThresholdChangeEnd,
       ),
       _SettingSliderSpec(
@@ -504,7 +504,7 @@ class _ServerSettingsCard extends StatelessWidget {
         min: 10,
         max: 180,
         divisions: 34,
-        color: MimiCamDesignTokens.serverBlue,
+        color: MiuCamDesignTokens.serverBlue,
         onChangeEnd: onNotifyCooldownChangeEnd,
       ),
       _SettingSliderSpec(
@@ -519,7 +519,7 @@ class _ServerSettingsCard extends StatelessWidget {
         min: .5,
         max: 6,
         divisions: 11,
-        color: MimiCamDesignTokens.serverCyan,
+        color: MiuCamDesignTokens.serverCyan,
         onChangeEnd: onCryDurationChangeEnd,
       ),
       _SettingSliderSpec(
@@ -534,7 +534,7 @@ class _ServerSettingsCard extends StatelessWidget {
         min: .5,
         max: 6,
         divisions: 11,
-        color: MimiCamDesignTokens.serverViolet,
+        color: MiuCamDesignTokens.serverViolet,
         onChangeEnd: onMotionDurationChangeEnd,
       ),
     ];
@@ -577,14 +577,14 @@ class _SettingsSaveChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: ShapeDecoration(
         color: saving
-            ? MimiCamDesignTokens.serverBlue
-            : MimiCamDesignTokens.serverSuccess,
+            ? MiuCamDesignTokens.serverBlue
+            : MiuCamDesignTokens.serverSuccess,
         shape: const StadiumBorder(),
       ),
       child: Text(
         saving ? strings.ui('saving') : strings.ui('realSettings'),
         style: const TextStyle(
-          color: MimiCamDesignTokens.serverOnAccent,
+          color: MiuCamDesignTokens.serverOnAccent,
           fontSize: 12,
           fontWeight: FontWeight.w900,
         ),
@@ -652,7 +652,7 @@ class _SettingSliderState extends State<_SettingSlider> {
               child: Text(
                 widget.title,
                 style: const TextStyle(
-                  color: MimiCamDesignTokens.serverText,
+                  color: MiuCamDesignTokens.serverText,
                   fontSize: 16,
                   fontWeight: FontWeight.w900,
                 ),
@@ -676,7 +676,7 @@ class _SettingSliderState extends State<_SettingSlider> {
         Text(
           widget.description,
           style: const TextStyle(
-            color: MimiCamDesignTokens.serverTextMuted,
+            color: MiuCamDesignTokens.serverTextMuted,
             fontSize: 13.5,
             height: 1.25,
           ),
@@ -689,7 +689,7 @@ class _SettingSliderState extends State<_SettingSlider> {
             child: Slider(
               activeColor: widget.color,
               inactiveColor:
-                  MimiCamDesignTokens.serverOutline.withValues(alpha: .58),
+                  MiuCamDesignTokens.serverOutline.withValues(alpha: .58),
               value: _value,
               min: widget.min,
               max: widget.max,

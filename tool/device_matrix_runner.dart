@@ -6,7 +6,7 @@ import 'dart:io';
 
 const _defaultPlanPath = 'tool/device_matrix_plan.json';
 const _resultSchemaPath = 'docs/device_matrix_result.schema.json';
-const _tokenEnvironmentKey = 'MIMICAM_MATRIX_TOKEN';
+const _tokenEnvironmentKey = 'MIUCAM_MATRIX_TOKEN';
 const _maxStoredCommandChars = 24000;
 const _maxHttpBodyBytes = 1024 * 1024;
 
@@ -254,7 +254,7 @@ class _MatrixRunner {
           deviceId,
           '--no-resident',
           modeFlag,
-          '--dart-define=MIMICAM_WEBRTC_PILOT=$webRtc',
+          '--dart-define=MIUCAM_WEBRTC_PILOT=$webRtc',
         ];
     return [
       _CommandResult.planned(
@@ -1291,7 +1291,7 @@ class _CliOptions {
   });
 
   static const usage = '''
-MimiCam physical-device matrix runner
+MiuCam physical-device matrix runner
 
 Generate a no-side-effect result template:
   dart run tool/device_matrix_runner.dart --dry-run --output /tmp/matrix.json
@@ -1307,7 +1307,7 @@ Launch a profile build on both devices (explicit opt-in):
     --media-lane webrtc --launch --output artifacts/device-matrix/run.json
 
 Authenticated server probe (token is read only from the environment):
-  MIMICAM_MATRIX_TOKEN=... dart run tool/device_matrix_runner.dart \\
+  MIUCAM_MATRIX_TOKEN=... dart run tool/device_matrix_runner.dart \\
     --base-url http://192.168.1.42:8080 --probe --output /tmp/probe.json
 
 Record and evaluate operator evidence:

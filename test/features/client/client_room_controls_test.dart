@@ -4,11 +4,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/controls/client_room_controls.dart';
-import 'package:mimicam/features/server/media/microphone_capture_service.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/features/client/controls/client_room_controls.dart';
+import 'package:miucam/features/server/media/microphone_capture_service.dart';
 import 'package:record/record.dart';
 
 void main() {
@@ -18,7 +18,7 @@ void main() {
     final receivedTalk = BytesBuilder(copy: false);
     var talkAudioAuthorized = false;
     unawaited(server.forEach((request) async {
-      if (request.uri.path == MimiCamProtocolV2.comfortCommand) {
+      if (request.uri.path == MiuCamProtocolV2.comfortCommand) {
         await utf8.decoder.bind(request).join();
         await _json(request.response, {
           'ok': true,
@@ -34,7 +34,7 @@ void main() {
         });
         return;
       }
-      if (request.uri.path == MimiCamProtocolV2.talkStart) {
+      if (request.uri.path == MiuCamProtocolV2.talkStart) {
         await utf8.decoder.bind(request).join();
         await _json(request.response, {
           'ok': true,
@@ -42,7 +42,7 @@ void main() {
         });
         return;
       }
-      if (request.uri.path == MimiCamProtocolV2.talkAudio) {
+      if (request.uri.path == MiuCamProtocolV2.talkAudio) {
         talkAudioAuthorized = request.headers.value(
               HttpHeaders.authorizationHeader,
             ) ==
@@ -53,7 +53,7 @@ void main() {
         await _json(request.response, {'ok': true});
         return;
       }
-      if (request.uri.path == MimiCamProtocolV2.talkStop) {
+      if (request.uri.path == MiuCamProtocolV2.talkStop) {
         await utf8.decoder.bind(request).join();
         await _json(request.response, {'ok': true});
         return;
@@ -99,14 +99,14 @@ void main() {
     var stops = 0;
     unawaited(server.forEach((request) async {
       await utf8.decoder.bind(request).join();
-      if (request.uri.path == MimiCamProtocolV2.talkStart) {
+      if (request.uri.path == MiuCamProtocolV2.talkStart) {
         await _json(request.response, {
           'ok': true,
           'session': const <String, Object?>{},
         });
         return;
       }
-      if (request.uri.path == MimiCamProtocolV2.talkStop) {
+      if (request.uri.path == MiuCamProtocolV2.talkStop) {
         stops++;
         await _json(request.response, {'ok': true});
         return;
@@ -131,7 +131,7 @@ void main() {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     var stops = 0;
     unawaited(server.forEach((request) async {
-      if (request.uri.path == MimiCamProtocolV2.talkStart) {
+      if (request.uri.path == MiuCamProtocolV2.talkStart) {
         await utf8.decoder.bind(request).join();
         await _json(request.response, {
           'ok': true,
@@ -139,7 +139,7 @@ void main() {
         });
         return;
       }
-      if (request.uri.path == MimiCamProtocolV2.talkAudio) {
+      if (request.uri.path == MiuCamProtocolV2.talkAudio) {
         try {
           await request.drain<void>();
           await _json(request.response, {'ok': true});
@@ -148,7 +148,7 @@ void main() {
         }
         return;
       }
-      if (request.uri.path == MimiCamProtocolV2.talkStop) {
+      if (request.uri.path == MiuCamProtocolV2.talkStop) {
         await utf8.decoder.bind(request).join();
         stops++;
         await _json(request.response, {'ok': true});
@@ -200,7 +200,7 @@ void main() {
 
 PairingSession _session(int port) => PairingSession(
       payload: PairingPayload(
-        schemaVersion: MimiCamProtocolV2.schemaVersion,
+        schemaVersion: MiuCamProtocolV2.schemaVersion,
         host: InternetAddress.loopbackIPv4.address,
         port: port,
         deviceId: 'server',

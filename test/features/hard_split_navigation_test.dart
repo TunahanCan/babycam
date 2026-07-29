@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/app/app_role.dart';
-import 'package:mimicam/features/client/client_home_screen.dart';
-import 'package:mimicam/features/client/client_runtime.dart';
-import 'package:mimicam/features/server/media/media_runtime_controller.dart';
-import 'package:mimicam/features/server/server_home_screen.dart';
-import 'package:mimicam/features/server/server_runtime.dart';
-import 'package:mimicam/features/shared/presentation/mimicam_shells.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/configuration_service.dart';
+import 'package:miucam/app/app_role.dart';
+import 'package:miucam/features/client/client_home_screen.dart';
+import 'package:miucam/features/client/client_runtime.dart';
+import 'package:miucam/features/server/media/media_runtime_controller.dart';
+import 'package:miucam/features/server/server_home_screen.dart';
+import 'package:miucam/features/server/server_runtime.dart';
+import 'package:miucam/features/shared/presentation/miucam_shells.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/configuration_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -51,11 +51,11 @@ void main() {
     expect(find.textContaining('yayınını durdur'), findsNothing);
     expect(find.text('QR üret'), findsNothing);
 
-    final badgeTopRight = tester.getTopRight(find.byType(MimiCamRoleBadge));
+    final badgeTopRight = tester.getTopRight(find.byType(MiuCamRoleBadge));
     expect(badgeTopRight.dx, greaterThan(700));
     expect(badgeTopRight.dy, lessThan(80));
 
-    await tester.tap(find.byType(MimiCamRoleBadge));
+    await tester.tap(find.byType(MiuCamRoleBadge));
     expect(selectedRole, AppRole.server);
   });
 
@@ -99,7 +99,7 @@ void main() {
       mediaRuntime: MediaRuntimeController(),
       onStartPairing: () async {
         pairingStarts++;
-        return 'mimicam://pair?payload=x';
+        return 'miucam://pair?payload=x';
       },
       onStop: () async {
         streamStops++;
@@ -142,7 +142,7 @@ void main() {
     expect(connectParent, findsOneWidget);
     expect(
       tester.getCenter(connectParent).dy,
-      lessThan(tester.getTopLeft(find.byType(MimiCamBottomNav)).dy),
+      lessThan(tester.getTopLeft(find.byType(MiuCamBottomNav)).dy),
     );
 
     final scrollable = find.byType(Scrollable).first;
@@ -186,7 +186,7 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     final runtime = ServerRuntime(
       mediaRuntime: MediaRuntimeController(),
-      onStartPairing: () async => 'mimicam://pair?payload=x',
+      onStartPairing: () async => 'miucam://pair?payload=x',
     );
 
     await tester.pumpWidget(
@@ -224,7 +224,7 @@ void main() {
         onStart: () async => mediaStarts++,
         onStop: () async => mediaStops++,
       ),
-      onStartPairing: () async => 'mimicam://pair?payload=x',
+      onStartPairing: () async => 'miucam://pair?payload=x',
     );
 
     await tester.pumpWidget(
@@ -320,7 +320,7 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     final runtime = ServerRuntime(
       mediaRuntime: MediaRuntimeController(),
-      onStartPairing: () async => 'mimicam://pair?payload=x',
+      onStartPairing: () async => 'miucam://pair?payload=x',
     );
 
     await tester.pumpWidget(
@@ -366,7 +366,7 @@ void main() {
       mediaRuntime: MediaRuntimeController(
         onStart: () async => throw StateError('camera-driver-secret'),
       ),
-      onStartPairing: () async => 'mimicam://pair?payload=x',
+      onStartPairing: () async => 'miucam://pair?payload=x',
     );
 
     await tester.pumpWidget(
@@ -426,7 +426,7 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     final runtime = ServerRuntime(
       mediaRuntime: MediaRuntimeController(),
-      onStartPairing: () async => 'mimicam://pair?payload=x',
+      onStartPairing: () async => 'miucam://pair?payload=x',
     );
 
     await tester.pumpWidget(
@@ -468,7 +468,7 @@ void main() {
       mediaRuntime: MediaRuntimeController(
         onStart: () async => throw StateError('camera unavailable'),
       ),
-      onStartPairing: () async => 'mimicam://pair?payload=x',
+      onStartPairing: () async => 'miucam://pair?payload=x',
     );
 
     await tester.pumpWidget(
@@ -585,7 +585,7 @@ void main() {
       mediaRuntime: MediaRuntimeController(),
       onStartPairing: () async {
         pairingStarts++;
-        return 'mimicam://pair?ticket=$pairingStarts';
+        return 'miucam://pair?ticket=$pairingStarts';
       },
     );
 
@@ -620,7 +620,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Adresi kopyala'));
     await tester.pumpAndSettle();
-    expect(clipboardText, 'mimicam://pair?ticket=$pairingStarts');
+    expect(clipboardText, 'miucam://pair?ticket=$pairingStarts');
     expect(find.text('Bağlantı bileti kopyalandı.'), findsOneWidget);
   });
 }

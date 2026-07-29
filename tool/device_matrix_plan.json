@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "suiteId": "mimicam-physical-smoke-v1",
-  "title": "MimiCam iOS and Android physical-device smoke matrix",
+  "suiteId": "miucam-physical-smoke-v1",
+  "title": "MiuCam iOS and Android physical-device smoke matrix",
   "preflightTests": [
     "test/core/network/lan_endpoint_test.dart",
     "test/core/security/local_network_guard_test.dart",
     "test/services/network_address_provider_test.dart",
-    "test/services/discovery/mimicam_service_discovery_test.dart",
+    "test/services/discovery/miucam_service_discovery_test.dart",
     "test/features/client/trusted_session_endpoint_resolver_test.dart",
     "test/features/client/client_runtime_lifecycle_test.dart",
     "test/services/platform/platform_runtime_contract_test.dart",
@@ -174,7 +174,7 @@
       "estimatedMinutes": 12,
       "setup": [
         "Use an isolated IPv6-only SSID with working multicast DNS.",
-        "Launch both devices with MIMICAM_WEBRTC_PILOT=true."
+        "Launch both devices with MIUCAM_WEBRTC_PILOT=true."
       ],
       "steps": [
         "Verify DNS-SD returns IPv6 addresses and pair without IPv4 fallback.",
@@ -455,7 +455,7 @@
       "steps": [
         "Trigger transient focus loss, duck, full focus loss and focus gain.",
         "Disconnect a wired/Bluetooth route to trigger becoming-noisy.",
-        "Start another media app, then return focus to MimiCam.",
+        "Start another media app, then return focus to MiuCam.",
         "Repeat with the app backgrounded under foreground service.",
         "Swap room/client roles and repeat the relevant capture/output focus path."
       ],

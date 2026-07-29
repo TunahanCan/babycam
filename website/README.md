@@ -1,6 +1,6 @@
-# MimiCam tanıtım sitesi
+# MiuCam tanıtım sitesi
 
-MimiCam mobil uygulamasından bağımsız, derleme adımı ve üçüncü taraf çalışma
+MiuCam mobil uygulamasından bağımsız, derleme adımı ve üçüncü taraf çalışma
 zamanı bağımlılığı olmayan statik tanıtım sitesidir.
 
 ## Yerelde çalıştırma
@@ -40,7 +40,7 @@ http://localhost:8080/privacy.html?lang=ar
 ```
 
 Geçerli bir `?lang=` değeri ilk tercihtir. Parametre yoksa son seçim
-`mimicam.website.language` anahtarıyla `localStorage` üzerinden geri yüklenir;
+`miucam.website.language` anahtarıyla `localStorage` üzerinden geri yüklenir;
 ikisi de yoksa Türkçe kullanılır. Seçiciden yapılan değişiklik hem URL'yi hem
 de bu yerel tercihi günceller; site içi sayfa bağlantıları da seçili dili
 `lang` parametresiyle taşır. Böylece depolamanın kapalı olduğu tarayıcılarda da
@@ -83,7 +83,7 @@ node --experimental-websocket website/scripts/browser-smoke.mjs http://127.0.0.1
 
 Bu kontrol masaüstü, mobil ve gizlilik sayfası senaryolarında kırık görsel,
 JavaScript hatası, yatay taşma, görünmeden kalan animasyon öğesi ve mobil menü
-davranışını denetler; tam sayfa ekran görüntülerini `/tmp/mimicam-browser-smoke`
+davranışını denetler; tam sayfa ekran görüntülerini `/tmp/miucam-browser-smoke`
 altına yazar.
 
 ## Dağıtım
@@ -113,7 +113,7 @@ eklenmemelidir. Gerçek bağlantılar geldiğinde ana CTA alanı güncellenebili
 
 ## İçerik sınırları
 
-Tanıtım metni mevcut ürün davranışına göre hazırlanmıştır: MimiCam aynı yerel
+Tanıtım metni mevcut ürün davranışına göre hazırlanmıştır: MiuCam aynı yerel
 ağda çalışır; uzak internet izleme, APNs/FCM bildirimi, TLS/uçtan uca şifreleme,
 iOS arka plan kamera veya tıbbi cihaz iddiası içermez. Bu özelliklerden biri
 değişirse site metni, SSS ve gizlilik bildirimi birlikte güncellenmelidir.

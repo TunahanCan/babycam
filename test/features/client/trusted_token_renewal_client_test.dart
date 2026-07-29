@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/pairing/trusted_token_renewal_client.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/features/client/pairing/trusted_token_renewal_client.dart';
 
 void main() {
   test('başarılı renew yeni token ve clientId döner', () async {
@@ -66,7 +66,7 @@ Future<HttpServer> _renewServer(
 ) async {
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   server.listen((request) async {
-    if (request.uri.path == MimiCamProtocolV2.authRenew) {
+    if (request.uri.path == MiuCamProtocolV2.authRenew) {
       await handler(request);
       return;
     }
@@ -78,7 +78,7 @@ Future<HttpServer> _renewServer(
 
 PairingSession _session(int port) => PairingSession(
       payload: PairingPayload(
-        schemaVersion: MimiCamProtocolV2.schemaVersion,
+        schemaVersion: MiuCamProtocolV2.schemaVersion,
         host: InternetAddress.loopbackIPv4.address,
         port: port,
         deviceId: 'server',

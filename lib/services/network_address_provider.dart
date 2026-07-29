@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import '../core/mimicam_protocol.dart';
+import '../core/miucam_protocol.dart';
 import '../core/network/lan_endpoint.dart';
 import '../core/network/local_network_guard.dart';
 
@@ -79,7 +79,7 @@ class NetworkAddressProvider {
   }
 
   static Future<LocalNetworkEndpoint?> localEndpoint({
-    int port = MimiCamProtocol.httpPort,
+    int port = MiuCamProtocol.httpPort,
     InternetAddressType type = InternetAddressType.any,
   }) async {
     final interfaces = await NetworkInterface.list(
@@ -99,19 +99,19 @@ class NetworkAddressProvider {
   }
 
   static Future<String?> localHttpAddress({
-    int port = MimiCamProtocol.httpPort,
+    int port = MiuCamProtocol.httpPort,
   }) async =>
       (await localEndpoint(port: port))?.authority;
 
   static LocalNetworkEndpoint? bestLocalEndpoint(
     Iterable<NetworkAddressCandidate> candidates, {
-    int port = MimiCamProtocol.httpPort,
+    int port = MiuCamProtocol.httpPort,
   }) =>
       rankedLocalEndpoints(candidates, port: port).firstOrNull;
 
   static List<LocalNetworkEndpoint> rankedLocalEndpoints(
     Iterable<NetworkAddressCandidate> candidates, {
-    int port = MimiCamProtocol.httpPort,
+    int port = MiuCamProtocol.httpPort,
   }) {
     final scored = candidates
         .map((candidate) => (

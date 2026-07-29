@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/network/lan_endpoint.dart';
+import 'package:miucam/core/network/lan_endpoint.dart';
 
 void main() {
   test('parses hostname and IPv4 authorities', () {

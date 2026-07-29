@@ -29,8 +29,8 @@ String _localizedFallback(
 const _deUiText = <String, String>{
   'notificationChannelDescription':
       'Hinweise zu weinähnlichen und lauten Geräuschen, Bewegung und Lichtänderungen im Babyzimmer.',
-  'bootstrapPreparing': 'MimiCam wird vorbereitet...',
-  'bootstrapFailedTitle': 'MimiCam konnte nicht gestartet werden',
+  'bootstrapPreparing': 'MiuCam wird vorbereitet...',
+  'bootstrapFailedTitle': 'MiuCam konnte nicht gestartet werden',
   'bootstrapFailedText':
       'Beim Vorbereiten der App-Daten ist ein Fehler aufgetreten. Versuche es erneut.',
   'roleSwitching': 'Rolle wird gewechselt...',
@@ -39,7 +39,7 @@ const _deUiText = <String, String>{
       'Wenn du in den Client-Modus wechselst, werden der Babyzimmer-Stream und lokale Dienste beendet.',
   'cancel': 'Abbrechen',
   'switchToClient': 'Zu Client wechseln',
-  'roleSelectionTitle': 'Wie möchtest du MimiCam nutzen?',
+  'roleSelectionTitle': 'Wie möchtest du MiuCam nutzen?',
   'roleSelectionSubtitle':
       'Lass ein Telefon beim Baby und schau auf dem anderen nach.',
   'babyRoomDeviceTitle': 'Im Babyzimmer aufstellen',
@@ -263,7 +263,7 @@ const _deUiText = <String, String>{
       'Halte das Ladekabel vom Baby fern und lasse das Telefon belüftet.',
   'safeRoomSetupVerify': 'Prüfe Bild und Ton auf dem Eltern-Gerät.',
   'adultSupervisionNotice':
-      'MimiCam ersetzt nicht die Aufsicht durch Erwachsene.',
+      'MiuCam ersetzt nicht die Aufsicht durch Erwachsene.',
   'streamDetails': 'Übertragungsdetails',
   'streamDetailsSubtitle': 'Verbindung, Bildqualität und Warnungsstatus',
   'technicalError': 'Technischer Fehler',
@@ -373,7 +373,7 @@ const _deUiText = <String, String>{
   'manualIpConnectText':
       'Gib die lokale Server-Adresse ein, wenn QR nicht verfügbar ist.',
   'localNetworkPrivacyNote':
-      'MimiCam bleibt im lokalen Netzwerk; kein Cloud-Relay.',
+      'MiuCam bleibt im lokalen Netzwerk; kein Cloud-Relay.',
   'important': 'Wichtig',
   'info': 'Hinweis',
   'warning': 'Warnung',
@@ -458,7 +458,7 @@ const _deUiText = <String, String>{
   'processRecoveryForegroundContract':
       'Nach einem Prozessabbruch muss die App im Vordergrund neu geöffnet werden.',
   'discoveredRoomsTitle': 'Räume in diesem Netzwerk',
-  'discoveredRoomsSubtitle': 'Über Bonjour / NSD gefundene MimiCam-Geräte.',
+  'discoveredRoomsSubtitle': 'Über Bonjour / NSD gefundene MiuCam-Geräte.',
   'noRoomsDiscovered':
       'Noch kein Raum gefunden; die lokale Suche läuft weiter.',
   'refreshDiscovery': 'Lokale Suche aktualisieren',
@@ -466,7 +466,7 @@ const _deUiText = <String, String>{
   'chooseLanguage': 'App-Sprache',
   'systemLanguage': 'Telefonsprache verwenden',
   'systemLanguageShort': 'Telefonsprache',
-  'systemLanguageDescription': 'MimiCam folgt der Telefonsprache.',
+  'systemLanguageDescription': 'MiuCam folgt der Telefonsprache.',
   'watchPreferences': 'Anzeige-Einstellungen',
   'watchNotificationsDescription': 'Live-Warnungen aus diesem Raum empfangen.',
   'detectionSettingsOnServer': 'Erkennung wird am Babyzimmer-Gerät eingestellt',
@@ -496,8 +496,8 @@ const _deUiText = <String, String>{
 const _arUiText = <String, String>{
   'notificationChannelDescription':
       'تنبيهات الأصوات الشبيهة بالبكاء والأصوات العالية والحركة وتغيّر الإضاءة في غرفة الطفل.',
-  'bootstrapPreparing': 'يتم تجهيز MimiCam...',
-  'bootstrapFailedTitle': 'تعذر بدء MimiCam',
+  'bootstrapPreparing': 'يتم تجهيز MiuCam...',
+  'bootstrapFailedTitle': 'تعذر بدء MiuCam',
   'bootstrapFailedText':
       'حدثت مشكلة أثناء تجهيز بيانات التطبيق. يمكنك المحاولة مرة أخرى.',
   'roleSwitching': 'يتم تبديل الدور...',
@@ -506,7 +506,7 @@ const _arUiText = <String, String>{
       'إذا انتقلت إلى وضع العميل، سيتوقف بث غرفة الطفل والخدمات المحلية.',
   'cancel': 'إلغاء',
   'switchToClient': 'التبديل إلى العميل',
-  'roleSelectionTitle': 'كيف ستستخدم MimiCam؟',
+  'roleSelectionTitle': 'كيف ستستخدم MiuCam؟',
   'roleSelectionSubtitle': 'اترك هاتفاً بجانب طفلك وشاهد من الهاتف الآخر.',
   'babyRoomDeviceTitle': 'ضعه في غرفة الطفل',
   'babyRoomName': 'غرفة الطفل',
@@ -714,7 +714,7 @@ const _arUiText = <String, String>{
   'safeRoomSetupPlacement': 'ثبّت الهاتف في مكان لا يستطيع الطفل الوصول إليه.',
   'safeRoomSetupPower': 'أبعد كابل الشحن عن الطفل واترك تهوية الهاتف مفتوحة.',
   'safeRoomSetupVerify': 'تحقق من الصورة والصوت عبر جهاز الوالدين.',
-  'adultSupervisionNotice': 'لا يحل MimiCam محل إشراف شخص بالغ.',
+  'adultSupervisionNotice': 'لا يحل MiuCam محل إشراف شخص بالغ.',
   'streamDetails': 'تفاصيل البث',
   'streamDetailsSubtitle': 'الاتصال وجودة الصورة وحالة التنبيهات',
   'technicalError': 'خطأ تقني',
@@ -812,7 +812,7 @@ const _arUiText = <String, String>{
   'manualIpConnectTitle': 'اتصال IP يدوي',
   'manualIpConnectText': 'أدخل عنوان الخادم المحلي إذا لم يتوفر QR.',
   'localNetworkPrivacyNote':
-      'يبقى MimiCam داخل الشبكة المحلية؛ لا يوجد ترحيل سحابي.',
+      'يبقى MiuCam داخل الشبكة المحلية؛ لا يوجد ترحيل سحابي.',
   'important': 'مهم',
   'info': 'معلومات',
   'warning': 'تحذير',
@@ -892,14 +892,14 @@ const _arUiText = <String, String>{
   'processRecoveryForegroundContract':
       'إذا توقفت العملية فأعد فتح التطبيق في الواجهة.',
   'discoveredRoomsTitle': 'الغرف على هذه الشبكة',
-  'discoveredRoomsSubtitle': 'أجهزة MimiCam التي عثر عليها Bonjour / NSD.',
+  'discoveredRoomsSubtitle': 'أجهزة MiuCam التي عثر عليها Bonjour / NSD.',
   'noRoomsDiscovered': 'لم يتم العثور على غرفة بعد؛ يستمر البحث المحلي.',
   'refreshDiscovery': 'تحديث البحث المحلي',
   'connectDiscoveredRoom': 'اتصال',
   'chooseLanguage': 'لغة التطبيق',
   'systemLanguage': 'استخدام لغة الهاتف',
   'systemLanguageShort': 'لغة الهاتف',
-  'systemLanguageDescription': 'يتبع MimiCam تغييرات لغة الهاتف.',
+  'systemLanguageDescription': 'يتبع MiuCam تغييرات لغة الهاتف.',
   'watchPreferences': 'تفضيلات المشاهدة',
   'watchNotificationsDescription': 'استقبال التنبيهات المباشرة من هذه الغرفة.',
   'detectionSettingsOnServer': 'إعدادات الاكتشاف على جهاز الغرفة',

@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/client_runtime.dart';
-import 'package:mimicam/features/client/pairing/client_pairing_flow.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/features/client/client_runtime.dart';
+import 'package:miucam/features/client/pairing/client_pairing_flow.dart';
 
 void main() {
   test('eşleşme başarılı olunca bildirim dinlemeyi otomatik başlatır',

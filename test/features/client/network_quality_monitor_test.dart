@@ -3,12 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/media/adaptive_media_profile.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/media/client_stream_health_state.dart';
-import 'package:mimicam/features/client/media/network_quality_monitor.dart';
+import 'package:miucam/core/media/adaptive_media_profile.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/features/client/media/client_stream_health_state.dart';
+import 'package:miucam/features/client/media/network_quality_monitor.dart';
 
 void main() {
   test('NetworkQualityMonitor status ölçer ve kalite raporunu servera yollar',
@@ -22,7 +22,7 @@ void main() {
         request.headers.value(HttpHeaders.authorizationHeader),
         'Bearer token',
       );
-      if (request.uri.path == MimiCamProtocolV2.status) {
+      if (request.uri.path == MiuCamProtocolV2.status) {
         request.response.headers.contentType = ContentType.json;
         request.response.write(jsonEncode({
           'mediaProfile':
@@ -32,7 +32,7 @@ void main() {
         await request.response.close();
         return;
       }
-      if (request.uri.path == MimiCamProtocolV2.qualityReport) {
+      if (request.uri.path == MiuCamProtocolV2.qualityReport) {
         final body = jsonDecode(await utf8.decoder.bind(request).join());
         expect(body, isA<Map>());
         expect((body as Map)['tier'], isNotEmpty);
@@ -175,11 +175,11 @@ void main() {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     server.listen((request) async {
-      if (request.uri.path == MimiCamProtocolV2.status) {
+      if (request.uri.path == MiuCamProtocolV2.status) {
         statusRequests++;
         request.response.headers.contentType = ContentType.json;
         request.response.write(jsonEncode({'ok': true}));
-      } else if (request.uri.path == MimiCamProtocolV2.qualityReport) {
+      } else if (request.uri.path == MiuCamProtocolV2.qualityReport) {
         reportRequests++;
         await request.drain<void>();
         request.response.headers.contentType = ContentType.json;
@@ -231,7 +231,7 @@ void main() {
 Future<HttpServer> _qualityServer(List<Map<String, Object?>> captured) async {
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   server.listen((request) async {
-    if (request.uri.path == MimiCamProtocolV2.status) {
+    if (request.uri.path == MiuCamProtocolV2.status) {
       request.response.headers.contentType = ContentType.json;
       request.response.write(jsonEncode({
         'mediaProfile':
@@ -241,7 +241,7 @@ Future<HttpServer> _qualityServer(List<Map<String, Object?>> captured) async {
       await request.response.close();
       return;
     }
-    if (request.uri.path == MimiCamProtocolV2.qualityReport) {
+    if (request.uri.path == MiuCamProtocolV2.qualityReport) {
       final body = jsonDecode(await utf8.decoder.bind(request).join());
       captured.add(Map<String, Object?>.from(body as Map));
       request.response.headers.contentType = ContentType.json;
@@ -263,7 +263,7 @@ Future<HttpServer> _qualityServer(List<Map<String, Object?>> captured) async {
 
 PairingSession _session(int port) => PairingSession(
       payload: PairingPayload(
-        schemaVersion: MimiCamProtocolV2.schemaVersion,
+        schemaVersion: MiuCamProtocolV2.schemaVersion,
         host: InternetAddress.loopbackIPv4.address,
         port: port,
         deviceId: 'server',

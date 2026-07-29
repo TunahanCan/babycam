@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/async/serialized_async_executor.dart';
+import 'package:miucam/core/async/serialized_async_executor.dart';
 
 void main() {
   test('commands run in submission order', () async {

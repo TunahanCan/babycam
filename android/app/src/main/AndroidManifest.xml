@@ -17,9 +17,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
-    <application android:label="MimiCam" android:allowBackup="false" android:fullBackupContent="false" android:usesCleartextTraffic="true" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round">
+    <application android:label="MiuCam" android:allowBackup="false" android:fullBackupContent="false" android:usesCleartextTraffic="true" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round">
         <service
-            android:name=".MimiCamForegroundService"
+            android:name=".MiuCamForegroundService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="camera|microphone|mediaPlayback|connectedDevice"

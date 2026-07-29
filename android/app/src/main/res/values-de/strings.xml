@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mimicam_server_channel_name">MimiCam-Server</string>
-    <string name="mimicam_alert_connection_channel_name">MimiCam-Warnverbindung</string>
-    <string name="mimicam_server_channel_description">Aktivität des lokalen MimiCam-Servers und der Medien</string>
-    <string name="mimicam_alert_connection_channel_description">Hält die Verbindung für Babyzimmer-Hinweise im Hintergrund aktiv</string>
-    <string name="mimicam_runtime_camera_microphone_playback">Kamera, Mikrofon und Babyzimmer-Ton sind im Hintergrund aktiv.</string>
-    <string name="mimicam_runtime_camera_microphone">Kamera und Mikrofon sind im Hintergrund aktiv.</string>
-    <string name="mimicam_runtime_camera_playback">Kamera und Babyzimmer-Ton sind im Hintergrund aktiv.</string>
-    <string name="mimicam_runtime_microphone_playback">Mikrofon und Babyzimmer-Ton sind im Hintergrund aktiv.</string>
-    <string name="mimicam_runtime_camera">Die Kamera ist im Hintergrund aktiv.</string>
-    <string name="mimicam_runtime_microphone">Das Mikrofon ist im Hintergrund aktiv.</string>
-    <string name="mimicam_runtime_playback">Der Babyzimmer-Ton ist im Hintergrund aktiv.</string>
-    <string name="mimicam_runtime_server">Der lokale Server und die Wi-Fi-Verbindung bleiben aktiv.</string>
-    <string name="mimicam_runtime_alerts">Babyzimmer-Hinweise werden im Hintergrund überwacht.</string>
-    <string name="mimicam_runtime_stopping">Der Hintergrunddienst wird beendet.</string>
-    <string name="mimicam_runtime_title_media">Die MimiCam-Babyzimmer-Sitzung ist aktiv</string>
-    <string name="mimicam_runtime_title_server">Der lokale MimiCam-Server ist aktiv</string>
-    <string name="mimicam_runtime_title_alerts">MimiCam-Babyzimmer-Hinweise sind aktiv</string>
+    <string name="miucam_server_channel_name">MiuCam-Server</string>
+    <string name="miucam_alert_connection_channel_name">MiuCam-Warnverbindung</string>
+    <string name="miucam_server_channel_description">Aktivität des lokalen MiuCam-Servers und der Medien</string>
+    <string name="miucam_alert_connection_channel_description">Hält die Verbindung für Babyzimmer-Hinweise im Hintergrund aktiv</string>
+    <string name="miucam_runtime_camera_microphone_playback">Kamera, Mikrofon und Babyzimmer-Ton sind im Hintergrund aktiv.</string>
+    <string name="miucam_runtime_camera_microphone">Kamera und Mikrofon sind im Hintergrund aktiv.</string>
+    <string name="miucam_runtime_camera_playback">Kamera und Babyzimmer-Ton sind im Hintergrund aktiv.</string>
+    <string name="miucam_runtime_microphone_playback">Mikrofon und Babyzimmer-Ton sind im Hintergrund aktiv.</string>
+    <string name="miucam_runtime_camera">Die Kamera ist im Hintergrund aktiv.</string>
+    <string name="miucam_runtime_microphone">Das Mikrofon ist im Hintergrund aktiv.</string>
+    <string name="miucam_runtime_playback">Der Babyzimmer-Ton ist im Hintergrund aktiv.</string>
+    <string name="miucam_runtime_server">Der lokale Server und die Wi-Fi-Verbindung bleiben aktiv.</string>
+    <string name="miucam_runtime_alerts">Babyzimmer-Hinweise werden im Hintergrund überwacht.</string>
+    <string name="miucam_runtime_stopping">Der Hintergrunddienst wird beendet.</string>
+    <string name="miucam_runtime_title_media">Die MiuCam-Babyzimmer-Sitzung ist aktiv</string>
+    <string name="miucam_runtime_title_server">Der lokale MiuCam-Server ist aktiv</string>
+    <string name="miucam_runtime_title_alerts">MiuCam-Babyzimmer-Hinweise sind aktiv</string>
 </resources>

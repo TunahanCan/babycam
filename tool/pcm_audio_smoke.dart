@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:mimicam/features/client/media/pcm_audio_output.dart';
+import 'package:miucam/features/client/media/pcm_audio_output.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/media/adaptive_media_profile.dart';
-import 'package:mimicam/services/platform/device_resource_snapshot_provider.dart';
-import 'package:mimicam/services/server/media_resource_governor.dart';
-import 'package:mimicam/services/server/stream_backpressure_gate.dart';
+import 'package:miucam/core/media/adaptive_media_profile.dart';
+import 'package:miucam/services/platform/device_resource_snapshot_provider.dart';
+import 'package:miucam/services/server/media_resource_governor.dart';
+import 'package:miucam/services/server/stream_backpressure_gate.dart';
 
 void main() {
   const governor = MediaResourceGovernor();

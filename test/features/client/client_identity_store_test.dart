@@ -1,9 +1,9 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/security/secure_random_token_generator.dart';
-import 'package:mimicam/features/client/pairing/client_identity_store.dart';
-import 'package:mimicam/features/client/pairing/pairing_session_store.dart';
+import 'package:miucam/core/security/secure_random_token_generator.dart';
+import 'package:miucam/features/client/pairing/client_identity_store.dart';
+import 'package:miucam/features/client/pairing/pairing_session_store.dart';
 
 void main() {
   test('client id secure storage icinde kalici uretilir', () async {
@@ -18,12 +18,12 @@ void main() {
 
     expect(first, startsWith('client_'));
     expect(second, first);
-    expect(secure.values['mimicam_client_id'], first);
+    expect(secure.values['miucam_client_id'], first);
   });
 
   test('legacy client_local degeri yenilenir', () async {
     final secure = _FakeSecureTokenStore()
-      ..values['mimicam_client_id'] = 'client_local';
+      ..values['miucam_client_id'] = 'client_local';
     final store = ClientIdentityStore(
       secureTokens: secure,
       tokenGenerator: SecureRandomTokenGenerator(random: Random(2)),
@@ -33,7 +33,7 @@ void main() {
 
     expect(id, startsWith('client_'));
     expect(id, isNot('client_local'));
-    expect(secure.values['mimicam_client_id'], id);
+    expect(secure.values['miucam_client_id'], id);
   });
 }
 

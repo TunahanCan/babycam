@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/features/server/pairing/pairing_token_service.dart';
-import 'package:mimicam/services/server/active_client_registry.dart';
+import 'package:miucam/features/server/pairing/pairing_token_service.dart';
+import 'package:miucam/services/server/active_client_registry.dart';
 
 void main() {
   test('session/start aynı client için slot sayısını artırmaz', () {

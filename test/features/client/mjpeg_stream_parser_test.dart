@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/features/client/media/mjpeg_stream_parser.dart';
+import 'package:miucam/features/client/media/mjpeg_stream_parser.dart';
 
 void main() {
   test('parcali MJPEG header ve frame verisini birlestirir', () {
@@ -49,9 +49,9 @@ void main() {
     final bytes = utf8.encode(
           '--frame\r\nContent-Type: image/jpeg\r\n'
           'Content-Length: 3\r\n'
-          'X-MimiCam-Sequence: 42\r\n'
-          'X-MimiCam-Captured-At-Ms: 900\r\n'
-          'X-MimiCam-Sent-At-Ms: 1000\r\n\r\n',
+          'X-MiuCam-Sequence: 42\r\n'
+          'X-MiuCam-Captured-At-Ms: 900\r\n'
+          'X-MiuCam-Sent-At-Ms: 1000\r\n\r\n',
         ) +
         [7, 8, 9] +
         utf8.encode('\r\n');

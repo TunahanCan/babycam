@@ -2,7 +2,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/services/server/audio_stream_leveler.dart';
+import 'package:miucam/services/server/audio_stream_leveler.dart';
 
 void main() {
   test('dusuk RMS PCM sesini peak limitini asmadan yukseltir', () {

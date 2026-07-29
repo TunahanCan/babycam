@@ -25,14 +25,14 @@ class NotificationService {
     FlutterLocalNotificationsPlugin? plugin,
   }) : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
-  static const channelId = 'mimicam_alerts';
-  static const updatesChannelId = 'mimicam_room_updates';
-  static const alertsPayload = 'mimicam://alerts';
-  static const _groupKey = 'mimicam_alerts_group';
+  static const channelId = 'miucam_alerts';
+  static const updatesChannelId = 'miucam_room_updates';
+  static const alertsPayload = 'miucam://alerts';
+  static const _groupKey = 'miucam_alerts_group';
   // iOS groups notifications by this exact thread identifier. Keep it
   // independent of the Android channel name so a future Android rename cannot
   // silently split the parent alert stack on iPhone.
-  static const iosAlertThreadIdentifier = 'mimicam.parent-alerts';
+  static const iosAlertThreadIdentifier = 'miucam.parent-alerts';
   static final _notificationTaps = StreamController<String>.broadcast();
   static String? _pendingTap;
   static String? _lastPublishedTap;
@@ -106,7 +106,7 @@ class NotificationService {
       if (!_pluginInitialized) {
         final initialized = await _plugin.initialize(
           const InitializationSettings(
-            android: AndroidInitializationSettings('ic_stat_mimicam'),
+            android: AndroidInitializationSettings('ic_stat_miucam'),
             iOS: DarwinInitializationSettings(
               requestAlertPermission: false,
               requestBadgePermission: false,
@@ -220,7 +220,7 @@ class NotificationService {
                 ? _strings.notificationChannelName
                 : _strings.notificationUpdatesChannelName,
             channelDescription: _strings.ui('notificationChannelDescription'),
-            icon: 'ic_stat_mimicam',
+            icon: 'ic_stat_miucam',
             importance:
                 interruptive ? Importance.high : Importance.defaultImportance,
             priority: interruptive ? Priority.high : Priority.defaultPriority,
@@ -236,7 +236,7 @@ class NotificationService {
             styleInformation: BigTextStyleInformation(
               message,
               contentTitle: contentTitle,
-              summaryText: 'MimiCam',
+              summaryText: 'MiuCam',
             ),
           ),
           iOS: DarwinNotificationDetails(
@@ -247,7 +247,7 @@ class NotificationService {
             presentList: true,
             // This is the iOS Notification Center grouping contract. Every
             // parent alert retains its own notification id while sharing one
-            // thread, so iOS shows a single MimiCam stack instead of a noisy
+            // thread, so iOS shows a single MiuCam stack instead of a noisy
             // list of independent banners.
             threadIdentifier: iosAlertThreadIdentifier,
             interruptionLevel: interruptive

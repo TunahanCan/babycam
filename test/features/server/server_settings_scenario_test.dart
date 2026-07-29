@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/features/server/media/media_runtime_controller.dart';
-import 'package:mimicam/features/server/presentation/server_settings_section.dart';
-import 'package:mimicam/features/server/server_runtime.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/configuration_service.dart';
+import 'package:miucam/features/server/media/media_runtime_controller.dart';
+import 'package:miucam/features/server/presentation/server_settings_section.dart';
+import 'package:miucam/features/server/server_runtime.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/configuration_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

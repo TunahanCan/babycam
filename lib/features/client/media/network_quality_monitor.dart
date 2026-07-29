@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../../core/media/adaptive_media_profile.dart';
-import '../../../core/protocol/mimicam_protocol.dart';
+import '../../../core/protocol/miucam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
 import '../../../services/platform/battery_snapshot_provider.dart';
@@ -84,7 +84,7 @@ class NetworkQualityMonitor {
       final status = await _getJson(
         client,
         session,
-        MimiCamProtocolV2.status,
+        MiuCamProtocolV2.status,
       ).timeout(timeout);
       stopwatch.stop();
       final rttMs = stopwatch.elapsedMilliseconds;
@@ -175,7 +175,7 @@ class NetworkQualityMonitor {
     );
     reportBody['battery'] = battery.toJson();
     final request = await client.postUrl(
-        ServerEndpointBuilder(session).http(MimiCamProtocolV2.qualityReport));
+        ServerEndpointBuilder(session).http(MiuCamProtocolV2.qualityReport));
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.authorizationHeader, 'Bearer ${session.sessionToken}');

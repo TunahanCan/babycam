@@ -5,25 +5,25 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
-import 'package:mimicam/app/app_role.dart';
-import 'package:mimicam/core/media/adaptive_media_profile.dart';
-import 'package:mimicam/core/protocol/alert_event_dto.dart';
-import 'package:mimicam/core/protocol/device_feature_models.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/core/theme/mimicam_theme.dart';
-import 'package:mimicam/features/client/client_home_screen.dart';
-import 'package:mimicam/features/client/client_runtime.dart';
-import 'package:mimicam/features/client/controls/client_room_controls.dart';
-import 'package:mimicam/features/client/media/active_stream_session.dart';
-import 'package:mimicam/features/client/media/watch_screen.dart';
-import 'package:mimicam/features/role_selection/role_selection_screen.dart';
-import 'package:mimicam/features/server/media/media_runtime_controller.dart';
-import 'package:mimicam/features/server/media/server_media_source.dart';
-import 'package:mimicam/features/server/server_home_screen.dart';
-import 'package:mimicam/features/server/server_runtime.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/configuration_service.dart';
+import 'package:miucam/app/app_role.dart';
+import 'package:miucam/core/media/adaptive_media_profile.dart';
+import 'package:miucam/core/protocol/alert_event_dto.dart';
+import 'package:miucam/core/protocol/device_feature_models.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/core/theme/miucam_theme.dart';
+import 'package:miucam/features/client/client_home_screen.dart';
+import 'package:miucam/features/client/client_runtime.dart';
+import 'package:miucam/features/client/controls/client_room_controls.dart';
+import 'package:miucam/features/client/media/active_stream_session.dart';
+import 'package:miucam/features/client/media/watch_screen.dart';
+import 'package:miucam/features/role_selection/role_selection_screen.dart';
+import 'package:miucam/features/server/media/media_runtime_controller.dart';
+import 'package:miucam/features/server/media/server_media_source.dart';
+import 'package:miucam/features/server/server_home_screen.dart';
+import 'package:miucam/features/server/server_runtime.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/configuration_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _scene = String.fromEnvironment('REPORT_SCENE', defaultValue: 'role');
@@ -67,7 +67,7 @@ Future<_BuiltReportScene> _buildScene(
       final runtime = ClientRuntime(pair: (_) async => _session());
       return _BuiltReportScene(
         child: _ThemedScene(
-          theme: MimiCamTheme.clientTheme(),
+          theme: MiuCamTheme.clientTheme(),
           child: ClientHomeScreen(
             runtime: runtime,
             activeRole: AppRole.client,
@@ -90,7 +90,7 @@ Future<_BuiltReportScene> _buildScene(
       await runtime.pairWithServer(_payload());
       return _BuiltReportScene(
         child: _ThemedScene(
-          theme: MimiCamTheme.clientTheme(),
+          theme: MiuCamTheme.clientTheme(),
           child: ClientHomeScreen(
             runtime: runtime,
             activeRole: AppRole.client,
@@ -139,7 +139,7 @@ Future<_BuiltReportScene> _buildScene(
       await runtime.startAlertListening();
       return _BuiltReportScene(
         child: _ThemedScene(
-          theme: MimiCamTheme.clientTheme(),
+          theme: MiuCamTheme.clientTheme(),
           child: WatchScreen(runtime: runtime, initialTab: tab),
         ),
         readyWidget: fixture == null || tab != 0
@@ -178,7 +178,7 @@ Future<_BuiltReportScene> _buildScene(
       }
       return _BuiltReportScene(
         child: _ThemedScene(
-          theme: MimiCamTheme.serverTheme(),
+          theme: MiuCamTheme.serverTheme(),
           child: ServerHomeScreen(
             runtime: runtime,
             config: config,
@@ -204,7 +204,7 @@ Future<_BuiltReportScene> _buildScene(
     default:
       return _BuiltReportScene(
         child: _ThemedScene(
-          theme: MimiCamTheme.neutralTheme(),
+          theme: MiuCamTheme.neutralTheme(),
           child: RoleSelectionScreen(onRoleSelected: (_) {}),
         ),
       );
@@ -213,7 +213,7 @@ Future<_BuiltReportScene> _buildScene(
 
 Future<Uint8List> _loadReportFrame() async {
   final data = await rootBundle.load(
-    'assets/branding/mimicam_launcher_icon.png',
+    'assets/branding/miucam_launcher_icon.png',
   );
   return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
 }
@@ -322,7 +322,7 @@ class _ReportSequenceState extends State<_ReportSequence> {
     _reportedReadyIndex = index;
     final spec = _reportScenes[index];
     debugPrint(
-      'MIMICAM_REPORT_READY index=$index '
+      'MIUCAM_REPORT_READY index=$index '
       'scene=${spec.scene} tab=${spec.tab}',
     );
   }
@@ -461,8 +461,8 @@ class _ReportMediaFixtureServer {
           '--frame\r\n'
           'Content-Type: image/png\r\n'
           'Content-Length: ${_frame.length}\r\n'
-          'X-MimiCam-Sequence: $sequence\r\n'
-          'X-MimiCam-Sent-At-Ms: $now\r\n\r\n',
+          'X-MiuCam-Sequence: $sequence\r\n'
+          'X-MiuCam-Sent-At-Ms: $now\r\n\r\n',
         ));
         response.add(_frame);
         response.add(const [13, 10]);
@@ -708,7 +708,7 @@ class _ReportRoomControls extends ClientRoomControls {
 }
 
 const _qrPayload =
-    'mimicam://pair?payload=eyJob3N0IjoiMTkyLjE2OC4xLjQyIiwicG9ydCI6ODA4MCwiZGV2aWNlTmFtZSI6IkJlYmVrIE9kYXNpIiwidHJhbnNwb3J0IjoiaHR0cF93cyJ9';
+    'miucam://pair?payload=eyJob3N0IjoiMTkyLjE2OC4xLjQyIiwicG9ydCI6ODA4MCwiZGV2aWNlTmFtZSI6IkJlYmVrIE9kYXNpIiwidHJhbnNwb3J0IjoiaHR0cF93cyJ9';
 
 class _QrScannerReportScene extends StatelessWidget {
   const _QrScannerReportScene();

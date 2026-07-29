@@ -1,4 +1,4 @@
-import '../../../core/mimicam_protocol.dart';
+import '../../../core/miucam_protocol.dart';
 import '../../../core/protocol/pairing_payload.dart';
 import '../../../core/security/transport_config.dart';
 import 'pairing_token_service.dart';
@@ -16,7 +16,7 @@ class ServerQrPayloadBuilder {
 
   PairingPayload build(
       {required String host,
-      int port = MimiCamProtocol.httpPort,
+      int port = MiuCamProtocol.httpPort,
       Duration ttl = const Duration(minutes: 10),
       TransportConfig? transportConfig,
       Map<String, Object?>? capabilities}) {

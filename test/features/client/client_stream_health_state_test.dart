@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/media/adaptive_media_profile.dart';
-import 'package:mimicam/features/client/media/client_stream_health_state.dart';
+import 'package:miucam/core/media/adaptive_media_profile.dart';
+import 'package:miucam/features/client/media/client_stream_health_state.dart';
 
 void main() {
   test('initial snapshot safe defaults taşır', () {

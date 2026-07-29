@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 
 const baseUrl = new URL(process.argv[2] || "http://127.0.0.1:8080/");
 const chromeBinary = process.env.CHROME_BIN || "google-chrome";
-const outputDirectory = resolve(process.env.SCREENSHOT_DIR || "/tmp/mimicam-browser-smoke");
+const outputDirectory = resolve(process.env.SCREENSHOT_DIR || "/tmp/miucam-browser-smoke");
 
 rmSync(outputDirectory, { recursive: true, force: true });
 mkdirSync(outputDirectory, { recursive: true });
@@ -140,7 +140,7 @@ const waitUntilReady = async () => {
 
   let i18nReady = false;
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    i18nReady = await evaluate("window.MimiCamI18n?.ready === true");
+    i18nReady = await evaluate("window.MiuCamI18n?.ready === true");
     if (i18nReady) break;
     await delay(50);
   }
@@ -343,17 +343,17 @@ const runScenario = async ({
           }
           return originalFetch(input, options);
         };
-        const slowSelection = window.MimiCamI18n.changeLanguage('fr');
-        const latestSelection = window.MimiCamI18n.changeLanguage('es');
+        const slowSelection = window.MiuCamI18n.changeLanguage('fr');
+        const latestSelection = window.MiuCamI18n.changeLanguage('es');
         await Promise.all([slowSelection, latestSelection]);
         const raceWinner = document.documentElement.lang;
         window.fetch = originalFetch;
 
         const results = [];
-        for (const language of window.MimiCamI18n.supportedLanguages) {
+        for (const language of window.MiuCamI18n.supportedLanguages) {
           const catalog = await fetch(new URL(language + '.json', localeBase))
             .then((response) => response.json());
-          await window.MimiCamI18n.changeLanguage(language);
+          await window.MiuCamI18n.changeLanguage(language);
           await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
           results.push({
             language,
@@ -377,7 +377,7 @@ const runScenario = async ({
               document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
           });
         }
-        await window.MimiCamI18n.changeLanguage(${JSON.stringify(expectedLanguage)});
+        await window.MiuCamI18n.changeLanguage(${JSON.stringify(expectedLanguage)});
         return { raceWinner, results };
       })()`,
       true,
@@ -409,7 +409,7 @@ const runScenario = async ({
         const selector = document.querySelector('[data-language-selector]');
         const languageChanged = Promise.race([
           new Promise((resolve) => {
-            window.addEventListener('mimicam:languagechange', resolve, { once: true });
+            window.addEventListener('miucam:languagechange', resolve, { once: true });
           }),
           new Promise((_, reject) => {
             setTimeout(() => reject(new Error('language selector timeout')), 3000);
@@ -421,7 +421,7 @@ const runScenario = async ({
         return {
           language: document.documentElement.lang,
           query: new URL(window.location.href).searchParams.get('lang'),
-          stored: window.localStorage.getItem('mimicam.website.language'),
+          stored: window.localStorage.getItem('miucam.website.language'),
           selected: document.querySelector('[data-language-selector]')?.value,
         };
       })()`,

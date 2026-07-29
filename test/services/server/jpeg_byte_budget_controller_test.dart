@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/media/adaptive_media_profile.dart';
-import 'package:mimicam/services/server/jpeg_byte_budget_controller.dart';
+import 'package:miucam/core/media/adaptive_media_profile.dart';
+import 'package:miucam/services/server/jpeg_byte_budget_controller.dart';
 
 void main() {
   test('actual bytes target üstündeyse JPEG quality düşer', () {

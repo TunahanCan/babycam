@@ -15,7 +15,7 @@ abstract class PcmAudioSink {
 
 class PcmAudioOutput implements PcmAudioSink {
   const PcmAudioOutput({
-    MethodChannel channel = const MethodChannel('mimicam/pcm_audio'),
+    MethodChannel channel = const MethodChannel('miucam/pcm_audio'),
   }) : _channel = channel;
 
   final MethodChannel _channel;

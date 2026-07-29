@@ -14,7 +14,7 @@ class BroadcastAccessConfig {
 
   static const freeLimit = Duration(hours: 2);
   static const oneTimePriceLabel = '300 TL';
-  static const productId = 'mimicam_lifetime_unlock_try_300';
+  static const productId = 'miucam_lifetime_unlock_try_300';
   static const entitlementAuthority = 'room_server';
   static const checkpointInterval = Duration(seconds: 15);
 }

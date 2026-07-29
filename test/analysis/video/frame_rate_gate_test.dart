@@ -1,4 +1,4 @@
-import 'package:mimicam/analysis/video/frame_rate_gate.dart';
+import 'package:miucam/analysis/video/frame_rate_gate.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
-import '../../../../core/protocol/mimicam_protocol.dart';
+import '../../../../core/protocol/miucam_protocol.dart';
 import '../../../../core/protocol/pairing_session.dart';
 import '../../../../core/protocol/server_endpoint_builder.dart';
 import '../../../../core/protocol/webrtc_signaling.dart';
@@ -166,7 +166,7 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
       final response = await _postJson(
         http: http,
         session: session,
-        path: MimiCamProtocolV2.webRtcOffer,
+        path: MiuCamProtocolV2.webRtcOffer,
         query: {'streamToken': streamToken},
         body: WebRtcOfferRequest(
           offer: WebRtcSignalDescription(
@@ -258,7 +258,7 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
       final response = await _getJson(
         http: http,
         session: session,
-        path: MimiCamProtocolV2.webRtcIce,
+        path: MiuCamProtocolV2.webRtcIce,
         query: {'streamToken': streamToken, 'peerId': peerId},
       );
       final raw = response['iceCandidates'];
@@ -283,7 +283,7 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
     await _postJson(
       http: http,
       session: session,
-      path: MimiCamProtocolV2.webRtcIce,
+      path: MiuCamProtocolV2.webRtcIce,
       query: {'streamToken': streamToken, 'peerId': peerId},
       body: {'candidate': candidate.toJson()},
     );
@@ -299,7 +299,7 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
       await _postJson(
         http: http,
         session: session,
-        path: MimiCamProtocolV2.webRtcClose,
+        path: MiuCamProtocolV2.webRtcClose,
         query: {'streamToken': streamToken, 'peerId': peerId},
         body: const {},
       );

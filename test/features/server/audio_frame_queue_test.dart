@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/features/server/media/wav_audio_stream_service.dart';
+import 'package:miucam/features/server/media/wav_audio_stream_service.dart';
 
 void main() {
   test('PCM recorder burstlerini 20 ms 640-byte framelere ayirir', () {

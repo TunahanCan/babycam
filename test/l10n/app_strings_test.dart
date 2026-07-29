@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/l10n/src/app_ui_text_catalog.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/l10n/src/app_ui_text_catalog.dart';
 
 void main() {
   test('American English is the canonical English locale', () async {
@@ -14,7 +14,7 @@ void main() {
     final strings = await delegate.load(locale);
 
     expect(strings.locale, locale);
-    expect(strings.notificationTitle, 'MimiCam · Nursery');
+    expect(strings.notificationTitle, 'MiuCam · Nursery');
     expect(
       strings.alertNotificationTitle(
         type: 'cryDetected',
@@ -36,7 +36,7 @@ void main() {
     final strings = await delegate.load(const Locale('zh'));
 
     expect(strings.isChinese, isTrue);
-    expect(strings.notificationTitle, 'MimiCam · 宝宝房');
+    expect(strings.notificationTitle, 'MiuCam · 宝宝房');
     expect(strings.cameraNotFound, '未找到摄像头。');
   });
 
@@ -64,15 +64,15 @@ void main() {
     final arabicQatar = await delegate.load(const Locale('ar', 'QA'));
 
     expect(hindi.isHindi, isTrue);
-    expect(hindi.notificationTitle, 'MimiCam · बच्चे का कमरा');
+    expect(hindi.notificationTitle, 'MiuCam · बच्चे का कमरा');
     expect(spanish.isSpanish, isTrue);
     expect(spanish.cameraNotFound, 'No se encontró la cámara.');
     expect(french.isFrench, isTrue);
     expect(french.reset, 'Réinitialiser');
     expect(german.isGerman, isTrue);
-    expect(german.notificationTitle, 'MimiCam · Babyzimmer');
+    expect(german.notificationTitle, 'MiuCam · Babyzimmer');
     expect(arabicSaudi.isArabic, isTrue);
-    expect(arabicSaudi.notificationTitle, 'MimiCam · غرفة الطفل');
+    expect(arabicSaudi.notificationTitle, 'MiuCam · غرفة الطفل');
     expect(arabicSaudi.locale.countryCode, 'SA');
     expect(arabicQatar.isArabic, isTrue);
     expect(arabicQatar.locale.countryCode, 'QA');
@@ -102,7 +102,7 @@ void main() {
     final fallback = await delegate.load(const Locale('ru'));
 
     expect(fallback.ui('scanQr'), 'Scan QR');
-    expect(fallback.ui('roleSelectionTitle'), 'How will you use MimiCam?');
+    expect(fallback.ui('roleSelectionTitle'), 'How will you use MiuCam?');
   });
 
   test('UI catalog tüm desteklenen diller için değer taşır', () {

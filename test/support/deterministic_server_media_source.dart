@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:mimicam/features/server/media/server_media_source.dart';
+import 'package:miucam/features/server/media/server_media_source.dart';
 
 /// Predictable media producer used by endpoint and runtime scenario tests.
 ///

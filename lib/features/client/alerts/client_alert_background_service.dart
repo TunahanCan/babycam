@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 /// background alerts are armed when the foreground service could not start.
 class ClientAlertBackgroundService {
   const ClientAlertBackgroundService({
-    MethodChannel channel = const MethodChannel('mimicam/platform_runtime'),
+    MethodChannel channel = const MethodChannel('miucam/platform_runtime'),
   }) : _channel = channel;
 
   final MethodChannel _channel;

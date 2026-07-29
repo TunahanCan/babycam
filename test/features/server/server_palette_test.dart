@@ -2,10 +2,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/theme/mimicam_colors.dart';
-import 'package:mimicam/core/theme/mimicam_theme.dart';
-import 'package:mimicam/features/shared/presentation/mimicam_design_tokens.dart';
-import 'package:mimicam/features/server/presentation/server_home_components.dart';
+import 'package:miucam/core/theme/miucam_colors.dart';
+import 'package:miucam/core/theme/miucam_theme.dart';
+import 'package:miucam/features/shared/presentation/miucam_design_tokens.dart';
+import 'package:miucam/features/server/presentation/server_home_components.dart';
 
 void main() {
   test('server destinasyonları tip güvenli ve dış indekslere dayanıklıdır', () {
@@ -26,31 +26,31 @@ void main() {
   });
 
   test('server theme ferah açık paleti kullanır ve client seedine düşmez', () {
-    final theme = MimiCamTheme.serverTheme();
+    final theme = MiuCamTheme.serverTheme();
 
     expect(theme.brightness, Brightness.light);
-    expect(theme.scaffoldBackgroundColor, MimiCamColors.serverBackground);
+    expect(theme.scaffoldBackgroundColor, MiuCamColors.serverBackground);
     expect(
       theme.scaffoldBackgroundColor.computeLuminance(),
       greaterThan(.85),
     );
-    expect(theme.colorScheme.primary, MimiCamColors.serverPrimary);
-    expect(theme.colorScheme.surface, MimiCamColors.serverSurface);
-    expect(theme.colorScheme.primary, isNot(MimiCamColors.brandPink));
+    expect(theme.colorScheme.primary, MiuCamColors.serverPrimary);
+    expect(theme.colorScheme.surface, MiuCamColors.serverSurface);
+    expect(theme.colorScheme.primary, isNot(MiuCamColors.brandPink));
   });
 
   test('server metin ve semantik durum renkleri panel üzerinde AA taşır', () {
-    const surface = MimiCamDesignTokens.serverPanel;
+    const surface = MiuCamDesignTokens.serverPanel;
     const colors = {
-      'primary text': MimiCamDesignTokens.serverText,
-      'muted text': MimiCamDesignTokens.serverTextMuted,
-      'primary action': MimiCamDesignTokens.serverCyan,
-      'information': MimiCamDesignTokens.serverBlue,
-      'secondary': MimiCamDesignTokens.serverViolet,
-      'success': MimiCamDesignTokens.serverSuccess,
-      'warning': MimiCamDesignTokens.serverWarning,
-      'error': MimiCamDesignTokens.serverError,
-      'disabled': MimiCamDesignTokens.serverDisabled,
+      'primary text': MiuCamDesignTokens.serverText,
+      'muted text': MiuCamDesignTokens.serverTextMuted,
+      'primary action': MiuCamDesignTokens.serverCyan,
+      'information': MiuCamDesignTokens.serverBlue,
+      'secondary': MiuCamDesignTokens.serverViolet,
+      'success': MiuCamDesignTokens.serverSuccess,
+      'warning': MiuCamDesignTokens.serverWarning,
+      'error': MiuCamDesignTokens.serverError,
+      'disabled': MiuCamDesignTokens.serverDisabled,
     };
 
     for (final entry in colors.entries) {
@@ -64,18 +64,18 @@ void main() {
 
   test('server durum renkleri üzerindeki ikonlar AA kontrastı taşır', () {
     const colors = [
-      MimiCamDesignTokens.serverCyan,
-      MimiCamDesignTokens.serverBlue,
-      MimiCamDesignTokens.serverViolet,
-      MimiCamDesignTokens.serverSuccess,
-      MimiCamDesignTokens.serverWarning,
-      MimiCamDesignTokens.serverError,
-      MimiCamDesignTokens.serverDisabled,
+      MiuCamDesignTokens.serverCyan,
+      MiuCamDesignTokens.serverBlue,
+      MiuCamDesignTokens.serverViolet,
+      MiuCamDesignTokens.serverSuccess,
+      MiuCamDesignTokens.serverWarning,
+      MiuCamDesignTokens.serverError,
+      MiuCamDesignTokens.serverDisabled,
     ];
 
     for (final color in colors) {
       expect(
-        _contrastRatio(MimiCamDesignTokens.serverOnAccent, color),
+        _contrastRatio(MiuCamDesignTokens.serverOnAccent, color),
         greaterThanOrEqualTo(4.5),
       );
     }

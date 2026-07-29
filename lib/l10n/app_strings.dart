@@ -101,7 +101,7 @@ class AppStrings {
         : text;
   }
 
-  String get appTitle => 'MimiCam';
+  String get appTitle => 'MiuCam';
   String get reset => _t(
       tr: 'Sıfırla',
       en: 'Reset',
@@ -214,14 +214,14 @@ class AppStrings {
       ar: 'بانتظار الخادم...');
 
   String get notificationTitle => _t(
-      tr: 'MimiCam · Bebek odası',
-      en: 'MimiCam · Nursery',
-      zh: 'MimiCam · 宝宝房',
-      hi: 'MimiCam · बच्चे का कमरा',
-      es: 'MimiCam · Habitación del bebé',
-      fr: 'MimiCam · Chambre de bébé',
-      de: 'MimiCam · Babyzimmer',
-      ar: 'MimiCam · غرفة الطفل');
+      tr: 'MiuCam · Bebek odası',
+      en: 'MiuCam · Nursery',
+      zh: 'MiuCam · 宝宝房',
+      hi: 'MiuCam · बच्चे का कमरा',
+      es: 'MiuCam · Habitación del bebé',
+      fr: 'MiuCam · Chambre de bébé',
+      de: 'MiuCam · Babyzimmer',
+      ar: 'MiuCam · غرفة الطفل');
 
   String alertNotificationTitle({
     required String type,
@@ -410,36 +410,36 @@ class AppStrings {
     }
     if (normalizedType == 'systemwarning') {
       return _addressParent(_t(
-        tr: 'MimiCam’den bir durum güncellemesi geldi. Ayrıntıları görmek için uygulamayı açabilirsin.',
-        en: 'MimiCam sent a nursery update. Open the app to see the details.',
-        zh: 'MimiCam 发来了一条宝宝房动态。打开应用即可查看详情。',
-        hi: 'MimiCam ने बच्चे के कमरे से नई जानकारी भेजी है। विवरण देखने के लिए ऐप खोलें।',
-        es: 'MimiCam envió una novedad de la habitación. Abre la app para ver los detalles.',
-        fr: 'MimiCam a envoyé une nouvelle de la chambre. Ouvre l’app pour voir les détails.',
-        de: 'MimiCam hat ein Update aus dem Babyzimmer gesendet. Öffne die App für weitere Details.',
-        ar: 'أرسل MimiCam تحديثاً من غرفة الطفل. افتحي التطبيق للاطلاع على التفاصيل.',
+        tr: 'MiuCam’den bir durum güncellemesi geldi. Ayrıntıları görmek için uygulamayı açabilirsin.',
+        en: 'MiuCam sent a nursery update. Open the app to see the details.',
+        zh: 'MiuCam 发来了一条宝宝房动态。打开应用即可查看详情。',
+        hi: 'MiuCam ने बच्चे के कमरे से नई जानकारी भेजी है। विवरण देखने के लिए ऐप खोलें।',
+        es: 'MiuCam envió una novedad de la habitación. Abre la app para ver los detalles.',
+        fr: 'MiuCam a envoyé une nouvelle de la chambre. Ouvre l’app pour voir les détails.',
+        de: 'MiuCam hat ein Update aus dem Babyzimmer gesendet. Öffne die App für weitere Details.',
+        ar: 'أرسل MiuCam تحديثاً من غرفة الطفل. افتحي التطبيق للاطلاع على التفاصيل.',
       ));
     }
     return null;
   }
 
   String get notificationChannelName => _t(
-      tr: 'MimiCam Uyarıları',
-      en: 'MimiCam Alerts',
-      zh: 'MimiCam 提醒',
-      hi: 'MimiCam अलर्ट',
-      es: 'Alertas de MimiCam',
-      fr: 'Alertes MimiCam',
-      de: 'MimiCam Warnungen',
-      ar: 'تنبيهات MimiCam');
+      tr: 'MiuCam Uyarıları',
+      en: 'MiuCam Alerts',
+      zh: 'MiuCam 提醒',
+      hi: 'MiuCam अलर्ट',
+      es: 'Alertas de MiuCam',
+      fr: 'Alertes MiuCam',
+      de: 'MiuCam Warnungen',
+      ar: 'تنبيهات MiuCam');
   String get notificationUpdatesChannelName => _t(
-      tr: 'MimiCam Oda Notları',
-      en: 'MimiCam Nursery Updates',
-      zh: 'MimiCam 房间动态',
-      hi: 'MimiCam कमरे की जानकारी',
+      tr: 'MiuCam Oda Notları',
+      en: 'MiuCam Nursery Updates',
+      zh: 'MiuCam 房间动态',
+      hi: 'MiuCam कमरे की जानकारी',
       es: 'Novedades de la habitación',
       fr: 'Nouvelles de la chambre',
-      de: 'MimiCam Zimmerhinweise',
+      de: 'MiuCam Zimmerhinweise',
       ar: 'تحديثات غرفة الطفل');
 
   /// Pairing errors are deliberately phrased as recovery steps. Raw HTTP and

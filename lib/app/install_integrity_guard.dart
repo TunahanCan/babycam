@@ -1,6 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../core/security/mimicam_secure_storage.dart';
+import '../core/security/miucam_secure_storage.dart';
 
 class InstallIntegrityGuard {
   const InstallIntegrityGuard();
@@ -17,7 +17,7 @@ class InstallIntegrityGuard {
     // Existing preferences mean this is an upgrade, not a clean reinstall.
     final isFreshInstallation = preferences.getKeys().isEmpty;
     if (isFreshInstallation) {
-      await (clearSecureStorage ?? mimicamSecureStorage.deleteAll)();
+      await (clearSecureStorage ?? miucamSecureStorage.deleteAll)();
     }
     await preferences.setBool(markerKey, true);
   }

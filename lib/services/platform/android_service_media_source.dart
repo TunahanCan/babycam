@@ -41,9 +41,9 @@ class MethodChannelAndroidServiceMediaBridge
     implements AndroidServiceMediaBridgePort {
   MethodChannelAndroidServiceMediaBridge({
     MethodChannel methodChannel =
-        const MethodChannel('mimicam/android_service_media'),
+        const MethodChannel('miucam/android_service_media'),
     EventChannel eventChannel =
-        const EventChannel('mimicam/android_service_media_events'),
+        const EventChannel('miucam/android_service_media_events'),
   })  : _methodChannel = methodChannel,
         _eventChannel = eventChannel;
 

@@ -1,13 +1,13 @@
-import 'package:mimicam/analysis/alert/alert_config.dart';
-import 'package:mimicam/analysis/alert/alert_engine.dart';
-import 'package:mimicam/analysis/alert/alert_event.dart';
-import 'package:mimicam/analysis/alert/alert_severity.dart';
-import 'package:mimicam/analysis/alert/alert_type.dart';
-import 'package:mimicam/analysis/alert/episode_notification_aggregator.dart';
-import 'package:mimicam/analysis/audio/audio_analysis_result.dart';
-import 'package:mimicam/analysis/audio/audio_calibration_state.dart';
-import 'package:mimicam/analysis/video/motion_analysis_result.dart';
-import 'package:mimicam/l10n/app_strings.dart';
+import 'package:miucam/analysis/alert/alert_config.dart';
+import 'package:miucam/analysis/alert/alert_engine.dart';
+import 'package:miucam/analysis/alert/alert_event.dart';
+import 'package:miucam/analysis/alert/alert_severity.dart';
+import 'package:miucam/analysis/alert/alert_type.dart';
+import 'package:miucam/analysis/alert/episode_notification_aggregator.dart';
+import 'package:miucam/analysis/audio/audio_analysis_result.dart';
+import 'package:miucam/analysis/audio/audio_calibration_state.dart';
+import 'package:miucam/analysis/video/motion_analysis_result.dart';
+import 'package:miucam/l10n/app_strings.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/features/server/pairing/pairing_token_service.dart';
-import 'package:mimicam/features/server/pairing/server_qr_payload_builder.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/features/server/pairing/pairing_token_service.dart';
+import 'package:miucam/features/server/pairing/server_qr_payload_builder.dart';
 
 void main() {
   PairingPayload payload({int? expiresAtMs, int schemaVersion = 1}) =>
@@ -87,7 +87,7 @@ void main() {
   test('transport alanı olmadan gelen payload HTTP/WS kabul edilir', () {
     final parsed = PairingPayload.fromJson({
       'schemaVersion': 1,
-      'scheme': 'mimicam',
+      'scheme': 'miucam',
       'host': '192.168.1.20',
       'port': 8080,
       'deviceId': 'server',

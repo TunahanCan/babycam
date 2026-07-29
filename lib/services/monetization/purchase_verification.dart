@@ -247,11 +247,11 @@ class TrustedBackendPurchaseVerifier implements BroadcastPurchaseVerifier {
 
 BroadcastPurchaseVerifier defaultBroadcastPurchaseVerifier() {
   const endpointText = String.fromEnvironment(
-    'MIMICAM_PURCHASE_VERIFIER_URL',
+    'MIUCAM_PURCHASE_VERIFIER_URL',
   );
   if (endpointText.trim().isEmpty) {
     return const UnavailableBroadcastPurchaseVerifier(
-      'Set MIMICAM_PURCHASE_VERIFIER_URL to a trusted HTTPS verifier.',
+      'Set MIUCAM_PURCHASE_VERIFIER_URL to a trusted HTTPS verifier.',
     );
   }
   final endpoint = Uri.tryParse(endpointText.trim());
@@ -259,7 +259,7 @@ BroadcastPurchaseVerifier defaultBroadcastPurchaseVerifier() {
       endpoint.scheme != 'https' ||
       !endpoint.hasAuthority) {
     return const UnavailableBroadcastPurchaseVerifier(
-      'MIMICAM_PURCHASE_VERIFIER_URL must be a valid HTTPS URL.',
+      'MIUCAM_PURCHASE_VERIFIER_URL must be a valid HTTPS URL.',
     );
   }
   return TrustedBackendPurchaseVerifier(endpoint: endpoint);

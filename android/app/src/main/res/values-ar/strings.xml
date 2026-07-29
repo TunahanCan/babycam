@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mimicam_server_channel_name">خادم MimiCam</string>
-    <string name="mimicam_alert_connection_channel_name">اتصال تنبيهات MimiCam</string>
-    <string name="mimicam_server_channel_description">نشاط خادم MimiCam المحلي والوسائط</string>
-    <string name="mimicam_alert_connection_channel_description">يبقي اتصال تنبيهات غرفة الطفل نشطاً في الخلفية</string>
-    <string name="mimicam_runtime_camera_microphone_playback">الكاميرا والميكروفون وصوت غرفة الطفل نشطة في الخلفية.</string>
-    <string name="mimicam_runtime_camera_microphone">الكاميرا والميكروفون نشطان في الخلفية.</string>
-    <string name="mimicam_runtime_camera_playback">الكاميرا وصوت غرفة الطفل نشطان في الخلفية.</string>
-    <string name="mimicam_runtime_microphone_playback">الميكروفون وصوت غرفة الطفل نشطان في الخلفية.</string>
-    <string name="mimicam_runtime_camera">الكاميرا نشطة في الخلفية.</string>
-    <string name="mimicam_runtime_microphone">الميكروفون نشط في الخلفية.</string>
-    <string name="mimicam_runtime_playback">صوت غرفة الطفل نشط في الخلفية.</string>
-    <string name="mimicam_runtime_server">يتم إبقاء الخادم المحلي واتصال Wi-Fi نشطين.</string>
-    <string name="mimicam_runtime_alerts">تتم مراقبة تنبيهات غرفة الطفل في الخلفية.</string>
-    <string name="mimicam_runtime_stopping">جارٍ إيقاف خدمة الخلفية.</string>
-    <string name="mimicam_runtime_title_media">جلسة غرفة الطفل في MimiCam نشطة</string>
-    <string name="mimicam_runtime_title_server">خادم MimiCam المحلي نشط</string>
-    <string name="mimicam_runtime_title_alerts">تنبيهات غرفة الطفل في MimiCam نشطة</string>
+    <string name="miucam_server_channel_name">خادم MiuCam</string>
+    <string name="miucam_alert_connection_channel_name">اتصال تنبيهات MiuCam</string>
+    <string name="miucam_server_channel_description">نشاط خادم MiuCam المحلي والوسائط</string>
+    <string name="miucam_alert_connection_channel_description">يبقي اتصال تنبيهات غرفة الطفل نشطاً في الخلفية</string>
+    <string name="miucam_runtime_camera_microphone_playback">الكاميرا والميكروفون وصوت غرفة الطفل نشطة في الخلفية.</string>
+    <string name="miucam_runtime_camera_microphone">الكاميرا والميكروفون نشطان في الخلفية.</string>
+    <string name="miucam_runtime_camera_playback">الكاميرا وصوت غرفة الطفل نشطان في الخلفية.</string>
+    <string name="miucam_runtime_microphone_playback">الميكروفون وصوت غرفة الطفل نشطان في الخلفية.</string>
+    <string name="miucam_runtime_camera">الكاميرا نشطة في الخلفية.</string>
+    <string name="miucam_runtime_microphone">الميكروفون نشط في الخلفية.</string>
+    <string name="miucam_runtime_playback">صوت غرفة الطفل نشط في الخلفية.</string>
+    <string name="miucam_runtime_server">يتم إبقاء الخادم المحلي واتصال Wi-Fi نشطين.</string>
+    <string name="miucam_runtime_alerts">تتم مراقبة تنبيهات غرفة الطفل في الخلفية.</string>
+    <string name="miucam_runtime_stopping">جارٍ إيقاف خدمة الخلفية.</string>
+    <string name="miucam_runtime_title_media">جلسة غرفة الطفل في MiuCam نشطة</string>
+    <string name="miucam_runtime_title_server">خادم MiuCam المحلي نشط</string>
+    <string name="miucam_runtime_title_alerts">تنبيهات غرفة الطفل في MiuCam نشطة</string>
 </resources>

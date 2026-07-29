@@ -3,13 +3,13 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/media/client_stream_health_state.dart';
-import 'package:mimicam/features/client/media/stream_session_controller.dart';
-import 'package:mimicam/features/client/media/webrtc/webrtc_client_connector.dart';
-import 'package:mimicam/services/monetization/broadcast_access_service.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/features/client/media/client_stream_health_state.dart';
+import 'package:miucam/features/client/media/stream_session_controller.dart';
+import 'package:miucam/features/client/media/webrtc/webrtc_client_connector.dart';
+import 'package:miucam/services/monetization/broadcast_access_service.dart';
 
 void main() {
   test('health state session start sonrası ayrı video/audio request açmaz',
@@ -20,7 +20,7 @@ void main() {
     var audioRequests = 0;
     Map<String, Object?>? sessionStartBody;
     server.listen((request) async {
-      if (request.uri.path == MimiCamProtocolV2.sessionStart) {
+      if (request.uri.path == MiuCamProtocolV2.sessionStart) {
         final body = await utf8.decoder.bind(request).join();
         sessionStartBody = Map<String, Object?>.from(jsonDecode(body) as Map);
         request.response.headers.contentType = ContentType.json;
@@ -43,13 +43,13 @@ void main() {
         await request.response.close();
         return;
       }
-      if (request.uri.path == MimiCamProtocolV2.video) {
+      if (request.uri.path == MiuCamProtocolV2.video) {
         videoRequests++;
         request.response.add([1, 2, 3]);
         await request.response.close();
         return;
       }
-      if (request.uri.path == MimiCamProtocolV2.audio) {
+      if (request.uri.path == MiuCamProtocolV2.audio) {
         audioRequests++;
         request.response.add([4, 5, 6]);
         await request.response.close();
@@ -162,7 +162,7 @@ void main() {
     addTearDown(() => server.close(force: true));
     var stops = 0;
     server.listen((request) async {
-      if (request.uri.path == MimiCamProtocolV2.sessionStop) stops++;
+      if (request.uri.path == MiuCamProtocolV2.sessionStop) stops++;
       request.response.headers.contentType = ContentType.json;
       request.response.write(jsonEncode({'ok': true}));
       await request.response.close();
@@ -196,7 +196,7 @@ void main() {
     var stops = 0;
     server.listen((request) async {
       final body = await utf8.decoder.bind(request).join();
-      if (request.uri.path == MimiCamProtocolV2.sessionStop) {
+      if (request.uri.path == MiuCamProtocolV2.sessionStop) {
         stops++;
         await _json(request.response, {'ok': true});
         return;
@@ -255,7 +255,7 @@ void main() {
 
 PairingSession _session(int port, {bool webRtc = false}) => PairingSession(
       payload: PairingPayload(
-        schemaVersion: MimiCamProtocolV2.schemaVersion,
+        schemaVersion: MiuCamProtocolV2.schemaVersion,
         host: InternetAddress.loopbackIPv4.address,
         port: port,
         deviceId: 'server',

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/app/install_integrity_guard.dart';
+import 'package:miucam/app/install_integrity_guard.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

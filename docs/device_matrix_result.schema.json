@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://mimicam.local/schemas/device-matrix-result-v1.json",
-  "title": "MimiCam physical-device matrix result",
+  "$id": "https://miucam.local/schemas/device-matrix-result-v1.json",
+  "title": "MiuCam physical-device matrix result",
   "type": "object",
   "additionalProperties": false,
   "required": [

@@ -8,27 +8,27 @@ class MjpegStreamParser {
     caseSensitive: false,
   );
   static final _sequencePattern = RegExp(
-    r'x-mimicam-sequence:\s*(\d+)',
+    r'x-miucam-sequence:\s*(\d+)',
     caseSensitive: false,
   );
   static final _capturedAtPattern = RegExp(
-    r'x-mimicam-captured-at-ms:\s*(\d+)',
+    r'x-miucam-captured-at-ms:\s*(\d+)',
     caseSensitive: false,
   );
   static final _sentAtPattern = RegExp(
-    r'x-mimicam-sent-at-ms:\s*(\d+)',
+    r'x-miucam-sent-at-ms:\s*(\d+)',
     caseSensitive: false,
   );
   static final _capturedMonoPattern = RegExp(
-    r'x-mimicam-captured-mono-us:\s*(\d+)',
+    r'x-miucam-captured-mono-us:\s*(\d+)',
     caseSensitive: false,
   );
   static final _encodeDurationPattern = RegExp(
-    r'x-mimicam-encode-duration-us:\s*(\d+)',
+    r'x-miucam-encode-duration-us:\s*(\d+)',
     caseSensitive: false,
   );
   static final _traceIdPattern = RegExp(
-    r'x-mimicam-trace-id:\s*([^\r\n]+)',
+    r'x-miucam-trace-id:\s*([^\r\n]+)',
     caseSensitive: false,
   );
   static const _maxHeaderBytes = 16 * 1024;

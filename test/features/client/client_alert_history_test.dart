@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/alert_event_dto.dart';
-import 'package:mimicam/features/client/alerts/client_alert_history.dart';
+import 'package:miucam/core/protocol/alert_event_dto.dart';
+import 'package:miucam/features/client/alerts/client_alert_history.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

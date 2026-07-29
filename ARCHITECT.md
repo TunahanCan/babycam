@@ -1,11 +1,11 @@
-# MimiCam Architecture
+# MiuCam Architecture
 
-Bu dokuman MimiCam Flutter uygulamasinin mevcut mimari gercegini anlatir.
+Bu dokuman MiuCam Flutter uygulamasinin mevcut mimari gercegini anlatir.
 Kaynak kodun asil sahibi `lib/` agacidir; test davranisinin asil sahibi
 `test/` agacidir. Bu dosya, eski Kotlin planlarini veya pazarlama hedeflerini
 degil, bu repodaki calisan Flutter uygulamasini tarif eder.
 
-MimiCam tek Flutter uygulamasi icinde iki rol tasir:
+MiuCam tek Flutter uygulamasi icinde iki rol tasir:
 
 - **Server:** Bebek odasindaki cihazdir. Kamera, mikrofon, analiz, alert
   uretimi, HTTP media server, WebSocket event server ve runtime diagnostics
@@ -61,7 +61,7 @@ MJPEG/WAV fallback'i olan opt-in bir pilot olarak bulunur.
 | Video codec | MJPEG fallback; H.264 pilot |
 | Audio codec | PCM16LE/WAV fallback; Opus pilot |
 | Signaling | Authenticated local HTTP `/webrtc/*` |
-| Discovery | DNS-SD/NSD `_mimicam._tcp`, QR and manual IP fallbacks |
+| Discovery | DNS-SD/NSD `_miucam._tcp`, QR and manual IP fallbacks |
 | Addressing | IPv6 dual-stack bind attempt, IPv4 fallback |
 | Alert payload | JSON DTO |
 | Private auth | Trusted Bearer token |
@@ -116,8 +116,8 @@ Runtime acisindan onemli dependency'ler:
 
 Flutter assets:
 
-- `assets/branding/mimicam_launcher_icon.png`
-- `assets/branding/mimicam_wordmark.png`
+- `assets/branding/miucam_launcher_icon.png`
+- `assets/branding/miucam_wordmark.png`
 
 ## Source Tree Ownership
 
@@ -128,7 +128,7 @@ lib/
 │   ├── app_bootstrap.dart
 │   ├── app_lifecycle_observer.dart
 │   ├── app_role.dart
-│   ├── mimicam_app.dart
+│   ├── miucam_app.dart
 │   ├── role_permission_coordinator.dart
 │   ├── role_repository.dart
 │   └── role_resolver.dart
@@ -150,7 +150,7 @@ lib/
 │   └── shared/
 ├── l10n/
 └── services/
-    ├── mimicam_server.dart
+    ├── miucam_server.dart
     ├── monetization/
     ├── platform/
     └── server/
@@ -174,7 +174,7 @@ Startup flow:
 
 ```text
 main.dart
-  -> runApp(MimiCamApp)
+  -> runApp(MiuCamApp)
   -> MaterialApp
   -> AppBootstrap
   -> SharedPreferences.getInstance()
@@ -183,7 +183,7 @@ main.dart
   -> ServerAppShell OR ClientAppShell OR RoleSelectionScreen
 ```
 
-`MimiCamApp` owns:
+`MiuCamApp` owns:
 
 - app title
 - theme
@@ -245,8 +245,8 @@ ServerCompositionRoot.create
   -> PairingTokenService
   -> BroadcastAccessService
   -> FlutterWebRtcServerGateway
-  -> MimiCamServiceAdvertiser
-  -> MimiCamServer
+  -> MiuCamServiceAdvertiser
+  -> MiuCamServer
   -> ServerQrPayloadBuilder
   -> MediaRuntimeController
   -> PlatformMediaLifecycleCoordinator
@@ -267,7 +267,7 @@ ClientCompositionRoot.create
   -> ClientAlertHistory
   -> BroadcastAccessService
   -> ClientRoomControls
-  -> MimiCamServiceBrowser
+  -> MiuCamServiceBrowser
   -> ClientNotificationService
   -> ClientAlertListener
   -> ClientRuntime
@@ -294,7 +294,7 @@ It owns:
 - runtime state stream for widgets
 
 It does not directly implement HTTP routing, camera encoding, token issuing or
-stream writes. Those live in `MimiCamServer` and service classes.
+stream writes. Those live in `MiuCamServer` and service classes.
 
 Important state fields:
 
@@ -419,7 +419,7 @@ Token renewal:
 
 ## Protocol Constants
 
-`MimiCamProtocolV2` owns the current route names:
+`MiuCamProtocolV2` owns the current route names:
 
 | Constant | Path |
 | --- | --- |
@@ -450,7 +450,7 @@ path/query normalization centralized on the client.
 
 ## HTTP Server Ownership
 
-`MimiCamServer` is the runtime owner for:
+`MiuCamServer` is the runtime owner for:
 
 - local HTTP server socket
 - WebSocket upgrade
@@ -545,7 +545,7 @@ Server pairing flow:
 ```text
 ServerHomeScreen QR/IP tab
   -> ServerRuntime.startPairingMode
-  -> MimiCamServer.startPairingMode
+  -> MiuCamServer.startPairingMode
   -> NetworkAddressProvider chooses local address
   -> PairingTokenService.createPairingNonce
   -> ServerQrPayloadBuilder.build
@@ -591,13 +591,13 @@ user enters host:port
 DNS-SD/NSD discovery:
 
 ```text
-MimiCamServer.startPairingMode
+MiuCamServer.startPairingMode
   -> IPv6 dual-stack bind attempt, IPv4 fallback
-  -> MimiCamServiceAdvertiser registers _mimicam._tcp
+  -> MiuCamServiceAdvertiser registers _miucam._tcp
   -> TXT: id, protocol version, WebRTC availability, http_ws transport
 
 ClientCompositionRoot
-  -> MimiCamServiceBrowser.start
+  -> MiuCamServiceBrowser.start
   -> auto-resolve with IPv4/IPv6 lookup
   -> discovered room card
   -> existing /status/public + pairing flow
@@ -678,7 +678,7 @@ multi-child monitoring.
 ## Monetization Architecture
 
 The complete paywall is build-gated by
-`MIMICAM_BROADCAST_PAYWALL_ENABLED`, which defaults to `false`. In the default
+`MIUCAM_BROADCAST_PAYWALL_ENABLED`, which defaults to `false`. In the default
 test build, `ServerCompositionRoot` does not create a
 `BroadcastAccessService`; runtime state has no broadcast-access snapshot,
 capabilities omit price/product fields, stream sessions are not trial-limited,
@@ -687,7 +687,7 @@ and neither Server nor Client renders purchase UI.
 An explicit store/paywall verification build enables it with:
 
 ```bash
-flutter run --dart-define=MIMICAM_BROADCAST_PAYWALL_ENABLED=true
+flutter run --dart-define=MIUCAM_BROADCAST_PAYWALL_ENABLED=true
 ```
 
 When enabled, `BroadcastAccessService` owns local usage and one-time unlock
@@ -698,7 +698,7 @@ Config:
 ```text
 free limit: 2 hours
 price label: 300 TL
-product id: mimicam_lifetime_unlock_try_300
+product id: miucam_lifetime_unlock_try_300
 storage: SharedPreferences
 store gateway: in_app_purchase
 ```
@@ -796,7 +796,7 @@ Why this matters:
 
 ## Server Media Runtime
 
-`MimiCamServer` exposes independent `startVideoRuntime` / `stopVideoRuntime` and
+`MiuCamServer` exposes independent `startVideoRuntime` / `stopVideoRuntime` and
 `startAudioRuntime` / `stopAudioRuntime` boundaries. `startMediaRuntime` remains
 as a compatibility convenience that requests both. There are two source modes:
 
@@ -1045,7 +1045,7 @@ Audio invariants:
 
 ## Native PCM Output
 
-`PcmAudioOutput` uses method channel `mimicam/pcm_audio`.
+`PcmAudioOutput` uses method channel `miucam/pcm_audio`.
 
 Methods:
 
@@ -1127,7 +1127,7 @@ Server event path:
 
 ```text
 AlertEngine emits AlertEvent
-  -> MimiCamServer._handleAlertEvent
+  -> MiuCamServer._handleAlertEvent
   -> AlertProtocolAdapter.toJsonText
   -> WebSocket clients
   -> legacy binary packet optional path
@@ -1260,7 +1260,7 @@ Upgrade/degrade behavior:
 Device resource governor:
 
 ```text
-mimicam/device_resources snapshot
+miucam/device_resources snapshot
   -> thermal state + low-power + charging + battery
   -> network tier + transport backpressure
   -> encode p95 + pre-encode drop ratio
@@ -1400,9 +1400,9 @@ Current limitation:
 
 Shared UI:
 
-- `MimiCamDesignTokens`
-- `MimiCamRolePresentation`
-- `MimiCamShells`
+- `MiuCamDesignTokens`
+- `MiuCamRolePresentation`
+- `MiuCamShells`
 - localized measurement/media-profile helpers
 - Material theme in `core/theme`
 - text catalogs in `l10n`
@@ -1494,7 +1494,7 @@ runtime. Automated tests exercise the same boundaries used by paired phones:
 
 ```text
 deterministic PCM/JPEG source
-  -> MimiCamServer analysis and stream services
+  -> MiuCamServer analysis and stream services
   -> /audio, /video or /ws/events
   -> production client parser/listener
 ```
@@ -1518,7 +1518,7 @@ Proof criteria for audio and alerts:
 The strongest non-device media tests use:
 
 - the `test/support/DeterministicServerMediaSource` fixture
-- real `MimiCamServer`
+- real `MiuCamServer`
 - real `/session/start`
 - real `/video`
 - real `/audio`
@@ -1543,7 +1543,7 @@ This proves runtime wiring without relying on camera/microphone hardware in CI.
 Platform/native paths:
 
 - Android caches the existing Flutter engine and lets
-  `MimiCamForegroundService` claim it while media demand is active.
+  `MiuCamForegroundService` claim it while media demand is active.
 - Android service notification and Wi-Fi lock reflect exact camera/microphone
   demand. The service is `START_NOT_STICKY`; process death requires a visible
   user restart and does not fabricate recovered capture.
@@ -1555,7 +1555,7 @@ Platform/native paths:
 - iOS PCM uses `AVAudioEngine`/`AVAudioPlayerNode` with interruption, route and
   media-services-reset handling.
 - Both platforms expose thermal/low-power/charging/battery snapshots through
-  `mimicam/device_resources`.
+  `miucam/device_resources`.
 - iOS camera/local-network permission channels remain explicit.
 
 iOS builds require macOS/Xcode. Linux can run Flutter analysis, Dart tests and
@@ -1574,15 +1574,15 @@ Important settings:
 - minimum motion duration
 - minimum cry duration
 - `webRtcPilotEnabled`, defaulting to
-  `--dart-define=MIMICAM_WEBRTC_PILOT=true` only when no stored override exists
+  `--dart-define=MIUCAM_WEBRTC_PILOT=true` only when no stored override exists
 - build-only broadcast paywall flag:
-  `--dart-define=MIMICAM_BROADCAST_PAYWALL_ENABLED=true`; default `false`
+  `--dart-define=MIUCAM_BROADCAST_PAYWALL_ENABLED=true`; default `false`
 
 Server settings screen updates `ConfigurationService`, then calls
-`MimiCamServer.reloadAnalysisConfig` through `ServerRuntime`.
+`MiuCamServer.reloadAnalysisConfig` through `ServerRuntime`.
 
 The WebRTC pilot is off by default. A build can opt in with
-`--dart-define=MIMICAM_WEBRTC_PILOT=true`; a persisted
+`--dart-define=MIUCAM_WEBRTC_PILOT=true`; a persisted
 `config.webrtc_pilot_enabled` value overrides the build default. Pairing mode
 initializes the gateway and advertises WebRTC only when both H.264 and Opus
 capability probes succeed.
@@ -1632,11 +1632,11 @@ Important cleanup owners:
 
 - `AppBootstrap`: role runtime disposal
 - `ServerRuntime`: UI/runtime resource demand cleanup
-- `MimiCamServer`: HTTP server, media runtime, stream clients
+- `MiuCamServer`: HTTP server, media runtime, stream clients
 - `BabyMonitorFeatureController`: comfort/night-light/talk facade
 - `RoomAudioCoordinator`: exclusive comfort/talk native PCM output
 - `FlutterWebRtcServerGateway`: pilot peer/tracks
-- `MimiCamServiceAdvertiser` / `MimiCamServiceBrowser`: discovery lifecycle
+- `MiuCamServiceAdvertiser` / `MiuCamServiceBrowser`: discovery lifecycle
 - `MjpegStreamService`: video responses
 - `WavAudioStreamService`: audio responses
 - `ClientRuntime`: network subscription and watch state
@@ -1671,7 +1671,7 @@ flutter test test/services/server/media_resource_governor_test.dart
 flutter test test/core/media/media_session_telemetry_test.dart
 flutter test test/features/server/webrtc_signaling_endpoints_test.dart
 flutter test test/features/client/stream_session_controller_test.dart
-flutter test test/services/discovery/mimicam_service_discovery_test.dart
+flutter test test/services/discovery/miucam_service_discovery_test.dart
 flutter test test/services/server/room_audio_coordinator_test.dart
 flutter test test/features/client/client_room_controls_test.dart
 ```
@@ -1706,7 +1706,7 @@ physical device/network lanes have produced archived results.
 
 Before shipping paid unlock:
 
-1. Configure non-consumable product `mimicam_lifetime_unlock_try_300`.
+1. Configure non-consumable product `miucam_lifetime_unlock_try_300`.
 2. Set product price to 300 TL or matching local tier.
 3. Test purchase and restore on sandbox accounts.
 4. Confirm unavailable store state is user-visible.

@@ -1,5 +1,5 @@
-import 'package:mimicam/analysis/alert/alert_type.dart';
-import 'package:mimicam/analysis/alert/cooldown_policy.dart';
+import 'package:miucam/analysis/alert/alert_type.dart';
+import 'package:miucam/analysis/alert/cooldown_policy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

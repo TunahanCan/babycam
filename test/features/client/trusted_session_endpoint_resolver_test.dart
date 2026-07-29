@@ -3,12 +3,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/network/retry_policy.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/discovery/trusted_session_endpoint_resolver.dart';
-import 'package:mimicam/services/discovery/mimicam_service_discovery.dart';
+import 'package:miucam/core/network/retry_policy.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/features/client/discovery/trusted_session_endpoint_resolver.dart';
+import 'package:miucam/services/discovery/miucam_service_discovery.dart';
 import 'package:nsd/nsd.dart' as nsd;
 
 void main() {
@@ -128,7 +128,7 @@ void main() {
       retryPolicy: _noDelayRetry,
       probe: (_) async => ++attempts >= 2,
     );
-    final service = MimiCamDiscoveredService(
+    final service = MiuCamDiscoveredService(
       name: 'Room',
       host: '192.168.1.55',
       port: 9090,
@@ -166,7 +166,7 @@ void main() {
   });
 }
 
-class _ControllableBrowser extends MimiCamServiceBrowser {
+class _ControllableBrowser extends MiuCamServiceBrowser {
   _ControllableBrowser()
       : super(
           startDiscovery: (_) async => nsd.Discovery('unused'),
@@ -174,19 +174,19 @@ class _ControllableBrowser extends MimiCamServiceBrowser {
         );
 
   final _controller =
-      StreamController<List<MimiCamDiscoveredService>>.broadcast();
-  List<MimiCamDiscoveredService> _current = const [];
+      StreamController<List<MiuCamDiscoveredService>>.broadcast();
+  List<MiuCamDiscoveredService> _current = const [];
 
-  void emit(List<MimiCamDiscoveredService> services) {
+  void emit(List<MiuCamDiscoveredService> services) {
     _current = List.unmodifiable(services);
     _controller.add(_current);
   }
 
   @override
-  Stream<List<MimiCamDiscoveredService>> get updates => _controller.stream;
+  Stream<List<MiuCamDiscoveredService>> get updates => _controller.stream;
 
   @override
-  List<MimiCamDiscoveredService> get services => _current;
+  List<MiuCamDiscoveredService> get services => _current;
 
   @override
   Future<void> start() async {}
@@ -195,8 +195,8 @@ class _ControllableBrowser extends MimiCamServiceBrowser {
   Future<void> dispose() => _controller.close();
 }
 
-MimiCamServiceBrowser _browser(nsd.Discovery discovery) =>
-    MimiCamServiceBrowser(
+MiuCamServiceBrowser _browser(nsd.Discovery discovery) =>
+    MiuCamServiceBrowser(
       startDiscovery: (_) async => discovery,
       stopDiscovery: (_) async {},
       retryPolicy: _noDelayRetry,
@@ -204,7 +204,7 @@ MimiCamServiceBrowser _browser(nsd.Discovery discovery) =>
 
 PairingSession _session() => PairingSession(
       payload: PairingPayload(
-        schemaVersion: MimiCamProtocolV2.schemaVersion,
+        schemaVersion: MiuCamProtocolV2.schemaVersion,
         host: '192.168.1.20',
         port: 8080,
         deviceId: 'stable-device-id',
@@ -229,7 +229,7 @@ nsd.Service _service({
 }) =>
     nsd.Service(
       name: name,
-      type: MimiCamDiscoveryConfig.serviceType,
+      type: MiuCamDiscoveryConfig.serviceType,
       port: port,
       addresses: addresses,
       txt: {

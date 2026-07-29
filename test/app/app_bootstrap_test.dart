@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/app/app_bootstrap.dart';
-import 'package:mimicam/app/install_integrity_guard.dart';
-import 'package:mimicam/l10n/app_strings.dart';
+import 'package:miucam/app/app_bootstrap.dart';
+import 'package:miucam/app/install_integrity_guard.dart';
+import 'package:miucam/l10n/app_strings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -39,7 +39,7 @@ void main() {
     await tester.pump();
 
     expect(preparationCalls, 1);
-    expect(find.text('MimiCam’i nasıl kullanacaksınız?'), findsOneWidget);
+    expect(find.text('MiuCam’i nasıl kullanacaksınız?'), findsOneWidget);
     expect(
       find.byKey(
         const ValueKey('app-bootstrap-install-preparation-progress'),
@@ -116,7 +116,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('MimiCam başlatılamadı'), findsOneWidget);
+    expect(find.text('MiuCam başlatılamadı'), findsOneWidget);
     expect(find.text('Tekrar dene'), findsOneWidget);
     expect(reportedError?.exception, isA<StateError>());
 
@@ -124,7 +124,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(attempts, 2);
-    expect(find.text('MimiCam’i nasıl kullanacaksınız?'), findsOneWidget);
+    expect(find.text('MiuCam’i nasıl kullanacaksınız?'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

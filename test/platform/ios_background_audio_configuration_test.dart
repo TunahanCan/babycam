@@ -38,7 +38,7 @@ void main() {
   });
 
   test('iOS server does not block screen locking with a wakelock', () {
-    final server = File('lib/services/mimicam_server.dart').readAsStringSync();
+    final server = File('lib/services/miucam_server.dart').readAsStringSync();
 
     expect(
       server,

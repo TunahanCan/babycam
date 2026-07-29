@@ -118,7 +118,7 @@ _NotificationSpec _notificationSpecFromAlert(
     _severityLabel(strings, alert.severity),
     switch (family) {
       AlertCategory.motion => const Color(0xFFEFFAF5),
-      AlertCategory.audio => MimiCamDesignTokens.blushSoft,
+      AlertCategory.audio => MiuCamDesignTokens.blushSoft,
       AlertCategory.system => const Color(0xFFF1F5FB),
     },
   );
@@ -174,7 +174,7 @@ class _NotificationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final decoration = MimiCamDesignTokens.cardDecoration().copyWith(
+    final decoration = MiuCamDesignTokens.cardDecoration().copyWith(
       color: item.backgroundColor,
     );
     return Semantics(
@@ -195,7 +195,7 @@ class _NotificationCard extends StatelessWidget {
                 CircleAvatar(
                   radius: 24,
                   backgroundColor: Colors.white,
-                  child: Icon(item.icon, color: MimiCamDesignTokens.nightPlum),
+                  child: Icon(item.icon, color: MiuCamDesignTokens.nightPlum),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -205,7 +205,7 @@ class _NotificationCard extends StatelessWidget {
                       Text(
                         item.title,
                         style: const TextStyle(
-                          color: MimiCamDesignTokens.nightPlum,
+                          color: MiuCamDesignTokens.nightPlum,
                           fontSize: 15.5,
                           fontWeight: FontWeight.w900,
                         ),
@@ -214,7 +214,7 @@ class _NotificationCard extends StatelessWidget {
                       Text(
                         item.text,
                         style: const TextStyle(
-                          color: MimiCamDesignTokens.slate,
+                          color: MiuCamDesignTokens.slate,
                           fontSize: 13.5,
                           height: 1.25,
                         ),
@@ -225,7 +225,7 @@ class _NotificationCard extends StatelessWidget {
                             ? item.time
                             : '${item.time} · ${strings.ui('openLiveWatch')}',
                         style: const TextStyle(
-                          color: MimiCamDesignTokens.slate,
+                          color: MiuCamDesignTokens.slate,
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
@@ -249,7 +249,7 @@ class _NotificationCard extends StatelessWidget {
                       child: Text(
                         item.badge,
                         style: const TextStyle(
-                          color: MimiCamDesignTokens.pink,
+                          color: MiuCamDesignTokens.pink,
                           fontSize: 11,
                           fontWeight: FontWeight.w900,
                         ),
@@ -259,7 +259,7 @@ class _NotificationCard extends StatelessWidget {
                       const SizedBox(height: 18),
                       const Icon(
                         Icons.play_circle_fill_rounded,
-                        color: MimiCamDesignTokens.pink,
+                        color: MiuCamDesignTokens.pink,
                         size: 22,
                       ),
                     ],

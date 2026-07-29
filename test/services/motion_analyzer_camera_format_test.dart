@@ -4,8 +4,8 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
-import 'package:mimicam/services/motion_analyzer.dart';
-import 'package:mimicam/services/server/camera_jpeg_worker.dart';
+import 'package:miucam/services/motion_analyzer.dart';
+import 'package:miucam/services/server/camera_jpeg_worker.dart';
 
 void main() {
   tearDown(() => debugDefaultTargetPlatformOverride = null);

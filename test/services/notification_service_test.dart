@@ -4,10 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/alert_event_dto.dart';
-import 'package:mimicam/features/client/alerts/client_notification_service.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/notification_service.dart';
+import 'package:miucam/core/protocol/alert_event_dto.dart';
+import 'package:miucam/features/client/alerts/client_notification_service.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/notification_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -145,9 +145,9 @@ void main() {
     final android = plugin.lastDetails?.android;
 
     expect(receipt.posted, isTrue);
-    expect(plugin.lastTitle, 'MimiCam · Nursery');
+    expect(plugin.lastTitle, 'MiuCam · Nursery');
     expect(plugin.lastBody, 'Baby is crying');
-    expect(plugin.lastPayload, 'mimicam://alerts?alertId=cry+alert%2F1');
+    expect(plugin.lastPayload, 'miucam://alerts?alertId=cry+alert%2F1');
     expect(android?.channelId, NotificationService.channelId);
     expect(android?.importance, Importance.high);
     expect(android?.priority, Priority.high);
@@ -262,7 +262,7 @@ void main() {
     expect(plugin.lastBody, startsWith('Anne,'));
   });
 
-  test('notification tap stream accepts only MimiCam alert payloads', () async {
+  test('notification tap stream accepts only MiuCam alert payloads', () async {
     final plugin = _FakeNotificationsPlugin();
     final service = NotificationService(
       AppStrings(const Locale('en')),
@@ -277,16 +277,16 @@ void main() {
     ));
     plugin.notificationResponse?.call(const NotificationResponse(
       notificationResponseType: NotificationResponseType.selectedNotification,
-      payload: 'mimicam://alerts?alertId=motion-1',
+      payload: 'miucam://alerts?alertId=motion-1',
     ));
 
-    expect(await nextTap, 'mimicam://alerts?alertId=motion-1');
+    expect(await nextTap, 'miucam://alerts?alertId=motion-1');
     NotificationService.takePendingTap();
   });
 
   test('retained engine refresh reads and deduplicates Activity launch tap',
       () async {
-    const payload = 'mimicam://alerts?alertId=retained-engine-1';
+    const payload = 'miucam://alerts?alertId=retained-engine-1';
     final plugin = _FakeNotificationsPlugin(
       launchDetails: const NotificationAppLaunchDetails(
         true,

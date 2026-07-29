@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/services/server/server_device_identity_resolver.dart';
+import 'package:miucam/services/server/server_device_identity_resolver.dart';
 
 void main() {
   test('coalesces concurrent resolution and caches normalized identity',

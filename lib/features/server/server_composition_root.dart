@@ -7,11 +7,11 @@ import '../../core/feature_flags.dart';
 import '../../core/protocol/pairing_payload.dart';
 import '../../core/security/transport_config.dart';
 import '../../l10n/app_strings.dart';
-import '../../services/mimicam_server.dart';
+import '../../services/miucam_server.dart';
 import '../../services/configuration_service.dart';
 import '../../services/monetization/broadcast_access_service.dart';
-import '../../services/discovery/mimicam_discovery_identity.dart';
-import '../../services/discovery/mimicam_service_discovery.dart';
+import '../../services/discovery/miucam_discovery_identity.dart';
+import '../../services/discovery/miucam_service_discovery.dart';
 import '../../services/platform/platform_runtime_contract.dart';
 import '../../services/platform/android_service_media_source.dart';
 import 'media/media_runtime_controller.dart';
@@ -30,7 +30,7 @@ class ServerCompositionRoot {
       Future<void> Function()? startMediaOverride,
       Future<void> Function()? stopOverride,
       bool broadcastPaywallEnabled =
-          MimiCamFeatureFlags.broadcastPaywallEnabled,
+          MiuCamFeatureFlags.broadcastPaywallEnabled,
       TransportConfig transportConfig = TransportConfig.local}) {
     createCount++;
     final tokenService = PairingTokenService(
@@ -42,7 +42,7 @@ class ServerCompositionRoot {
         ? BroadcastAccessService(config.preferences)
         : null;
     final discoveryIdentity =
-        PersistentMimiCamDiscoveryIdentity(config.preferences);
+        PersistentMiuCamDiscoveryIdentity(config.preferences);
     final serverDeviceId = discoveryIdentity.getOrCreate();
     final webRtcGateway = FlutterWebRtcServerGateway(onLog: onLog);
     void Function()? notifyMediaProfileChanged;
@@ -81,7 +81,7 @@ class ServerCompositionRoot {
       return publishNativeDemand();
     }
 
-    Future<void> stopServerRuntime(MimiCamServer server) async {
+    Future<void> stopServerRuntime(MiuCamServer server) async {
       try {
         await server.dispose();
       } finally {
@@ -99,7 +99,7 @@ class ServerCompositionRoot {
           )
         : null;
     late final ServerRuntime runtime;
-    final server = MimiCamServer(
+    final server = MiuCamServer(
         config: config,
         strings: strings,
         onLog: onLog ?? (_) {},
@@ -137,7 +137,7 @@ class ServerCompositionRoot {
         broadcastAccess: broadcastAccess,
         mediaSource: nativeMediaSource,
         serverDeviceIdProvider: () => serverDeviceId,
-        serviceAdvertiser: MimiCamServiceAdvertiser(
+        serviceAdvertiser: MiuCamServiceAdvertiser(
           deviceIdProvider: () => serverDeviceId,
         ),
         webRtcGateway: webRtcGateway,

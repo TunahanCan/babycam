@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/services/server/pcm16_frame_assembler.dart';
+import 'package:miucam/services/server/pcm16_frame_assembler.dart';
 
 void main() {
   test('odd transport boundary preserves the split PCM16 sample', () {

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/services/platform/platform_runtime_contract.dart';
+import 'package:miucam/services/platform/platform_runtime_contract.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -121,7 +121,7 @@ void main() {
   });
 
   test('setMediaDemand forwards exact playback demand', () async {
-    const channel = MethodChannel('mimicam/platform_runtime_test');
+    const channel = MethodChannel('miucam/platform_runtime_test');
     MethodCall? received;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -153,7 +153,7 @@ void main() {
 
   test('setMediaDemand separates WebRTC FGS type from native capture',
       () async {
-    const channel = MethodChannel('mimicam/platform_runtime_external_test');
+    const channel = MethodChannel('miucam/platform_runtime_external_test');
     MethodCall? received;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -187,7 +187,7 @@ void main() {
       () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
-    const channel = MethodChannel('mimicam/platform_runtime_server_test');
+    const channel = MethodChannel('miucam/platform_runtime_server_test');
     MethodCall? received;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -210,7 +210,7 @@ void main() {
       () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
-    const channel = MethodChannel('mimicam/platform_runtime_ios_server_test');
+    const channel = MethodChannel('miucam/platform_runtime_ios_server_test');
     MethodCall? received;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {

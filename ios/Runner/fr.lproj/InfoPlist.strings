@@ -1,3 +1,3 @@
-"NSCameraUsageDescription" = "MimiCam utilise la caméra pour diffuser la chambre de bébé et scanner les codes QR d’association.";
-"NSLocalNetworkUsageDescription" = "MimiCam utilise votre réseau local pour trouver et connecter les appareils de la chambre et des parents.";
-"NSMicrophoneUsageDescription" = "MimiCam utilise le micro en mode Server pour diffuser le son de la chambre et détecter les sons importants.";
+"NSCameraUsageDescription" = "MiuCam utilise la caméra pour diffuser la chambre de bébé et scanner les codes QR d’association.";
+"NSLocalNetworkUsageDescription" = "MiuCam utilise votre réseau local pour trouver et connecter les appareils de la chambre et des parents.";
+"NSMicrophoneUsageDescription" = "MiuCam utilise le micro en mode Server pour diffuser le son de la chambre et détecter les sons importants.";

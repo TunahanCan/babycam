@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/media/adaptive_media_profile.dart';
-import 'package:mimicam/services/platform/device_capability_probe.dart';
+import 'package:miucam/core/media/adaptive_media_profile.dart';
+import 'package:miucam/services/platform/device_capability_probe.dart';
 
 void main() {
   test('işlemci sayısına göre cihaz tier tahmini yapılır', () {

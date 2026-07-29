@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../../../core/mimicam_protocol.dart';
+import '../../../core/miucam_protocol.dart';
 import '../../../core/network/retry_policy.dart';
 import '../../../core/protocol/alert_event_dto.dart';
-import '../../../core/protocol/mimicam_protocol.dart';
+import '../../../core/protocol/miucam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
 import '../media/client_stream_health_state.dart';
@@ -125,7 +125,7 @@ class ClientAlertListener {
   Future<void> _connectAndRead(int generation, PairingSession session) async {
     final client = _clientFactory?.call(session) ?? HttpClient();
     client.connectionTimeout = maxReconnectDelay;
-    final uri = ServerEndpointBuilder(session).ws(MimiCamProtocolV2.events);
+    final uri = ServerEndpointBuilder(session).ws(MiuCamProtocolV2.events);
     _client = client;
     WebSocket? socket;
     try {
@@ -213,7 +213,7 @@ class ClientAlertListener {
       }
       if (data is List<int> &&
           data.isNotEmpty &&
-          data.first == MimiCamProtocol.packetAlertText) {
+          data.first == MiuCamProtocol.packetAlertText) {
         final message = utf8.decode(data.skip(1).toList());
         final nowMs = DateTime.now().millisecondsSinceEpoch;
         return AlertEventDto(

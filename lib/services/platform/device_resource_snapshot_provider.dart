@@ -86,7 +86,7 @@ abstract interface class DeviceResourceSnapshotProvider {
 class MethodChannelDeviceResourceSnapshotProvider
     implements DeviceResourceSnapshotProvider {
   const MethodChannelDeviceResourceSnapshotProvider({
-    MethodChannel channel = const MethodChannel('mimicam/device_resources'),
+    MethodChannel channel = const MethodChannel('miucam/device_resources'),
   }) : _channel = channel;
 
   final MethodChannel _channel;

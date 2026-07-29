@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/media/media_session_telemetry.dart';
+import 'package:miucam/core/media/media_session_telemetry.dart';
 
 void main() {
   test('bounded telemetry reports p50 p95 p99 and lifetime count', () {

@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/services/server/wav_pcm16.dart';
+import 'package:miucam/services/server/wav_pcm16.dart';
 
 void main() {
   test('header PCM16 WAV alanlarini dogru yazar', () {

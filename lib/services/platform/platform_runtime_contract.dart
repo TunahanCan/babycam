@@ -135,7 +135,7 @@ class PlatformRuntimeSnapshot {
       contractMessage ??
       switch (platform) {
         PlatformRuntimeKind.ios =>
-          'iOS kamera yayını için MimiCam ön planda ve ekran açık kalmalıdır.',
+          'iOS kamera yayını için MiuCam ön planda ve ekran açık kalmalıdır.',
         PlatformRuntimeKind.android => foregroundServiceActive
             ? serviceOwnsMediaHardware
                 ? externalMediaCaptureDemand
@@ -203,9 +203,9 @@ class PlatformRuntimeEvent {
 class PlatformRuntimeContract {
   const PlatformRuntimeContract({
     MethodChannel methodChannel =
-        const MethodChannel('mimicam/platform_runtime'),
+        const MethodChannel('miucam/platform_runtime'),
     EventChannel eventChannel =
-        const EventChannel('mimicam/platform_runtime_events'),
+        const EventChannel('miucam/platform_runtime_events'),
   })  : _methodChannel = methodChannel,
         _eventChannel = eventChannel;
 

@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mimicam_server_channel_name">MimiCam Server</string>
-    <string name="mimicam_alert_connection_channel_name">MimiCam Alert Connection</string>
-    <string name="mimicam_server_channel_description">MimiCam local server and media activity</string>
-    <string name="mimicam_alert_connection_channel_description">Keeps the nursery alert connection active in the background</string>
-    <string name="mimicam_runtime_camera_microphone_playback">The camera, microphone, and nursery audio are active in the background.</string>
-    <string name="mimicam_runtime_camera_microphone">The camera and microphone are active in the background.</string>
-    <string name="mimicam_runtime_camera_playback">The camera and nursery audio are active in the background.</string>
-    <string name="mimicam_runtime_microphone_playback">The microphone and nursery audio are active in the background.</string>
-    <string name="mimicam_runtime_camera">The camera is active in the background.</string>
-    <string name="mimicam_runtime_microphone">The microphone is active in the background.</string>
-    <string name="mimicam_runtime_playback">Nursery audio is active in the background.</string>
-    <string name="mimicam_runtime_server">The local server and Wi-Fi connection are being kept active.</string>
-    <string name="mimicam_runtime_alerts">Nursery alerts are being monitored in the background.</string>
-    <string name="mimicam_runtime_stopping">The background service is stopping.</string>
-    <string name="mimicam_runtime_title_media">MimiCam nursery session is active</string>
-    <string name="mimicam_runtime_title_server">MimiCam local server is active</string>
-    <string name="mimicam_runtime_title_alerts">MimiCam nursery alerts are active</string>
+    <string name="miucam_server_channel_name">MiuCam Server</string>
+    <string name="miucam_alert_connection_channel_name">MiuCam Alert Connection</string>
+    <string name="miucam_server_channel_description">MiuCam local server and media activity</string>
+    <string name="miucam_alert_connection_channel_description">Keeps the nursery alert connection active in the background</string>
+    <string name="miucam_runtime_camera_microphone_playback">The camera, microphone, and nursery audio are active in the background.</string>
+    <string name="miucam_runtime_camera_microphone">The camera and microphone are active in the background.</string>
+    <string name="miucam_runtime_camera_playback">The camera and nursery audio are active in the background.</string>
+    <string name="miucam_runtime_microphone_playback">The microphone and nursery audio are active in the background.</string>
+    <string name="miucam_runtime_camera">The camera is active in the background.</string>
+    <string name="miucam_runtime_microphone">The microphone is active in the background.</string>
+    <string name="miucam_runtime_playback">Nursery audio is active in the background.</string>
+    <string name="miucam_runtime_server">The local server and Wi-Fi connection are being kept active.</string>
+    <string name="miucam_runtime_alerts">Nursery alerts are being monitored in the background.</string>
+    <string name="miucam_runtime_stopping">The background service is stopping.</string>
+    <string name="miucam_runtime_title_media">MiuCam nursery session is active</string>
+    <string name="miucam_runtime_title_server">MiuCam local server is active</string>
+    <string name="miucam_runtime_title_alerts">MiuCam nursery alerts are active</string>
 </resources>

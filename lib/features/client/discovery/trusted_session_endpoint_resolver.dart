@@ -4,11 +4,11 @@ import 'dart:io';
 
 import '../../../core/network/lan_endpoint.dart';
 import '../../../core/network/retry_policy.dart';
-import '../../../core/protocol/mimicam_protocol.dart';
+import '../../../core/protocol/miucam_protocol.dart';
 import '../../../core/protocol/pairing_payload.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
-import '../../../services/discovery/mimicam_service_discovery.dart';
+import '../../../services/discovery/miucam_service_discovery.dart';
 
 typedef TrustedEndpointProbe = Future<bool> Function(PairingSession candidate);
 
@@ -44,7 +44,7 @@ class TrustedSessionEndpointResolver {
     }
   }
 
-  final MimiCamServiceBrowser browser;
+  final MiuCamServiceBrowser browser;
   final TrustedEndpointProbe? _probe;
   final RetryPolicy _retryPolicy;
   final int maxProbeAttempts;
@@ -53,8 +53,8 @@ class TrustedSessionEndpointResolver {
 
   Stream<PairingSession> watch(PairingSession initialSession) async* {
     if (!allowUnverifiedEndpointRebind) return;
-    final queue = StreamController<List<MimiCamDiscoveredService>>();
-    void enqueue(List<MimiCamDiscoveredService> services) {
+    final queue = StreamController<List<MiuCamDiscoveredService>>();
+    void enqueue(List<MiuCamDiscoveredService> services) {
       if (!queue.isClosed) queue.add(services);
     }
 
@@ -112,7 +112,7 @@ class TrustedSessionEndpointResolver {
     }
   }
 
-  String _endpointSignature(MimiCamDiscoveredService service) {
+  String _endpointSignature(MiuCamDiscoveredService service) {
     final authorities = service.endpoints
         .map((endpoint) => endpoint.authority.toLowerCase())
         .toList(growable: false)
@@ -120,9 +120,9 @@ class TrustedSessionEndpointResolver {
     return authorities.join('|');
   }
 
-  MimiCamDiscoveredService? _matchingService(
+  MiuCamDiscoveredService? _matchingService(
     PairingSession session,
-    List<MimiCamDiscoveredService> services,
+    List<MiuCamDiscoveredService> services,
   ) {
     final deviceId = session.deviceId.trim();
     if (deviceId.isEmpty) return null;
@@ -134,7 +134,7 @@ class TrustedSessionEndpointResolver {
 
   bool _containsCurrentEndpoint(
     PairingSession current,
-    MimiCamDiscoveredService service,
+    MiuCamDiscoveredService service,
   ) =>
       current.port == service.port &&
       service.endpoints.any(
@@ -143,7 +143,7 @@ class TrustedSessionEndpointResolver {
 
   Future<PairingSession?> _resolveReachableEndpoint(
     PairingSession current,
-    MimiCamDiscoveredService service,
+    MiuCamDiscoveredService service,
   ) async {
     final candidates = [
       for (final endpoint in service.endpoints)
@@ -178,7 +178,7 @@ class TrustedSessionEndpointResolver {
     try {
       final request = await client
           .getUrl(
-            ServerEndpointBuilder(candidate).http(MimiCamProtocolV2.status),
+            ServerEndpointBuilder(candidate).http(MiuCamProtocolV2.status),
           )
           .timeout(probeTimeout);
       request.headers.set(

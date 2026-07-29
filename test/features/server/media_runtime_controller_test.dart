@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/features/server/media/media_runtime_controller.dart';
+import 'package:miucam/features/server/media/media_runtime_controller.dart';
 
 import '../../support/deterministic_server_media_source.dart';
 

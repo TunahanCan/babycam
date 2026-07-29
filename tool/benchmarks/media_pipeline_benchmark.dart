@@ -4,12 +4,12 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:mimicam/analysis/audio/audio_chunk.dart';
-import 'package:mimicam/analysis/audio/cry_audio_analyzer_v2.dart';
-import 'package:mimicam/analysis/video/luma_frame.dart';
-import 'package:mimicam/analysis/video/motion_analysis_config.dart';
-import 'package:mimicam/analysis/video/motion_analyzer_v2.dart';
-import 'package:mimicam/features/client/media/mjpeg_stream_parser.dart';
+import 'package:miucam/analysis/audio/audio_chunk.dart';
+import 'package:miucam/analysis/audio/cry_audio_analyzer_v2.dart';
+import 'package:miucam/analysis/video/luma_frame.dart';
+import 'package:miucam/analysis/video/motion_analysis_config.dart';
+import 'package:miucam/analysis/video/motion_analyzer_v2.dart';
+import 'package:miucam/features/client/media/mjpeg_stream_parser.dart';
 
 void main() {
   final results = <String, Object?>{
@@ -112,7 +112,7 @@ Map<String, Object?> _benchmarkMjpegParser() {
     final header = latin1.encode(
       '--frame\r\nContent-Type: image/jpeg\r\n'
       'Content-Length: ${jpeg.length}\r\n'
-      'X-MimiCam-Sequence: $sequence\r\n\r\n',
+      'X-MiuCam-Sequence: $sequence\r\n\r\n',
     );
     final part = Uint8List(header.length + jpeg.length + 2)
       ..setRange(0, header.length, header)

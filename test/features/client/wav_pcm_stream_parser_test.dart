@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/features/client/media/wav_pcm_stream_parser.dart';
+import 'package:miucam/features/client/media/wav_pcm_stream_parser.dart';
 
 void main() {
   test('WAV header parcalansa bile PCM payload ve format okunur', () {

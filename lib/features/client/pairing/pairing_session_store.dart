@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/protocol/device_feature_models.dart';
 import '../../../core/protocol/pairing_payload.dart';
 import '../../../core/protocol/pairing_session.dart';
-import '../../../core/security/mimicam_secure_storage.dart';
+import '../../../core/security/miucam_secure_storage.dart';
 
 class ChildProfileLimitException implements Exception {
   const ChildProfileLimitException();
@@ -268,7 +268,7 @@ abstract interface class SecureTokenStore {
 
 class FlutterSecureTokenStore implements SecureTokenStore {
   const FlutterSecureTokenStore({
-    FlutterSecureStorage storage = mimicamSecureStorage,
+    FlutterSecureStorage storage = miucamSecureStorage,
   }) : _storage = storage;
 
   final FlutterSecureStorage _storage;

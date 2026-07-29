@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/services/server/best_effort_operation_collector.dart';
+import 'package:miucam/services/server/best_effort_operation_collector.dart';
 
 void main() {
   test('a failed operation does not prevent later cleanup', () async {

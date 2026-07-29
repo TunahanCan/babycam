@@ -1,7 +1,7 @@
-# MimiCam
+# MiuCam
 
 <div align="center">
-  <img src="assets/branding/mimicam_wordmark_v2.png" width="440" alt="MimiCam" />
+  <img src="assets/branding/miucam_wordmark_v2.png" width="440" alt="MiuCam" />
 
   <h3>İki telefon. Tek Wi-Fi. Bulutsuz bebek takibi.</h3>
 
@@ -18,7 +18,7 @@
   </p>
 
   <p>
-    <a href="docs/reports/mimicam_cok_dilli_ekranlar_usecase_raporu.pdf"><strong>📱 Ekranları ve use-case'leri gör</strong></a>
+    <a href="docs/reports/miucam_cok_dilli_ekranlar_usecase_raporu.pdf"><strong>📱 Ekranları ve use-case'leri gör</strong></a>
     &nbsp;·&nbsp;
     <a href="ARCHITECT.md"><strong>🏗️ Mimariyi incele</strong></a>
     &nbsp;·&nbsp;
@@ -32,7 +32,7 @@
 
 ## Eski telefonun yeni görevi
 
-MimiCam, aynı yerel ağdaki iki telefonu tek bir bebek takip deneyiminde
+MiuCam, aynı yerel ağdaki iki telefonu tek bir bebek takip deneyiminde
 buluşturan Flutter uygulamasıdır. Bebek odasındaki telefon **Server**, ebeveynin
 yanındaki telefon **Client** olur.
 
@@ -42,16 +42,16 @@ yanındaki telefon **Client** olur.
 - Video, ses ve kontrol trafiği doğrudan aynı Wi-Fi üzerinde taşınır.
 
 > [!NOTE]
-> MimiCam internet üzerinden uzaktan erişim ürünü değildir. İki cihazın aynı
+> MiuCam internet üzerinden uzaktan erişim ürünü değildir. İki cihazın aynı
 > erişilebilir yerel ağda kalması gerekir.
 
 ## Gerçek uygulama ekranları
 
 <table>
   <tr>
-    <td align="center" width="33%"><img src="docs/readme/role-selection.jpg" alt="MimiCam Server ve Client rol seçimi ekranı" /></td>
-    <td align="center" width="33%"><img src="docs/readme/client-live.jpg" alt="MimiCam Client canlı izleme ekranı" /></td>
-    <td align="center" width="33%"><img src="docs/readme/server-preview.jpg" alt="MimiCam Server yayın ve kamera önizleme ekranı" /></td>
+    <td align="center" width="33%"><img src="docs/readme/role-selection.jpg" alt="MiuCam Server ve Client rol seçimi ekranı" /></td>
+    <td align="center" width="33%"><img src="docs/readme/client-live.jpg" alt="MiuCam Client canlı izleme ekranı" /></td>
+    <td align="center" width="33%"><img src="docs/readme/server-preview.jpg" alt="MiuCam Server yayın ve kamera önizleme ekranı" /></td>
   </tr>
   <tr>
     <td align="center"><strong>Rolünü seç</strong><br /><sub>Bebek odası veya izleme cihazı</sub></td>
@@ -112,9 +112,9 @@ flowchart TB
 
 <table>
   <tr>
-    <td align="center" width="33%"><img src="docs/readme/notifications.jpg" alt="MimiCam bildirim geçmişi ekranı" /></td>
-    <td align="center" width="33%"><img src="docs/readme/room-controls.jpg" alt="MimiCam rahatlatıcı ses ve bas-konuş kontrolleri" /></td>
-    <td align="center" width="33%"><img src="docs/readme/connection-recovery.jpg" alt="MimiCam bağlantı hatası ve yeniden bağlanma ekranı" /></td>
+    <td align="center" width="33%"><img src="docs/readme/notifications.jpg" alt="MiuCam bildirim geçmişi ekranı" /></td>
+    <td align="center" width="33%"><img src="docs/readme/room-controls.jpg" alt="MiuCam rahatlatıcı ses ve bas-konuş kontrolleri" /></td>
+    <td align="center" width="33%"><img src="docs/readme/connection-recovery.jpg" alt="MiuCam bağlantı hatası ve yeniden bağlanma ekranı" /></td>
   </tr>
   <tr>
     <td align="center"><strong>Uyarı geçmişi</strong><br /><sub>Ses, hareket ve sistem olayları</sub></td>
@@ -125,7 +125,7 @@ flowchart TB
 
 ## Platform davranışı
 
-MimiCam, Android ve iOS'un farklı arka plan kurallarını kullanıcıdan saklamaz.
+MiuCam, Android ve iOS'un farklı arka plan kurallarını kullanıcıdan saklamaz.
 
 | Platform | Server davranışı |
 | --- | --- |
@@ -185,7 +185,7 @@ oda kontrolleri, hata kurtarma ve ayar akışlarını fiziksel Android cihazınd
 alınmış görüntülerle belgeliyor.
 
 <div align="center">
-  <a href="docs/reports/mimicam_cok_dilli_ekranlar_usecase_raporu.pdf">
+  <a href="docs/reports/miucam_cok_dilli_ekranlar_usecase_raporu.pdf">
     <strong>📄 Çok dilli ekran ve use-case raporunu aç</strong>
   </a>
   <br /><br />
@@ -210,7 +210,7 @@ Fransızca, Almanca, Arapça–Suudi Arabistan ve Arapça–Katar.
 > [!IMPORTANT]
 > Local-first, uçtan uca şifreleme anlamına gelmez. Mevcut medya ve kontrol
 > taşıması aynı LAN üzerinde HTTP/WS kullanır ve tokenlarla yetkilendirilir;
-> TLS/E2E şifreleme sağlamaz. MimiCam tıbbi cihaz değildir ve yetişkin
+> TLS/E2E şifreleme sağlamaz. MiuCam tıbbi cihaz değildir ve yetişkin
 > gözetiminin yerini almaz.
 
 <details>
@@ -243,7 +243,7 @@ testi yalnız açık bir derleme bayrağıyla etkinleştirilir:
 
 ```bash
 flutter run \
-  --dart-define=MIMICAM_BROADCAST_PAYWALL_ENABLED=true
+  --dart-define=MIUCAM_BROADCAST_PAYWALL_ENABLED=true
 ```
 
 </details>
@@ -273,11 +273,11 @@ flutter build ios --release --no-codesign
 - [Medya taşıma ve analiz algoritmaları](docs/media_transport_algorithms.md)
 - [Fiziksel cihaz test matrisi](docs/physical_device_test_matrix.md)
 - [Gizlilik bildirimi taslağı](PRIVACY.md)
-- [Çok dilli ekran görüntüleri ve use-case raporu](docs/reports/mimicam_cok_dilli_ekranlar_usecase_raporu.pdf)
+- [Çok dilli ekran görüntüleri ve use-case raporu](docs/reports/miucam_cok_dilli_ekranlar_usecase_raporu.pdf)
 
 ---
 
 <div align="center">
-  <img src="assets/branding/mimicam_wordmark_v2.png" width="260" alt="" />
+  <img src="assets/branding/miucam_wordmark_v2.png" width="260" alt="" />
   <p><strong>Yakında. Yerel. Senin kontrolünde.</strong></p>
 </div>

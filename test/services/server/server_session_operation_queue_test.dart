@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/services/server/server_session_operation_queue.dart';
+import 'package:miucam/services/server/server_session_operation_queue.dart';
 
 void main() {
   test('session mutations execute in request order', () async {

@@ -582,7 +582,7 @@ class _Top extends StatelessWidget {
         Expanded(
           child: Center(
             child: Text(
-              title ?? 'MimiCam',
+              title ?? 'MiuCam',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(

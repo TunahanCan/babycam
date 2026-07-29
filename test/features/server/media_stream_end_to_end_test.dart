@@ -5,13 +5,13 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/features/client/media/mjpeg_stream_parser.dart';
-import 'package:mimicam/features/client/media/wav_pcm_stream_parser.dart';
-import 'package:mimicam/features/server/pairing/pairing_token_service.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/configuration_service.dart';
-import 'package:mimicam/services/mimicam_server.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/features/client/media/mjpeg_stream_parser.dart';
+import 'package:miucam/features/client/media/wav_pcm_stream_parser.dart';
+import 'package:miucam/features/server/pairing/pairing_token_service.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/configuration_service.dart';
+import 'package:miucam/services/miucam_server.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../support/deterministic_server_media_source.dart';
@@ -50,7 +50,7 @@ void main() {
     final status = await _getJson(
       client,
       base.port,
-      MimiCamProtocolV2.status,
+      MiuCamProtocolV2.status,
       trusted.token,
     );
 
@@ -88,7 +88,7 @@ void main() {
     final status = await _getJson(
       client,
       base.port,
-      MimiCamProtocolV2.status,
+      MiuCamProtocolV2.status,
       trusted.token,
     );
     expect(status['activeStreamClients'], 1);
@@ -121,12 +121,12 @@ void main() {
 
     final video = await _openMediaStream(
       base.port,
-      MimiCamProtocolV2.video,
+      MiuCamProtocolV2.video,
       streamToken,
     );
     final audio = await _openMediaStream(
       base.port,
-      MimiCamProtocolV2.audio,
+      MiuCamProtocolV2.audio,
       streamToken,
     );
     addTearDown(video.close);
@@ -134,7 +134,7 @@ void main() {
 
     final rejected = await _requestRejectedMediaStream(
       base.port,
-      MimiCamProtocolV2.video,
+      MiuCamProtocolV2.video,
       streamToken,
     );
     expect(rejected.statusCode, HttpStatus.tooManyRequests);
@@ -143,7 +143,7 @@ void main() {
     final status = await _getJson(
       controlClient,
       base.port,
-      MimiCamProtocolV2.status,
+      MiuCamProtocolV2.status,
       trusted.token,
     );
     expect(status['mediaConnections'], 2);
@@ -183,12 +183,12 @@ void main() {
 
     final first = await _openMediaStream(
       base.port,
-      MimiCamProtocolV2.video,
+      MiuCamProtocolV2.video,
       streamTokens[0],
     );
     final second = await _openMediaStream(
       base.port,
-      MimiCamProtocolV2.video,
+      MiuCamProtocolV2.video,
       streamTokens[1],
     );
     addTearDown(first.close);
@@ -196,7 +196,7 @@ void main() {
 
     final rejected = await _requestRejectedMediaStream(
       base.port,
-      MimiCamProtocolV2.video,
+      MiuCamProtocolV2.video,
       streamTokens[2],
     );
     expect(rejected.statusCode, HttpStatus.serviceUnavailable);
@@ -231,7 +231,7 @@ void main() {
       scheme: 'http',
       host: InternetAddress.loopbackIPv4.address,
       port: base.port,
-      path: MimiCamProtocolV2.video,
+      path: MiuCamProtocolV2.video,
       queryParameters: {'streamToken': streamToken},
     ));
     final mediaResponse = await mediaRequest.close();
@@ -259,7 +259,7 @@ void main() {
     final stopped = await _postJson(
       controlClient,
       base.port,
-      MimiCamProtocolV2.sessionStop,
+      MiuCamProtocolV2.sessionStop,
       trusted.token,
       {'clientId': trusted.clientId},
     );
@@ -267,7 +267,7 @@ void main() {
     final status = await _getJson(
       controlClient,
       base.port,
-      MimiCamProtocolV2.status,
+      MiuCamProtocolV2.status,
       trusted.token,
     );
 
@@ -322,7 +322,7 @@ void main() {
     final status = await _getJson(
       client,
       base.port,
-      MimiCamProtocolV2.status,
+      MiuCamProtocolV2.status,
       anne.token,
     );
 
@@ -334,7 +334,7 @@ void main() {
   });
 }
 
-Future<MimiCamServer> _testServer(
+Future<MiuCamServer> _testServer(
   PairingTokenService tokenService, {
   bool startMediaOnSessionStart = true,
   int maxMediaConnectionsPerClient = 2,
@@ -342,7 +342,7 @@ Future<MimiCamServer> _testServer(
 }) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
-  return MimiCamServer(
+  return MiuCamServer(
     config: ConfigurationService(preferences),
     strings: AppStrings(const Locale('tr')),
     onLog: (_) {},
@@ -468,7 +468,7 @@ Future<Map<String, Object?>> _postSessionStart(
   final response = await _postJson(
     client,
     port,
-    MimiCamProtocolV2.sessionStart,
+    MiuCamProtocolV2.sessionStart,
     bearerToken,
     {'clientId': clientId, 'video': true, 'audio': audio},
   );
@@ -483,7 +483,7 @@ Future<Uint8List> _readFirstMjpegFrame(int port, String streamToken) async {
       scheme: 'http',
       host: InternetAddress.loopbackIPv4.address,
       port: port,
-      path: MimiCamProtocolV2.video,
+      path: MiuCamProtocolV2.video,
       queryParameters: {'streamToken': streamToken},
     ));
     final response = await request.close().timeout(const Duration(seconds: 2));
@@ -526,7 +526,7 @@ Future<ParsedPcmAudio> _readFirstPcmChunk(
       scheme: 'http',
       host: InternetAddress.loopbackIPv4.address,
       port: port,
-      path: MimiCamProtocolV2.audio,
+      path: MiuCamProtocolV2.audio,
       queryParameters: {'streamToken': streamToken},
     ));
     final response = await request.close().timeout(const Duration(seconds: 2));

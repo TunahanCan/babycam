@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
-import 'package:mimicam/features/client/media/client_video_viewer.dart';
+import 'package:miucam/features/client/media/client_video_viewer.dart';
 
 void main() {
   testWidgets('frame yokken loading, hata varken kapalı kamera ikonu gösterir',

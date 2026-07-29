@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/network/retry_policy.dart';
+import 'package:miucam/core/network/retry_policy.dart';
 
 void main() {
   test('exponential delay mevcut 1.7 carpanli diziyi ve capi korur', () {

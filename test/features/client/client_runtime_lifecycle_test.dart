@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/media/adaptive_media_profile.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/client_runtime.dart';
-import 'package:mimicam/features/client/media/active_stream_session.dart';
-import 'package:mimicam/features/client/pairing/pairing_failure.dart';
-import 'package:mimicam/services/monetization/broadcast_access_service.dart';
+import 'package:miucam/core/media/adaptive_media_profile.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/features/client/client_runtime.dart';
+import 'package:miucam/features/client/media/active_stream_session.dart';
+import 'package:miucam/features/client/pairing/pairing_failure.dart';
+import 'package:miucam/services/monetization/broadcast_access_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

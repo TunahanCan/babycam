@@ -26,7 +26,7 @@ class _ClientSettingsList extends StatelessWidget {
           icon: Icons.notifications_none_rounded,
           title: strings.ui('navNotifications'),
           text: strings.ui('notificationsManageText'),
-          backgroundColor: MimiCamDesignTokens.blushSoft,
+          backgroundColor: MiuCamDesignTokens.blushSoft,
           trailing: const Icon(Icons.chevron_right_rounded),
           onTap: onNotificationsTap,
         ),
@@ -35,7 +35,7 @@ class _ClientSettingsList extends StatelessWidget {
           icon: Icons.language_rounded,
           title: strings.ui('language'),
           text: strings.ui('languageSelectText'),
-          backgroundColor: MimiCamDesignTokens.mintSoft,
+          backgroundColor: MiuCamDesignTokens.mintSoft,
           trailing: SizedBox(
             width: 92,
             child: Text(
@@ -56,7 +56,7 @@ class _ClientSettingsList extends StatelessWidget {
           icon: Icons.nights_stay_rounded,
           title: strings.ui('keepDeviceAwake'),
           text: strings.ui('keepAwakeClientText'),
-          backgroundColor: MimiCamDesignTokens.lavenderSoft,
+          backgroundColor: MiuCamDesignTokens.lavenderSoft,
           trailing: Switch(
             value: keepScreenAwake,
             activeThumbColor: Colors.white,
@@ -86,8 +86,8 @@ class _SystemNotificationSettingsCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: MimiCamDesignTokens.cardDecoration().copyWith(
-        color: MimiCamDesignTokens.lavenderSoft,
+      decoration: MiuCamDesignTokens.cardDecoration().copyWith(
+        color: MiuCamDesignTokens.lavenderSoft,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -97,7 +97,7 @@ class _SystemNotificationSettingsCard extends StatelessWidget {
             backgroundColor: Colors.white,
             child: Icon(
               Icons.notifications_outlined,
-              color: MimiCamDesignTokens.pink,
+              color: MiuCamDesignTokens.pink,
             ),
           ),
           const SizedBox(width: 12),
@@ -108,7 +108,7 @@ class _SystemNotificationSettingsCard extends StatelessWidget {
                 Text(
                   strings.ui('navNotifications'),
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.navy,
+                    color: MiuCamDesignTokens.navy,
                     fontSize: 15.5,
                     fontWeight: FontWeight.w900,
                   ),
@@ -117,7 +117,7 @@ class _SystemNotificationSettingsCard extends StatelessWidget {
                 Text(
                   strings.ui('notificationsManageText'),
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.slate,
+                    color: MiuCamDesignTokens.slate,
                     fontSize: 13,
                     height: 1.28,
                   ),
@@ -163,7 +163,7 @@ class _SettingsRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         child: Ink(
           padding: const EdgeInsets.all(18),
-          decoration: MimiCamDesignTokens.cardDecoration().copyWith(
+          decoration: MiuCamDesignTokens.cardDecoration().copyWith(
             color: backgroundColor,
           ),
           child: Row(
@@ -171,19 +171,19 @@ class _SettingsRow extends StatelessWidget {
               CircleAvatar(
                 radius: 28,
                 backgroundColor: Colors.white.withValues(alpha: .72),
-                child: Icon(icon, color: MimiCamDesignTokens.nightPlum),
+                child: Icon(icon, color: MiuCamDesignTokens.nightPlum),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: MimiCamDesignTokens.cardTitle),
+                    Text(title, style: MiuCamDesignTokens.cardTitle),
                     const SizedBox(height: 6),
                     Text(
                       text,
                       style: const TextStyle(
-                        color: MimiCamDesignTokens.slate,
+                        color: MiuCamDesignTokens.slate,
                         fontSize: 13.5,
                         height: 1.25,
                       ),
@@ -225,11 +225,11 @@ class _FilterChip extends StatelessWidget {
           child: Ink(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             decoration: ShapeDecoration(
-              color: active ? MimiCamDesignTokens.pink : Colors.white,
+              color: active ? MiuCamDesignTokens.pink : Colors.white,
               shape: StadiumBorder(
                 side: BorderSide(
                   color: active
-                      ? MimiCamDesignTokens.pink
+                      ? MiuCamDesignTokens.pink
                       : const Color(0xFFE2E8F0),
                   width: 1.5,
                 ),
@@ -238,7 +238,7 @@ class _FilterChip extends StatelessWidget {
             child: Text(
               text,
               style: TextStyle(
-                color: active ? Colors.white : MimiCamDesignTokens.nightPlum,
+                color: active ? Colors.white : MiuCamDesignTokens.nightPlum,
                 fontSize: 12,
                 fontWeight: FontWeight.w900,
               ),
@@ -260,7 +260,7 @@ class _TinyLabel extends StatelessWidget {
     return Text(
       text.toUpperCase(),
       style: const TextStyle(
-        color: MimiCamDesignTokens.pink,
+        color: MiuCamDesignTokens.pink,
         fontSize: 10.5,
         letterSpacing: 1.0,
         fontWeight: FontWeight.w900,

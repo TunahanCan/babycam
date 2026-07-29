@@ -2,12 +2,12 @@ import 'dart:convert';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/analysis/alert/alert_event.dart';
-import 'package:mimicam/analysis/alert/alert_severity.dart';
-import 'package:mimicam/analysis/alert/alert_type.dart';
-import 'package:mimicam/core/protocol/alert_event_dto.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/server/alert_protocol_adapter.dart';
+import 'package:miucam/analysis/alert/alert_event.dart';
+import 'package:miucam/analysis/alert/alert_severity.dart';
+import 'package:miucam/analysis/alert/alert_type.dart';
+import 'package:miucam/core/protocol/alert_event_dto.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/server/alert_protocol_adapter.dart';
 
 void main() {
   test('alert kategorileri event tipinden kesin olarak belirlenir', () {
@@ -181,7 +181,7 @@ void main() {
       type: 'systemWarning',
       severity: 'info',
       messageKey: 'legacyAlert',
-      message: 'MimiCam test bildirimi',
+      message: 'MiuCam test bildirimi',
       score: 0,
       timestampMs: 100,
       sourceDeviceId: 'server',

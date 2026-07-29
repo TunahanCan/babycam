@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../../../core/protocol/mimicam_protocol.dart';
+import '../../../core/protocol/miucam_protocol.dart';
 import '../../../core/protocol/pairing_payload.dart';
 import 'pairing_failure.dart';
 
@@ -31,7 +31,7 @@ class HttpPairingPayloadGateway implements PairingPayloadGateway {
               scheme: 'http',
               host: host,
               port: port,
-              path: MimiCamProtocolV2.statusPublic,
+              path: MiuCamProtocolV2.statusPublic,
             ),
           )
           .timeout(timeout);
@@ -61,7 +61,7 @@ class HttpPairingPayloadGateway implements PairingPayloadGateway {
               'maxClients': 5,
             };
       return PairingPayload(
-        schemaVersion: MimiCamProtocolV2.schemaVersion,
+        schemaVersion: MiuCamProtocolV2.schemaVersion,
         host: host,
         port: port,
         deviceId: json['serverDeviceId']?.toString() ?? 'manual_server',

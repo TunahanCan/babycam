@@ -34,7 +34,7 @@ class MethodChannelCameraPermissionGateway implements CameraPermissionGateway {
         _fallback = fallback,
         _isIOS = isIOS;
 
-  static const _channelName = 'mimicam/camera_permission';
+  static const _channelName = 'miucam/camera_permission';
 
   final MethodChannel _channel;
   final CameraPermissionGateway _fallback;

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/services/server/server_session_registry.dart';
+import 'package:miucam/services/server/server_session_registry.dart';
 
 void main() {
   group('ServerSessionRegistry', () {

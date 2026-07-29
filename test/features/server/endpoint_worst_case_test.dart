@@ -3,11 +3,11 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/features/server/pairing/pairing_token_service.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/configuration_service.dart';
-import 'package:mimicam/services/mimicam_server.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/features/server/pairing/pairing_token_service.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/configuration_service.dart';
+import 'package:miucam/services/miucam_server.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -29,61 +29,61 @@ void main() {
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.pairConfirm,
+        MiuCamProtocolV2.pairConfirm,
         method: 'GET',
       ),
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.authRenew,
-        method: 'GET',
-        bearerToken: trusted.token,
-      ),
-      await _requestStatusCode(
-        client,
-        base.port,
-        MimiCamProtocolV2.sessionStart,
+        MiuCamProtocolV2.authRenew,
         method: 'GET',
         bearerToken: trusted.token,
       ),
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.sessionStop,
+        MiuCamProtocolV2.sessionStart,
         method: 'GET',
         bearerToken: trusted.token,
       ),
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.qualityReport,
+        MiuCamProtocolV2.sessionStop,
         method: 'GET',
         bearerToken: trusted.token,
       ),
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.statusPublic,
+        MiuCamProtocolV2.qualityReport,
+        method: 'GET',
+        bearerToken: trusted.token,
+      ),
+      await _requestStatusCode(
+        client,
+        base.port,
+        MiuCamProtocolV2.statusPublic,
         method: 'POST',
       ),
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.status,
+        MiuCamProtocolV2.status,
         method: 'POST',
         bearerToken: trusted.token,
       ),
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.video,
+        MiuCamProtocolV2.video,
         method: 'POST',
         query: {'streamToken': streamToken},
       ),
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.audio,
+        MiuCamProtocolV2.audio,
         method: 'POST',
         query: {'streamToken': streamToken},
       ),
@@ -94,7 +94,7 @@ void main() {
     final status = await _getJson(
       client,
       base.port,
-      MimiCamProtocolV2.status,
+      MiuCamProtocolV2.status,
       bearerToken: trusted.token,
     );
     expect(status['activeStreamClients'], 0);
@@ -114,7 +114,7 @@ void main() {
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.events,
+        MiuCamProtocolV2.events,
         method: 'GET',
       ),
       HttpStatus.upgradeRequired,
@@ -150,7 +150,7 @@ void main() {
         scheme: 'ws',
         host: InternetAddress.loopbackIPv4.address,
         port: base.port,
-        path: MimiCamProtocolV2.events,
+        path: MiuCamProtocolV2.events,
       ).toString(),
       headers: {HttpHeaders.authorizationHeader: 'Bearer ${trusted.token}'},
     );
@@ -177,7 +177,7 @@ void main() {
         scheme: 'ws',
         host: InternetAddress.loopbackIPv4.address,
         port: base.port,
-        path: MimiCamProtocolV2.events,
+        path: MiuCamProtocolV2.events,
       ).toString(),
       headers: {HttpHeaders.authorizationHeader: 'Bearer ${trusted.token}'},
     );
@@ -208,7 +208,7 @@ void main() {
           scheme: 'ws',
           host: InternetAddress.loopbackIPv4.address,
           port: base.port,
-          path: MimiCamProtocolV2.events,
+          path: MiuCamProtocolV2.events,
         ).toString(),
         headers: {
           HttpHeaders.authorizationHeader: 'Bearer ${trusted.token}',
@@ -244,27 +244,27 @@ void main() {
     final badPair = await _postRaw(
       client,
       base.port,
-      MimiCamProtocolV2.pairConfirm,
+      MiuCamProtocolV2.pairConfirm,
       '{',
     );
     final listStart = await _postRaw(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       '["not","an","object"]',
       bearerToken: trusted.token,
     );
     final listStop = await _postRaw(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStop,
+      MiuCamProtocolV2.sessionStop,
       '["not","an","object"]',
       bearerToken: trusted.token,
     );
     final badQuality = await _postRaw(
       client,
       base.port,
-      MimiCamProtocolV2.qualityReport,
+      MiuCamProtocolV2.qualityReport,
       '{"tier"',
       bearerToken: trusted.token,
     );
@@ -277,7 +277,7 @@ void main() {
     final status = await _getJson(
       client,
       base.port,
-      MimiCamProtocolV2.status,
+      MiuCamProtocolV2.status,
       bearerToken: trusted.token,
     );
     expect(status['activeStreamClients'], 0);
@@ -296,27 +296,27 @@ void main() {
     final client = HttpClient();
     addTearDown(() => client.close(force: true));
     final oversized = jsonEncode({
-      'padding': 'x' * MimiCamServer.maxJsonRequestBodyBytes,
+      'padding': 'x' * MiuCamServer.maxJsonRequestBodyBytes,
     });
 
     final statuses = [
       await _postRaw(
         client,
         base.port,
-        MimiCamProtocolV2.pairConfirm,
+        MiuCamProtocolV2.pairConfirm,
         oversized,
       ),
       await _postRaw(
         client,
         base.port,
-        MimiCamProtocolV2.sessionStart,
+        MiuCamProtocolV2.sessionStart,
         oversized,
         bearerToken: trusted.token,
       ),
       await _postRaw(
         client,
         base.port,
-        MimiCamProtocolV2.qualityReport,
+        MiuCamProtocolV2.qualityReport,
         oversized,
         bearerToken: trusted.token,
       ),
@@ -326,7 +326,7 @@ void main() {
     final status = await _getJson(
       client,
       base.port,
-      MimiCamProtocolV2.status,
+      MiuCamProtocolV2.status,
       bearerToken: trusted.token,
     );
     expect(status['activeStreamClients'], 0);
@@ -349,13 +349,13 @@ void main() {
     final publicStatus = await _getPublicJson(
       client,
       base.port,
-      MimiCamProtocolV2.statusPublic,
+      MiuCamProtocolV2.statusPublic,
     );
     final nonce = publicStatus['pairingNonce'] as String;
     final firstPair = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.pairConfirm,
+      MiuCamProtocolV2.pairConfirm,
       null,
       {
         'pairingNonce': nonce,
@@ -366,7 +366,7 @@ void main() {
     final replayPair = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.pairConfirm,
+      MiuCamProtocolV2.pairConfirm,
       null,
       {
         'pairingNonce': nonce,
@@ -378,13 +378,13 @@ void main() {
     final nextPublicStatus = await _getPublicJson(
       client,
       base.port,
-      MimiCamProtocolV2.statusPublic,
+      MiuCamProtocolV2.statusPublic,
     );
     now = now.add(const Duration(seconds: 2));
     final expiredPair = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.pairConfirm,
+      MiuCamProtocolV2.pairConfirm,
       null,
       {
         'pairingNonce': nextPublicStatus['pairingNonce'],
@@ -412,14 +412,14 @@ void main() {
     final status = await _getPublicJson(
       client,
       base.port,
-      MimiCamProtocolV2.statusPublic,
+      MiuCamProtocolV2.statusPublic,
     );
     final nonce = status['pairingNonce'] as String;
 
     final rejected = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.pairConfirm,
+      MiuCamProtocolV2.pairConfirm,
       null,
       {
         'pairingNonce': nonce,
@@ -431,7 +431,7 @@ void main() {
     final validAfterRejection = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.pairConfirm,
+      MiuCamProtocolV2.pairConfirm,
       null,
       {
         'pairingNonce': nonce,
@@ -464,7 +464,7 @@ void main() {
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.status,
+        MiuCamProtocolV2.status,
         method: 'GET',
         bearerToken: trusted.token,
       ),
@@ -474,7 +474,7 @@ void main() {
     final renewed = await _postWithoutBody(
       client,
       base.port,
-      MimiCamProtocolV2.authRenew,
+      MiuCamProtocolV2.authRenew,
       bearerToken: trusted.token,
     );
     final nextToken = renewed.body['trustedClientToken'] as String;
@@ -485,7 +485,7 @@ void main() {
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.status,
+        MiuCamProtocolV2.status,
         method: 'GET',
         bearerToken: trusted.token,
       ),
@@ -495,7 +495,7 @@ void main() {
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.status,
+        MiuCamProtocolV2.status,
         method: 'GET',
         bearerToken: nextToken,
       ),
@@ -520,7 +520,7 @@ void main() {
     final started = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       trusted.token,
       {'clientId': trusted.clientId},
     );
@@ -531,7 +531,7 @@ void main() {
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.status,
+        MiuCamProtocolV2.status,
         method: 'GET',
         bearerToken: trusted.token,
       ),
@@ -541,7 +541,7 @@ void main() {
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.video,
+        MiuCamProtocolV2.video,
         method: 'GET',
         query: {'streamToken': streamToken},
       ),
@@ -551,7 +551,7 @@ void main() {
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.audio,
+        MiuCamProtocolV2.audio,
         method: 'GET',
         query: {'streamToken': streamToken},
       ),
@@ -575,21 +575,21 @@ void main() {
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.status,
+        MiuCamProtocolV2.status,
         method: 'GET',
         authorizationHeader: 'bearer ${trusted.token}',
       ),
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.status,
+        MiuCamProtocolV2.status,
         method: 'GET',
         authorizationHeader: 'Token ${trusted.token}',
       ),
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.status,
+        MiuCamProtocolV2.status,
         method: 'GET',
         authorizationHeader: 'Bearer',
       ),
@@ -600,7 +600,7 @@ void main() {
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.status,
+        MiuCamProtocolV2.status,
         method: 'GET',
         bearerToken: trusted.token,
       ),
@@ -627,14 +627,14 @@ void main() {
     await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       first.token,
       {'clientId': first.clientId},
     );
     await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStart,
+      MiuCamProtocolV2.sessionStart,
       second.token,
       {'clientId': second.clientId},
     );
@@ -642,7 +642,7 @@ void main() {
     final spoofedStop = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStop,
+      MiuCamProtocolV2.sessionStop,
       first.token,
       {'clientId': second.clientId},
     );
@@ -652,7 +652,7 @@ void main() {
     final secondStillActive = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.qualityReport,
+      MiuCamProtocolV2.qualityReport,
       second.token,
       {
         'clientId': second.clientId,
@@ -666,7 +666,7 @@ void main() {
     final secondStop = await _postJson(
       client,
       base.port,
-      MimiCamProtocolV2.sessionStop,
+      MiuCamProtocolV2.sessionStop,
       second.token,
       {'clientId': second.clientId},
     );
@@ -690,7 +690,7 @@ void main() {
       final started = await _postJson(
         client,
         base.port,
-        MimiCamProtocolV2.sessionStart,
+        MiuCamProtocolV2.sessionStart,
         trusted.token,
         {'clientId': trusted.clientId},
       );
@@ -704,7 +704,7 @@ void main() {
       await _requestStatusCode(
         client,
         base.port,
-        MimiCamProtocolV2.video,
+        MiuCamProtocolV2.video,
         method: 'GET',
         query: {'streamToken': overflowStreamToken},
       ),
@@ -713,14 +713,14 @@ void main() {
   });
 }
 
-Future<MimiCamServer> _testServer(
+Future<MiuCamServer> _testServer(
   PairingTokenService tokenService, {
   int maxEventSocketsPerClient = 1,
   int? maxTotalEventSockets,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
-  return MimiCamServer(
+  return MiuCamServer(
     config: ConfigurationService(preferences),
     strings: AppStrings(const Locale('tr')),
     onLog: (_) {},
@@ -744,7 +744,7 @@ Future<({int statusCode, String body})> _rawWebSocketHandshake(
   );
   try {
     socket.write(
-      'GET ${MimiCamProtocolV2.events} HTTP/1.1\r\n'
+      'GET ${MiuCamProtocolV2.events} HTTP/1.1\r\n'
       'Host: 127.0.0.1:$port\r\n'
       'Connection: Upgrade\r\n'
       'Upgrade: websocket\r\n'
@@ -779,7 +779,7 @@ Future<void> _waitForEventSocketCount(
     final status = await _getJson(
       client,
       port,
-      MimiCamProtocolV2.status,
+      MiuCamProtocolV2.status,
       bearerToken: bearerToken,
     );
     if (status['eventSocketConnections'] == expected) return;

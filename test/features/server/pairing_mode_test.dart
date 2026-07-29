@@ -4,12 +4,12 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/features/server/media/media_runtime_controller.dart';
-import 'package:mimicam/features/server/server_runtime.dart';
-import 'package:mimicam/l10n/app_strings.dart';
-import 'package:mimicam/services/configuration_service.dart';
-import 'package:mimicam/services/mimicam_server.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/features/server/media/media_runtime_controller.dart';
+import 'package:miucam/features/server/server_runtime.dart';
+import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/services/configuration_service.dart';
+import 'package:miucam/services/miucam_server.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -17,7 +17,7 @@ void main() {
     var mediaStarts = 0;
     final runtime = ServerRuntime(
       mediaRuntime: MediaRuntimeController(onStart: () async => mediaStarts++),
-      onStartPairing: () async => 'mimicam://pair?payload=x',
+      onStartPairing: () async => 'miucam://pair?payload=x',
     );
 
     await runtime.startPairingMode();
@@ -37,7 +37,7 @@ void main() {
       onStartPairing: () async {
         starts++;
         if (starts == 1) await firstStart.future;
-        return 'mimicam://pair?payload=$starts';
+        return 'miucam://pair?payload=$starts';
       },
     );
     addTearDown(runtime.dispose);
@@ -65,7 +65,7 @@ void main() {
       scheme: 'http',
       host: InternetAddress.loopbackIPv4.address,
       port: base.port,
-      path: MimiCamProtocolV2.statusPublic,
+      path: MiuCamProtocolV2.statusPublic,
     ));
     final response = await request.close();
     final body = await utf8.decoder.bind(response).join();
@@ -91,7 +91,7 @@ void main() {
       scheme: 'http',
       host: InternetAddress.loopbackIPv4.address,
       port: base.port,
-      path: MimiCamProtocolV2.statusPublic,
+      path: MiuCamProtocolV2.statusPublic,
     ));
     final inactiveResponse = await inactiveRequest.close();
     await inactiveResponse.drain<void>();
@@ -99,8 +99,7 @@ void main() {
     expect(inactiveResponse.statusCode, HttpStatus.notFound);
   });
 
-  test('MimiCamServer eşzamanlı pairing start için tek bind paylaşır',
-      () async {
+  test('MiuCamServer eşzamanlı pairing start için tek bind paylaşır', () async {
     final server = await _testServer();
     addTearDown(server.dispose);
 
@@ -134,10 +133,10 @@ void main() {
   });
 }
 
-Future<MimiCamServer> _testServer({int httpPort = 0}) async {
+Future<MiuCamServer> _testServer({int httpPort = 0}) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
-  return MimiCamServer(
+  return MiuCamServer(
     config: ConfigurationService(preferences),
     strings: AppStrings(const Locale('tr')),
     onLog: (_) {},

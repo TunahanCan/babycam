@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/app_strings.dart';
 import '../../../services/platform/platform_runtime_contract.dart';
-import '../../shared/presentation/mimicam_design_tokens.dart';
-import '../../shared/presentation/mimicam_shells.dart';
+import '../../shared/presentation/miucam_design_tokens.dart';
+import '../../shared/presentation/miucam_shells.dart';
 import '../server_runtime.dart';
 import 'server_home_components.dart';
 
@@ -55,12 +55,12 @@ class _ServiceStatusGrid extends StatelessWidget {
                     ? strings.ui('preparing')
                     : strings.ui('waiting'),
         color: state.cameraActive
-            ? MimiCamDesignTokens.serverSuccess
+            ? MiuCamDesignTokens.serverSuccess
             : inactive
-                ? MimiCamDesignTokens.serverDisabled
+                ? MiuCamDesignTokens.serverDisabled
                 : state.phase == ServerRuntimePhase.mediaStarting
-                    ? MimiCamDesignTokens.serverBlue
-                    : MimiCamDesignTokens.serverDisabled,
+                    ? MiuCamDesignTokens.serverBlue
+                    : MiuCamDesignTokens.serverDisabled,
       ),
       _ServiceStatusCard(
         icon: Icons.mic_rounded,
@@ -68,8 +68,8 @@ class _ServiceStatusGrid extends StatelessWidget {
         value:
             state.microphoneActive ? strings.ui('active') : strings.ui('off'),
         color: state.microphoneActive
-            ? MimiCamDesignTokens.serverSuccess
-            : MimiCamDesignTokens.serverDisabled,
+            ? MiuCamDesignTokens.serverSuccess
+            : MiuCamDesignTokens.serverDisabled,
       ),
       _ServiceStatusCard(
         icon: Icons.hub_rounded,
@@ -77,8 +77,8 @@ class _ServiceStatusGrid extends StatelessWidget {
         value: strings
             .uiFormat('eventClientsCount', {'count': state.activeEventClients}),
         color: state.activeEventClients > 0
-            ? MimiCamDesignTokens.serverSuccess
-            : MimiCamDesignTokens.serverBlue,
+            ? MiuCamDesignTokens.serverSuccess
+            : MiuCamDesignTokens.serverBlue,
       ),
       _ServiceStatusCard(
         icon: Icons.people_alt_rounded,
@@ -86,8 +86,8 @@ class _ServiceStatusGrid extends StatelessWidget {
         value:
             strings.uiFormat('connectedCount', {'count': state.activeClients}),
         color: state.activeClients > 0
-            ? MimiCamDesignTokens.serverSuccess
-            : MimiCamDesignTokens.serverDisabled,
+            ? MiuCamDesignTokens.serverSuccess
+            : MiuCamDesignTokens.serverDisabled,
       ),
     ];
 
@@ -165,20 +165,20 @@ class _PlatformRuntimeContractCardState
         strings.ui('androidServiceInactiveContract'),
       _ => strings.ui('platformRuntimeUnknownContract'),
     };
-    return MimiCamCard(
+    return MiuCamCard(
       dark: true,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           CircleAvatar(
             backgroundColor: active
-                ? MimiCamDesignTokens.serverSuccess
-                : MimiCamDesignTokens.serverDisabled,
+                ? MiuCamDesignTokens.serverSuccess
+                : MiuCamDesignTokens.serverDisabled,
             child: Icon(
               platform == PlatformRuntimeKind.ios
                   ? Icons.phone_iphone_rounded
                   : Icons.settings_applications_rounded,
-              color: MimiCamDesignTokens.serverOnAccent,
+              color: MiuCamDesignTokens.serverOnAccent,
             ),
           ),
           const SizedBox(width: 12),
@@ -189,7 +189,7 @@ class _PlatformRuntimeContractCardState
                 Text(
                   strings.ui('platformRuntimeContractTitle'),
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.serverText,
+                    color: MiuCamDesignTokens.serverText,
                     fontSize: 16,
                     fontWeight: FontWeight.w900,
                   ),
@@ -198,7 +198,7 @@ class _PlatformRuntimeContractCardState
                 Text(
                   message,
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.serverTextMuted,
+                    color: MiuCamDesignTokens.serverTextMuted,
                     fontSize: 13.5,
                     height: 1.3,
                   ),
@@ -208,7 +208,7 @@ class _PlatformRuntimeContractCardState
                   Text(
                     strings.ui('processRecoveryForegroundContract'),
                     style: const TextStyle(
-                      color: MimiCamDesignTokens.serverWarning,
+                      color: MiuCamDesignTokens.serverWarning,
                       fontSize: 12.5,
                       fontWeight: FontWeight.w700,
                     ),
@@ -254,12 +254,12 @@ class _ServiceStatusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: MimiCamDesignTokens.cardDecoration(dark: true),
+      decoration: MiuCamDesignTokens.cardDecoration(dark: true),
       child: Row(
         children: [
           CircleAvatar(
             backgroundColor: color,
-            child: Icon(icon, color: MimiCamDesignTokens.serverOnAccent),
+            child: Icon(icon, color: MiuCamDesignTokens.serverOnAccent),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -269,7 +269,7 @@ class _ServiceStatusCard extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.serverText,
+                    color: MiuCamDesignTokens.serverText,
                     fontSize: 16,
                     fontWeight: FontWeight.w900,
                   ),
@@ -278,7 +278,7 @@ class _ServiceStatusCard extends StatelessWidget {
                 Text(
                   value,
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.serverTextMuted,
+                    color: MiuCamDesignTokens.serverTextMuted,
                     fontSize: 13.5,
                   ),
                 ),

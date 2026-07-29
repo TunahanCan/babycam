@@ -1,10 +1,10 @@
 import 'dart:typed_data';
 
-import 'package:mimicam/analysis/video/luma_frame.dart';
-import 'package:mimicam/analysis/video/motion_analysis_config.dart';
-import 'package:mimicam/analysis/video/motion_analysis_result.dart';
-import 'package:mimicam/analysis/video/motion_analyzer_v2.dart';
-import 'package:mimicam/analysis/video/normalized_rect.dart';
+import 'package:miucam/analysis/video/luma_frame.dart';
+import 'package:miucam/analysis/video/motion_analysis_config.dart';
+import 'package:miucam/analysis/video/motion_analysis_result.dart';
+import 'package:miucam/analysis/video/motion_analyzer_v2.dart';
+import 'package:miucam/analysis/video/normalized_rect.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Uint8List makeLumaFrame(

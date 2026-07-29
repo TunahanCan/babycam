@@ -7,7 +7,7 @@ import '../../../core/bytes/byte_chunk.dart';
 import '../../../core/async/serialized_async_executor.dart';
 import '../../../core/media/media_session_telemetry.dart';
 import '../../../core/network/retry_policy.dart';
-import '../../../core/protocol/mimicam_protocol.dart';
+import '../../../core/protocol/miucam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
 import 'active_stream_session.dart';
@@ -462,12 +462,12 @@ class ClientMediaStreamSupervisor {
   }
 
   Uri _videoUri() => ServerEndpointBuilder(session).http(
-        MimiCamProtocolV2.video,
+        MiuCamProtocolV2.video,
         query: {'streamToken': activeStream.streamToken},
       );
 
   Uri _audioUri() => ServerEndpointBuilder(session).http(
-        MimiCamProtocolV2.audio,
+        MiuCamProtocolV2.audio,
         query: {'streamToken': activeStream.streamToken},
       );
 

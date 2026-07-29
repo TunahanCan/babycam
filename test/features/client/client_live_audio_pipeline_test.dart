@@ -3,8 +3,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/features/client/media/client_live_audio_pipeline.dart';
-import 'package:mimicam/features/client/media/pcm_audio_output.dart';
+import 'package:miucam/features/client/media/client_live_audio_pipeline.dart';
+import 'package:miucam/features/client/media/pcm_audio_output.dart';
 
 void main() {
   test('Bearer token ile WAV streami acar ve PCM native sinke yazar', () async {

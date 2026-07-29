@@ -2,14 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/features/client/pairing/pairing_failure.dart';
-import 'package:mimicam/features/client/pairing/pairing_payload_gateway.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/features/client/pairing/pairing_failure.dart';
+import 'package:miucam/features/client/pairing/pairing_payload_gateway.dart';
 
 void main() {
   test('public status response is adapted into a pairing payload', () async {
     final server = await _serve((request) {
-      expect(request.uri.path, MimiCamProtocolV2.statusPublic);
+      expect(request.uri.path, MiuCamProtocolV2.statusPublic);
       request.response
         ..headers.contentType = ContentType.json
         ..write(jsonEncode({

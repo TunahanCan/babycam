@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:mimicam/analysis/alert/alert_event.dart';
-import 'package:mimicam/analysis/alert/alert_severity.dart';
-import 'package:mimicam/analysis/alert/alert_type.dart';
-import 'package:mimicam/analysis/audio/audio_analysis_result.dart';
-import 'package:mimicam/analysis/audio/audio_calibration_state.dart';
-import 'package:mimicam/analysis/video/motion_analysis_result.dart';
-import 'package:mimicam/services/server/media_analysis_metrics.dart';
+import 'package:miucam/analysis/alert/alert_event.dart';
+import 'package:miucam/analysis/alert/alert_severity.dart';
+import 'package:miucam/analysis/alert/alert_type.dart';
+import 'package:miucam/analysis/audio/audio_analysis_result.dart';
+import 'package:miucam/analysis/audio/audio_calibration_state.dart';
+import 'package:miucam/analysis/video/motion_analysis_result.dart';
+import 'package:miucam/services/server/media_analysis_metrics.dart';
 
 void main() {
   group('MediaAnalysisMetrics', () {

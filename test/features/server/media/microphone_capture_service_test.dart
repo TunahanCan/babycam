@@ -3,7 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/features/server/media/microphone_capture_service.dart';
+import 'package:miucam/features/server/media/microphone_capture_service.dart';
 import 'package:record/record.dart';
 
 void main() {

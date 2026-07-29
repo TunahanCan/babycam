@@ -1,4 +1,4 @@
-# MimiCam Full Code Review — 2026-07-10
+# MiuCam Full Code Review — 2026-07-10
 
 ## Kapsam ve yöntem
 
@@ -36,10 +36,10 @@ thermal policy, room audio ve purchase verification yüzeylerini ekledi:
 | Telemetry | Bounded counters ve p50/p95/p99 capture/codec/send/receive/playout dağılımları | Cross-device clock estimate ölçüm aracıdır, mutlak senkronizasyon değildir |
 | Resource governor | Thermal, low-power, battery, encode, client-load ve backpressure ile normal/constrained/survival/audio-first profil | Release eşikleri fiziksel soak testinde doğrulanmalı |
 | WebRTC | Opt-in, tek peer H.264+Opus; auth'lu HTTP signaling ve MJPEG/WAV fallback | Host ICE/LAN pilotu; TURN/relay, multi-peer ve production kanıtı yok |
-| Discovery | `_mimicam._tcp` DNS-SD/NSD, IPv4/IPv6 resolve; dual-stack bind denemesi | QR/manual adres fallback korunuyor |
+| Discovery | `_miucam._tcp` DNS-SD/NSD, IPv4/IPv6 resolve; dual-stack bind denemesi | QR/manual adres fallback korunuyor |
 | Room features | Procedural comfort PCM ve parent-to-room talk audio native sink'e yazılıyor | Talk video/parent overlay yok; acoustic echo fiziksel test bekliyor |
 | Purchase | Wrong product/source/state/evidence fail-closed; yalnız SHA-256 fingerprint metadata tutuluyor | Apple/Google server-side receipt authenticity doğrulaması yok |
-| Server parçalama | Test endpoint part extension, feature facade, room-audio coordinator, WebRTC gateway ve governor sınırları | `MimiCamServer` hâlâ büyük HTTP composition host |
+| Server parçalama | Test endpoint part extension, feature facade, room-audio coordinator, WebRTC gateway ve governor sınırları | `MiuCamServer` hâlâ büyük HTTP composition host |
 
 Kullanıcı kapsamı gereği public pairing nonce redesign, merkezi body limitleri,
 socket lease/revoke ve secure session ticket paketi bilinçli olarak uygulanmadı.
@@ -98,8 +98,8 @@ Komutlar:
 ```bash
 dart run tool/benchmarks/media_pipeline_benchmark.dart
 dart compile exe tool/benchmarks/media_pipeline_benchmark.dart \
-  -o /tmp/mimicam_media_benchmark
-/usr/bin/time -l /tmp/mimicam_media_benchmark
+  -o /tmp/miucam_media_benchmark
+/usr/bin/time -l /tmp/miucam_media_benchmark
 ```
 
 Son AOT ölçümü:
@@ -160,7 +160,7 @@ matris dokümanının varlığı fiziksel sonuçların çalıştırıldığı an
 
 ### P1
 
-1. `MimiCamServer` yaklaşık 2.500 satırlık HTTP composition host olmaya devam
+1. `MiuCamServer` yaklaşık 2.500 satırlık HTTP composition host olmaya devam
    ediyor. Diagnostics part extension, feature facade, room-audio coordinator,
    WebRTC gateway ve resource governor ayrıldı; sonraki güvenli adım pairing,
    session ve quality route controller'larını çıkarmaktır.
@@ -230,7 +230,7 @@ flutter test test/services/server/media_resource_governor_test.dart
 flutter test test/core/media/media_session_telemetry_test.dart
 flutter test test/features/server/webrtc_signaling_endpoints_test.dart
 flutter test test/features/client/stream_session_controller_test.dart
-flutter test test/services/discovery/mimicam_service_discovery_test.dart
+flutter test test/services/discovery/miucam_service_discovery_test.dart
 flutter test test/services/server/room_audio_coordinator_test.dart
 flutter test test/features/client/client_room_controls_test.dart
 flutter test test/services/monetization/broadcast_access_service_test.dart

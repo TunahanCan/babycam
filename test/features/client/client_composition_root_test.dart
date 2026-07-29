@@ -3,15 +3,15 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mimicam/core/protocol/mimicam_protocol.dart';
-import 'package:mimicam/core/protocol/pairing_payload.dart';
-import 'package:mimicam/core/protocol/pairing_session.dart';
-import 'package:mimicam/features/client/alerts/client_alert_listener.dart';
-import 'package:mimicam/features/client/alerts/client_notification_service.dart';
-import 'package:mimicam/features/client/client_composition_root.dart';
-import 'package:mimicam/features/client/client_runtime.dart';
-import 'package:mimicam/features/client/pairing/pairing_session_store.dart';
-import 'package:mimicam/l10n/app_strings.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
+import 'package:miucam/features/client/alerts/client_alert_listener.dart';
+import 'package:miucam/features/client/alerts/client_notification_service.dart';
+import 'package:miucam/features/client/client_composition_root.dart';
+import 'package:miucam/features/client/client_runtime.dart';
+import 'package:miucam/features/client/pairing/pairing_session_store.dart';
+import 'package:miucam/l10n/app_strings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -153,7 +153,7 @@ void main() {
 }
 
 PairingPayload _payload() => PairingPayload(
-      schemaVersion: MimiCamProtocolV2.schemaVersion,
+      schemaVersion: MiuCamProtocolV2.schemaVersion,
       host: '127.0.0.1',
       port: 9,
       deviceId: 'server',

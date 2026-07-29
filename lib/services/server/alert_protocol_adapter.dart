@@ -2,12 +2,12 @@ import 'dart:convert';
 
 import '../../analysis/alert/alert_event.dart';
 import '../../analysis/alert/alert_type.dart';
-import '../../core/mimicam_protocol.dart';
+import '../../core/miucam_protocol.dart';
 import '../../core/protocol/alert_event_dto.dart';
 
 class AlertProtocolAdapter {
   static List<int> toLegacyAlertPacket(AlertEvent event) =>
-      MimiCamProtocol.alertFrame(event.message);
+      MiuCamProtocol.alertFrame(event.message);
 
   static String toJsonText(AlertEvent event) =>
       jsonEncode(toDto(event).toJson());

@@ -10,7 +10,7 @@ typedef ResourceProfileRefresh = Future<void> Function();
 typedef ResourceWatchdogErrorHandler = void Function(Object error);
 
 /// Owns resource-decision hysteresis, watchdog scheduling and WebRTC policy
-/// translation. MimiCamServer supplies measurements and applies the resulting
+/// translation. MiuCamServer supplies measurements and applies the resulting
 /// profile, while this coordinator keeps the state-machine mechanics local.
 class ServerResourcePolicyCoordinator {
   ServerResourcePolicyCoordinator({

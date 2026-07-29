@@ -53,11 +53,11 @@ import UserNotifications
   }
 
   private func registerPlatformRuntimeChannels() {
-    guard let registrar = registrar(forPlugin: "MimiCamPlatformRuntime") else {
+    guard let registrar = registrar(forPlugin: "MiuCamPlatformRuntime") else {
       return
     }
     let methodChannel = FlutterMethodChannel(
-      name: "mimicam/platform_runtime",
+      name: "miucam/platform_runtime",
       binaryMessenger: registrar.messenger()
     )
     methodChannel.setMethodCallHandler { [weak self] call, result in
@@ -89,12 +89,12 @@ import UserNotifications
       }
     }
     FlutterEventChannel(
-      name: "mimicam/platform_runtime_events",
+      name: "miucam/platform_runtime_events",
       binaryMessenger: registrar.messenger()
     ).setStreamHandler(platformRuntime)
 
     let resourcesChannel = FlutterMethodChannel(
-      name: "mimicam/device_resources",
+      name: "miucam/device_resources",
       binaryMessenger: registrar.messenger()
     )
     resourcesChannel.setMethodCallHandler { call, result in
@@ -131,11 +131,11 @@ import UserNotifications
   }
 
   private func registerCameraPermissionChannel() {
-    guard let registrar = registrar(forPlugin: "MimiCamCameraPermission") else {
+    guard let registrar = registrar(forPlugin: "MiuCamCameraPermission") else {
       return
     }
     let channel = FlutterMethodChannel(
-      name: "mimicam/camera_permission",
+      name: "miucam/camera_permission",
       binaryMessenger: registrar.messenger()
     )
     channel.setMethodCallHandler { [weak self] call, result in
@@ -157,11 +157,11 @@ import UserNotifications
   }
 
   private func registerLocalNetworkPermissionChannel() {
-    guard let registrar = registrar(forPlugin: "MimiCamLocalNetworkPermission") else {
+    guard let registrar = registrar(forPlugin: "MiuCamLocalNetworkPermission") else {
       return
     }
     let channel = FlutterMethodChannel(
-      name: "mimicam/local_network_permission",
+      name: "miucam/local_network_permission",
       binaryMessenger: registrar.messenger()
     )
     channel.setMethodCallHandler { [weak self] call, result in
@@ -178,11 +178,11 @@ import UserNotifications
   }
 
   private func registerPcmAudioChannel() {
-    guard let registrar = registrar(forPlugin: "MimiCamPcmAudio") else {
+    guard let registrar = registrar(forPlugin: "MiuCamPcmAudio") else {
       return
     }
     let channel = FlutterMethodChannel(
-      name: "mimicam/pcm_audio",
+      name: "miucam/pcm_audio",
       binaryMessenger: registrar.messenger()
     )
     channel.setMethodCallHandler { [weak self] call, result in
@@ -477,7 +477,7 @@ private final class CameraPermissionRequester {
 
 private final class LocalNetworkPermissionRequester {
   private var browser: NWBrowser?
-  private let queue = DispatchQueue(label: "com.mimicam.local-network-permission")
+  private let queue = DispatchQueue(label: "com.miucam.local-network-permission")
 
   func request(result: @escaping FlutterResult) {
     guard #available(iOS 14.0, *) else {
@@ -494,7 +494,7 @@ private final class LocalNetworkPermissionRequester {
     parameters.includePeerToPeer = true
 
     let browser = NWBrowser(
-      for: .bonjour(type: "_mimicam._tcp", domain: nil),
+      for: .bonjour(type: "_miucam._tcp", domain: nil),
       using: parameters
     )
     self.browser = browser
@@ -518,7 +518,7 @@ private final class LocalNetworkPermissionRequester {
   }
 }
 
-/// Coordinates MimiCam's native output without deactivating the process-wide
+/// Coordinates MiuCam's native output without deactivating the process-wide
 /// AVAudioSession that `record` or WebRTC may currently use for microphone
 /// input. AVAudioSession is a singleton; output ownership must therefore be
 /// reference-counted and configured for simultaneous input/output.
@@ -597,7 +597,7 @@ private enum PcmAudioPlayerError: LocalizedError {
 private final class PcmAudioPlayer {
   typealias EventEmitter = (_ type: String, _ details: [String: Any]) -> Void
 
-  private let queue = DispatchQueue(label: "com.mimicam.pcm-audio")
+  private let queue = DispatchQueue(label: "com.miucam.pcm-audio")
   private let eventEmitter: EventEmitter
   private let audioSessionPolicy = SharedAudioSessionPolicy.shared
   private var observers: [NSObjectProtocol] = []

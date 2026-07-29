@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_role.dart';
 import '../../l10n/app_strings.dart';
-import '../shared/presentation/mimicam_design_tokens.dart';
-import '../shared/presentation/mimicam_role_presentation.dart';
+import '../shared/presentation/miucam_design_tokens.dart';
+import '../shared/presentation/miucam_role_presentation.dart';
 
 class RoleSelectionScreen extends StatelessWidget {
   const RoleSelectionScreen({super.key, required this.onRoleSelected});
@@ -13,8 +13,8 @@ class RoleSelectionScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final serverRole = MimiCamRolePresentation.of(AppRole.server, strings);
-    final clientRole = MimiCamRolePresentation.of(AppRole.client, strings);
+    final serverRole = MiuCamRolePresentation.of(AppRole.server, strings);
+    final clientRole = MiuCamRolePresentation.of(AppRole.client, strings);
     return Scaffold(
       body: _WelcomeShell(
         child: SafeArea(
@@ -98,13 +98,13 @@ class _BrandHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Semantics(
-        label: 'MimiCam',
+        label: 'MiuCam',
         image: true,
         child: Image.asset(
-          'assets/branding/mimicam_wordmark_v2.png',
+          'assets/branding/miucam_wordmark_v2.png',
           key: const ValueKey('role-wordmark'),
           width: 210,
-          height: 40,
+          height: 64,
           fit: BoxFit.contain,
           filterQuality: FilterQuality.high,
         ),
@@ -116,8 +116,8 @@ class _BrandHeader extends StatelessWidget {
 class _DeviceFlow extends StatelessWidget {
   const _DeviceFlow({required this.roomRole, required this.parentRole});
 
-  final MimiCamRolePresentation roomRole;
-  final MimiCamRolePresentation parentRole;
+  final MiuCamRolePresentation roomRole;
+  final MiuCamRolePresentation parentRole;
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +140,7 @@ class _DeviceFlow extends StatelessWidget {
           Expanded(
             child: _DeviceFlowNode(
               icon: roomRole.choiceIcon,
-              color: MimiCamDesignTokens.mint,
+              color: MiuCamDesignTokens.mint,
             ),
           ),
           Expanded(
@@ -156,7 +156,7 @@ class _DeviceFlow extends StatelessWidget {
                   ),
                   child: const Icon(
                     Icons.wifi_rounded,
-                    color: MimiCamDesignTokens.pink,
+                    color: MiuCamDesignTokens.pink,
                     size: 19,
                   ),
                 ),
@@ -167,7 +167,7 @@ class _DeviceFlow extends StatelessWidget {
           Expanded(
             child: _DeviceFlowNode(
               icon: parentRole.choiceIcon,
-              color: MimiCamDesignTokens.pink,
+              color: MiuCamDesignTokens.pink,
             ),
           ),
         ],
@@ -207,7 +207,7 @@ class _RoleChoiceCard extends StatelessWidget {
     required this.onPressed,
   });
 
-  final MimiCamRolePresentation role;
+  final MiuCamRolePresentation role;
   final VoidCallback onPressed;
 
   @override
@@ -216,7 +216,7 @@ class _RoleChoiceCard extends StatelessWidget {
     final background =
         roomDevice ? const Color(0xFFECF7F4) : const Color(0xFFEDEAFF);
     final accent =
-        roomDevice ? MimiCamDesignTokens.mint : MimiCamDesignTokens.pink;
+        roomDevice ? MiuCamDesignTokens.mint : MiuCamDesignTokens.pink;
     return Semantics(
       button: true,
       label: '${role.choiceTitle}. ${role.choiceDescription}',
@@ -279,7 +279,7 @@ class _RoleChoiceCard extends StatelessWidget {
                       Text(
                         role.choiceTitle,
                         style: const TextStyle(
-                          color: MimiCamDesignTokens.nightPlum,
+                          color: MiuCamDesignTokens.nightPlum,
                           fontSize: 19,
                           height: 1.1,
                           fontWeight: FontWeight.w900,
@@ -289,7 +289,7 @@ class _RoleChoiceCard extends StatelessWidget {
                       Text(
                         role.choiceDescription,
                         style: const TextStyle(
-                          color: MimiCamDesignTokens.slate,
+                          color: MiuCamDesignTokens.slate,
                           fontSize: 13.5,
                           height: 1.3,
                         ),
@@ -340,7 +340,7 @@ class _InfoStrip extends StatelessWidget {
             backgroundColor: Color(0xFFE0DCFF),
             child: Icon(
               Icons.wifi_rounded,
-              color: MimiCamDesignTokens.pink,
+              color: MiuCamDesignTokens.pink,
               size: 23,
             ),
           ),
@@ -352,7 +352,7 @@ class _InfoStrip extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.nightPlum,
+                    color: MiuCamDesignTokens.nightPlum,
                     fontSize: 15.5,
                     fontWeight: FontWeight.w900,
                   ),
@@ -361,7 +361,7 @@ class _InfoStrip extends StatelessWidget {
                 Text(
                   text,
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.slate,
+                    color: MiuCamDesignTokens.slate,
                     fontSize: 13,
                     height: 1.25,
                   ),
@@ -434,7 +434,7 @@ class _BackgroundGlow extends StatelessWidget {
 }
 
 const _titleStyle = TextStyle(
-  color: MimiCamDesignTokens.nightPlum,
+  color: MiuCamDesignTokens.nightPlum,
   fontSize: 29,
   height: 1.08,
   fontWeight: FontWeight.w900,
@@ -442,7 +442,7 @@ const _titleStyle = TextStyle(
 );
 
 const _subtitleStyle = TextStyle(
-  color: MimiCamDesignTokens.slate,
+  color: MiuCamDesignTokens.slate,
   fontSize: 15,
   height: 1.3,
 );

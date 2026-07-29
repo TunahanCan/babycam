@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/app_strings.dart';
 import '../../../services/monetization/broadcast_access_service.dart';
-import '../../shared/presentation/mimicam_design_tokens.dart';
-import '../../shared/presentation/mimicam_shells.dart';
+import '../../shared/presentation/miucam_design_tokens.dart';
+import '../../shared/presentation/miucam_shells.dart';
 import '../media/server_media_source.dart';
 import '../server_runtime.dart';
 
@@ -62,7 +62,7 @@ class ServerLivePreviewCard extends StatelessWidget {
                         ? strings.ui('localPreviewPreparingText')
                         : strings.ui('cameraPermissionPreviewText');
 
-    return MimiCamCard(
+    return MiuCamCard(
       key: const ValueKey('server-live-preview-card'),
       dark: true,
       child: LayoutBuilder(
@@ -123,7 +123,7 @@ class ServerLivePreviewCard extends StatelessWidget {
                             left: 10,
                             child: _PreviewStatusChip(
                               label: strings.ui('livePreview'),
-                              color: MimiCamDesignTokens.serverSuccess,
+                              color: MiuCamDesignTokens.serverSuccess,
                             ),
                           ),
                         if (showCamera)
@@ -160,7 +160,7 @@ class ServerLivePreviewCard extends StatelessWidget {
               Text(
                 description,
                 style: const TextStyle(
-                  color: MimiCamDesignTokens.serverTextMuted,
+                  color: MiuCamDesignTokens.serverTextMuted,
                   fontSize: 14,
                 ),
               ),
@@ -183,7 +183,7 @@ class _PreviewTitle extends StatelessWidget {
       children: [
         const Icon(
           Icons.videocam_rounded,
-          color: MimiCamDesignTokens.serverCyan,
+          color: MiuCamDesignTokens.serverCyan,
           size: 22,
         ),
         const SizedBox(width: 8),
@@ -191,7 +191,7 @@ class _PreviewTitle extends StatelessWidget {
           child: Text(
             strings.ui('roomCamera'),
             style: const TextStyle(
-              color: MimiCamDesignTokens.serverText,
+              color: MiuCamDesignTokens.serverText,
               fontSize: 18,
               fontWeight: FontWeight.w900,
             ),
@@ -234,8 +234,8 @@ class _LocalPreviewToggleButton extends StatelessWidget {
             child: CircularProgressIndicator(
               strokeWidth: 2.2,
               color: active
-                  ? MimiCamDesignTokens.serverCyan
-                  : MimiCamDesignTokens.serverOnAccent,
+                  ? MiuCamDesignTokens.serverCyan
+                  : MiuCamDesignTokens.serverOnAccent,
             ),
           )
         : Icon(
@@ -261,16 +261,16 @@ class _LocalPreviewToggleButton extends StatelessWidget {
             onPressed: callback,
             style: sharedStyle.copyWith(
               backgroundColor: WidgetStatePropertyAll(
-                MimiCamDesignTokens.serverSurfaceRaised.withValues(alpha: .94),
+                MiuCamDesignTokens.serverSurfaceRaised.withValues(alpha: .94),
               ),
               foregroundColor: const WidgetStatePropertyAll(
-                MimiCamDesignTokens.serverCyan,
+                MiuCamDesignTokens.serverCyan,
               ),
               side: WidgetStatePropertyAll(
                 BorderSide(
                   color: enabled
-                      ? MimiCamDesignTokens.serverCyan
-                      : MimiCamDesignTokens.serverDisabled,
+                      ? MiuCamDesignTokens.serverCyan
+                      : MiuCamDesignTokens.serverDisabled,
                 ),
               ),
             ),
@@ -283,11 +283,11 @@ class _LocalPreviewToggleButton extends StatelessWidget {
             style: sharedStyle.copyWith(
               backgroundColor: WidgetStateProperty.resolveWith(
                 (states) => states.contains(WidgetState.disabled)
-                    ? MimiCamDesignTokens.serverDisabled
-                    : MimiCamDesignTokens.serverCyan,
+                    ? MiuCamDesignTokens.serverDisabled
+                    : MiuCamDesignTokens.serverCyan,
               ),
               foregroundColor: const WidgetStatePropertyAll(
-                MimiCamDesignTokens.serverOnAccent,
+                MiuCamDesignTokens.serverOnAccent,
               ),
             ),
             icon: icon,
@@ -392,7 +392,7 @@ class _ServerBroadcastAccessCardState extends State<ServerBroadcastAccessCard> {
                 'remaining': _remainingText(strings, snapshot.remaining),
                 'price': snapshot.priceLabel,
               });
-    return MimiCamCard(
+    return MiuCamCard(
       dark: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,17 +401,17 @@ class _ServerBroadcastAccessCardState extends State<ServerBroadcastAccessCard> {
             children: [
               CircleAvatar(
                 backgroundColor: unlocked
-                    ? MimiCamDesignTokens.serverSuccess
+                    ? MiuCamDesignTokens.serverSuccess
                     : locked
-                        ? MimiCamDesignTokens.serverWarning
-                        : MimiCamDesignTokens.serverBlue,
+                        ? MiuCamDesignTokens.serverWarning
+                        : MiuCamDesignTokens.serverBlue,
                 child: Icon(
                   unlocked
                       ? Icons.verified_rounded
                       : locked
                           ? Icons.lock_rounded
                           : Icons.hourglass_bottom_rounded,
-                  color: MimiCamDesignTokens.serverOnAccent,
+                  color: MiuCamDesignTokens.serverOnAccent,
                 ),
               ),
               const SizedBox(width: 12),
@@ -419,7 +419,7 @@ class _ServerBroadcastAccessCardState extends State<ServerBroadcastAccessCard> {
                 child: Text(
                   title,
                   style: const TextStyle(
-                    color: MimiCamDesignTokens.serverText,
+                    color: MiuCamDesignTokens.serverText,
                     fontSize: 17,
                     fontWeight: FontWeight.w900,
                   ),
@@ -431,7 +431,7 @@ class _ServerBroadcastAccessCardState extends State<ServerBroadcastAccessCard> {
           Text(
             body,
             style: const TextStyle(
-              color: MimiCamDesignTokens.serverTextMuted,
+              color: MiuCamDesignTokens.serverTextMuted,
               fontSize: 14,
               height: 1.25,
             ),
@@ -444,11 +444,11 @@ class _ServerBroadcastAccessCardState extends State<ServerBroadcastAccessCard> {
                 minHeight: 8,
                 value: snapshot.usedRatio,
                 backgroundColor:
-                    MimiCamDesignTokens.serverOutline.withValues(alpha: .46),
+                    MiuCamDesignTokens.serverOutline.withValues(alpha: .46),
                 valueColor: AlwaysStoppedAnimation<Color>(
                   locked
-                      ? MimiCamDesignTokens.serverWarning
-                      : MimiCamDesignTokens.serverCyan,
+                      ? MiuCamDesignTokens.serverWarning
+                      : MiuCamDesignTokens.serverCyan,
                 ),
               ),
             ),
@@ -468,8 +468,8 @@ class _ServerBroadcastAccessCardState extends State<ServerBroadcastAccessCard> {
                         )
                       : const Icon(Icons.lock_open_rounded),
                   style: FilledButton.styleFrom(
-                    backgroundColor: MimiCamDesignTokens.serverCyan,
-                    foregroundColor: MimiCamDesignTokens.serverOnAccent,
+                    backgroundColor: MiuCamDesignTokens.serverCyan,
+                    foregroundColor: MiuCamDesignTokens.serverOnAccent,
                   ),
                   label: Text(
                     strings.uiFormat('unlockLifetimePrice', {
@@ -483,9 +483,9 @@ class _ServerBroadcastAccessCardState extends State<ServerBroadcastAccessCard> {
                       : () => unawaited(_runPurchase(restore: true)),
                   icon: const Icon(Icons.restore_rounded),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: MimiCamDesignTokens.serverText,
+                    foregroundColor: MiuCamDesignTokens.serverText,
                     side: const BorderSide(
-                      color: MimiCamDesignTokens.serverOutline,
+                      color: MiuCamDesignTokens.serverOutline,
                     ),
                   ),
                   label: Text(strings.ui('restorePurchase')),
@@ -529,7 +529,7 @@ class _PreviewStatusChip extends StatelessWidget {
       child: Text(
         label,
         style: const TextStyle(
-          color: MimiCamDesignTokens.serverOnAccent,
+          color: MiuCamDesignTokens.serverOnAccent,
           fontWeight: FontWeight.w900,
           fontSize: 12.5,
         ),
@@ -554,7 +554,7 @@ class _PreviewIconButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: MimiCamDesignTokens.serverSurfaceRaised.withValues(alpha: .92),
+        color: MiuCamDesignTokens.serverSurfaceRaised.withValues(alpha: .92),
         shape: const CircleBorder(),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -564,7 +564,7 @@ class _PreviewIconButton extends StatelessWidget {
             height: 48,
             child: Icon(
               icon,
-              color: MimiCamDesignTokens.serverText,
+              color: MiuCamDesignTokens.serverText,
               size: 22,
             ),
           ),
@@ -716,10 +716,10 @@ class ServerFullscreenPreview extends StatelessWidget {
                       ? strings.ui('cameraStarting')
                       : strings.ui('localPreviewOff'),
               color: showCamera
-                  ? MimiCamDesignTokens.serverSuccess
+                  ? MiuCamDesignTokens.serverSuccess
                   : state.localPreviewActive
-                      ? MimiCamDesignTokens.serverBlue
-                      : MimiCamDesignTokens.serverDisabled,
+                      ? MiuCamDesignTokens.serverBlue
+                      : MiuCamDesignTokens.serverDisabled,
             ),
           ),
         ],

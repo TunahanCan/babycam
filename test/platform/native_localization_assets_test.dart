@@ -3,23 +3,23 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 const _androidStringKeys = {
-  'mimicam_server_channel_name',
-  'mimicam_alert_connection_channel_name',
-  'mimicam_server_channel_description',
-  'mimicam_alert_connection_channel_description',
-  'mimicam_runtime_camera_microphone_playback',
-  'mimicam_runtime_camera_microphone',
-  'mimicam_runtime_camera_playback',
-  'mimicam_runtime_microphone_playback',
-  'mimicam_runtime_camera',
-  'mimicam_runtime_microphone',
-  'mimicam_runtime_playback',
-  'mimicam_runtime_server',
-  'mimicam_runtime_alerts',
-  'mimicam_runtime_stopping',
-  'mimicam_runtime_title_media',
-  'mimicam_runtime_title_server',
-  'mimicam_runtime_title_alerts',
+  'miucam_server_channel_name',
+  'miucam_alert_connection_channel_name',
+  'miucam_server_channel_description',
+  'miucam_alert_connection_channel_description',
+  'miucam_runtime_camera_microphone_playback',
+  'miucam_runtime_camera_microphone',
+  'miucam_runtime_camera_playback',
+  'miucam_runtime_microphone_playback',
+  'miucam_runtime_camera',
+  'miucam_runtime_microphone',
+  'miucam_runtime_playback',
+  'miucam_runtime_server',
+  'miucam_runtime_alerts',
+  'miucam_runtime_stopping',
+  'miucam_runtime_title_media',
+  'miucam_runtime_title_server',
+  'miucam_runtime_title_alerts',
 };
 
 const _iosPermissionKeys = {
@@ -57,13 +57,13 @@ void main() {
     }
 
     final service = File(
-      'android/app/src/main/kotlin/com/mimicam/app/'
-      'MimiCamForegroundService.kt',
+      'android/app/src/main/kotlin/com/miucam/app/'
+      'MiuCamForegroundService.kt',
     ).readAsStringSync();
     for (final key in _androidStringKeys) {
       expect(service, contains('R.string.$key'), reason: '$key is unused');
     }
-    expect(service, isNot(contains('MimiCam Bildirim Bağlantısı')));
+    expect(service, isNot(contains('MiuCam Bildirim Bağlantısı')));
     expect(service, isNot(contains('Bebek odası bildirimleri')));
   });
 
@@ -110,9 +110,9 @@ void main() {
     }
 
     final fallback = File('ios/Runner/Info.plist').readAsStringSync();
-    expect(fallback, contains('MimiCam uses the camera'));
-    expect(fallback, contains('MimiCam uses your local network'));
-    expect(fallback, contains('MimiCam uses the microphone'));
+    expect(fallback, contains('MiuCam uses the camera'));
+    expect(fallback, contains('MiuCam uses your local network'));
+    expect(fallback, contains('MiuCam uses the microphone'));
   });
 }
 
