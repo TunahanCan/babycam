@@ -47,6 +47,7 @@ class MicrophoneCaptureService {
     int Function()? nowMs,
     this.restartBaseDelay = const Duration(milliseconds: 250),
     this.restartMaxDelay = const Duration(seconds: 5),
+    this.cleanupTimeout = const Duration(seconds: 2),
   })  : _recorder = recorder,
         _recorderFactory = recorderFactory ?? RecordMicrophoneRecorder.new,
         _streamLeveler = streamLeveler ?? AudioStreamLeveler.liveMonitor(),
@@ -60,13 +61,17 @@ class MicrophoneCaptureService {
   final int Function() _nowMs;
   final Duration restartBaseDelay;
   final Duration restartMaxDelay;
+  final Duration cleanupTimeout;
 
   StreamSubscription<Uint8List>? _subscription;
+  Future<({bool granted, bool current})>? _permissionOperation;
   Future<bool>? _startOperation;
   Timer? _restartTimer;
   int _restartAttempt = 0;
   int? _terminalHandledGeneration;
   int _generation = 0;
+  int _permissionGeneration = 0;
+  bool _captureRequested = false;
   bool _disposed = false;
   bool _recorderCreated = false;
   bool? _permissionGranted;
@@ -79,7 +84,9 @@ class MicrophoneCaptureService {
   int _lastChunkBytes = 0;
 
   bool get isActive =>
-      _subscription != null || _restartTimer != null || _startOperation != null;
+      _subscription != null ||
+      _restartTimer != null ||
+      (_captureRequested && _startOperation != null);
   MicrophoneCaptureSnapshot get snapshot => MicrophoneCaptureSnapshot(
         recorderCreated: _recorderCreated,
         permissionGranted: _permissionGranted,
@@ -94,6 +101,64 @@ class MicrophoneCaptureService {
         leveler: _streamLeveler.lastSnapshot,
       );
 
+  /// Resolves microphone permission without starting capture.
+  ///
+  /// A successful result is cached so a caller can safely obtain permission
+  /// before opening a remote media session and then call [start] without a
+  /// second platform permission prompt.
+  Future<bool> ensurePermission({
+    bool preserveResolvedDecisionWhenCancelled = false,
+  }) async {
+    if (_disposed) {
+      throw StateError('MicrophoneCaptureService is disposed.');
+    }
+    if (_permissionGranted == true) return true;
+    var operation = _permissionOperation;
+    if (operation == null) {
+      final generation = _permissionGeneration;
+      final recorder = _recorder ??= _recorderFactory();
+      _recorderCreated = true;
+      late final Future<({bool granted, bool current})> nextOperation;
+      nextOperation = _ensurePermission(
+        recorder: recorder,
+        generation: generation,
+      ).whenComplete(() {
+        if (identical(_permissionOperation, nextOperation)) {
+          _permissionOperation = null;
+        }
+      });
+      _permissionOperation = nextOperation;
+      operation = nextOperation;
+    }
+    final result = await operation;
+    return result.granted &&
+        (result.current || preserveResolvedDecisionWhenCancelled);
+  }
+
+  Future<({bool granted, bool current})> _ensurePermission({
+    required MicrophoneRecorderPort recorder,
+    required int generation,
+  }) async {
+    try {
+      final granted = await recorder.hasPermission();
+      final current = _isPermissionCurrent(generation);
+      if (current) {
+        _permissionGranted = granted;
+        if (!granted) {
+          _lastFailureReason = 'permissionDenied';
+          _lastStartError = 'Microphone permission denied';
+        }
+      }
+      return (granted: granted, current: current);
+    } catch (error) {
+      if (_isPermissionCurrent(generation)) {
+        _lastFailureReason = 'permissionCheckFailed';
+        _lastStartError = error.toString();
+      }
+      rethrow;
+    }
+  }
+
   Future<bool> start({
     required MicrophoneChunkHandler onChunk,
     void Function(Object error, StackTrace stackTrace)? onError,
@@ -107,6 +172,7 @@ class MicrophoneCaptureService {
     final current = _startOperation;
     if (current != null) return current;
 
+    _captureRequested = true;
     final generation = ++_generation;
     late final Future<bool> operation;
     operation = _start(
@@ -114,7 +180,12 @@ class MicrophoneCaptureService {
       onChunk: onChunk,
       onError: onError,
     ).whenComplete(() {
-      if (identical(_startOperation, operation)) _startOperation = null;
+      if (identical(_startOperation, operation)) {
+        _startOperation = null;
+        if (_subscription == null && _restartTimer == null) {
+          _captureRequested = false;
+        }
+      }
     });
     _startOperation = operation;
     return operation;
@@ -125,22 +196,21 @@ class MicrophoneCaptureService {
     required MicrophoneChunkHandler onChunk,
     required void Function(Object error, StackTrace stackTrace)? onError,
   }) async {
-    final recorder = _recorder ??= _recorderFactory();
-    _recorderCreated = true;
     _lastStartAttemptAtMs = _nowMs();
     _lastFailureReason = null;
     _lastStartError = null;
 
     try {
-      final hasPermission = await recorder.hasPermission();
+      final hasPermission = await ensurePermission();
       if (!_isCurrent(generation)) return false;
-      _permissionGranted = hasPermission;
       if (!hasPermission) {
         _lastFailureReason = 'permissionDenied';
         _lastStartError = 'Microphone permission denied';
         return false;
       }
 
+      final recorder = _recorder ??= _recorderFactory();
+      _recorderCreated = true;
       final stream = await recorder.startStream(RecordConfig(
         encoder: AudioEncoder.pcm16bits,
         sampleRate: sampleRate,
@@ -200,15 +270,37 @@ class MicrophoneCaptureService {
     _restartAttempt = 0;
     _terminalHandledGeneration = null;
     _generation++;
+    _permissionGeneration++;
+    // A permission can be revoked while the app is in system settings. Keep
+    // the grant only for the preflight-to-start handoff of one capture lease;
+    // the next talk/capture must query the platform again.
+    _permissionGranted = null;
+    _captureRequested = false;
     final starting = _startOperation;
-    if (starting != null) {
-      try {
-        await starting;
-      } catch (_) {}
+    final permission = _permissionOperation;
+    final recorderAtStop = _recorder;
+    final operationsSettled = await _waitForCleanup([
+      if (starting != null) starting,
+      if (permission != null) permission,
+    ]);
+    if (!operationsSettled && recorderAtStop != null) {
+      if (identical(_startOperation, starting)) _startOperation = null;
+      if (identical(_permissionOperation, permission)) {
+        _permissionOperation = null;
+      }
+      // A start/permission call that outlives this capture lease can complete
+      // after the next lease has begun. Never let that stale operation share
+      // a recorder with the next capture, otherwise its cleanup could stop the
+      // newer stream.
+      await _discardRecorder(recorderAtStop);
     }
     final subscription = _subscription;
     _subscription = null;
-    await subscription?.cancel();
+    if (subscription != null) {
+      try {
+        await subscription.cancel().timeout(cleanupTimeout);
+      } catch (_) {}
+    }
     final recorder = _recorder;
     if (recorder == null) return;
     await _stopRecorder(recorder);
@@ -220,10 +312,28 @@ class MicrophoneCaptureService {
     await stop();
     final recorder = _recorder;
     _recorder = null;
-    await recorder?.dispose();
+    if (recorder != null) {
+      try {
+        await recorder.dispose().timeout(cleanupTimeout);
+      } catch (_) {}
+    }
   }
 
   bool _isCurrent(int generation) => !_disposed && generation == _generation;
+  bool _isPermissionCurrent(int generation) =>
+      !_disposed && generation == _permissionGeneration;
+
+  Future<bool> _waitForCleanup(List<Future<Object?>> operations) async {
+    if (operations.isEmpty) return true;
+    try {
+      await Future.wait(
+        operations.map((operation) => operation.catchError((_) => null)),
+      ).timeout(cleanupTimeout);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   Future<void> _handleTerminalCapture({
     required int generation,
@@ -239,7 +349,7 @@ class MicrophoneCaptureService {
     _terminalHandledGeneration = generation;
     _subscription = null;
     try {
-      await subscription.cancel();
+      await subscription.cancel().timeout(cleanupTimeout);
     } catch (_) {}
     final recorder = _recorder;
     if (recorder != null) await _stopRecorder(recorder);
@@ -279,9 +389,22 @@ class MicrophoneCaptureService {
     });
   }
 
-  Future<void> _stopRecorder(MicrophoneRecorderPort recorder) async {
+  Future<bool> _stopRecorder(MicrophoneRecorderPort recorder) async {
     try {
-      await recorder.stop();
+      await recorder.stop().timeout(cleanupTimeout);
+      return true;
+    } catch (_) {
+      // A timed-out/failed native recorder is not safe to reuse. Detach and
+      // dispose it best-effort so the next capture lease gets a fresh instance.
+      await _discardRecorder(recorder);
+      return false;
+    }
+  }
+
+  Future<void> _discardRecorder(MicrophoneRecorderPort recorder) async {
+    if (identical(_recorder, recorder)) _recorder = null;
+    try {
+      await recorder.dispose().timeout(cleanupTimeout);
     } catch (_) {}
   }
 

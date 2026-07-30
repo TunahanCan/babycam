@@ -4,6 +4,8 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:camera/camera.dart';
+import 'package:camera_platform_interface/camera_platform_interface.dart'
+    show CameraPlatform;
 import 'package:flutter/foundation.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -119,8 +121,18 @@ class MiuCamServer {
     MediaResourceGovernor? mediaResourceGovernor,
     MediaSessionTelemetry? mediaTelemetry,
     this.webRtcGateway,
+    this.webRtcNegotiationTimeout = const Duration(seconds: 12),
+    this.webRtcCleanupTimeout = const Duration(seconds: 2),
+    this.streamSessionLifecycleTimeout = const Duration(seconds: 12),
+    this.streamSessionReaperInterval = const Duration(seconds: 5),
+    this.mediaLifecycleOperationTimeout = const Duration(seconds: 8),
     this.onBroadcastAccessChanged,
-  })  : maxTotalMediaConnections =
+  })  : assert(webRtcNegotiationTimeout > Duration.zero),
+        assert(webRtcCleanupTimeout > Duration.zero),
+        assert(streamSessionLifecycleTimeout > Duration.zero),
+        assert(streamSessionReaperInterval > Duration.zero),
+        assert(mediaLifecycleOperationTimeout > Duration.zero),
+        maxTotalMediaConnections =
             maxTotalMediaConnections ?? maxActiveWatchClients * 3,
         maxTotalEventSockets =
             maxTotalEventSockets ?? maxActiveWatchClients * 2,
@@ -147,6 +159,13 @@ class MiuCamServer {
         ),
         _mediaTelemetry = mediaTelemetry ?? MediaSessionTelemetry.shared,
         _deviceTier = deviceTier ?? DeviceCapabilityProbe.detectTier() {
+    if (mediaLifecycleOperationTimeout <= Duration.zero) {
+      throw ArgumentError.value(
+        mediaLifecycleOperationTimeout,
+        'mediaLifecycleOperationTimeout',
+        'must be positive',
+      );
+    }
     _activeMediaProfile = MediaQualityProfile.forDeviceTier(_deviceTier);
     _effectiveLocalNetworkGuard = localNetworkGuard;
     _frameBudget.updateMinInterval(_activeMediaProfile.frameInterval);
@@ -161,6 +180,9 @@ class MiuCamServer {
     _authGuard = RequestAuthGuard(tokenService: this.tokenService);
     _sessionController = ServerSessionController(
       activeClients: _activeClientRegistry,
+    );
+    _activeClientRegistry.bindExpiredSessionReadyCallback(
+      _scheduleExpiredClientCleanup,
     );
     _resourcePolicyCoordinator = ServerResourcePolicyCoordinator(
       governor: mediaResourceGovernor ?? const MediaResourceGovernor(),
@@ -266,6 +288,11 @@ class MiuCamServer {
   final ServerMediaSource? mediaSource;
   final int httpPort;
   final WebRtcServerGateway? webRtcGateway;
+  final Duration webRtcNegotiationTimeout;
+  final Duration webRtcCleanupTimeout;
+  final Duration streamSessionLifecycleTimeout;
+  final Duration streamSessionReaperInterval;
+  final Duration mediaLifecycleOperationTimeout;
   MediaAnalysisCoordinator? _analysisCoordinator;
   MediaAnalysisMetrics? _analysisMetrics;
   StreamSubscription<AlertEvent>? _alertSubscription;
@@ -288,8 +315,11 @@ class MiuCamServer {
   int _broadcastAccessTimerGeneration = 0;
   BatterySnapshot _serverBattery = BatterySnapshot.unknown();
   final _clientBatterySnapshots = <String, BatterySnapshot>{};
+  final _webRtcOfferGenerations = <String, int>{};
+  final _expiredClientCleanupOperations = <String>{};
   late final MiuCamHttpDispatcher _httpDispatcher;
   late final ServerSessionController _sessionController;
+  Timer? _streamSessionReaperTimer;
 
   MjpegStreamService get _videoStreamService => _media.video;
   WavAudioStreamService get _audioStreamService => _media.audio;
@@ -303,6 +333,17 @@ class MiuCamServer {
   Map<String, Object?> get mediaCapabilities => _mediaCapabilities();
   Future<String> get serverDeviceId => _serverDeviceIdentityResolver.resolve();
 
+  @visibleForTesting
+  Future<void> restartCameraWithProfileForTesting(
+    MediaQualityProfile profile,
+  ) =>
+      _mediaProfileApplyQueue.enqueue((generation) async {
+        await _restartCameraWithProfile(
+          profile,
+          applyGeneration: generation,
+        );
+      });
+
   Future<void> handleAudioOutputLost(String reason) async {
     await _features.handleAudioOutputLost(reason);
     _updateResourceWatchdog();
@@ -315,7 +356,16 @@ class MiuCamServer {
   bool _disposed = false;
   bool _wakelockEnabled = false;
   Future<void>? _mediaStart;
+  int? _mediaStartGeneration;
+  int? _mediaStartOperationToken;
   bool _videoCaptureDesired = false;
+  int _videoCaptureIntentGeneration = 0;
+  int _cameraOperationToken = 0;
+  final _pendingCameraControllers = <CameraController, int>{};
+  final _cameraControllersPendingDisposal = <CameraController>{};
+  final _cameraControllerDisposals = <CameraController, Future<bool>>{};
+  final _cameraControllerRawDisposals = <CameraController, Future<void>>{};
+  final _cameraControllerDisposeStarted = <CameraController>{};
   bool _injectedVideoDemand = false;
   bool _injectedAudioDemand = false;
   final _injectedMediaOperations = SerializedAsyncExecutor();
@@ -432,6 +482,7 @@ class MiuCamServer {
       _httpServerListening = true;
       _httpServer!.listen(_handleRequest);
     }
+    _startStreamSessionReaper();
     _pairingModeActive = true;
     final deviceId = await _serverDeviceIdentityResolver.resolve();
     final serviceAdvertiser = _serviceAdvertiser;
@@ -457,6 +508,56 @@ class MiuCamServer {
     ).toString();
     onLog(strings.serverStartedLog(url));
     return url;
+  }
+
+  void _startStreamSessionReaper() {
+    if (_disposed || _streamSessionReaperTimer != null) return;
+    _streamSessionReaperTimer = Timer.periodic(
+      streamSessionReaperInterval,
+      (_) {
+        if (_disposed) return;
+        try {
+          _activeClientRegistry.pruneExpiredStreamTokens();
+        } catch (error) {
+          onLog('Expired stream-session scan failed: $error');
+        }
+      },
+    );
+  }
+
+  void _scheduleExpiredClientCleanup(String clientId) {
+    if (_disposed ||
+        !_activeClientRegistry.isExpiredSessionReady(clientId) ||
+        !_expiredClientCleanupOperations.add(clientId)) {
+      return;
+    }
+    final operation = _sessionOperations.run(() async {
+      if (_disposed || !_activeClientRegistry.isExpiredSessionReady(clientId)) {
+        return;
+      }
+      final errors = await _cleanupClientSession(
+        clientId,
+        closeWebRtc: true,
+      );
+      if (errors.isNotEmpty) {
+        onLog(
+          'Expired stream-session cleanup completed with errors ($clientId): '
+          '${errors.join(' | ')}',
+        );
+      }
+    });
+    unawaited(
+      operation.catchError((Object error, StackTrace _) {
+        if (!_disposed) {
+          onLog(
+            'Expired stream-session cleanup could not be queued '
+            '($clientId): $error',
+          );
+        }
+      }).whenComplete(
+        () => _expiredClientCleanupOperations.remove(clientId),
+      ),
+    );
   }
 
   Future<void> stopPairingMode() async {
@@ -523,28 +624,64 @@ class MiuCamServer {
     _videoCaptureDesired = true;
     final source = mediaSource;
     if (source != null) {
+      _videoCaptureIntentGeneration++;
       await _reconcileInjectedMediaSource(source, video: true);
       return;
     }
     final existingController = cameraController;
     if (existingController != null) {
       if (existingController.value.isInitialized) return;
-      await existingController.dispose();
+      final disposed = await _disposeCameraControllerLease(existingController);
+      if (!disposed) {
+        throw TimeoutException(
+          'Stale video controller disposal timed out.',
+          mediaLifecycleOperationTimeout,
+        );
+      }
       if (cameraController == existingController) cameraController = null;
     }
     final existingStart = _mediaStart;
-    if (existingStart != null) return existingStart;
-
-    final start = _startVideoCaptureRuntime();
-    _mediaStart = start;
-    try {
-      await start;
-    } catch (_) {
-      _videoCaptureDesired = false;
-      rethrow;
-    } finally {
-      if (_mediaStart == start) _mediaStart = null;
+    if (existingStart != null &&
+        _mediaStartGeneration == _videoCaptureIntentGeneration &&
+        _mediaStartOperationToken == _cameraOperationToken) {
+      return existingStart;
     }
+
+    final generation = ++_videoCaptureIntentGeneration;
+    final operationToken = ++_cameraOperationToken;
+    late final Future<void> start;
+    start = _startVideoCaptureRuntime(
+      generation,
+      operationToken: operationToken,
+    )
+        .timeout(
+      mediaLifecycleOperationTimeout,
+      onTimeout: () => throw TimeoutException(
+        'Video capture start timed out.',
+        mediaLifecycleOperationTimeout,
+      ),
+    )
+        .catchError((Object error, StackTrace stack) {
+      if (_videoCaptureIntentGeneration == generation) {
+        _videoCaptureDesired = false;
+        _videoCaptureIntentGeneration++;
+      }
+      if (_cameraOperationToken == operationToken) {
+        _cameraOperationToken++;
+      }
+      unawaited(_disposeCameraControllersForGeneration(generation));
+      Error.throwWithStackTrace(error, stack);
+    }).whenComplete(() {
+      if (identical(_mediaStart, start)) {
+        _mediaStart = null;
+        _mediaStartGeneration = null;
+        _mediaStartOperationToken = null;
+      }
+    });
+    _mediaStart = start;
+    _mediaStartGeneration = generation;
+    _mediaStartOperationToken = operationToken;
+    return start;
   }
 
   Future<void> startAudioRuntime() async {
@@ -653,6 +790,51 @@ class MiuCamServer {
     return config.webRtcPilotEnabled && gateway?.isAvailable == true
         ? 'webrtc'
         : 'mjpeg_wav';
+  }
+
+  String _streamAttemptIdForRequest(Object? json) {
+    if (json is! Map ||
+        !json.containsKey(protocol_v2.MiuCamProtocolV2.streamAttemptId)) {
+      throw const FormatException('Missing streamAttemptId.');
+    }
+    final raw = json[protocol_v2.MiuCamProtocolV2.streamAttemptId];
+    if (raw is! String ||
+        raw.isEmpty ||
+        raw.length > 128 ||
+        raw.trim() != raw ||
+        !RegExp(r'^[A-Za-z0-9._~-]+$').hasMatch(raw)) {
+      throw const FormatException('Invalid streamAttemptId.');
+    }
+    return raw;
+  }
+
+  String _talkAttemptIdForRequest(Object? json) {
+    if (json is! Map ||
+        !json.containsKey(protocol_v2.MiuCamProtocolV2.talkAttemptId)) {
+      throw const FormatException('Missing talkAttemptId.');
+    }
+    final raw = json[protocol_v2.MiuCamProtocolV2.talkAttemptId];
+    if (raw is! String ||
+        raw.isEmpty ||
+        raw.length > 128 ||
+        raw.trim() != raw ||
+        !RegExp(r'^[A-Za-z0-9._~-]+$').hasMatch(raw)) {
+      throw const FormatException('Invalid talkAttemptId.');
+    }
+    return raw;
+  }
+
+  Future<void> _rejectInvalidAttemptId(
+    HttpRequest request, {
+    required String code,
+    required String field,
+  }) async {
+    request.response.statusCode = HttpStatus.badRequest;
+    await _writeJson(request.response, {
+      'ok': false,
+      'code': code,
+      'message': '$field is required and must be a valid attempt identifier.',
+    });
   }
 
   Future<void> _reconcileStandaloneSessionDemand() async {
@@ -776,6 +958,8 @@ class MiuCamServer {
   }
 
   Future<void> stopVideoRuntime() async {
+    _videoCaptureIntentGeneration++;
+    _cameraOperationToken++;
     _videoCaptureDesired = false;
     _analysisCoordinator?.markVideoDiscontinuity();
     final source = mediaSource;
@@ -786,10 +970,26 @@ class MiuCamServer {
     _mediaProfileApplyQueue.invalidate();
     _cameraEncodeGeneration++;
     _pendingCameraEncode = null;
+    final pendingControllers =
+        _pendingCameraControllers.keys.toList(growable: false);
     final controller = cameraController;
     cameraController = null;
+    Object? disposalError;
+    StackTrace? disposalStack;
     try {
-      await controller?.dispose();
+      final disposed = await Future.wait<bool>([
+        for (final pendingController in pendingControllers)
+          _disposeCameraControllerLease(pendingController),
+        if (controller != null && !pendingControllers.contains(controller))
+          _disposeCameraControllerLease(controller),
+      ]);
+      if (disposed.any((confirmed) => !confirmed)) {
+        disposalError = TimeoutException(
+          'Camera controller disposal timed out.',
+          mediaLifecycleOperationTimeout,
+        );
+        disposalStack = StackTrace.current;
+      }
     } finally {
       _latestJpeg = null;
       _lastMotionSample = null;
@@ -803,6 +1003,12 @@ class MiuCamServer {
       _videoFramesCaptured = 0;
       await _disposeAnalysisIfIdle();
       await _updateMediaHostLifecycle();
+    }
+    if (disposalError != null) {
+      Error.throwWithStackTrace(
+        disposalError,
+        disposalStack ?? StackTrace.current,
+      );
     }
   }
 
@@ -903,9 +1109,12 @@ class MiuCamServer {
       return;
     }
     final controller = gateway as WebRtcMediaPolicyController;
-    await controller.applyMediaPolicy(
-      _resourcePolicyCoordinator.webRtcPolicyFor(profile, _resourceDecision),
-    );
+    await controller
+        .applyMediaPolicy(
+          _resourcePolicyCoordinator.webRtcPolicyFor(
+              profile, _resourceDecision),
+        )
+        .timeout(webRtcCleanupTimeout);
   }
 
   Future<void> _handleMjpeg(
@@ -972,6 +1181,9 @@ class MiuCamServer {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _streamSessionReaperTimer?.cancel();
+    _streamSessionReaperTimer = null;
+    _activeClientRegistry.bindExpiredSessionReadyCallback(null);
     _cancelBroadcastAccessTimer();
     final cleanup = BestEffortOperationCollector();
 

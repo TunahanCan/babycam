@@ -1,10 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
 import 'package:miucam/core/protocol/pairing_payload.dart';
 import 'package:miucam/features/server/pairing/pairing_token_service.dart';
 import 'package:miucam/features/server/pairing/server_qr_payload_builder.dart';
 
 void main() {
-  PairingPayload payload({int? expiresAtMs, int schemaVersion = 1}) =>
+  PairingPayload payload({
+    int? expiresAtMs,
+    int schemaVersion = MiuCamProtocolV2.schemaVersion,
+  }) =>
       PairingPayload(
         schemaVersion: schemaVersion,
         host: '192.168.1.20',
@@ -36,7 +40,7 @@ void main() {
   test('QR payload Türkçe ve İngilizce cihaz adlarını UTF-8 taşır', () {
     final turkish = payload();
     final english = PairingPayload(
-      schemaVersion: 1,
+      schemaVersion: MiuCamProtocolV2.schemaVersion,
       host: '192.168.1.21',
       port: 8080,
       deviceId: 'server_en',
@@ -74,8 +78,9 @@ void main() {
   });
 
   test('invalid schema reddedilir', () {
-    final parsed =
-        PairingPayload.parseUri(payload(schemaVersion: 2).toUriString());
+    final parsed = PairingPayload.parseUri(
+      payload(schemaVersion: MiuCamProtocolV2.schemaVersion + 1).toUriString(),
+    );
     expect(parsed, isNull);
   });
 
@@ -92,7 +97,7 @@ void main() {
 
   test('transport alanı olmadan gelen payload HTTP/WS kabul edilir', () {
     final parsed = PairingPayload.fromJson({
-      'schemaVersion': 1,
+      'schemaVersion': MiuCamProtocolV2.schemaVersion,
       'scheme': 'miucam',
       'host': '192.168.1.20',
       'port': 8080,

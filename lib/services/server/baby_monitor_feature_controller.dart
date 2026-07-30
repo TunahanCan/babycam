@@ -53,25 +53,54 @@ class BabyMonitorFeatureController {
 
   Future<TalkSession> startTalk({
     required String clientId,
+    String? attemptId,
     int sampleRate = 16000,
     int channels = 1,
   }) async {
-    final session = talkSessions.start(clientId: clientId);
+    final session = talkSessions.start(
+      clientId: clientId,
+      attemptId: attemptId,
+    );
     try {
       await roomAudio.beginTalk(
         sampleRate: sampleRate.clamp(8000, 48000),
         channels: channels.clamp(1, 2),
       );
+      final stillOwnsTalk = talkSessions.activeSession?.token == session.token;
+      final cancelled = attemptId != null &&
+          talkSessions.isAttemptCancelled(clientId, attemptId);
+      if (!stillOwnsTalk || cancelled) {
+        if (stillOwnsTalk) {
+          await stopTalk(
+            clientId: clientId,
+            token: session.token,
+            attemptId: attemptId,
+          );
+        }
+        throw const TalkSessionCancelledException();
+      }
     } catch (_) {
-      talkSessions.stop(clientId: clientId, token: session.token);
+      talkSessions.stop(
+        clientId: clientId,
+        token: session.token,
+        attemptId: attemptId,
+      );
       rethrow;
     }
     _scheduleTalkExpiry(session);
     return session;
   }
 
-  Future<bool> stopTalk({required String clientId, String? token}) async {
-    final stopped = talkSessions.stop(clientId: clientId, token: token);
+  Future<bool> stopTalk({
+    required String clientId,
+    String? token,
+    String? attemptId,
+  }) async {
+    final stopped = talkSessions.stop(
+      clientId: clientId,
+      token: token,
+      attemptId: attemptId,
+    );
     if (!stopped) return false;
     _talkExpiryTimer?.cancel();
     _talkExpiryTimer = null;

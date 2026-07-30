@@ -302,6 +302,56 @@ void main() {
     expect(pipelines, hasLength(2));
     expect(videoRequests, 1);
   });
+
+  test('cancelImmediately video transportini ilk awaitten once kapatir',
+      () async {
+    final client = _PendingVideoHttpClient();
+    final health = ClientStreamHealthState()..resetForNewWatchSession();
+    final supervisor = ClientMediaStreamSupervisor(
+      session: _session(8080),
+      activeStream: const ActiveStreamSession(streamToken: 'stream'),
+      audioEnabled: false,
+      healthState: health,
+      videoClientFactory: () => client,
+      onVideoFrame: (_) {},
+    );
+
+    await supervisor.start();
+    await client.requested.future.timeout(const Duration(seconds: 1));
+
+    supervisor.cancelImmediately();
+
+    expect(client.closed, isTrue);
+    expect(health.snapshot().watchActive, isFalse);
+    await supervisor.stop();
+  });
+
+  test('cancelImmediately sonrasi stop detached audio temizligini bekler',
+      () async {
+    final pipeline = _DelayedStopAudioPipeline(const PcmAudioOutput());
+    final supervisor = ClientMediaStreamSupervisor(
+      session: _session(8080),
+      activeStream: const ActiveStreamSession(streamToken: 'stream'),
+      audioEnabled: true,
+      videoClientFactory: _PendingVideoHttpClient.new,
+      audioPipelineFactory: (_) => pipeline,
+      onVideoFrame: (_) {},
+    );
+
+    await supervisor.start();
+    supervisor.cancelImmediately();
+    await pipeline.stopEntered.future.timeout(const Duration(seconds: 1));
+    var stopCompleted = false;
+    final stopping = supervisor.stop().whenComplete(() => stopCompleted = true);
+    await pumpEventQueue();
+
+    expect(stopCompleted, isFalse);
+    expect(pipeline.stopCount, 1);
+
+    pipeline.releaseStop.complete();
+    await stopping.timeout(const Duration(seconds: 1));
+    expect(stopCompleted, isTrue);
+  });
 }
 
 class _ControlledAudioPipeline extends ClientLiveAudioPipeline {
@@ -364,6 +414,48 @@ class _ControlledAudioPipeline extends ClientLiveAudioPipeline {
       nativeStatus: const {},
     ));
   }
+}
+
+class _DelayedStopAudioPipeline extends _ControlledAudioPipeline {
+  _DelayedStopAudioPipeline(super.audioOutput);
+
+  final stopEntered = Completer<void>();
+  final releaseStop = Completer<void>();
+
+  @override
+  Future<void> stop() async {
+    stopCount++;
+    if (!stopEntered.isCompleted) stopEntered.complete();
+    await releaseStop.future;
+  }
+}
+
+class _PendingVideoHttpClient implements HttpClient {
+  final requested = Completer<void>();
+  final _request = Completer<HttpClientRequest>();
+  bool closed = false;
+
+  @override
+  Duration? connectionTimeout;
+
+  @override
+  Future<HttpClientRequest> getUrl(Uri url) {
+    if (!requested.isCompleted) requested.complete();
+    return _request.future;
+  }
+
+  @override
+  void close({bool force = false}) {
+    closed = true;
+    if (!_request.isCompleted) {
+      _request.completeError(
+        const HttpException('closed by lifecycle cancellation'),
+      );
+    }
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 List<int> _mjpegFrame(List<int> jpeg, {required int sequence}) => [

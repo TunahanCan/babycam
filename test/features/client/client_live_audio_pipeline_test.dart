@@ -320,6 +320,155 @@ void main() {
     expect(sink.writes, isEmpty);
     expect(sink.stops, greaterThanOrEqualTo(2));
   });
+
+  test('cancelImmediately takilan native start kuyrugunu beklemez', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      request.response.headers
+        ..contentType = ContentType('audio', 'wav')
+        ..chunkedTransferEncoding = true;
+      final pcm = _pcmFrames(4);
+      request.response.add(_wavHeader(pcmBytes: pcm.length));
+      await request.response.flush();
+      for (var index = 0; index < 4; index++) {
+        request.response.add(
+          Uint8List.sublistView(pcm, index * 640, (index + 1) * 640),
+        );
+        await request.response.flush();
+      }
+      await request.response.close();
+    });
+    final sink = _DelayedStartPcmAudioSink();
+    final pipeline = ClientLiveAudioPipeline(audioOutput: sink);
+    addTearDown(() {
+      if (!sink.releaseStart.isCompleted) sink.releaseStart.complete();
+      return pipeline.stop();
+    });
+
+    await pipeline.start(
+      uri: Uri(
+        scheme: 'http',
+        host: InternetAddress.loopbackIPv4.address,
+        port: server.port,
+        path: '/audio',
+      ),
+      pairedServerHost: InternetAddress.loopbackIPv4.address,
+      pairedServerPort: server.port,
+    );
+    await sink.startEntered.future.timeout(const Duration(seconds: 2));
+
+    pipeline.cancelImmediately();
+
+    expect(pipeline.isRunning, isFalse);
+    await pumpEventQueue();
+    expect(sink.stops, greaterThanOrEqualTo(1));
+
+    sink.releaseStart.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(sink.stops, greaterThanOrEqualTo(2));
+  });
+
+  test('geciken eski native start yeni audio leaseini durduramaz', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    var streamRequests = 0;
+    server.listen((request) async {
+      final requestIndex = ++streamRequests;
+      request.response.headers
+        ..contentType = ContentType('audio', 'wav')
+        ..chunkedTransferEncoding = true;
+      final pcm = _pcmFrames(4);
+      request.response.add(_wavHeader(pcmBytes: pcm.length));
+      await request.response.flush();
+      if (requestIndex == 1) {
+        request.response.add(pcm);
+        await request.response.close();
+        return;
+      }
+      for (var index = 0; index < 100; index++) {
+        request.response.add(
+          Uint8List.sublistView(
+            pcm,
+            (index % 4) * 640,
+            ((index % 4) + 1) * 640,
+          ),
+        );
+        await request.response.flush();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      await request.response.close();
+    });
+    final sink = _DelayedStartPcmAudioSink();
+    final first = ClientLiveAudioPipeline(
+      audioOutput: sink,
+      connectTimeout: const Duration(milliseconds: 50),
+      retryDelay: const Duration(seconds: 30),
+    );
+    final second = ClientLiveAudioPipeline(
+      audioOutput: sink,
+      connectTimeout: const Duration(milliseconds: 500),
+      retryDelay: const Duration(seconds: 30),
+    );
+    addTearDown(() async {
+      if (!sink.releaseStart.isCompleted) sink.releaseStart.complete();
+      await first.stop();
+      await second.stop();
+    });
+    final firstError = Completer<Object>();
+
+    await first.start(
+      uri: Uri(
+        scheme: 'http',
+        host: InternetAddress.loopbackIPv4.address,
+        port: server.port,
+        path: '/audio',
+      ),
+      pairedServerHost: InternetAddress.loopbackIPv4.address,
+      pairedServerPort: server.port,
+      shouldRetry: (_) => false,
+      onError: (error) {
+        if (!firstError.isCompleted) firstError.complete(error);
+      },
+    );
+    await sink.startEntered.future.timeout(const Duration(seconds: 2));
+    expect(
+      await firstError.future.timeout(const Duration(seconds: 2)),
+      isA<TimeoutException>(),
+    );
+
+    await second.start(
+      uri: Uri(
+        scheme: 'http',
+        host: InternetAddress.loopbackIPv4.address,
+        port: server.port,
+        path: '/audio',
+      ),
+      pairedServerHost: InternetAddress.loopbackIPv4.address,
+      pairedServerPort: server.port,
+      shouldRetry: (_) => false,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(sink.starts, hasLength(1));
+
+    sink.releaseStart.complete();
+    await _waitUntil(() => sink.starts.length == 2);
+    final stopsAfterSecondStart = sink.stops;
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    expect(sink.stops, stopsAfterSecondStart);
+    expect(second.isRunning, isTrue);
+  });
+}
+
+Future<void> _waitUntil(bool Function() predicate) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 2));
+  while (!predicate()) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw TimeoutException('Condition was not reached.');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
 }
 
 Uint8List _pcmFrames(int count) => Uint8List.fromList(

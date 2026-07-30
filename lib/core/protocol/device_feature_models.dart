@@ -226,6 +226,7 @@ class TalkSession {
     required this.expiresAtMs,
     required this.audioBytesReceived,
     required this.videoBytesReceived,
+    this.attemptId,
     this.lastAudioAtMs,
     this.lastVideoAtMs,
   });
@@ -236,6 +237,7 @@ class TalkSession {
   final int expiresAtMs;
   final int audioBytesReceived;
   final int videoBytesReceived;
+  final String? attemptId;
   final int? lastAudioAtMs;
   final int? lastVideoAtMs;
 
@@ -255,6 +257,7 @@ class TalkSession {
         expiresAtMs: expiresAtMs ?? this.expiresAtMs,
         audioBytesReceived: audioBytesReceived ?? this.audioBytesReceived,
         videoBytesReceived: videoBytesReceived ?? this.videoBytesReceived,
+        attemptId: attemptId,
         lastAudioAtMs: lastAudioAtMs ?? this.lastAudioAtMs,
         lastVideoAtMs: lastVideoAtMs ?? this.lastVideoAtMs,
       );
@@ -266,6 +269,7 @@ class TalkSession {
         'expiresAtMs': expiresAtMs,
         'audioBytesReceived': audioBytesReceived,
         'videoBytesReceived': videoBytesReceived,
+        if (attemptId != null) 'talkAttemptId': attemptId,
         'lastAudioAtMs': lastAudioAtMs,
         'lastVideoAtMs': lastVideoAtMs,
       };

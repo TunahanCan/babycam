@@ -117,4 +117,301 @@ void main() {
     expect(source.snapshot.audioChunks, 1);
     await source.stop();
   });
+
+  test('timed out start cannot block stop or a successor demand', () async {
+    final firstStart = Completer<void>();
+    var starts = 0;
+    var stops = 0;
+    var nativeVideoActive = false;
+    final controller = MediaRuntimeController(
+      operationTimeout: const Duration(milliseconds: 20),
+      onStartVideo: () async {
+        starts++;
+        if (starts == 1) await firstStart.future;
+        nativeVideoActive = true;
+      },
+      onStopVideo: () async {
+        stops++;
+        nativeVideoActive = false;
+      },
+    );
+
+    await expectLater(
+      controller.reconcile(
+        const MediaResourceDemand(video: true, audio: false),
+      ),
+      throwsA(isA<TimeoutException>()),
+    );
+    await controller.reconcile(MediaResourceDemand.none);
+    await controller.reconcile(
+      const MediaResourceDemand(video: true, audio: false),
+    );
+
+    expect(starts, 2);
+    expect(stops, 1);
+    expect(controller.videoActive, isTrue);
+    expect(nativeVideoActive, isTrue);
+
+    firstStart.complete();
+    await pumpEventQueue();
+
+    expect(controller.videoActive, isTrue);
+    expect(nativeVideoActive, isTrue);
+    expect(stops, 1);
+  });
+
+  test('late timed out start is compensated when no successor exists',
+      () async {
+    final firstStart = Completer<void>();
+    var stops = 0;
+    var nativeVideoActive = false;
+    final controller = MediaRuntimeController(
+      operationTimeout: const Duration(milliseconds: 20),
+      onStartVideo: () async {
+        await firstStart.future;
+        nativeVideoActive = true;
+      },
+      onStopVideo: () async {
+        stops++;
+        nativeVideoActive = false;
+      },
+    );
+
+    await expectLater(
+      controller.reconcile(
+        const MediaResourceDemand(video: true, audio: false),
+      ),
+      throwsA(isA<TimeoutException>()),
+    );
+    await controller.reconcile(MediaResourceDemand.none);
+    firstStart.complete();
+    await _waitUntil(() => stops == 2);
+
+    expect(controller.isActive, isFalse);
+    expect(nativeVideoActive, isFalse);
+  });
+
+  test(
+      'failed successor preserves timed-out start uncertainty until late cleanup',
+      () async {
+    final firstStart = Completer<void>();
+    var starts = 0;
+    var stops = 0;
+    var nativeVideoActive = false;
+    final controller = MediaRuntimeController(
+      operationTimeout: const Duration(milliseconds: 20),
+      onStartVideo: () async {
+        starts++;
+        if (starts == 1) {
+          await firstStart.future;
+          nativeVideoActive = true;
+          return;
+        }
+        throw StateError('successor start failed');
+      },
+      onStopVideo: () async {
+        stops++;
+        nativeVideoActive = false;
+      },
+    );
+
+    await expectLater(
+      controller.reconcile(
+        const MediaResourceDemand(video: true, audio: false),
+      ),
+      throwsA(isA<TimeoutException>()),
+    );
+    await expectLater(
+      controller.reconcile(
+        const MediaResourceDemand(video: true, audio: false),
+      ),
+      throwsA(isA<StateError>()),
+    );
+    firstStart.complete();
+    await pumpEventQueue();
+    expect(nativeVideoActive, isTrue);
+
+    await controller.reconcile(MediaResourceDemand.none);
+
+    expect(stops, 1);
+    expect(nativeVideoActive, isFalse);
+    expect(controller.isActive, isFalse);
+  });
+
+  test('failed stop stays uncertain and is retried until confirmed', () async {
+    var stops = 0;
+    var nativeVideoActive = false;
+    final controller = MediaRuntimeController(
+      onStartVideo: () async => nativeVideoActive = true,
+      onStopVideo: () async {
+        stops++;
+        if (stops == 1) throw StateError('native stop failed');
+        nativeVideoActive = false;
+      },
+    );
+
+    await controller.reconcile(
+      const MediaResourceDemand(video: true, audio: false),
+    );
+    await expectLater(
+      controller.reconcile(MediaResourceDemand.none),
+      throwsA(isA<StateError>()),
+    );
+    expect(controller.videoActive, isTrue);
+
+    await _waitUntil(() => stops == 2);
+    expect(nativeVideoActive, isFalse);
+    expect(controller.isActive, isFalse);
+  });
+
+  test('timed-out stop late error keeps uncertainty and retries stop',
+      () async {
+    final firstStopRelease = Completer<void>();
+    var stops = 0;
+    var nativeVideoActive = false;
+    final controller = MediaRuntimeController(
+      operationTimeout: const Duration(milliseconds: 20),
+      onStartVideo: () async => nativeVideoActive = true,
+      onStopVideo: () async {
+        stops++;
+        if (stops == 1) {
+          await firstStopRelease.future;
+          throw StateError('late stop failure');
+        }
+        nativeVideoActive = false;
+      },
+    );
+
+    await controller.reconcile(
+      const MediaResourceDemand(video: true, audio: false),
+    );
+    await expectLater(
+      controller.reconcile(MediaResourceDemand.none),
+      throwsA(isA<TimeoutException>()),
+    );
+    firstStopRelease.complete();
+    await _waitUntil(() => stops == 2);
+
+    expect(nativeVideoActive, isFalse);
+    expect(controller.isActive, isFalse);
+  });
+
+  test('timed-out start late error retries while demand is still wanted',
+      () async {
+    final firstStartRelease = Completer<void>();
+    var starts = 0;
+    var nativeVideoActive = false;
+    final controller = MediaRuntimeController(
+      operationTimeout: const Duration(milliseconds: 20),
+      onStartVideo: () async {
+        starts++;
+        if (starts == 1) {
+          await firstStartRelease.future;
+          throw StateError('late start failure');
+        }
+        nativeVideoActive = true;
+      },
+    );
+
+    await expectLater(
+      controller.reconcile(
+        const MediaResourceDemand(video: true, audio: false),
+      ),
+      throwsA(isA<TimeoutException>()),
+    );
+    firstStartRelease.complete();
+    await _waitUntil(() => starts == 2);
+
+    expect(nativeVideoActive, isTrue);
+    expect(controller.videoActive, isTrue);
+  });
+
+  test('stop that throws after stopping is reasserted by successor start',
+      () async {
+    var starts = 0;
+    var stops = 0;
+    var nativeVideoActive = false;
+    final controller = MediaRuntimeController(
+      onStartVideo: () async {
+        starts++;
+        nativeVideoActive = true;
+      },
+      onStopVideo: () async {
+        stops++;
+        nativeVideoActive = false;
+        throw StateError('stop response lost');
+      },
+    );
+
+    await controller.reconcile(
+      const MediaResourceDemand(video: true, audio: false),
+    );
+    await expectLater(
+      controller.reconcile(MediaResourceDemand.none),
+      throwsA(isA<StateError>()),
+    );
+    await controller.reconcile(
+      const MediaResourceDemand(video: true, audio: false),
+    );
+
+    expect(starts, 2);
+    expect(stops, 1);
+    expect(nativeVideoActive, isTrue);
+    expect(controller.videoActive, isTrue);
+  });
+
+  test(
+      'late timed out stop reasserts latest start without reopening after stop',
+      () async {
+    final firstStop = Completer<void>();
+    var starts = 0;
+    var stops = 0;
+    var nativeVideoActive = false;
+    final controller = MediaRuntimeController(
+      operationTimeout: const Duration(milliseconds: 20),
+      onStartVideo: () async {
+        starts++;
+        nativeVideoActive = true;
+      },
+      onStopVideo: () async {
+        stops++;
+        if (stops == 1) await firstStop.future;
+        nativeVideoActive = false;
+      },
+    );
+
+    await controller.reconcile(
+      const MediaResourceDemand(video: true, audio: false),
+    );
+    await expectLater(
+      controller.reconcile(MediaResourceDemand.none),
+      throwsA(isA<TimeoutException>()),
+    );
+    await controller.reconcile(
+      const MediaResourceDemand(video: true, audio: false),
+    );
+    expect(nativeVideoActive, isTrue);
+
+    firstStop.complete();
+    await _waitUntil(() => starts == 3);
+    expect(nativeVideoActive, isTrue);
+
+    await controller.reconcile(MediaResourceDemand.none);
+    await pumpEventQueue();
+    expect(nativeVideoActive, isFalse);
+    expect(controller.isActive, isFalse);
+  });
+}
+
+Future<void> _waitUntil(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 1),
+}) async {
+  final stopwatch = Stopwatch()..start();
+  while (!condition()) {
+    if (stopwatch.elapsed >= timeout) {
+      fail('Condition was not met within $timeout.');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
 }

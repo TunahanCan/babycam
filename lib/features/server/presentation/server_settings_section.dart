@@ -896,68 +896,74 @@ class _SettingSliderState extends State<_SettingSlider> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                widget.title,
-                style: const TextStyle(
-                  color: MiuCamDesignTokens.serverText,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
+    return RepaintBoundary(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.title,
+                  style: const TextStyle(
+                    color: MiuCamDesignTokens.serverText,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
-            ),
-            SizedBox(
-              width: 64,
-              child: Text(
-                widget.valueLabel(_value),
-                textAlign: TextAlign.end,
-                style: TextStyle(
-                  color: widget.color,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w900,
+              SizedBox(
+                width: 64,
+                child: Text(
+                  widget.valueLabel(_value),
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    color: widget.color,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          widget.description,
-          style: const TextStyle(
-            color: MiuCamDesignTokens.serverTextMuted,
-            fontSize: 13.5,
-            height: 1.25,
+            ],
           ),
-        ),
-        RepaintBoundary(
-          child: SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              tickMarkShape: SliderTickMarkShape.noTickMark,
-            ),
-            child: Slider(
-              activeColor: widget.color,
-              inactiveColor:
-                  MiuCamDesignTokens.serverOutline.withValues(alpha: .58),
-              value: _value,
-              min: widget.min,
-              max: widget.max,
-              divisions: widget.divisions,
-              semanticFormatterCallback: widget.valueLabel,
-              onChangeStart: (_) => _dragging = true,
-              onChanged: (value) => setState(() => _value = value),
-              onChangeEnd: (value) {
-                _dragging = false;
-                widget.onChangeEnd(value);
-              },
+          const SizedBox(height: 4),
+          Text(
+            widget.description,
+            style: const TextStyle(
+              color: MiuCamDesignTokens.serverTextMuted,
+              fontSize: 13.5,
+              height: 1.25,
             ),
           ),
-        ),
-      ],
+          RepaintBoundary(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                tickMarkShape: SliderTickMarkShape.noTickMark,
+              ),
+              child: Slider(
+                activeColor: widget.color,
+                inactiveColor:
+                    MiuCamDesignTokens.serverOutline.withValues(alpha: .58),
+                value: _value,
+                min: widget.min,
+                max: widget.max,
+                divisions: widget.divisions,
+                semanticFormatterCallback: widget.valueLabel,
+                onChangeStart: (_) => _dragging = true,
+                onChanged: (value) {
+                  final next = _safeValue(value);
+                  if (next == _value) return;
+                  setState(() => _value = next);
+                },
+                onChangeEnd: (value) {
+                  _dragging = false;
+                  widget.onChangeEnd(value);
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -63,12 +63,16 @@ class ActiveSessionStartResult {
   const ActiveSessionStartResult({
     required this.clientId,
     required this.streamToken,
+    required this.streamTokenHash,
+    required this.previousStreamTokenHash,
     required this.activeClientCount,
     required this.createdActiveSlot,
   });
 
   final String clientId;
   final StreamAccessToken streamToken;
+  final String streamTokenHash;
+  final String? previousStreamTokenHash;
   final int activeClientCount;
   final bool createdActiveSlot;
 }
@@ -113,10 +117,13 @@ class ActiveClientRegistry {
   final ClientQualityTracker _qualityTracker;
   final _sessionClients = <String>{};
   final _activeClients = <String>{};
+  final _currentStreamTokenHashes = <String, String>{};
+  final _expiredSessionClientsPendingCleanup = <String>{};
   final _streamConnectionCounts = <String, int>{};
   final _streamConnectionLeases = <int, String>{};
   final _eventSocketCounts = <String, int>{};
   final _eventSocketLeases = <int, String>{};
+  void Function(String clientId)? _onExpiredSessionReady;
   int _nextConnectionLeaseId = 0;
 
   int get activeClientCount {
@@ -140,11 +147,18 @@ class ActiveClientRegistry {
     pruneExpiredStreamTokens();
     final createdActiveSlot = _activateClient(normalizedClientId);
     _sessionClients.add(normalizedClientId);
+    final previousStreamTokenHash =
+        _currentStreamTokenHashes[normalizedClientId];
     final streamToken =
         tokenService.issueStreamToken(clientId: normalizedClientId);
+    final streamTokenHash = tokenService.hashToken(streamToken.token);
+    _currentStreamTokenHashes[normalizedClientId] = streamTokenHash;
+    _expiredSessionClientsPendingCleanup.remove(normalizedClientId);
     return ActiveSessionStartResult(
       clientId: normalizedClientId,
       streamToken: streamToken,
+      streamTokenHash: streamTokenHash,
+      previousStreamTokenHash: previousStreamTokenHash,
       activeClientCount: _activeClients.length,
       createdActiveSlot: createdActiveSlot,
     );
@@ -156,8 +170,25 @@ class ActiveClientRegistry {
 
   void rollbackSessionStart(ActiveSessionStartResult startResult) {
     tokenService.revokeStreamToken(startResult.streamToken.token);
+    if (_currentStreamTokenHashes[startResult.clientId] !=
+        startResult.streamTokenHash) {
+      // A later replacement already owns this client. An out-of-order
+      // rollback may revoke only its own token, never the newer session.
+      return;
+    }
     if (startResult.createdActiveSlot) {
       cleanupClient(startResult.clientId);
+    } else {
+      final previousStreamTokenHash = startResult.previousStreamTokenHash;
+      if (previousStreamTokenHash == null) {
+        _currentStreamTokenHashes.remove(startResult.clientId);
+      } else {
+        _currentStreamTokenHashes[startResult.clientId] =
+            previousStreamTokenHash;
+      }
+      if (!tokenService.hasValidStreamTokenForClient(startResult.clientId)) {
+        _markExpiredSession(startResult.clientId);
+      }
     }
   }
 
@@ -222,7 +253,15 @@ class ActiveClientRegistry {
   String? clientIdForStreamToken(String token) {
     pruneExpiredStreamTokens();
     final record = tokenService.validateStreamToken(token);
-    return record?.clientId;
+    if (record == null) return null;
+    final currentTokenHash = _currentStreamTokenHashes[record.clientId];
+    // Tokens issued outside an active HTTP session are retained for the
+    // standalone registry use cases. Once session/start establishes an owner,
+    // only that exact current token may authorize new media or signaling work.
+    if (currentTokenHash != null && currentTokenHash != record.tokenHash) {
+      return null;
+    }
+    return record.clientId;
   }
 
   void updateQuality({
@@ -265,6 +304,8 @@ class ActiveClientRegistry {
     final normalizedClientId = _normalizeClientId(clientId);
     _sessionClients.remove(normalizedClientId);
     _activeClients.remove(normalizedClientId);
+    _currentStreamTokenHashes.remove(normalizedClientId);
+    _expiredSessionClientsPendingCleanup.remove(normalizedClientId);
     _streamConnectionCounts.remove(normalizedClientId);
     _streamConnectionLeases.removeWhere(
       (_, leaseClientId) => leaseClientId == normalizedClientId,
@@ -284,16 +325,64 @@ class ActiveClientRegistry {
       _eventSocketLeases.clear();
     }
     _sessionClients.clear();
+    _currentStreamTokenHashes.clear();
+    _expiredSessionClientsPendingCleanup.clear();
     _qualityTracker.clear();
+  }
+
+  /// Installs the lifecycle owner that performs full runtime/session cleanup.
+  ///
+  /// Without a handler the registry keeps its standalone synchronous behavior.
+  /// A server handler must enqueue cleanup on the global session-operation
+  /// queue and re-check [isExpiredSessionReady] before mutating state.
+  void bindExpiredSessionReadyCallback(
+    void Function(String clientId)? callback,
+  ) {
+    _onExpiredSessionReady = callback;
+    if (callback == null) return;
+    for (final clientId
+        in _expiredSessionClientsPendingCleanup.toList(growable: false)) {
+      _notifyExpiredSessionIfReady(clientId);
+    }
+  }
+
+  bool isExpiredSessionReady(String clientId) {
+    final normalizedClientId = _normalizeClientId(clientId);
+    return _expiredSessionClientsPendingCleanup.contains(normalizedClientId) &&
+        !_streamConnectionCounts.containsKey(normalizedClientId) &&
+        !tokenService.hasValidStreamTokenForClient(normalizedClientId);
+  }
+
+  List<String> expiredSessionClientIdsReadyForCleanup() {
+    pruneExpiredStreamTokens();
+    return _expiredSessionClientsPendingCleanup
+        .where(isExpiredSessionReady)
+        .toList(growable: false);
   }
 
   void pruneExpiredStreamTokens() {
     final expiredClientIds = tokenService.pruneExpiredStreamTokens();
     for (final clientId in expiredClientIds) {
-      if (_streamConnectionCounts.containsKey(clientId)) continue;
       if (tokenService.hasValidStreamTokenForClient(clientId)) continue;
-      cleanupClient(clientId);
+      _markExpiredSession(clientId);
     }
+  }
+
+  void _markExpiredSession(String clientId) {
+    final normalizedClientId = _normalizeClientId(clientId);
+    if (!_activeClients.contains(normalizedClientId)) return;
+    _expiredSessionClientsPendingCleanup.add(normalizedClientId);
+    _notifyExpiredSessionIfReady(normalizedClientId);
+  }
+
+  void _notifyExpiredSessionIfReady(String clientId) {
+    if (!isExpiredSessionReady(clientId)) return;
+    final callback = _onExpiredSessionReady;
+    if (callback == null) {
+      cleanupClient(clientId);
+      return;
+    }
+    callback(clientId);
   }
 
   bool _activateClient(String clientId) {
@@ -333,6 +422,10 @@ class ActiveClientRegistry {
     final clientId = _streamConnectionLeases.remove(leaseId);
     if (clientId == null) return;
     _decrementConnectionCount(_streamConnectionCounts, clientId);
+    if (_expiredSessionClientsPendingCleanup.contains(clientId)) {
+      _notifyExpiredSessionIfReady(clientId);
+      return;
+    }
     if (!_sessionClients.contains(clientId) &&
         !_streamConnectionCounts.containsKey(clientId)) {
       cleanupClient(clientId);

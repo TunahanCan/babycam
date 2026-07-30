@@ -9,6 +9,8 @@ import UserNotifications
   private let cameraPermissionRequester = CameraPermissionRequester()
   private let localNetworkPermissionRequester = LocalNetworkPermissionRequester()
   private let platformRuntime = PlatformRuntimeBridge.shared
+  private var pcmAudioLastOperationId = Int64.min
+  private var pcmAudioActiveLeaseId: Int64?
   private lazy var pcmAudioPlayer = PcmAudioPlayer { [weak self] type, details in
     guard let self else { return }
     self.platformRuntime.emit(type, details: details)
@@ -195,10 +197,24 @@ import UserNotifications
         let args = call.arguments as? [String: Any]
         let sampleRate = (args?["sampleRate"] as? NSNumber)?.intValue ?? 16000
         let channels = (args?["channels"] as? NSNumber)?.intValue ?? 1
+        let leaseId = (args?["leaseId"] as? NSNumber)?.int64Value
+        let operationId = (args?["operationId"] as? NSNumber)?.int64Value
+        let owned = leaseId != nil && operationId != nil
+        if owned, operationId! <= self.pcmAudioLastOperationId {
+          result(false)
+          return
+        }
         do {
+          if owned {
+            self.pcmAudioLastOperationId = operationId!
+            self.pcmAudioActiveLeaseId = leaseId
+          } else {
+            self.pcmAudioActiveLeaseId = nil
+          }
           try self.pcmAudioPlayer.start(sampleRate: sampleRate, channels: channels)
-          result(nil)
+          result(true)
         } catch {
+          self.pcmAudioActiveLeaseId = nil
           self.platformRuntime.setAudioOutputActive(
             false,
             reason: "audioPlaybackStartFailed"
@@ -210,11 +226,27 @@ import UserNotifications
           ))
         }
       case "write":
-        if let typed = call.arguments as? FlutterStandardTypedData {
-          result(self.pcmAudioPlayer.write(typed.data))
-        } else {
+        let args = call.arguments as? [String: Any]
+        let typed = args?["bytes"] as? FlutterStandardTypedData
+          ?? call.arguments as? FlutterStandardTypedData
+        let leaseId = (args?["leaseId"] as? NSNumber)?.int64Value
+        let operationId = (args?["operationId"] as? NSNumber)?.int64Value
+        let owned = leaseId != nil && operationId != nil
+        guard let typed else {
           result(false)
+          return
         }
+        if owned &&
+           (operationId! <= self.pcmAudioLastOperationId ||
+             self.pcmAudioActiveLeaseId != leaseId) {
+          result(false)
+          return
+        }
+        if owned {
+          self.pcmAudioLastOperationId = operationId!
+        }
+        let accepted = self.pcmAudioPlayer.write(typed.data)
+        result(accepted && (!owned || self.pcmAudioActiveLeaseId == leaseId))
       case "status":
         result(self.pcmAudioPlayer.status())
       case "playTestTone":
@@ -225,6 +257,9 @@ import UserNotifications
         let frequencyHz = (args?["frequencyHz"] as? NSNumber)?.intValue ?? 440
         let amplitude = (args?["amplitude"] as? NSNumber)?.doubleValue ?? 0.35
         do {
+          // A diagnostic tone replaces the native player. Retire any room
+          // playback lease so it cannot write into or later stop that tone.
+          self.pcmAudioActiveLeaseId = nil
           try self.pcmAudioPlayer.playTestTone(
             sampleRate: sampleRate,
             channels: channels,
@@ -245,8 +280,24 @@ import UserNotifications
           ))
         }
       case "stop":
-        self.pcmAudioPlayer.stop()
-        result(nil)
+        let args = call.arguments as? [String: Any]
+        let leaseId = (args?["leaseId"] as? NSNumber)?.int64Value
+        let operationId = (args?["operationId"] as? NSNumber)?.int64Value
+        let reset = args?["reset"] as? Bool ?? false
+        let owned = operationId != nil && (reset || leaseId != nil)
+        if owned, operationId! <= self.pcmAudioLastOperationId {
+          result(false)
+          return
+        }
+        if owned {
+          self.pcmAudioLastOperationId = operationId!
+        }
+        let shouldStop = !owned || reset || self.pcmAudioActiveLeaseId == leaseId
+        if shouldStop {
+          self.pcmAudioActiveLeaseId = nil
+          self.pcmAudioPlayer.stop()
+        }
+        result(shouldStop)
       default:
         result(FlutterMethodNotImplemented)
       }

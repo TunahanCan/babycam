@@ -174,7 +174,10 @@ void main() {
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.authorizationHeader, 'Bearer ${trusted.token}');
-    request.write(jsonEncode({'clientId': trusted.clientId}));
+    request.write(jsonEncode({
+      'clientId': trusted.clientId,
+      MiuCamProtocolV2.streamAttemptId: 'short-lived-token-attempt',
+    }));
     final response = await request.close();
     final body = jsonDecode(await utf8.decoder.bind(response).join()) as Map;
 
@@ -225,6 +228,7 @@ void main() {
       'clientId': trusted.clientId,
       'video': true,
       'audio': true,
+      MiuCamProtocolV2.streamAttemptId: 'audio-demand-attempt',
     }));
     final response = await request.close();
     final body = jsonDecode(await utf8.decoder.bind(response).join()) as Map;
@@ -551,7 +555,10 @@ Future<Map<String, Object?>> _postSessionStart(
   request.headers
     ..contentType = ContentType.json
     ..set(HttpHeaders.authorizationHeader, 'Bearer $bearerToken');
-  request.write(jsonEncode({'clientId': clientId}));
+  request.write(jsonEncode({
+    'clientId': clientId,
+    MiuCamProtocolV2.streamAttemptId: 'token-auth-fixture-attempt',
+  }));
   final response = await request.close();
   final body = jsonDecode(await utf8.decoder.bind(response).join());
   expect(response.statusCode, HttpStatus.ok);

@@ -53,6 +53,10 @@ class _QRScanScreenState extends State<QRScanScreen>
     formats: const [BarcodeFormat.qrCode],
   );
   final _manualController = TextEditingController();
+  final _manualFocusNode = FocusNode(debugLabel: 'qr-manual-entry');
+  // Reparent the live native scanner without recreating/stopping it when the
+  // keyboard switches the body to its compact scroll layout.
+  final _scannerAreaKey = GlobalKey(debugLabel: 'qr-scanner-area');
   StreamSubscription<BarcodeCapture>? _barcodeSubscription;
   bool _handled = false;
   bool _startingScanner = false;
@@ -71,6 +75,7 @@ class _QRScanScreenState extends State<QRScanScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _manualFocusNode.dispose();
     _manualController.dispose();
     unawaited(_barcodeSubscription?.cancel());
     _barcodeSubscription = null;
@@ -280,6 +285,9 @@ class _QRScanScreenState extends State<QRScanScreen>
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    // Scaffold removes the bottom view inset from its body MediaQuery when it
+    // resizes for the keyboard, so capture the keyboard state above it.
+    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Scaffold(
       backgroundColor: const Color(0xFF07111F),
       appBar: AppBar(
@@ -288,85 +296,123 @@ class _QRScanScreenState extends State<QRScanScreen>
         title: Text(strings.ui('scanQr')),
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  _buildCameraStage(strings),
-                  if (_cameraState == _QrCameraState.ready)
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final shortestSide =
-                            constraints.biggest.shortestSide.isFinite
-                                ? constraints.biggest.shortestSide
-                                : 250.0;
-                        final overlaySize =
-                            (shortestSide - 32).clamp(72.0, 250.0).toDouble();
-                        return Center(
-                          child: Container(
-                            width: overlaySize,
-                            height: overlaySize,
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.white, width: 3),
-                              borderRadius: BorderRadius.circular(26),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-              color: Colors.white,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _manualController,
-                      minLines: 1,
-                      maxLines: 2,
-                      keyboardType: TextInputType.url,
-                      textInputAction: TextInputAction.done,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      smartDashesType: SmartDashesType.disabled,
-                      smartQuotesType: SmartQuotesType.disabled,
-                      onSubmitted: (value) => unawaited(_submit(value)),
-                      decoration: InputDecoration(
-                        labelText: strings.ui('qrCodeText'),
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (keyboardVisible) {
+              // Landscape keyboards can leave less height than the manual
+              // entry panel needs at large text scales. Keep the entry first
+              // and make the whole surface scrollable instead of squeezing
+              // the camera and overflowing the panel.
+              final cameraHeight =
+                  (constraints.maxHeight * .5).clamp(96.0, 180.0).toDouble();
+              return SingleChildScrollView(
+                key: const ValueKey('qr-keyboard-scroll'),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight,
                   ),
-                  const SizedBox(width: 12),
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: _manualController,
-                    builder: (context, value, _) => Tooltip(
-                      message: strings.ui('connectDiscoveredRoom'),
-                      child: SizedBox(
-                        height: 56,
-                        child: FilledButton(
-                          key: const ValueKey('qr-manual-submit'),
-                          onPressed: value.text.trim().isEmpty || _handled
-                              ? null
-                              : () => unawaited(_submit(value.text)),
-                          child: Icon(
-                            Icons.arrow_forward_rounded,
-                            semanticLabel: strings.ui('connectDiscoveredRoom'),
-                          ),
-                        ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildManualEntry(strings),
+                      SizedBox(
+                        height: cameraHeight,
+                        child: _buildScannerArea(strings),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          ],
+                ),
+              );
+            }
+            return Column(
+              children: [
+                Expanded(child: _buildScannerArea(strings)),
+                _buildManualEntry(strings),
+              ],
+            );
+          },
         ),
+      ),
+    );
+  }
+
+  Widget _buildScannerArea(AppStrings strings) {
+    return Stack(
+      key: _scannerAreaKey,
+      fit: StackFit.expand,
+      children: [
+        _buildCameraStage(strings),
+        if (_cameraState == _QrCameraState.ready)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final shortestSide = constraints.biggest.shortestSide.isFinite
+                  ? constraints.biggest.shortestSide
+                  : 250.0;
+              final overlaySize =
+                  (shortestSide - 32).clamp(72.0, 250.0).toDouble();
+              return Center(
+                child: Container(
+                  width: overlaySize,
+                  height: overlaySize,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white, width: 3),
+                    borderRadius: BorderRadius.circular(26),
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildManualEntry(AppStrings strings) {
+    return Container(
+      key: const ValueKey('qr-manual-entry-panel'),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+      color: Colors.white,
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _manualController,
+              focusNode: _manualFocusNode,
+              minLines: 1,
+              maxLines: 2,
+              keyboardType: TextInputType.url,
+              textInputAction: TextInputAction.done,
+              autocorrect: false,
+              enableSuggestions: false,
+              smartDashesType: SmartDashesType.disabled,
+              smartQuotesType: SmartQuotesType.disabled,
+              onSubmitted: (value) => unawaited(_submit(value)),
+              decoration: InputDecoration(
+                labelText: strings.ui('qrCodeText'),
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _manualController,
+            builder: (context, value, _) => Tooltip(
+              message: strings.ui('connectDiscoveredRoom'),
+              child: SizedBox(
+                height: 56,
+                child: FilledButton(
+                  key: const ValueKey('qr-manual-submit'),
+                  onPressed: value.text.trim().isEmpty || _handled
+                      ? null
+                      : () => unawaited(_submit(value.text)),
+                  child: Icon(
+                    Icons.arrow_forward_rounded,
+                    semanticLabel: strings.ui('connectDiscoveredRoom'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

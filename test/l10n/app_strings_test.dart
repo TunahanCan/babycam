@@ -105,6 +105,86 @@ void main() {
     expect(fallback.ui('roleSelectionTitle'), 'How will you use MiuCam?');
   });
 
+  test('server service copy is user-facing in every app language', () {
+    const expectedAlertConnection = {
+      'tr': 'Uyarı bağlantısı',
+      'en': 'Alert connection',
+      'zh': '提醒连接',
+      'hi': 'चेतावनी कनेक्शन',
+      'es': 'Conexión de alertas',
+      'fr': 'Connexion des alertes',
+      'de': 'Warnverbindung',
+      'ar': 'اتصال التنبيهات',
+    };
+    const expectedBackgroundTitle = {
+      'tr': 'Arka planda çalışma',
+      'en': 'Background operation',
+      'zh': '后台运行',
+      'hi': 'बैकग्राउंड में संचालन',
+      'es': 'Funcionamiento en segundo plano',
+      'fr': 'Fonctionnement en arrière-plan',
+      'de': 'Hintergrundbetrieb',
+      'ar': 'التشغيل في الخلفية',
+    };
+    const locales = [
+      Locale('tr'),
+      Locale('en', 'US'),
+      Locale('zh'),
+      Locale('hi'),
+      Locale('es'),
+      Locale('fr'),
+      Locale('de'),
+      Locale('ar', 'SA'),
+    ];
+    const technicalTerms = [
+      'WebSocket',
+      'foreground service',
+      'Vordergrunddienst',
+      '前台服务',
+      'फ़ोरग्राउंड सेवा',
+      'servicio en primer plano',
+      'service Android au premier plan',
+      'خدمة Android الأمامية',
+      'runtime contract',
+      'çalışma sözleşmesi',
+      'Laufzeitvertrag',
+      'عقد التشغيل',
+    ];
+
+    for (final locale in locales) {
+      final strings = AppStrings(locale);
+      final languageCode = locale.languageCode;
+      expect(
+        strings.ui('alertConnection'),
+        expectedAlertConnection[languageCode],
+      );
+      expect(
+        strings.ui('platformRuntimeContractTitle'),
+        expectedBackgroundTitle[languageCode],
+      );
+
+      final serviceCopy = [
+        strings.ui('serviceStatusSubtitle'),
+        strings.uiFormat('eventClientsCount', {'count': 2}),
+        strings.ui('clientCount'),
+        strings.ui('androidServiceActiveContract'),
+        strings.ui('androidServiceInactiveContract'),
+        strings.ui('sentToClientDevice'),
+      ].join(' ');
+      for (final term in technicalTerms) {
+        expect(
+          serviceCopy,
+          isNot(contains(term)),
+          reason: '${locale.toLanguageTag()} still exposes "$term"',
+        );
+      }
+      expect(
+        strings.ui('sentToClientDevice').toLowerCase(),
+        isNot(contains('client')),
+      );
+    }
+  });
+
   test('UI catalog tüm desteklenen diller için değer taşır', () {
     const baseLanguageCodes = {'tr', 'en', 'zh', 'hi', 'es', 'fr'};
 

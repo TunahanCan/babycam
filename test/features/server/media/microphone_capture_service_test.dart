@@ -57,6 +57,52 @@ void main() {
     expect(service.snapshot.lastStartError, contains('permission denied'));
   });
 
+  test('izin onceden cozulur ve start ikinci kez izin istemez', () async {
+    final recorder = _FakeRecorder();
+    final service = MicrophoneCaptureService(
+      sampleRate: 16000,
+      channels: 1,
+      recorder: recorder,
+    );
+
+    expect(await service.ensurePermission(), isTrue);
+    expect(await service.start(onChunk: (_) {}), isTrue);
+
+    expect(recorder.permissionCalls, 1);
+    expect(recorder.startCalls, 1);
+    await service.stop();
+    expect(await service.ensurePermission(), isTrue);
+    expect(
+      recorder.permissionCalls,
+      2,
+      reason: 'yeni capture lease sistem iznini yeniden doğrulamalı',
+    );
+    await service.dispose();
+  });
+
+  test('bekleyen izin kontrolunu stop sinirli surede gecersiz kilar', () async {
+    final permission = Completer<bool>();
+    final recorder = _FakeRecorder(permissionResult: permission.future);
+    final service = MicrophoneCaptureService(
+      sampleRate: 16000,
+      channels: 1,
+      recorder: recorder,
+      cleanupTimeout: const Duration(milliseconds: 20),
+    );
+
+    final checking = service.ensurePermission();
+    final stopwatch = Stopwatch()..start();
+    await service.stop().timeout(const Duration(seconds: 1));
+    stopwatch.stop();
+
+    expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 200)));
+    permission.complete(true);
+    expect(await checking, isFalse);
+    expect(service.snapshot.permissionGranted, isNull);
+    expect(recorder.startCalls, 0);
+    await service.dispose();
+  });
+
   test('es zamanli start talepleri tek recorder operasyonunda birlesir',
       () async {
     final permission = Completer<bool>();
@@ -100,6 +146,117 @@ void main() {
     await service.dispose();
   });
 
+  test('takilan start ve recorder stop temizligi sure sinirlidir', () async {
+    final streamResult = Completer<Stream<Uint8List>>();
+    final recorderStop = Completer<void>();
+    final recorder = _FakeRecorder(
+      streamResult: streamResult.future,
+      stopResult: recorderStop.future,
+    );
+    final service = MicrophoneCaptureService(
+      sampleRate: 16000,
+      channels: 1,
+      recorder: recorder,
+      cleanupTimeout: const Duration(milliseconds: 20),
+    );
+
+    final starting = service.start(onChunk: (_) {});
+    await pumpEventQueue();
+    final stopwatch = Stopwatch()..start();
+    await service.stop().timeout(const Duration(seconds: 1));
+    stopwatch.stop();
+
+    expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 200)));
+    expect(service.isActive, isFalse);
+
+    streamResult.complete(recorder.stream);
+    expect(await starting, isFalse);
+    recorderStop.complete();
+    await service.dispose();
+  });
+
+  test('basarisiz recorder teardown sonraki capture icin yenisini olusturur',
+      () async {
+    final hangingStop = Completer<void>();
+    final first = _FakeRecorder(stopResult: hangingStop.future);
+    final second = _FakeRecorder();
+    final recorders = [first, second];
+    var factoryCalls = 0;
+    final service = MicrophoneCaptureService(
+      sampleRate: 16000,
+      channels: 1,
+      recorderFactory: () => recorders[factoryCalls++],
+      cleanupTimeout: const Duration(milliseconds: 20),
+    );
+
+    expect(await service.start(onChunk: (_) {}), isTrue);
+    await service.stop().timeout(const Duration(seconds: 1));
+
+    expect(first.disposed, isTrue);
+    expect(await service.start(onChunk: (_) {}), isTrue);
+    expect(factoryCalls, 2);
+    expect(second.startCalls, 1);
+    await service.dispose();
+  });
+
+  test('gec tamamlanan eski start yeni recorder captureini durduramaz',
+      () async {
+    final firstStream = Completer<Stream<Uint8List>>();
+    final first = _FakeRecorder(streamResult: firstStream.future);
+    final second = _FakeRecorder();
+    final recorders = [first, second];
+    var factoryCalls = 0;
+    final service = MicrophoneCaptureService(
+      sampleRate: 16000,
+      channels: 1,
+      recorderFactory: () => recorders[factoryCalls++],
+      cleanupTimeout: const Duration(milliseconds: 20),
+    );
+
+    final firstStart = service.start(onChunk: (_) {});
+    await pumpEventQueue();
+    await service.stop().timeout(const Duration(seconds: 1));
+
+    expect(first.disposed, isTrue);
+    expect(await service.start(onChunk: (_) {}), isTrue);
+    expect(factoryCalls, 2);
+    expect(second.startCalls, 1);
+    expect(second.stopCalls, 0);
+
+    firstStream.complete(first.stream);
+    expect(await firstStart, isFalse);
+    await pumpEventQueue();
+
+    expect(second.stopCalls, 0);
+    expect(service.isActive, isTrue);
+    await service.dispose();
+  });
+
+  test('hic tamamlanmayan eski start sonraki capturei bloke etmez', () async {
+    final neverCompletes = Completer<Stream<Uint8List>>();
+    final first = _FakeRecorder(streamResult: neverCompletes.future);
+    final second = _FakeRecorder();
+    final recorders = [first, second];
+    var factoryCalls = 0;
+    final service = MicrophoneCaptureService(
+      sampleRate: 16000,
+      channels: 1,
+      recorderFactory: () => recorders[factoryCalls++],
+      cleanupTimeout: const Duration(milliseconds: 20),
+    );
+
+    unawaited(service.start(onChunk: (_) {}));
+    await pumpEventQueue();
+    await service.stop().timeout(const Duration(seconds: 1));
+
+    expect(first.disposed, isTrue);
+    expect(await service.start(onChunk: (_) {}), isTrue);
+    expect(factoryCalls, 2);
+    expect(second.startCalls, 1);
+    expect(service.isActive, isTrue);
+    await service.dispose();
+  });
+
   test('capture stream hatasindan sonra mikrofonu yeniden baslatir', () async {
     final recorder = _FakeRecorder();
     final service = MicrophoneCaptureService(
@@ -126,6 +283,30 @@ void main() {
     expect(service.isActive, isTrue);
     await service.dispose();
   });
+
+  test('takilan terminal cancel mikrofon yeniden baslatmayi engellemez',
+      () async {
+    final cancelRelease = Completer<void>();
+    final recorder = _FakeRecorder(
+      onCancel: () => cancelRelease.future,
+    );
+    final service = MicrophoneCaptureService(
+      sampleRate: 16000,
+      channels: 1,
+      recorder: recorder,
+      restartBaseDelay: const Duration(milliseconds: 1),
+      restartMaxDelay: const Duration(milliseconds: 2),
+      cleanupTimeout: const Duration(milliseconds: 20),
+    );
+
+    expect(await service.start(onChunk: (_) {}), isTrue);
+    recorder.addError(StateError('terminal stream failure'));
+    await _waitUntil(() => recorder.startCalls >= 2);
+
+    expect(service.isActive, isTrue);
+    cancelRelease.complete();
+    await service.dispose();
+  });
 }
 
 class _FakeRecorder implements MicrophoneRecorderPort {
@@ -133,14 +314,20 @@ class _FakeRecorder implements MicrophoneRecorderPort {
     this.hasPermissionValue = true,
     this.permissionResult,
     this.streamResult,
-  });
+    this.stopResult,
+    FutureOr<void> Function()? onCancel,
+  }) : _controller = StreamController<Uint8List>.broadcast(
+          onCancel: onCancel,
+        );
 
   final bool hasPermissionValue;
   final Future<bool>? permissionResult;
   final Future<Stream<Uint8List>>? streamResult;
-  final _controller = StreamController<Uint8List>.broadcast();
+  final Future<void>? stopResult;
+  final StreamController<Uint8List> _controller;
   int permissionCalls = 0;
   int startCalls = 0;
+  int stopCalls = 0;
   bool stopped = false;
   bool disposed = false;
   RecordConfig? lastConfig;
@@ -170,13 +357,28 @@ class _FakeRecorder implements MicrophoneRecorderPort {
 
   @override
   Future<void> stop() async {
+    stopCalls++;
     stopped = true;
+    await stopResult;
   }
 
   @override
   Future<void> dispose() async {
     disposed = true;
     await _controller.close();
+  }
+}
+
+Future<void> _waitUntil(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 1),
+}) async {
+  final stopwatch = Stopwatch()..start();
+  while (!condition()) {
+    if (stopwatch.elapsed >= timeout) {
+      fail('Condition was not met within $timeout.');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
   }
 }
 

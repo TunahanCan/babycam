@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miucam/core/media/adaptive_media_profile.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
 import 'package:miucam/core/protocol/pairing_payload.dart';
 import 'package:miucam/core/protocol/pairing_session.dart';
 import 'package:miucam/features/client/client_runtime.dart';
@@ -12,7 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   PairingPayload payload({String deviceId = 's'}) => PairingPayload(
-      schemaVersion: 1,
+      schemaVersion: MiuCamProtocolV2.schemaVersion,
       host: 'h',
       port: 1,
       deviceId: deviceId,
@@ -136,6 +137,97 @@ void main() {
     await runtime.clearPairing();
     expect(cleared, 1);
     expect(runtime.currentState.phase, ClientRuntimePhase.unpaired);
+  });
+
+  test('background stop devam eden stream startini kuyruk arkasında bırakmaz',
+      () async {
+    final startEntered = Completer<void>();
+    final finishStart = Completer<ActiveStreamSession?>();
+    var stopCalls = 0;
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      startStream: (_, {bool audioEnabled = false}) {
+        startEntered.complete();
+        return finishStart.future;
+      },
+      stopStream: (_) async => stopCalls++,
+    );
+    addTearDown(runtime.dispose);
+    await runtime.pairWithServer(payload());
+
+    final starting = runtime.startWatching();
+    await startEntered.future;
+    final stopping = runtime.stopWatching();
+
+    expect(stopCalls, 1, reason: 'stop, bekleyen start kuyruğunu atlamalı');
+    expect(runtime.currentState.activeStream, isNull);
+    await stopping.timeout(const Duration(seconds: 1));
+
+    finishStart.complete(
+      const ActiveStreamSession(streamToken: 'late-stream'),
+    );
+    await starting.timeout(const Duration(seconds: 1));
+
+    expect(
+      stopCalls,
+      2,
+      reason: 'geç dönen start sonucu da idempotent olarak geri alınmalı',
+    );
+    expect(runtime.currentState.activeStream, isNull);
+    expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
+  });
+
+  test('uzak stream stop gecikse de yerel watch state hemen ayrilir', () async {
+    final remoteStop = Completer<void>();
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      startStream: (_, {bool audioEnabled = false}) async =>
+          const ActiveStreamSession(streamToken: 'stream'),
+      stopStream: (_) => remoteStop.future,
+    );
+    addTearDown(() {
+      if (!remoteStop.isCompleted) remoteStop.complete();
+      return runtime.dispose();
+    });
+    await runtime.pairWithServer(payload());
+    await runtime.startWatching();
+
+    final stopping = runtime.stopWatching();
+
+    expect(runtime.currentState.activeStream, isNull);
+    expect(runtime.currentState.phase, ClientRuntimePhase.pairedIdle);
+    remoteStop.complete();
+    await stopping.timeout(const Duration(seconds: 1));
+  });
+
+  test('hizli foreground donusu eski stop bitmeden yeni stream acmaz',
+      () async {
+    final remoteStop = Completer<void>();
+    var starts = 0;
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      startStream: (_, {bool audioEnabled = false}) async =>
+          ActiveStreamSession(streamToken: 'stream-${++starts}'),
+      stopStream: (_) => remoteStop.future,
+    );
+    addTearDown(() {
+      if (!remoteStop.isCompleted) remoteStop.complete();
+      return runtime.dispose();
+    });
+    await runtime.pairWithServer(payload());
+    await runtime.startWatching();
+
+    final stopping = runtime.stopWatching();
+    final resuming = runtime.startWatching();
+    await pumpEventQueue();
+
+    expect(starts, 1, reason: 'yeni start, eski client-id stopunu beklemeli');
+    remoteStop.complete();
+    await stopping.timeout(const Duration(seconds: 1));
+    await resuming.timeout(const Duration(seconds: 1));
+
+    expect(starts, 2);
+    expect(runtime.currentState.activeStream?.streamToken, 'stream-2');
   });
 
   test('eşleşme yokken canlı izleme başlatılmaz', () async {
@@ -307,10 +399,12 @@ void main() {
   });
 
   test('canlı izleme başlatma hatası runtime state içinde görünür', () async {
+    var stops = 0;
     final runtime = ClientRuntime(
       pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
       startStream: (_, {bool audioEnabled = false}) async =>
           throw StateError('MEDIA_START_FAILED'),
+      stopStream: (_) async => stops++,
     );
 
     await runtime.pairWithServer(payload());
@@ -321,6 +415,7 @@ void main() {
     expect(runtime.currentState.error, isA<StateError>());
     expect(
         runtime.currentState.error.toString(), contains('MEDIA_START_FAILED'));
+    expect(stops, 1, reason: 'belirsiz uzak start sonucu geri alinmali');
   });
 
   test('pair hatası runtime state içinde görünür ve yeniden fırlatılır',

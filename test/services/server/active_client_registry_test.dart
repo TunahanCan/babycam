@@ -17,6 +17,14 @@ void main() {
     expect(second.createdActiveSlot, isFalse);
     expect(registry.activeClientCount, 1);
     expect(first.streamToken.token, isNot(second.streamToken.token));
+    expect(
+      registry.clientIdForStreamToken(first.streamToken.token),
+      isNull,
+    );
+    expect(
+      registry.clientIdForStreamToken(second.streamToken.token),
+      'anne',
+    );
   });
 
   test('başarısız replacement yalnız yeni stream tokenini geri alır', () {
@@ -36,6 +44,41 @@ void main() {
     expect(
       tokenService.validateStreamToken(replacement.streamToken.token),
       isNull,
+    );
+    expect(
+      registry.clientIdForStreamToken(first.streamToken.token),
+      'anne',
+    );
+    expect(
+      registry.clientIdForStreamToken(replacement.streamToken.token),
+      isNull,
+    );
+  });
+
+  test('gec kalan rollback daha yeni token sahibini geri alamaz', () {
+    final tokenService = PairingTokenService();
+    final registry = ActiveClientRegistry(
+      tokenService: tokenService,
+      maxActiveClients: 5,
+    );
+
+    final first = registry.startSession('anne');
+    final staleReplacement = registry.startSession('anne');
+    final current = registry.startSession('anne');
+    registry.rollbackSessionStart(staleReplacement);
+
+    expect(registry.activeClientCount, 1);
+    expect(
+      registry.clientIdForStreamToken(first.streamToken.token),
+      isNull,
+    );
+    expect(
+      registry.clientIdForStreamToken(staleReplacement.streamToken.token),
+      isNull,
+    );
+    expect(
+      registry.clientIdForStreamToken(current.streamToken.token),
+      'anne',
     );
   });
 
@@ -83,6 +126,70 @@ void main() {
 
     expect(registry.activeClientCount, 0);
     expect(registry.startSession('baba').clientId, 'baba');
+  });
+
+  test(
+      'token expiry sağlıklı medya leaseini korur ve son lease sonrası temizliği bildirir',
+      () {
+    var now = DateTime(2026);
+    final tokenService = PairingTokenService(
+      now: () => now,
+      streamTokenTtl: const Duration(seconds: 1),
+    );
+    final expiredSessions = <String>[];
+    final registry = ActiveClientRegistry(
+      tokenService: tokenService,
+      maxActiveClients: 1,
+    )..bindExpiredSessionReadyCallback(expiredSessions.add);
+
+    registry.startSession('anne');
+    final transportLease = registry.attachStream('anne');
+
+    now = now.add(const Duration(seconds: 2));
+    registry.pruneExpiredStreamTokens();
+
+    expect(expiredSessions, isEmpty);
+    expect(registry.activeClientCount, 1);
+    expect(registry.mediaConnectionCount, 1);
+    expect(registry.isExpiredSessionReady('anne'), isFalse);
+
+    transportLease.release();
+
+    expect(expiredSessions, ['anne']);
+    expect(registry.activeClientCount, 1);
+    expect(registry.mediaConnectionCount, 0);
+    expect(registry.isExpiredSessionReady('anne'), isTrue);
+
+    registry.cleanupClient('anne');
+    expect(registry.activeClientCount, 0);
+  });
+
+  test('yeni token sıradaki gecikmiş expiry temizliğini geçersiz kılar', () {
+    var now = DateTime(2026);
+    final tokenService = PairingTokenService(
+      now: () => now,
+      streamTokenTtl: const Duration(seconds: 1),
+    );
+    final expiredSessions = <String>[];
+    final registry = ActiveClientRegistry(
+      tokenService: tokenService,
+      maxActiveClients: 1,
+    )..bindExpiredSessionReadyCallback(expiredSessions.add);
+
+    registry.startSession('anne');
+    now = now.add(const Duration(seconds: 2));
+    registry.pruneExpiredStreamTokens();
+    expect(expiredSessions, ['anne']);
+    expect(registry.isExpiredSessionReady('anne'), isTrue);
+
+    final replacement = registry.startSession('anne');
+
+    expect(registry.isExpiredSessionReady('anne'), isFalse);
+    expect(
+      registry.clientIdForStreamToken(replacement.streamToken.token),
+      'anne',
+    );
+    expect(registry.activeClientCount, 1);
   });
 
   test('aynı client video ve audio reconnect için session açık kalır', () {

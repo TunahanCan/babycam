@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../app/app_role.dart';
 import '../../l10n/app_strings.dart';
@@ -28,6 +29,7 @@ class ServerHomeScreen extends StatefulWidget {
     this.switchingRole = false,
     this.initialTab = 0,
     this.onRestartServer,
+    this.openSettings,
   });
 
   final ServerRuntime runtime;
@@ -37,6 +39,7 @@ class ServerHomeScreen extends StatefulWidget {
   final bool switchingRole;
   final int initialTab;
   final VoidCallback? onRestartServer;
+  final Future<bool> Function()? openSettings;
 
   @override
   State<ServerHomeScreen> createState() => _ServerHomeScreenState();
@@ -163,6 +166,7 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
             _selectDestination(ServerHomeDestination.pairing),
         onRetry: widget.onRestartServer ?? _retryLocalPreview,
         onRestart: widget.onRestartServer,
+        onOpenAppSettings: _openSystemSettings,
       ),
       const SizedBox(height: 12),
       ServerLivePreviewCard(
@@ -286,51 +290,86 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
     final strings = AppStrings.of(context);
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
+      isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 4, 24, 18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              strings.ui('stopRoomStreamConfirmTitle'),
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+      builder: (context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final stackActions = constraints.maxWidth < 420 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.3;
+          final cancelButton = OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 48),
             ),
-            const SizedBox(height: 10),
-            Text(
-              strings.ui('stopRoomStreamConfirmBody'),
-              style: const TextStyle(fontSize: 15.5, height: 1.35),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(strings.ui('cancel')),
+          );
+          final stopButton = FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.stop_circle_rounded),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(0, 48),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
             ),
-            const SizedBox(height: 22),
-            Row(
+            label: Text(
+              strings.ui('stopRoomStream'),
+              textAlign: TextAlign.center,
+            ),
+          );
+
+          return SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              24,
+              4,
+              24,
+              18 + MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: Text(strings.ui('cancel')),
+                Text(
+                  strings.ui('stopRoomStreamConfirmTitle'),
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    icon: const Icon(Icons.stop_circle_rounded),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.error,
-                      foregroundColor: Theme.of(context).colorScheme.onError,
-                    ),
-                    label: Text(strings.ui('stopRoomStream')),
-                  ),
+                const SizedBox(height: 10),
+                Text(
+                  strings.ui('stopRoomStreamConfirmBody'),
+                  style: const TextStyle(fontSize: 15.5, height: 1.35),
                 ),
+                const SizedBox(height: 22),
+                if (stackActions)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      cancelButton,
+                      const SizedBox(height: 12),
+                      stopButton,
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(child: cancelButton),
+                      const SizedBox(width: 12),
+                      Expanded(child: stopButton),
+                    ],
+                  ),
               ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
     if (confirmed == true) await widget.runtime.stop();
+  }
+
+  void _openSystemSettings() {
+    unawaited(widget.openSettings?.call() ?? openAppSettings());
   }
 
   void _showMessage(String message) {

@@ -112,6 +112,7 @@ class ServerKeyValue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
           child: Text(
@@ -127,7 +128,6 @@ class ServerKeyValue extends StatelessWidget {
           child: Text(
             value,
             textAlign: TextAlign.right,
-            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 15,
               color: MiuCamDesignTokens.serverText,

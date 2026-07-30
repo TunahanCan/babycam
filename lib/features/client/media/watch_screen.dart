@@ -13,6 +13,7 @@ import '../../../l10n/app_strings.dart';
 import '../../../services/monetization/broadcast_access_service.dart';
 import '../../shared/presentation/media_profile_text.dart';
 import '../client_runtime.dart';
+import '../controls/client_room_controls.dart';
 import '../controls/room_controls_panel.dart';
 import 'active_stream_session.dart';
 import 'client_media_stream_supervisor.dart';
@@ -33,18 +34,20 @@ class WatchScreen extends StatefulWidget {
     this.initialTab = 0,
     this.keepScreenAwake = true,
     this.onKeepScreenAwakeChanged,
+    this.openSettings,
   });
 
   final ClientRuntime runtime;
   final int initialTab;
   final bool keepScreenAwake;
   final ValueChanged<bool>? onKeepScreenAwakeChanged;
+  final Future<bool> Function()? openSettings;
 
   @override
   State<WatchScreen> createState() => _WatchScreenState();
 }
 
-class _WatchScreenState extends State<WatchScreen> {
+class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
   late int _tab;
   bool _audioEnabled = true;
   bool _fullscreen = false;
@@ -56,14 +59,19 @@ class _WatchScreenState extends State<WatchScreen> {
   late final int _presentationToken;
   int _screenOperationGeneration = 0;
   bool _screenDisposed = false;
+  late bool _appInForeground;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    _appInForeground =
+        lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
     _presentationToken = widget.runtime.claimWatchPresentation();
     _tab = widget.initialTab.clamp(0, 2);
     _keepScreenAwake = widget.keepScreenAwake;
-    unawaited(_applyWakelock(_keepScreenAwake));
+    unawaited(_applyWakelock(_keepScreenAwake && _appInForeground));
     _startLiveWatch();
   }
 
@@ -71,6 +79,7 @@ class _WatchScreenState extends State<WatchScreen> {
   void dispose() {
     _screenDisposed = true;
     _screenOperationGeneration++;
+    WidgetsBinding.instance.removeObserver(this);
     if (_fullscreen) {
       unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     }
@@ -81,7 +90,23 @@ class _WatchScreenState extends State<WatchScreen> {
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final foreground = state == AppLifecycleState.resumed;
+    if (_appInForeground == foreground) return;
+    _appInForeground = foreground;
+    if (!foreground) {
+      _screenOperationGeneration++;
+      if (_keepScreenAwake) unawaited(_applyWakelock(false));
+      unawaited(widget.runtime.stopWatching().catchError((_) {}));
+      return;
+    }
+    if (_keepScreenAwake) unawaited(_applyWakelock(true));
+    if (!_nightClock) _startLiveWatch();
+  }
+
   void _startLiveWatch() {
+    if (!_appInForeground || _nightClock || _screenDisposed) return;
     final operationGeneration = ++_screenOperationGeneration;
     unawaited(() async {
       try {
@@ -106,7 +131,7 @@ class _WatchScreenState extends State<WatchScreen> {
   void _setKeepScreenAwake(bool enabled) {
     if (_keepScreenAwake == enabled) return;
     setState(() => _keepScreenAwake = enabled);
-    unawaited(_applyWakelock(enabled));
+    unawaited(_applyWakelock(enabled && _appInForeground));
     widget.onKeepScreenAwakeChanged?.call(enabled);
   }
 
@@ -160,6 +185,28 @@ class _WatchScreenState extends State<WatchScreen> {
       ..clearSnackBars()
       ..showSnackBar(SnackBar(content: Text(message)));
   }
+
+  void _handleRoomControlError(Object error) {
+    final strings = AppStrings.of(context);
+    if (error is RoomMicrophonePermissionException) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(strings.ui('microphonePermissionRequired')),
+            action: SnackBarAction(
+              label: strings.ui('openAppSettings'),
+              onPressed: () => unawaited(_openSystemSettings()),
+            ),
+          ),
+        );
+      return;
+    }
+    _showSnack(strings.ui('roomControlFailed'));
+  }
+
+  Future<bool> _openSystemSettings() =>
+      widget.openSettings?.call() ?? openAppSettings();
 
   String _purchaseMessage(AppStrings strings, Object error) {
     if (error is BroadcastPurchaseException) {
@@ -453,7 +500,7 @@ class _WatchScreenState extends State<WatchScreen> {
             RoomControlsPanel(
               controls: widget.runtime.roomControls!,
               session: state.session!,
-              onError: (_) => _showSnack(strings.ui('roomControlFailed')),
+              onError: _handleRoomControlError,
             ),
           ],
           const SizedBox(height: 22),

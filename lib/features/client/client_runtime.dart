@@ -138,6 +138,8 @@ class ClientRuntime implements AppRuntime {
   int _endpointGeneration = 0;
   int _broadcastAccessTimerGeneration = 0;
   int _watchPresentationGeneration = 0;
+  int _watchIntentGeneration = 0;
+  bool _streamStartInFlight = false;
   bool _disposed = false;
   bool _alertTransportConnected = false;
   bool? _systemNotificationsEnabled;
@@ -176,20 +178,19 @@ class ClientRuntime implements AppRuntime {
   bool isWatchPresentationCurrent(int generation) =>
       !_disposed && generation == _watchPresentationGeneration;
 
-  Future<void> releaseWatchPresentation(int generation) =>
-      _enqueueWatch(() async {
-        if (!isWatchPresentationCurrent(generation)) return;
-        final alertsWereActive = _state.alertsActive;
-        await _stopWatchingUnlocked();
-        if (!isWatchPresentationCurrent(generation) ||
-            !alertsWereActive ||
-            _state.alertsActive ||
-            _state.session == null ||
-            _state.activeStream != null) {
-          return;
-        }
-        await startAlertListening();
-      });
+  Future<void> releaseWatchPresentation(int generation) async {
+    if (!isWatchPresentationCurrent(generation)) return;
+    final alertsWereActive = _state.alertsActive;
+    await stopWatching();
+    if (!isWatchPresentationCurrent(generation) ||
+        !alertsWereActive ||
+        _state.alertsActive ||
+        _state.session == null ||
+        _state.activeStream != null) {
+      return;
+    }
+    await startAlertListening();
+  }
 
   Future<void> startDiscovery() async {
     await serviceBrowser?.start();
@@ -432,11 +433,21 @@ class ClientRuntime implements AppRuntime {
     }
   }
 
-  Future<void> startWatching({bool audioEnabled = false}) =>
-      _enqueueWatch(() => _startWatchingUnlocked(audioEnabled: audioEnabled));
+  Future<void> startWatching({bool audioEnabled = false}) {
+    final generation = ++_watchIntentGeneration;
+    return _enqueueWatch(
+      () => _startWatchingUnlocked(
+        audioEnabled: audioEnabled,
+        generation: generation,
+      ),
+    );
+  }
 
-  Future<void> _startWatchingUnlocked({bool audioEnabled = false}) async {
-    if (_disposed || _state.session == null) return;
+  Future<void> _startWatchingUnlocked({
+    bool audioEnabled = false,
+    required int generation,
+  }) async {
+    if (!_isWatchIntentCurrent(generation) || _state.session == null) return;
     final session = _state.session!;
     // Keep the event WebSocket independent from the media transport. When the
     // server cannot analyze alongside WebRTC it rejects the pilot and the
@@ -450,6 +461,7 @@ class ClientRuntime implements AppRuntime {
       }
       _activeStreamOwnerSession = null;
       streamHealthState?.setWatchActive(false);
+      if (!_isWatchIntentCurrent(generation)) return;
     }
     final access = _broadcastAccess;
     BroadcastAccessSnapshot? accessSnapshot;
@@ -458,7 +470,7 @@ class ClientRuntime implements AppRuntime {
       try {
         accessSnapshot = await access.beginSession(accessSessionId);
       } on BroadcastAccessLockedException catch (error) {
-        if (!_disposed) {
+        if (_isWatchIntentCurrent(generation)) {
           _emit(ClientRuntimeState(
             phase: ClientRuntimePhase.pairedIdle,
             session: session,
@@ -471,17 +483,35 @@ class ClientRuntime implements AppRuntime {
         }
         rethrow;
       }
+      if (!_isWatchIntentCurrent(generation)) {
+        await access.endSession(accessSessionId);
+        return;
+      }
     }
     late final ActiveStreamSession? activeStream;
     try {
-      activeStream = await _startStream?.call(
-        session,
-        audioEnabled: audioEnabled,
-      );
+      _streamStartInFlight = true;
+      try {
+        activeStream = await _startStream?.call(
+          session,
+          audioEnabled: audioEnabled,
+        );
+      } finally {
+        _streamStartInFlight = false;
+      }
     } catch (error) {
+      try {
+        // A failed response can still mean the room accepted part of a start
+        // before the connection was lost. Give the transport controller a
+        // chance to tombstone/rollback every owned stream attempt.
+        await _stopStream?.call(session);
+      } catch (_) {
+        // Preserve the original start failure for user-facing diagnostics.
+      }
       if (access != null) {
         accessSnapshot = await access.endSession(accessSessionId);
       }
+      if (!_isWatchIntentCurrent(generation)) return;
       if (!_disposed) {
         if (error is BroadcastAccessLockedException) {
           _emit(ClientRuntimeState(
@@ -507,8 +537,10 @@ class ClientRuntime implements AppRuntime {
       }
       rethrow;
     }
-    if (_disposed) {
-      await _stopStream?.call(session);
+    if (!_isWatchIntentCurrent(generation)) {
+      try {
+        await _stopStream?.call(session);
+      } catch (_) {}
       await access?.endSession(accessSessionId);
       return;
     }
@@ -526,21 +558,29 @@ class ClientRuntime implements AppRuntime {
     _scheduleBroadcastAccessTimer(authoritativeAccess);
   }
 
-  Future<void> restartWatching({bool audioEnabled = false}) =>
-      _enqueueWatch(() async {
-        if (_disposed || _state.session == null) return;
-        _emit(ClientRuntimeState(
-          phase: ClientRuntimePhase.reconnecting,
-          session: _state.session,
-          networkQuality: _state.networkQuality,
-          mediaProfile: _state.mediaProfile,
-          activeStream: _state.activeStream,
-          alertsActive: _state.alertsActive,
-          broadcastAccess: _state.broadcastAccess,
-        ));
-        await _stopWatchingUnlocked(emitState: false, endAccess: false);
-        await _startWatchingUnlocked(audioEnabled: audioEnabled);
-      });
+  Future<void> restartWatching({bool audioEnabled = false}) {
+    final generation = ++_watchIntentGeneration;
+    return _enqueueWatch(() async {
+      if (!_isWatchIntentCurrent(generation) || _state.session == null) {
+        return;
+      }
+      _emit(ClientRuntimeState(
+        phase: ClientRuntimePhase.reconnecting,
+        session: _state.session,
+        networkQuality: _state.networkQuality,
+        mediaProfile: _state.mediaProfile,
+        activeStream: _state.activeStream,
+        alertsActive: _state.alertsActive,
+        broadcastAccess: _state.broadcastAccess,
+      ));
+      await _stopWatchingUnlocked(emitState: false, endAccess: false);
+      if (!_isWatchIntentCurrent(generation)) return;
+      await _startWatchingUnlocked(
+        audioEnabled: audioEnabled,
+        generation: generation,
+      );
+    });
+  }
 
   void reportStreamFailure(Object error) {
     if (_disposed) return;
@@ -556,7 +596,91 @@ class ClientRuntime implements AppRuntime {
     ));
   }
 
-  Future<void> stopWatching() => _enqueueWatch(() => _stopWatchingUnlocked());
+  Future<void> stopWatching() {
+    final generation = ++_watchIntentGeneration;
+    final session = _state.session;
+    final ownerSession = _activeStreamOwnerSession ?? session;
+    final shouldStopRemote = ownerSession != null &&
+        (_state.activeStream != null || _streamStartInFlight);
+
+    // Detach presentation and health tracking before any network await. This
+    // immediately stops the local MJPEG/audio supervisor when the app is
+    // backgrounded, even if the room endpoint is slow or unreachable.
+    _activeStreamOwnerSession = null;
+    _cancelBroadcastAccessTimer();
+    streamHealthState?.setWatchActive(false);
+    if (!_disposed) {
+      _emit(_copyState(
+        phase: _state.alertsActive
+            ? ClientRuntimePhase.alertOnly
+            : ClientRuntimePhase.pairedIdle,
+        clearActiveStream: true,
+      ));
+    }
+
+    Future<void>? remoteStop;
+    if (shouldStopRemote) {
+      try {
+        // Invoke eagerly instead of placing this behind a pending stream
+        // start. The production controller synchronously interrupts its local
+        // transport before awaiting the best-effort server stop.
+        remoteStop = _stopStream?.call(ownerSession);
+      } catch (error, stackTrace) {
+        remoteStop = Future<void>.error(error, stackTrace);
+      }
+    }
+    Future<BroadcastAccessSnapshot?>? accessStop;
+    try {
+      accessStop = _broadcastAccess?.endSession('client.watch');
+    } catch (error, stackTrace) {
+      accessStop = Future<BroadcastAccessSnapshot?>.error(error, stackTrace);
+    }
+    final completion = _finishEagerWatchStop(
+      generation: generation,
+      remoteStop: remoteStop,
+      accessStop: accessStop,
+    );
+    // Preserve ordering for a rapid foreground resume without delaying the
+    // eager local teardown above. A new start submitted after this call waits
+    // until the old room stop has settled, so a late client-id stop cannot
+    // accidentally tear down the replacement session.
+    unawaited(_enqueueWatch(() async {
+      try {
+        await completion;
+      } catch (_) {}
+    }).catchError((_) {}));
+    return completion;
+  }
+
+  Future<void> _finishEagerWatchStop({
+    required int generation,
+    required Future<void>? remoteStop,
+    required Future<BroadcastAccessSnapshot?>? accessStop,
+  }) async {
+    Object? firstError;
+    try {
+      await remoteStop;
+    } catch (error) {
+      firstError = error;
+    }
+    BroadcastAccessSnapshot? accessSnapshot;
+    try {
+      accessSnapshot = await accessStop;
+    } catch (error) {
+      firstError ??= error;
+    }
+    if (_isWatchIntentCurrent(generation)) {
+      _emit(_copyState(
+        phase: _state.alertsActive
+            ? ClientRuntimePhase.alertOnly
+            : ClientRuntimePhase.pairedIdle,
+        broadcastAccess: accessSnapshot,
+        clearActiveStream: true,
+      ));
+      if (firstError != null) reportStreamFailure(firstError);
+    }
+    if (firstError != null) throw firstError;
+  }
 
   Future<void> _stopWatchingUnlocked({
     bool emitState = true,
@@ -564,26 +688,33 @@ class ClientRuntime implements AppRuntime {
   }) async {
     final session = _state.session;
     final ownerSession = _activeStreamOwnerSession ?? session;
-    if (session != null && _state.activeStream != null) {
+    final hadActiveStream = _state.activeStream != null;
+    _activeStreamOwnerSession = null;
+    _cancelBroadcastAccessTimer();
+    streamHealthState?.setWatchActive(false);
+    if (!_disposed) {
+      _emit(_copyState(
+        phase: emitState
+            ? (_state.alertsActive
+                ? ClientRuntimePhase.alertOnly
+                : ClientRuntimePhase.pairedIdle)
+            : ClientRuntimePhase.reconnecting,
+        clearActiveStream: true,
+      ));
+    }
+    if (session != null && hadActiveStream) {
       try {
         if (ownerSession != null) await _stopStream?.call(ownerSession);
       } catch (error) {
         if (!_disposed && emitState) reportStreamFailure(error);
       }
     }
-    _activeStreamOwnerSession = null;
     final accessSnapshot = endAccess
         ? await _broadcastAccess?.endSession('client.watch')
         : _state.broadcastAccess;
-    _cancelBroadcastAccessTimer();
-    streamHealthState?.setWatchActive(false);
     if (_disposed || !emitState) {
-      if (!_disposed && !emitState) {
-        _emit(_copyState(
-          phase: ClientRuntimePhase.reconnecting,
-          clearActiveStream: true,
-          broadcastAccess: accessSnapshot,
-        ));
+      if (!_disposed && !emitState && accessSnapshot != null) {
+        _emit(_copyState(broadcastAccess: accessSnapshot));
       }
       return;
     }
@@ -599,6 +730,9 @@ class ClientRuntime implements AppRuntime {
       broadcastAccess: accessSnapshot ?? _state.broadcastAccess,
     ));
   }
+
+  bool _isWatchIntentCurrent(int generation) =>
+      !_disposed && generation == _watchIntentGeneration;
 
   Future<bool> startAlertListening() {
     if (_disposed) return Future<bool>.value(false);
@@ -797,7 +931,6 @@ class ClientRuntime implements AppRuntime {
   @override
   Future<void> dispose() async {
     if (_disposed) return;
-    _disposed = true;
     const cleanupTimeout = Duration(seconds: 1);
 
     Future<void> attempt(FutureOr<void> Function() operation) async {
@@ -811,6 +944,11 @@ class ClientRuntime implements AppRuntime {
       }
     }
 
+    // Preempt an in-flight media start before closing the serialized queue.
+    // Otherwise a platform/network future could keep camera/audio transports
+    // alive while disposal waits for the queued start to finish.
+    await attempt(stopWatching);
+    _disposed = true;
     await attempt(_watchOperations.drain);
     await attempt(_alertOperations.close);
     await attempt(() async => _networkQualitySubscription?.cancel());

@@ -28,6 +28,7 @@ class ServerRuntimeState {
     this.qrPayload,
     this.lastAlert,
     this.errorMessage,
+    this.errorKind,
     this.mediaProfile,
     this.broadcastAccess,
   });
@@ -47,6 +48,7 @@ class ServerRuntimeState {
   final String? qrPayload;
   final String? lastAlert;
   final String? errorMessage;
+  final ServerRuntimeErrorKind? errorKind;
   final MediaQualityProfile? mediaProfile;
   final BroadcastAccessSnapshot? broadcastAccess;
 }
@@ -60,6 +62,12 @@ enum ServerRuntimePhase {
   mediaStarting,
   mediaActive,
   error
+}
+
+enum ServerRuntimeErrorKind {
+  pairing,
+  media,
+  broadcastAccess,
 }
 
 enum ServerStreamTransport { legacy, webRtc }
@@ -106,6 +114,7 @@ class ServerRuntime implements AppRuntime {
     List<TrustedClientRecord> Function()? trustedClients,
     Future<void> Function(String clientId)? onRevokeTrustedClient,
     Future<void> Function()? onRevokeAllTrustedClients,
+    this.mediaOperationTimeout = const Duration(seconds: 8),
   })  : _mediaRuntime = mediaRuntime,
         _onStartPairing = onStartPairing,
         _onStopPairing = onStopPairing,
@@ -122,6 +131,13 @@ class ServerRuntime implements AppRuntime {
         _trustedClients = trustedClients,
         _onRevokeTrustedClient = onRevokeTrustedClient,
         _onRevokeAllTrustedClients = onRevokeAllTrustedClients {
+    if (mediaOperationTimeout <= Duration.zero) {
+      throw ArgumentError.value(
+        mediaOperationTimeout,
+        'mediaOperationTimeout',
+        'must be positive',
+      );
+    }
     _platformLifecycle?.start();
   }
 
@@ -142,9 +158,12 @@ class ServerRuntime implements AppRuntime {
   final List<TrustedClientRecord> Function()? _trustedClients;
   final Future<void> Function(String clientId)? _onRevokeTrustedClient;
   final Future<void> Function()? _onRevokeAllTrustedClients;
+  final Duration mediaOperationTimeout;
   final _states = StreamController<ServerRuntimeState>.broadcast();
   final _activeSessions = <String, StreamSessionOptions>{};
+  final _appliedSessions = <String, StreamSessionOptions>{};
   final _externalCaptureOwners = <String>{};
+  final _appliedExternalCaptureOwners = <String>{};
   final _notificationClients = <String, ({bool cry, bool motion})>{};
   final _resources = MediaResourceCounter();
   ServerRuntimeState _state =
@@ -153,6 +172,8 @@ class ServerRuntime implements AppRuntime {
   int _broadcastAccessTimerGeneration = 0;
   final _mutations = SerializedAsyncExecutor();
   final _pairingMutations = SerializedAsyncExecutor();
+  final _sessionIntentGenerations = <String, int>{};
+  int _nextSessionIntentGeneration = 0;
   bool _disposed = false;
   bool _platformAudioOnly = false;
 
@@ -243,6 +264,7 @@ class ServerRuntime implements AppRuntime {
       _emit(_stateForPhase(
         _phaseAfterPairingResult(success: false),
         errorMessage: error.toString(),
+        errorKind: ServerRuntimeErrorKind.pairing,
         preserveErrorMessage: false,
       ));
     }
@@ -276,7 +298,11 @@ class ServerRuntime implements AppRuntime {
         accessSnapshot = await access.beginSession(accessSessionId);
         _scheduleBroadcastAccessTimer(accessSnapshot);
       } on BroadcastAccessLockedException catch (error) {
-        _emit(_errorState(error, broadcastAccess: error.snapshot));
+        _emit(_errorState(
+          error,
+          broadcastAccess: error.snapshot,
+          kind: ServerRuntimeErrorKind.broadcastAccess,
+        ));
         rethrow;
       }
     }
@@ -372,37 +398,79 @@ class ServerRuntime implements AppRuntime {
   Future<void> startStreamSession(
     String clientId,
     StreamSessionOptions options,
-  ) =>
-      _serializeMutation(
-        () => _startStreamSessionLocked(clientId, options),
-      );
+  ) {
+    if (_disposed) return Future<void>.value();
+    final generation = ++_nextSessionIntentGeneration;
+    _sessionIntentGenerations[clientId] = generation;
+    final current = _activeSessions[clientId];
+    final previous = _appliedSessions[clientId];
+    final wasExternalActive = _appliedExternalCaptureOwners.contains(clientId);
+    if (current == options) {
+      // Preserve an already-active WebRTC lease for an idempotent refresh.
+    } else {
+      _externalCaptureOwners.remove(clientId);
+    }
+    _activeSessions[clientId] = options;
+    final operation = _serializeMutation(
+      () => _startStreamSessionLocked(
+        clientId,
+        options,
+        generation: generation,
+        previous: previous,
+        wasExternalActive: wasExternalActive,
+      ),
+    );
+    return operation.whenComplete(
+      () => _pruneSessionIntentGeneration(clientId, generation),
+    );
+  }
 
   Future<void> _startStreamSessionLocked(
     String clientId,
-    StreamSessionOptions options,
-  ) async {
-    if (_disposed) return;
-    final previous = _activeSessions[clientId];
-    if (previous == options) {
-      _refreshResourceCounts();
-      _emit(_stateForPhase(ServerRuntimePhase.mediaActive));
-      return;
-    }
-    final wasExternalActive = _externalCaptureOwners.remove(clientId);
-    _activeSessions[clientId] = options;
+    StreamSessionOptions options, {
+    required int generation,
+    required StreamSessionOptions? previous,
+    required bool wasExternalActive,
+  }) async {
+    if (_disposed || !_ownsSessionIntent(clientId, generation)) return;
     try {
       await _recomputeResources(
-          startMediaIfNeeded: true, phase: ServerRuntimePhase.mediaActive);
+        startMediaIfNeeded: true,
+        phase: ServerRuntimePhase.mediaActive,
+        ownsIntent: () => _ownsSessionIntent(clientId, generation),
+      );
+      if (_ownsSessionIntent(clientId, generation)) {
+        _appliedSessions[clientId] = options;
+        if (_externalCaptureOwners.contains(clientId)) {
+          _appliedExternalCaptureOwners.add(clientId);
+        } else {
+          _appliedExternalCaptureOwners.remove(clientId);
+        }
+      }
     } catch (error) {
+      if (!_ownsSessionIntent(clientId, generation)) rethrow;
       if (previous == null) {
         _activeSessions.remove(clientId);
+        _appliedSessions.remove(clientId);
+        _appliedExternalCaptureOwners.remove(clientId);
       } else {
         _activeSessions[clientId] = previous;
+        _appliedSessions[clientId] = previous;
       }
       if (wasExternalActive) {
         _externalCaptureOwners.add(clientId);
+        _appliedExternalCaptureOwners.add(clientId);
+      } else {
+        _externalCaptureOwners.remove(clientId);
+        _appliedExternalCaptureOwners.remove(clientId);
       }
       _refreshResourceCounts();
+      try {
+        await _mediaRuntime.reconcile(_resourceDemand());
+      } catch (_) {
+        // Preserve the acquisition error; MediaRuntime retains uncertain
+        // resources and retries their cleanup independently.
+      }
       await _publishMediaDemand();
       _emit(_errorState(error));
       rethrow;
@@ -437,8 +505,10 @@ class ServerRuntime implements AppRuntime {
         startMediaIfNeeded: false,
         phase: ServerRuntimePhase.mediaActive,
       );
+      _appliedExternalCaptureOwners.add(clientId);
     } catch (error) {
       _externalCaptureOwners.remove(clientId);
+      _appliedExternalCaptureOwners.remove(clientId);
       _refreshResourceCounts();
       rethrow;
     }
@@ -449,6 +519,7 @@ class ServerRuntime implements AppRuntime {
 
   Future<void> _deactivateExternalCaptureLocked(String clientId) async {
     if (!_externalCaptureOwners.remove(clientId)) return;
+    _appliedExternalCaptureOwners.remove(clientId);
     await _recomputeResources(
       startMediaIfNeeded: true,
       phase: ServerRuntimePhase.mediaActive,
@@ -460,13 +531,26 @@ class ServerRuntime implements AppRuntime {
   Future<void> startMediaRuntimeForSession(String sessionId) =>
       startStreamSession(sessionId, const StreamSessionOptions());
 
-  Future<void> endSession(String sessionId) =>
-      _serializeMutation(() => _endSessionLocked(sessionId));
-
-  Future<void> _endSessionLocked(String sessionId) async {
+  Future<void> endSession(String sessionId) {
+    final generation = ++_nextSessionIntentGeneration;
+    _sessionIntentGenerations[sessionId] = generation;
     _activeSessions.remove(sessionId);
+    _appliedSessions.remove(sessionId);
     _externalCaptureOwners.remove(sessionId);
-    await _stopMediaRuntimeIfNoActiveClientsLocked();
+    _appliedExternalCaptureOwners.remove(sessionId);
+    final operation = _serializeMutation(
+      () => _endSessionLocked(sessionId, generation),
+    );
+    return operation.whenComplete(
+      () => _pruneSessionIntentGeneration(sessionId, generation),
+    );
+  }
+
+  Future<void> _endSessionLocked(String sessionId, int generation) async {
+    if (!_ownsSessionIntent(sessionId, generation)) return;
+    await _stopMediaRuntimeIfNoActiveClientsLocked(
+      ownsIntent: () => _ownsSessionIntent(sessionId, generation),
+    );
   }
 
   Future<void> enableNotificationsForClient(String clientId,
@@ -493,7 +577,10 @@ class ServerRuntime implements AppRuntime {
       // The pilot cannot yet route WebRTC frames into the Dart analyzers.
       // Release its native tracks first so reconnect can select MJPEG/WAV
       // while notification analysis owns camera and microphone capture.
-      await pauseExternal('notificationDemand');
+      await _runMediaOperation(
+        () => pauseExternal('notificationDemand'),
+        'pause external media',
+      );
     }
     _notificationClients[clientId] = (cry: cry, motion: motion);
     try {
@@ -519,9 +606,15 @@ class ServerRuntime implements AppRuntime {
   Future<void> stopMediaRuntimeIfNoActiveClients() =>
       _serializeMutation(_stopMediaRuntimeIfNoActiveClientsLocked);
 
-  Future<void> _stopMediaRuntimeIfNoActiveClientsLocked() async {
+  Future<void> _stopMediaRuntimeIfNoActiveClientsLocked({
+    bool Function()? ownsIntent,
+  }) async {
     await _recomputeResources(
-        startMediaIfNeeded: false, phase: ServerRuntimePhase.mediaIdle);
+      startMediaIfNeeded: false,
+      phase: ServerRuntimePhase.mediaIdle,
+      ownsIntent: ownsIntent,
+    );
+    if (!(ownsIntent?.call() ?? true)) return;
     final demand = _resourceDemand();
     final mediaStillRequired = !demand.isEmpty;
     _emit(_stateForPhase(mediaStillRequired
@@ -550,7 +643,10 @@ class ServerRuntime implements AppRuntime {
   Future<void> _stopLocked() async {
     _cancelBroadcastAccessTimer();
     _activeSessions.clear();
+    _appliedSessions.clear();
+    _sessionIntentGenerations.clear();
     _externalCaptureOwners.clear();
+    _appliedExternalCaptureOwners.clear();
     _notificationClients.clear();
     _platformAudioOnly = false;
     _resources.localPreviewActive = false;
@@ -582,7 +678,13 @@ class ServerRuntime implements AppRuntime {
   Future<void> _pauseMediaForPlatformLocked(String reason) async {
     if (_disposed) return;
     _platformAudioOnly = true;
-    await _onPauseExternalMedia?.call(reason);
+    final pauseExternal = _onPauseExternalMedia;
+    if (pauseExternal != null) {
+      await _runMediaOperation(
+        () => pauseExternal(reason),
+        'pause external media',
+      );
+    }
     await _mediaRuntime.reconcile(_resourceDemand());
     await _publishMediaDemand();
     if (_disposed) return;
@@ -598,7 +700,13 @@ class ServerRuntime implements AppRuntime {
   Future<void> _recoverMediaForPlatformLocked(String reason) async {
     if (_disposed) return;
     _platformAudioOnly = false;
-    await _onRecoverExternalMedia?.call(reason);
+    final recoverExternal = _onRecoverExternalMedia;
+    if (recoverExternal != null) {
+      await _runMediaOperation(
+        () => recoverExternal(reason),
+        'recover external media',
+      );
+    }
     await _recomputeResources(
       startMediaIfNeeded: true,
       phase: ServerRuntimePhase.mediaActive,
@@ -613,8 +721,11 @@ class ServerRuntime implements AppRuntime {
 
   Future<void> _recomputeResources(
       {required bool startMediaIfNeeded,
-      required ServerRuntimePhase phase}) async {
-    if (_disposed) return;
+      required ServerRuntimePhase phase,
+      bool Function()? ownsIntent}) async {
+    bool isCurrent() => !_disposed && (ownsIntent?.call() ?? true);
+
+    if (!isCurrent()) return;
     _refreshResourceCounts();
     final demand = _resourceDemand();
     final acquiringHardware = (demand.video && !_mediaRuntime.videoActive) ||
@@ -630,15 +741,20 @@ class ServerRuntime implements AppRuntime {
         serviceVideoCapture: demand.video,
         serviceAudioCapture: demand.audio,
       ));
+      if (!isCurrent()) return;
     }
     if (startMediaIfNeeded && !demand.isEmpty) {
       _emit(_stateForPhase(ServerRuntimePhase.mediaStarting));
       try {
         await _mediaRuntime.reconcile(demand);
       } catch (error) {
+        if (!isCurrent()) return;
         await _publishMediaDemand();
         _emit(_errorState(error));
         rethrow;
+      }
+      if (!isCurrent()) {
+        return;
       }
       if (_disposed) {
         await _mediaRuntime.reconcile(MediaResourceDemand.none);
@@ -647,7 +763,9 @@ class ServerRuntime implements AppRuntime {
     } else {
       await _mediaRuntime.reconcile(demand);
     }
+    if (!isCurrent()) return;
     await _publishMediaDemand();
+    if (!isCurrent()) return;
     _emit(_stateForPhase(phase));
   }
 
@@ -671,6 +789,16 @@ class ServerRuntime implements AppRuntime {
         _notificationClients.values.any((s) => s.motion);
   }
 
+  bool _ownsSessionIntent(String clientId, int generation) =>
+      !_disposed && _sessionIntentGenerations[clientId] == generation;
+
+  void _pruneSessionIntentGeneration(String clientId, int generation) {
+    if (_sessionIntentGenerations[clientId] == generation &&
+        !_activeSessions.containsKey(clientId)) {
+      _sessionIntentGenerations.remove(clientId);
+    }
+  }
+
   MediaResourceDemand _resourceDemand() => MediaResourceDemand(
         video: !_platformAudioOnly && _resources.needsVideoCapture,
         audio: _resources.needsAudioCapture,
@@ -681,6 +809,7 @@ class ServerRuntime implements AppRuntime {
     BroadcastAccessSnapshot? broadcastAccess,
     String? qrPayload,
     String? errorMessage,
+    ServerRuntimeErrorKind? errorKind,
     bool preserveErrorMessage = true,
   }) {
     final powerMode = _resources.hasLiveWatch
@@ -708,6 +837,7 @@ class ServerRuntime implements AppRuntime {
       qrPayload: qrPayload ?? _state.qrPayload,
       lastAlert: _state.lastAlert,
       errorMessage: preserveErrorMessage ? _state.errorMessage : errorMessage,
+      errorKind: preserveErrorMessage ? _state.errorKind : errorKind,
       mediaProfile: mediaProfile,
       broadcastAccess: broadcastAccess ?? _state.broadcastAccess,
     );
@@ -730,6 +860,7 @@ class ServerRuntime implements AppRuntime {
   ServerRuntimeState _errorState(
     Object error, {
     BroadcastAccessSnapshot? broadcastAccess,
+    ServerRuntimeErrorKind kind = ServerRuntimeErrorKind.media,
   }) =>
       ServerRuntimeState(
         phase: ServerRuntimePhase.error,
@@ -747,6 +878,7 @@ class ServerRuntime implements AppRuntime {
         qrPayload: _state.qrPayload,
         lastAlert: _state.lastAlert,
         errorMessage: error.toString(),
+        errorKind: kind,
         mediaProfile: mediaProfile,
         broadcastAccess: broadcastAccess ?? _state.broadcastAccess,
       );
@@ -827,7 +959,10 @@ class ServerRuntime implements AppRuntime {
     _cancelBroadcastAccessTimer();
     await _mediaRuntime.reconcile(MediaResourceDemand.none);
     _activeSessions.clear();
+    _appliedSessions.clear();
+    _sessionIntentGenerations.clear();
     _externalCaptureOwners.clear();
+    _appliedExternalCaptureOwners.clear();
     _notificationClients.clear();
     _platformAudioOnly = false;
     _resources.localPreviewActive = false;
@@ -838,6 +973,7 @@ class ServerRuntime implements AppRuntime {
     _emit(_errorState(
       BroadcastAccessLockedException(snapshot),
       broadcastAccess: snapshot,
+      kind: ServerRuntimeErrorKind.broadcastAccess,
     ));
   }
 
@@ -863,9 +999,15 @@ class ServerRuntime implements AppRuntime {
     bool forceNone = false,
     MediaResourceDemand? demandOverride,
   }) async {
-    await _onVideoEncodingDemandChanged?.call(
-      !forceNone && _resources.needsVideoEncoding,
-    );
+    final videoEncodingCallback = _onVideoEncodingDemandChanged;
+    if (videoEncodingCallback != null) {
+      await _runMediaOperation(
+        () => videoEncodingCallback(
+          !forceNone && _resources.needsVideoEncoding,
+        ),
+        'video encoding demand',
+      );
+    }
     final callback = _onMediaDemandChanged;
     if (callback == null) return;
     final demand = forceNone
@@ -879,8 +1021,23 @@ class ServerRuntime implements AppRuntime {
               serviceVideoCapture: _mediaRuntime.videoActive,
               serviceAudioCapture: _mediaRuntime.audioActive,
             );
-    await callback(demand);
+    await _runMediaOperation(
+      () => callback(demand),
+      'native media demand',
+    );
   }
+
+  Future<void> _runMediaOperation(
+    FutureOr<void> Function() operation,
+    String label,
+  ) =>
+      Future<void>.sync(operation).timeout(
+        mediaOperationTimeout,
+        onTimeout: () => throw TimeoutException(
+          '$label timed out.',
+          mediaOperationTimeout,
+        ),
+      );
 
   bool _hasCompetingLegacyDemand(
     String clientId,

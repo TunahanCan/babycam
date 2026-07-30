@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -73,6 +74,48 @@ void main() {
       await controller.stopTalk(clientId: 'anne', token: session.token),
       isTrue,
     );
+  });
+
+  test('talk attempt tombstone rejects late start without stopping successor',
+      () {
+    var now = DateTime.utc(2026, 1, 1);
+    final sessions = TalkSessionRegistry(
+      now: () => now,
+      attemptTombstoneTtl: const Duration(minutes: 1),
+      maxAttemptTombstones: 2,
+    );
+
+    expect(
+      sessions.stop(clientId: 'anne', attemptId: 'attempt-a'),
+      isFalse,
+    );
+    expect(
+      () => sessions.start(clientId: 'anne', attemptId: 'attempt-a'),
+      throwsA(isA<TalkSessionCancelledException>()),
+    );
+
+    final successor = sessions.start(clientId: 'anne', attemptId: 'attempt-b');
+    expect(
+      sessions.stop(clientId: 'anne', attemptId: 'attempt-a'),
+      isFalse,
+    );
+    expect(sessions.activeSession?.token, successor.token);
+    expect(
+      sessions.stop(
+        clientId: 'anne',
+        token: successor.token,
+        attemptId: 'attempt-b',
+      ),
+      isTrue,
+    );
+
+    sessions
+      ..cancelAttempt('anne', 'attempt-c')
+      ..cancelAttempt('anne', 'attempt-d');
+    expect(sessions.attemptTombstoneCount, 2);
+
+    now = now.add(const Duration(minutes: 2));
+    expect(sessions.attemptTombstoneCount, 0);
   });
 
   test('comfort generator returns bounded little-endian PCM frames', () {
@@ -166,7 +209,7 @@ void main() {
 
     await expectLater(audio.beginTalk(), throwsA(isA<StateError>()));
 
-    expect(events, ['stop', 'demand:true', 'start', 'demand:false']);
+    expect(events, ['stop', 'demand:true', 'start', 'stop', 'demand:false']);
     expect(audio.mode, RoomAudioMode.idle);
   });
 
@@ -207,6 +250,228 @@ void main() {
     expect((await audio.snapshot())['comfortRequested'], isFalse);
     expect(demands.last, isFalse);
   });
+
+  test('hanging native start is bounded and cannot poison its successor',
+      () async {
+    final sink = _ControllableLeasePcmAudioSink(hangingStartLeaseId: 1);
+    final demands = <bool>[];
+    final audio = RoomAudioCoordinator(
+      sink: sink,
+      nativeOperationTimeout: const Duration(milliseconds: 20),
+      onOutputDemandChanged: demands.add,
+    );
+    addTearDown(() async {
+      sink.releaseAll();
+      await audio.dispose();
+    });
+
+    await expectLater(audio.beginTalk(), throwsA(isA<TimeoutException>()));
+
+    expect(audio.mode, RoomAudioMode.idle);
+    expect(sink.activeLeaseId, isNull);
+    expect(demands, [true, false]);
+
+    await audio.beginTalk();
+    expect(audio.mode, RoomAudioMode.talk);
+    expect(sink.activeLeaseId, 2);
+
+    sink.releaseStart();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(sink.activeLeaseId, 2);
+    expect(await audio.writeTalk(Uint8List.fromList([1, 0])), isTrue);
+  });
+
+  test('hanging talk write is bounded and successor accepts audio', () async {
+    final sink = _ControllableLeasePcmAudioSink(hangingWriteLeaseId: 1);
+    final audio = RoomAudioCoordinator(
+      sink: sink,
+      nativeOperationTimeout: const Duration(milliseconds: 20),
+    );
+    addTearDown(() async {
+      sink.releaseAll();
+      await audio.dispose();
+    });
+    await audio.beginTalk();
+
+    final elapsed = Stopwatch()..start();
+    expect(await audio.writeTalk(Uint8List.fromList([1, 0])), isFalse);
+    elapsed.stop();
+
+    expect(elapsed.elapsed, lessThan(const Duration(milliseconds: 500)));
+    await audio.endTalk();
+    await audio.beginTalk();
+    expect(sink.activeLeaseId, 2);
+    expect(await audio.writeTalk(Uint8List.fromList([2, 0])), isTrue);
+
+    sink.releaseWrite();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(sink.activeLeaseId, 2);
+  });
+
+  test('late comfort write cannot cross into a talk playback lease', () async {
+    final sink = _ControllableLeasePcmAudioSink(hangingWriteLeaseId: 1);
+    final audio = RoomAudioCoordinator(
+      sink: sink,
+      frameDuration: const Duration(milliseconds: 5),
+      nativeOperationTimeout: const Duration(milliseconds: 20),
+    );
+    addTearDown(() async {
+      sink.releaseAll();
+      await audio.dispose();
+    });
+
+    await audio.applyComfort(
+      playing: true,
+      trackId: 'rain',
+      volume: .3,
+    );
+    await audio.beginTalk();
+
+    expect(sink.activeLeaseId, 2);
+    expect(await audio.writeTalk(Uint8List.fromList([3, 0])), isTrue);
+
+    sink.releaseWrite();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(audio.mode, RoomAudioMode.talk);
+    expect(sink.activeLeaseId, 2);
+  });
+
+  test('hanging stop is bounded and its late completion spares successor',
+      () async {
+    final sink = _ControllableLeasePcmAudioSink(hangingStopLeaseId: 1);
+    final audio = RoomAudioCoordinator(
+      sink: sink,
+      nativeOperationTimeout: const Duration(milliseconds: 20),
+    );
+    final controller = BabyMonitorFeatureController(
+      talkSessions: TalkSessionRegistry(
+        sessionTtl: const Duration(seconds: 2),
+      ),
+      roomAudio: audio,
+    );
+    addTearDown(() async {
+      sink.releaseAll();
+      await controller.dispose();
+    });
+
+    final first = await controller.startTalk(clientId: 'anne');
+    final elapsed = Stopwatch()..start();
+    expect(
+      await controller.stopTalk(clientId: 'anne', token: first.token),
+      isTrue,
+    );
+    elapsed.stop();
+
+    expect(elapsed.elapsed, lessThan(const Duration(milliseconds: 500)));
+    expect(audio.mode, RoomAudioMode.idle);
+    final successor = await controller.startTalk(clientId: 'anne');
+    expect(successor.token, isNot(first.token));
+    expect(sink.activeLeaseId, 2);
+
+    sink.releaseStop();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(sink.activeLeaseId, 2);
+    expect(audio.mode, RoomAudioMode.talk);
+  });
+
+  test('talk expiry survives hanging native stop and permits a successor',
+      () async {
+    final sink = _ControllableLeasePcmAudioSink(hangingStopLeaseId: 1);
+    final audio = RoomAudioCoordinator(
+      sink: sink,
+      nativeOperationTimeout: const Duration(milliseconds: 20),
+    );
+    final controller = BabyMonitorFeatureController(
+      talkSessions: TalkSessionRegistry(
+        sessionTtl: const Duration(milliseconds: 35),
+      ),
+      roomAudio: audio,
+    );
+    addTearDown(() async {
+      sink.releaseAll();
+      await controller.dispose();
+    });
+
+    final expired = await controller.startTalk(
+      clientId: 'anne',
+      attemptId: 'attempt-a',
+    );
+    await _waitUntil(() => audio.mode == RoomAudioMode.idle);
+
+    expect(controller.isTalkTokenActive(expired.token), isFalse);
+    expect(sink.activeLeaseId, isNull);
+
+    final successor = await controller.startTalk(
+      clientId: 'anne',
+      attemptId: 'attempt-b',
+    );
+    expect(successor.token, isNot(expired.token));
+    expect(sink.activeLeaseId, 2);
+
+    sink.releaseStop();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(sink.activeLeaseId, 2);
+    expect(controller.isTalkTokenActive(successor.token), isTrue);
+  });
+
+  test('hanging playback demand and status callbacks are bounded', () async {
+    final sink = _ControllableLeasePcmAudioSink(hangingStatus: true);
+    final firstDemand = Completer<void>();
+    var hangNextActivation = true;
+    final demands = <bool>[];
+    final audio = RoomAudioCoordinator(
+      sink: sink,
+      nativeOperationTimeout: const Duration(milliseconds: 20),
+      onOutputDemandChanged: (active) {
+        demands.add(active);
+        if (active && hangNextActivation) {
+          hangNextActivation = false;
+          return firstDemand.future;
+        }
+      },
+    );
+    addTearDown(() async {
+      if (!firstDemand.isCompleted) firstDemand.complete();
+      sink.releaseAll();
+      await audio.dispose();
+    });
+
+    await expectLater(audio.beginTalk(), throwsA(isA<TimeoutException>()));
+    expect(audio.mode, RoomAudioMode.idle);
+    expect(demands, [true, false]);
+
+    await audio.beginTalk();
+    expect(audio.mode, RoomAudioMode.talk);
+
+    final elapsed = Stopwatch()..start();
+    final snapshot = await audio.snapshot();
+    elapsed.stop();
+
+    expect(elapsed.elapsed, lessThan(const Duration(milliseconds: 500)));
+    expect(snapshot['native'], isEmpty);
+    expect(snapshot['lastError'], contains('TimeoutException'));
+
+    firstDemand.complete();
+    sink.releaseStatus();
+  });
+}
+
+Future<void> _waitUntil(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 1),
+}) async {
+  final stopwatch = Stopwatch()..start();
+  while (!condition()) {
+    if (stopwatch.elapsed >= timeout) {
+      fail('Condition was not met within $timeout.');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
 }
 
 class _FakePcmAudioSink implements PcmAudioSink {
@@ -278,5 +543,144 @@ class _FailingOrderingPcmAudioSink extends _OrderingPcmAudioSink {
   Future<void> start({required int sampleRate, required int channels}) async {
     events.add('start');
     throw StateError('native output unavailable');
+  }
+}
+
+class _ControllableLeasePcmAudioSink
+    implements PcmAudioSink, PcmAudioLeaseSink {
+  _ControllableLeasePcmAudioSink({
+    this.hangingStartLeaseId,
+    this.hangingWriteLeaseId,
+    this.hangingStopLeaseId,
+    this.hangingStatus = false,
+  });
+
+  final int? hangingStartLeaseId;
+  final int? hangingWriteLeaseId;
+  final int? hangingStopLeaseId;
+  final bool hangingStatus;
+  final Completer<void> _startRelease = Completer<void>();
+  final Completer<void> _writeRelease = Completer<void>();
+  final Completer<void> _stopRelease = Completer<void>();
+  final Completer<void> _statusRelease = Completer<void>();
+  final Set<int> _retiredLeaseIds = <int>{};
+  int _nextLeaseId = 0;
+  int? activeLeaseId;
+
+  @override
+  PcmAudioPlaybackLease createPlaybackLease() =>
+      _ControllablePlaybackLease(this, ++_nextLeaseId);
+
+  Future<void> startLease(int leaseId) {
+    final gate = leaseId == hangingStartLeaseId
+        ? _startRelease.future
+        : Future<void>.value();
+    return gate.then((_) {
+      if (!_retiredLeaseIds.contains(leaseId)) activeLeaseId = leaseId;
+    });
+  }
+
+  Future<bool> writeLease(int leaseId, Uint8List bytes) {
+    if (_retiredLeaseIds.contains(leaseId) || activeLeaseId != leaseId) {
+      return Future<bool>.value(false);
+    }
+    final gate = leaseId == hangingWriteLeaseId
+        ? _writeRelease.future
+        : Future<void>.value();
+    return gate.then(
+      (_) => !_retiredLeaseIds.contains(leaseId) && activeLeaseId == leaseId,
+    );
+  }
+
+  Future<void> stopLease(int leaseId) {
+    _retiredLeaseIds.add(leaseId);
+    if (activeLeaseId == leaseId) activeLeaseId = null;
+    return leaseId == hangingStopLeaseId
+        ? _stopRelease.future
+        : Future<void>.value();
+  }
+
+  @override
+  Future<void> resetPlayback() async {
+    final active = activeLeaseId;
+    if (active != null) _retiredLeaseIds.add(active);
+    activeLeaseId = null;
+  }
+
+  @override
+  Future<Map<String, Object?>> status() async {
+    if (hangingStatus) await _statusRelease.future;
+    return {'activeLeaseId': activeLeaseId};
+  }
+
+  void releaseStart() {
+    if (!_startRelease.isCompleted) _startRelease.complete();
+  }
+
+  void releaseWrite() {
+    if (!_writeRelease.isCompleted) _writeRelease.complete();
+  }
+
+  void releaseStop() {
+    if (!_stopRelease.isCompleted) _stopRelease.complete();
+  }
+
+  void releaseStatus() {
+    if (!_statusRelease.isCompleted) _statusRelease.complete();
+  }
+
+  void releaseAll() {
+    releaseStart();
+    releaseWrite();
+    releaseStop();
+    releaseStatus();
+  }
+
+  @override
+  Future<void> start({
+    required int sampleRate,
+    required int channels,
+  }) =>
+      Future<void>.error(
+        UnsupportedError('Use createPlaybackLease in this test sink.'),
+      );
+
+  @override
+  Future<void> stop() => resetPlayback();
+
+  @override
+  Future<bool> write(Uint8List pcm16le) => Future<bool>.value(false);
+}
+
+class _ControllablePlaybackLease implements PcmAudioPlaybackLease {
+  _ControllablePlaybackLease(this._sink, this._leaseId);
+
+  final _ControllableLeasePcmAudioSink _sink;
+  final int _leaseId;
+  Future<void>? _startOperation;
+  Future<void>? _stopOperation;
+  bool _retired = false;
+
+  @override
+  Future<void> start({
+    required int sampleRate,
+    required int channels,
+  }) {
+    if (_retired) return Future<void>.error(StateError('Lease is retired.'));
+    return _startOperation ??= _sink.startLease(_leaseId);
+  }
+
+  @override
+  Future<void> stop() {
+    final current = _stopOperation;
+    if (current != null) return current;
+    _retired = true;
+    return _stopOperation = _sink.stopLease(_leaseId);
+  }
+
+  @override
+  Future<bool> write(Uint8List pcm16le) {
+    if (_retired) return Future<bool>.value(false);
+    return _sink.writeLease(_leaseId, pcm16le);
   }
 }

@@ -37,7 +37,7 @@ void main() {
     });
     final session = PairingSession(
       payload: PairingPayload(
-        schemaVersion: 1,
+        schemaVersion: MiuCamProtocolV2.schemaVersion,
         host: InternetAddress.loopbackIPv4.address,
         port: server.port,
         deviceId: 'room',

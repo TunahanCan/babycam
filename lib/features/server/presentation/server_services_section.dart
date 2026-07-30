@@ -73,7 +73,7 @@ class _ServiceStatusGrid extends StatelessWidget {
       ),
       _ServiceStatusCard(
         icon: Icons.hub_rounded,
-        title: 'WebSocket',
+        title: strings.ui('alertConnection'),
         value: strings
             .uiFormat('eventClientsCount', {'count': state.activeEventClients}),
         color: state.activeEventClients > 0

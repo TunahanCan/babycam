@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miucam/app/app_role.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
 import 'package:miucam/core/protocol/pairing_payload.dart';
 import 'package:miucam/core/protocol/pairing_session.dart';
 import 'package:miucam/features/client/client_home_screen.dart';
 import 'package:miucam/features/client/client_runtime.dart';
 import 'package:miucam/features/server/media/media_runtime_controller.dart';
+import 'package:miucam/features/server/presentation/server_home_components.dart';
 import 'package:miucam/features/server/server_home_screen.dart';
 import 'package:miucam/features/server/server_runtime.dart';
 import 'package:miucam/features/shared/presentation/miucam_shells.dart';
@@ -227,6 +229,32 @@ void main() {
     expect(restartRequests, 1);
   });
 
+  testWidgets('Server bilgi satırı uzun değeri kesmeden gösterir',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(280, 180));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Padding(
+            padding: EdgeInsets.all(12),
+            child: ServerKeyValue(
+              'Yerel bildirim',
+              'Client cihazına gönderilir',
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final valueFinder = find.text('Client cihazına gönderilir');
+    final value = tester.widget<Text>(valueFinder);
+    expect(value.overflow, isNull);
+    expect(tester.getSize(valueFinder).height, greaterThan(20));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Server yayın ana eylemi QR bağlantı ekranını açar',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -434,7 +462,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Kamera izinlerini ve bağlantıyı kontrol edip tekrar dene.'),
+      find.text(
+        'Kamera ve mikrofon izinlerini, ardından bağlantıyı kontrol et.',
+      ),
       findsNothing,
     );
     expect(find.textContaining('camera-driver-secret'), findsNothing);
@@ -445,7 +475,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Kamera izinlerini ve bağlantıyı kontrol edip tekrar dene.'),
+      find.text(
+        'Kamera ve mikrofon izinlerini, ardından bağlantıyı kontrol et.',
+      ),
       findsOneWidget,
     );
 
@@ -513,6 +545,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     var restartRequests = 0;
+    var settingsRequests = 0;
     final runtime = ServerRuntime(
       mediaRuntime: MediaRuntimeController(
         onStart: () async => throw StateError('camera unavailable'),
@@ -531,6 +564,10 @@ void main() {
           activeRole: AppRole.server,
           onRoleSelected: (_) {},
           onRestartServer: () => restartRequests++,
+          openSettings: () async {
+            settingsRequests++;
+            return true;
+          },
         ),
       ),
     );
@@ -541,6 +578,11 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Yayın başlatılamadı'), findsOneWidget);
+
+    expect(find.text('Ayarları aç'), findsOneWidget);
+    await tester.tap(find.text('Ayarları aç'));
+    await tester.pump();
+    expect(settingsRequests, 1);
 
     await tester.tap(find.text('Tekrar dene'));
     await tester.pump();
@@ -573,6 +615,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(
+      find.text('Ayarları aç'),
+      findsNothing,
+      reason:
+          'Ağ/eşleşme hatası kullanıcıyı alakasız izin ayarına göndermemeli.',
+    );
     await tester.tap(find.text('QR/IP'));
     await tester.pumpAndSettle();
 
@@ -635,7 +683,7 @@ void main() {
       onStartPairing: () async {
         pairingStarts++;
         return PairingPayload(
-          schemaVersion: 1,
+          schemaVersion: MiuCamProtocolV2.schemaVersion,
           host: '192.168.1.20',
           port: 8080,
           deviceId: 'server',
@@ -684,10 +732,69 @@ void main() {
     expect(clipboardText, '192.168.1.20:8080');
     expect(find.text('Bağlantı adresi kopyalandı.'), findsOneWidget);
   });
+
+  testWidgets(
+    'Server yayın durdurma onayı kısa landscape ve büyük metinde taşmaz',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(667, 320));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      var streamStops = 0;
+      final runtime = ServerRuntime(
+        mediaRuntime: MediaRuntimeController(),
+        onStartPairing: () async => _validPairingTicket('stop-modal'),
+        onStop: () async => streamStops++,
+      );
+      final strings = AppStrings(const Locale('de'));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('de'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: _localizationsDelegates,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: const TextScaler.linear(2),
+            ),
+            child: child!,
+          ),
+          home: ServerHomeScreen(
+            runtime: runtime,
+            config: ConfigurationService(preferences),
+            activeRole: AppRole.server,
+            onRoleSelected: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final stopAction = find.text(strings.ui('stopRoomStream'));
+      await tester.scrollUntilVisible(
+        stopAction,
+        260,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(stopAction);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final cancelAction = find.text(strings.ui('cancel'));
+      await tester.ensureVisible(cancelAction);
+      await tester.pumpAndSettle();
+      expect(cancelAction.hitTestable(), findsOneWidget);
+
+      await tester.tap(cancelAction);
+      await tester.pumpAndSettle();
+      expect(streamStops, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 String _validPairingTicket(String nonce) => PairingPayload(
-      schemaVersion: 1,
+      schemaVersion: MiuCamProtocolV2.schemaVersion,
       host: '192.168.1.20',
       port: 8080,
       deviceId: 'server',

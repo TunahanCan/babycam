@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:miucam/app/app_role.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
 import 'package:miucam/core/protocol/pairing_payload.dart';
 import 'package:miucam/core/protocol/pairing_session.dart';
 import 'package:miucam/features/client/client_runtime.dart';
@@ -59,6 +61,134 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'watch navigation exposes selected buttons with 48dp tap targets',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      final runtime = await _pairedRuntime();
+      addTearDown(runtime.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('tr'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: _localizationsDelegates,
+          home: WatchScreen(
+            runtime: runtime,
+            keepScreenAwake: false,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final watchNode = tester.getSemantics(find.bySemanticsLabel('İzle'));
+      final historyNode = tester.getSemantics(find.bySemanticsLabel('Geçmiş'));
+      final settingsNode =
+          tester.getSemantics(find.bySemanticsLabel('Ayarlar'));
+
+      for (final node in [watchNode, historyNode, settingsNode]) {
+        final data = node.getSemanticsData();
+        expect(data.flagsCollection.isButton, isTrue);
+        expect(data.hasAction(ui.SemanticsAction.tap), isTrue);
+        expect(data.rect.height, greaterThanOrEqualTo(48));
+      }
+      expect(
+        watchNode.getSemanticsData().flagsCollection.isSelected,
+        ui.Tristate.isTrue,
+      );
+      expect(
+        historyNode.getSemanticsData().flagsCollection.isSelected,
+        ui.Tristate.isFalse,
+      );
+
+      historyNode.owner!.performAction(
+        historyNode.id,
+        ui.SemanticsAction.tap,
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .getSemantics(find.bySemanticsLabel('İzle'))
+            .getSemanticsData()
+            .flagsCollection
+            .isSelected,
+        ui.Tristate.isFalse,
+      );
+      expect(
+        tester
+            .getSemantics(find.bySemanticsLabel('Geçmiş'))
+            .getSemanticsData()
+            .flagsCollection
+            .isSelected,
+        ui.Tristate.isTrue,
+      );
+      semantics.dispose();
+    },
+  );
+
+  testWidgets('watch back icon mirrors in RTL', (tester) async {
+    final runtime = await _pairedRuntime();
+    addTearDown(runtime.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ar'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: WatchScreen(
+          runtime: runtime,
+          keepScreenAwake: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final backIcon = find.byType(BackButtonIcon);
+    expect(backIcon, findsOneWidget);
+    final renderedIcon = tester.widget<Icon>(
+      find.descendant(of: backIcon, matching: find.byType(Icon)),
+    );
+    expect(renderedIcon.icon?.matchTextDirection, isTrue);
+
+    final rtlTransform = tester.widget<Transform>(
+      find.descendant(of: backIcon, matching: find.byType(Transform)),
+    );
+    expect(rtlTransform.transform.entry(0, 0), -1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('role badge keeps a 48dp minimum tap target', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
+        home: Scaffold(
+          body: Center(
+            child: MiuCamRoleBadge(
+              activeRole: AppRole.client,
+              onRoleSelected: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final badge = find.byType(MiuCamRoleBadge);
+    expect(tester.getSize(badge).height, greaterThanOrEqualTo(48));
+    expect(
+      tester
+          .getSize(
+            find.descendant(of: badge, matching: find.byType(InkWell)),
+          )
+          .height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'alt navigasyon seçili durumu ve tap aksiyonunu semantiğe taşır',
@@ -160,7 +290,7 @@ Future<ClientRuntime> _pairedRuntime() async {
 }
 
 PairingPayload _payload() => PairingPayload(
-      schemaVersion: 1,
+      schemaVersion: MiuCamProtocolV2.schemaVersion,
       host: '192.168.1.20',
       port: 8080,
       deviceId: 'server',

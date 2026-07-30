@@ -2,12 +2,20 @@ part of '../miucam_server.dart';
 
 /// Owns capture, analysis and frame fan-out concerns.
 extension MiuCamServerMediaCaptureController on MiuCamServer {
-  Future<void> _startVideoCaptureRuntime() async {
+  Future<void> _startVideoCaptureRuntime(
+    int generation, {
+    required int operationToken,
+  }) async {
     _cameraEncodeGeneration++;
     _pendingCameraEncode = null;
     await _ensureCameraPermission();
+    if (!_ownsVideoCaptureOperation(generation, operationToken)) {
+      throw StateError('Video capture demand changed during permission.');
+    }
     final cameras = await availableCameras();
-    if (_disposed) throw StateError('MiuCamServer is disposed.');
+    if (!_ownsVideoCaptureOperation(generation, operationToken)) {
+      throw StateError('Video capture demand changed during discovery.');
+    }
     if (cameras.isEmpty) throw StateError(strings.cameraNotFound);
 
     _initializeAnalysisPipeline();
@@ -26,18 +34,187 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
       ),
       imageFormatGroup: ImageFormatGroup.yuv420,
     );
-    cameraController = controller;
+    if (!_ownsVideoCaptureOperation(generation, operationToken)) {
+      await _disposeCameraControllerLease(controller);
+      throw StateError('Video capture demand changed before initialization.');
+    }
+    _pendingCameraControllers[controller] = generation;
     try {
-      await controller.initialize();
-      if (_disposed) {
-        throw StateError('MiuCamServer is disposed.');
+      await _awaitCameraControllerOperation(
+        controller.initialize(),
+        controller: controller,
+        label: 'initialize camera',
+      );
+      if (!_ownsVideoCaptureOperation(generation, operationToken)) {
+        throw StateError('Video capture demand changed during initialization.');
       }
-      await controller.startImageStream(_handleCameraFrame);
-      await _updateMediaHostLifecycle();
+      await _awaitCameraControllerOperation(
+        controller.startImageStream(_handleCameraFrame),
+        controller: controller,
+        label: 'start camera stream',
+      );
+      if (!_ownsVideoCaptureOperation(generation, operationToken)) {
+        throw StateError('Video capture demand changed while starting stream.');
+      }
+      cameraController = controller;
+      await _updateMediaHostLifecycle().timeout(mediaLifecycleOperationTimeout);
+      if (!_ownsVideoCaptureOperation(generation, operationToken) ||
+          !identical(cameraController, controller)) {
+        throw StateError('Video capture demand changed while publishing.');
+      }
     } catch (_) {
-      await stopVideoRuntime();
+      if (identical(cameraController, controller)) {
+        cameraController = null;
+      }
+      await _disposeCameraControllerLease(controller);
       rethrow;
     }
+  }
+
+  Future<T> _awaitCameraControllerOperation<T>(
+    Future<T> operation, {
+    required CameraController controller,
+    required String label,
+  }) {
+    var timedOut = false;
+    operation.then<void>(
+      (_) {
+        if (timedOut) {
+          unawaited(_disposeCameraControllerLease(controller));
+        }
+      },
+      onError: (Object _, StackTrace __) {
+        if (timedOut) {
+          unawaited(_disposeCameraControllerLease(controller));
+        }
+      },
+    );
+    return operation.timeout(
+      mediaLifecycleOperationTimeout,
+      onTimeout: () {
+        timedOut = true;
+        throw TimeoutException(
+          '$label timed out.',
+          mediaLifecycleOperationTimeout,
+        );
+      },
+    );
+  }
+
+  bool _ownsVideoCaptureIntent(int generation) =>
+      !_disposed &&
+      _videoCaptureDesired &&
+      _videoCaptureIntentGeneration == generation;
+
+  bool _ownsVideoCaptureOperation(int generation, int operationToken) =>
+      _ownsVideoCaptureIntent(generation) &&
+      _cameraOperationToken == operationToken;
+
+  Future<void> _disposeCameraControllersForGeneration(int generation) async {
+    final controllers = _pendingCameraControllers.entries
+        .where((entry) => entry.value == generation)
+        .map((entry) => entry.key)
+        .toList(growable: false);
+    final activeController = cameraController;
+    if (activeController != null &&
+        _pendingCameraControllers[activeController] == generation) {
+      cameraController = null;
+    }
+    await Future.wait<bool>(
+      controllers.map(_disposeCameraControllerLease),
+    );
+  }
+
+  Future<bool> _disposeCameraControllerLease(CameraController controller) {
+    _cameraControllersPendingDisposal.add(controller);
+    final existing = _cameraControllerDisposals[controller];
+    if (existing != null) return existing;
+    late final Future<bool> operation;
+    operation = _tryDisposeCameraController(controller).whenComplete(() {
+      if (identical(_cameraControllerDisposals[controller], operation)) {
+        _cameraControllerDisposals.remove(controller);
+      }
+    });
+    _cameraControllerDisposals[controller] = operation;
+    return operation;
+  }
+
+  Future<bool> _tryDisposeCameraController(
+    CameraController controller,
+  ) async {
+    final existing = _cameraControllerRawDisposals[controller];
+    if (existing != null) {
+      return _awaitCameraControllerDisposal(controller, existing);
+    }
+
+    late final Future<void> rawDisposal;
+    try {
+      if (_cameraControllerDisposeStarted.add(controller)) {
+        rawDisposal = controller.dispose();
+      } else {
+        // CameraController marks itself disposed before awaiting the platform
+        // teardown. Retrying controller.dispose() after a platform error would
+        // therefore be a no-op; retry the exact native camera lease instead.
+        rawDisposal = CameraPlatform.instance.dispose(controller.cameraId);
+      }
+    } catch (error) {
+      onLog('Kamera controller kapatılamadı; yeniden denenecek: $error');
+      _scheduleCameraControllerDisposalRetry(controller);
+      return false;
+    }
+    _cameraControllerRawDisposals[controller] = rawDisposal;
+    rawDisposal.then<void>(
+      (_) {
+        if (identical(
+          _cameraControllerRawDisposals[controller],
+          rawDisposal,
+        )) {
+          _confirmCameraControllerDisposal(controller);
+        }
+      },
+      onError: (Object _, StackTrace __) {
+        if (!identical(
+          _cameraControllerRawDisposals[controller],
+          rawDisposal,
+        )) {
+          return;
+        }
+        _cameraControllerRawDisposals.remove(controller);
+        _scheduleCameraControllerDisposalRetry(controller);
+      },
+    );
+    return _awaitCameraControllerDisposal(controller, rawDisposal);
+  }
+
+  Future<bool> _awaitCameraControllerDisposal(
+    CameraController controller,
+    Future<void> rawDisposal,
+  ) async {
+    try {
+      await rawDisposal.timeout(mediaLifecycleOperationTimeout);
+      _confirmCameraControllerDisposal(controller);
+      return true;
+    } catch (error) {
+      onLog('Kamera controller kapatılamadı; yeniden denenecek: $error');
+      _scheduleCameraControllerDisposalRetry(controller);
+      return false;
+    }
+  }
+
+  void _confirmCameraControllerDisposal(CameraController controller) {
+    _cameraControllersPendingDisposal.remove(controller);
+    _cameraControllerDisposals.remove(controller);
+    _cameraControllerRawDisposals.remove(controller);
+    _cameraControllerDisposeStarted.remove(controller);
+    _pendingCameraControllers.remove(controller);
+    if (identical(cameraController, controller)) cameraController = null;
+  }
+
+  void _scheduleCameraControllerDisposalRetry(CameraController controller) {
+    unawaited(Future<void>.delayed(const Duration(milliseconds: 250), () async {
+      if (!_cameraControllersPendingDisposal.contains(controller)) return;
+      await _disposeCameraControllerLease(controller);
+    }));
   }
 
   Future<void> _reconcileInjectedMediaSource(
@@ -56,7 +233,13 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
     if (video != null) _injectedVideoDemand = video;
     if (audio != null) _injectedAudioDemand = audio;
     return _injectedMediaOperations.run(
-      () => _applyInjectedMediaDemand(source),
+      () => _applyInjectedMediaDemand(source).timeout(
+        mediaLifecycleOperationTimeout,
+        onTimeout: () => throw TimeoutException(
+          'Injected media reconciliation timed out.',
+          mediaLifecycleOperationTimeout,
+        ),
+      ),
     );
   }
 
@@ -702,6 +885,9 @@ extension _MiuCamServerMediaPolicyController on MiuCamServer {
     required int applyGeneration,
   }) async {
     if (!_isCurrentMediaProfileApply(applyGeneration)) return false;
+    final captureGeneration = _videoCaptureIntentGeneration;
+    if (!_ownsVideoCaptureIntent(captureGeneration)) return false;
+    final operationToken = ++_cameraOperationToken;
     _analysisCoordinator?.markVideoDiscontinuity();
     _cameraEncodeGeneration++;
     _pendingCameraEncode = null;
@@ -712,15 +898,35 @@ extension _MiuCamServerMediaPolicyController on MiuCamServer {
     _latestJpeg = null;
     _frameBudget.reset();
     _resourcePolicyCoordinator.resetDecision();
-    await previousController.dispose();
     CameraController? nextController;
     var installed = false;
     try {
-      if (!_isCurrentMediaProfileApply(applyGeneration)) return false;
+      _pendingCameraControllers.putIfAbsent(
+        previousController,
+        () => captureGeneration,
+      );
+      final previousDisposed =
+          await _disposeCameraControllerLease(previousController);
+      if (!previousDisposed) {
+        throw TimeoutException(
+          'Previous camera profile disposal timed out.',
+          mediaLifecycleOperationTimeout,
+        );
+      }
+      if (!_isCurrentMediaProfileApply(applyGeneration) ||
+          !_ownsVideoCaptureOperation(captureGeneration, operationToken)) {
+        return false;
+      }
       await _ensureCameraPermission();
-      if (!_isCurrentMediaProfileApply(applyGeneration)) return false;
+      if (!_isCurrentMediaProfileApply(applyGeneration) ||
+          !_ownsVideoCaptureOperation(captureGeneration, operationToken)) {
+        return false;
+      }
       final cameras = await availableCameras();
-      if (!_isCurrentMediaProfileApply(applyGeneration)) return false;
+      if (!_isCurrentMediaProfileApply(applyGeneration) ||
+          !_ownsVideoCaptureOperation(captureGeneration, operationToken)) {
+        return false;
+      }
       if (cameras.isEmpty) throw StateError(strings.cameraNotFound);
 
       nextController = CameraController(
@@ -736,22 +942,30 @@ extension _MiuCamServerMediaPolicyController on MiuCamServer {
         ),
         imageFormatGroup: ImageFormatGroup.yuv420,
       );
-      await nextController.initialize();
+      _pendingCameraControllers[nextController] = captureGeneration;
+      await _awaitCameraControllerOperation(
+        nextController.initialize(),
+        controller: nextController,
+        label: 'initialize camera profile',
+      );
       if (!_isCurrentMediaProfileApply(applyGeneration) ||
+          !_ownsVideoCaptureOperation(captureGeneration, operationToken) ||
           cameraController != null) {
-        await _disposeStaleCameraController(nextController);
+        await _disposeCameraControllerLease(nextController);
+        return false;
+      }
+      await _awaitCameraControllerOperation(
+        nextController.startImageStream(_handleCameraFrame),
+        controller: nextController,
+        label: 'start camera profile stream',
+      );
+      if (!_isCurrentMediaProfileApply(applyGeneration) ||
+          !_ownsVideoCaptureOperation(captureGeneration, operationToken) ||
+          cameraController != null) {
+        await _disposeCameraControllerLease(nextController);
         return false;
       }
       cameraController = nextController;
-      await nextController.startImageStream(_handleCameraFrame);
-      if (!_isCurrentMediaProfileApply(applyGeneration) ||
-          !identical(cameraController, nextController)) {
-        if (identical(cameraController, nextController)) {
-          cameraController = null;
-        }
-        await _disposeStaleCameraController(nextController);
-        return false;
-      }
       installed = true;
       return true;
     } catch (error, stackTrace) {
@@ -760,31 +974,22 @@ extension _MiuCamServerMediaPolicyController on MiuCamServer {
         cameraController = null;
       }
       if (nextController != null) {
-        await _disposeStaleCameraController(nextController);
+        await _disposeCameraControllerLease(nextController);
       }
       Error.throwWithStackTrace(error, stackTrace);
     } finally {
       if (!installed &&
           _videoCaptureDesired &&
           !_disposed &&
+          _ownsVideoCaptureOperation(captureGeneration, operationToken) &&
           cameraController == null) {
         try {
-          await _startVideoCaptureRuntime();
+          await startVideoRuntime();
           onLog('Camera profile restart rolled back to the previous profile.');
         } catch (recoveryError) {
           onLog('Camera profile rollback failed: $recoveryError');
         }
       }
-    }
-  }
-
-  Future<void> _disposeStaleCameraController(
-    CameraController controller,
-  ) async {
-    try {
-      await controller.dispose();
-    } catch (error) {
-      onLog('Eski kamera controller kapatılamadı: $error');
     }
   }
 

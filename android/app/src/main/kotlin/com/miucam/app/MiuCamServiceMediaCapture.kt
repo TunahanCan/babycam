@@ -283,7 +283,12 @@ internal class MiuCamServiceMediaCapture(
             if (microphoneActive || audioRunning.get()) return
         }
         microphoneError = null
-        if (!hasPermission(Manifest.permission.RECORD_AUDIO)) {
+        if (
+            ContextCompat.checkSelfPermission(
+                applicationContext,
+                Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
             failMicrophone("microphone_permission_denied", retryable = false)
             return
         }

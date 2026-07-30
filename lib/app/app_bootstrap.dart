@@ -142,44 +142,67 @@ class _AppBootstrapState extends State<AppBootstrap> {
     final strings = AppStrings.of(context);
     return showModalBottomSheet<bool>(
       context: context,
+      isScrollControlled: true,
       builder: (context) {
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  strings.ui('confirmLeaveServerTitle'),
-                  style: const TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.w900),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final stackActions = constraints.maxWidth < 420 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.3;
+              final cancelButton = OutlinedButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text(strings.ui('cancel')),
+              );
+              final confirmButton = FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text(strings.ui('switchToClient')),
+              );
+
+              return SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  24,
+                  24,
+                  18 + MediaQuery.viewInsetsOf(context).bottom,
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  strings.ui('confirmLeaveServerBody'),
-                  style: const TextStyle(fontSize: 16, height: 1.3),
-                ),
-                const SizedBox(height: 22),
-                Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(false),
-                        child: Text(strings.ui('cancel')),
+                    Text(
+                      strings.ui('confirmLeaveServerTitle'),
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: () => Navigator.of(context).pop(true),
-                        child: Text(strings.ui('switchToClient')),
-                      ),
+                    const SizedBox(height: 10),
+                    Text(
+                      strings.ui('confirmLeaveServerBody'),
+                      style: const TextStyle(fontSize: 16, height: 1.3),
                     ),
+                    const SizedBox(height: 22),
+                    if (stackActions)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          cancelButton,
+                          const SizedBox(height: 12),
+                          confirmButton,
+                        ],
+                      )
+                    else
+                      Row(
+                        children: [
+                          Expanded(child: cancelButton),
+                          const SizedBox(width: 12),
+                          Expanded(child: confirmButton),
+                        ],
+                      ),
                   ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
         );
       },
@@ -385,37 +408,32 @@ class _BootstrapError extends StatelessWidget {
     return Theme(
       data: MiuCamTheme.neutralTheme(),
       child: Scaffold(
-        body: SafeArea(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(28),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.sync_problem_rounded, size: 54),
-                  const SizedBox(height: 18),
-                  Text(
-                    strings.ui('bootstrapFailedTitle'),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 23,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    strings.ui('bootstrapFailedText'),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 22),
-                  FilledButton.icon(
-                    onPressed: onRetry,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: Text(strings.ui('tryAgain')),
-                  ),
-                ],
+        body: _BootstrapStatusViewport(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.sync_problem_rounded, size: 54),
+              const SizedBox(height: 18),
+              Text(
+                strings.ui('bootstrapFailedTitle'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 23,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                strings.ui('bootstrapFailedText'),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 22),
+              FilledButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded),
+                label: Text(strings.ui('tryAgain')),
+              ),
+            ],
           ),
         ),
       ),
@@ -433,16 +451,46 @@ class _BootstrapProgress extends StatelessWidget {
     return Theme(
       data: MiuCamTheme.neutralTheme(),
       child: Scaffold(
-        body: Center(
+        body: _BootstrapStatusViewport(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const CircularProgressIndicator(),
               const SizedBox(height: 16),
-              Text(message),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+              ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _BootstrapStatusViewport extends StatelessWidget {
+  const _BootstrapStatusViewport({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    const padding = EdgeInsets.all(28);
+    return SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final availableHeight = constraints.maxHeight > padding.vertical
+              ? constraints.maxHeight - padding.vertical
+              : 0.0;
+          return SingleChildScrollView(
+            padding: padding,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: availableHeight),
+              child: Center(child: child),
+            ),
+          );
+        },
       ),
     );
   }

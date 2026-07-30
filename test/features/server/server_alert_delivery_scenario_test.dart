@@ -265,13 +265,34 @@ Future<_JsonResponse> _postJson(
     HttpHeaders.authorizationHeader,
     'Bearer $bearerToken',
   );
-  request.write(jsonEncode(body));
+  request.write(jsonEncode(_withV2AttemptFixture(path, body)));
   final response = await request.close();
   final decoded = jsonDecode(await utf8.decoder.bind(response).join());
   return _JsonResponse(
     response.statusCode,
     Map<String, Object?>.from(decoded as Map),
   );
+}
+
+Map<String, Object?> _withV2AttemptFixture(
+  String path,
+  Map<String, Object?> body,
+) {
+  final fixture = Map<String, Object?>.of(body);
+  if (path == MiuCamProtocolV2.sessionStart ||
+      path == MiuCamProtocolV2.sessionStop) {
+    fixture.putIfAbsent(
+      MiuCamProtocolV2.streamAttemptId,
+      () => 'alert-stream-fixture-attempt',
+    );
+  }
+  if (path == MiuCamProtocolV2.talkStart || path == MiuCamProtocolV2.talkStop) {
+    fixture.putIfAbsent(
+      MiuCamProtocolV2.talkAttemptId,
+      () => 'alert-talk-fixture-attempt',
+    );
+  }
+  return fixture;
 }
 
 Future<Map<String, Object?>> _getJson(

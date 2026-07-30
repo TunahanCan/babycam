@@ -178,6 +178,237 @@ void main() {
     expect(stop.body['ok'], isTrue);
   });
 
+  test('talk attempt siralamasi gec kalan start ve stop isteklerini izole eder',
+      () async {
+    final tokenService = PairingTokenService();
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final anne = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'anne',
+    );
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    final first = await _postJson(
+      client,
+      base.port,
+      MiuCamProtocolV2.talkStart,
+      {MiuCamProtocolV2.talkAttemptId: 'attempt-a'},
+      bearerToken: anne.token,
+    );
+    final second = await _postJson(
+      client,
+      base.port,
+      MiuCamProtocolV2.talkStart,
+      {MiuCamProtocolV2.talkAttemptId: 'attempt-b'},
+      bearerToken: anne.token,
+    );
+    final firstToken =
+        ((first.body['session'] as Map)['talkToken'] as String?) ?? '';
+    final secondToken =
+        ((second.body['session'] as Map)['talkToken'] as String?) ?? '';
+
+    final lateFirstStop = await _postJson(
+      client,
+      base.port,
+      MiuCamProtocolV2.talkStop,
+      {
+        MiuCamProtocolV2.talkAttemptId: 'attempt-a',
+        'talkToken': firstToken,
+      },
+      bearerToken: anne.token,
+    );
+    final successorAudio = await _postBytes(
+      client,
+      base.port,
+      MiuCamProtocolV2.talkAudio,
+      Uint8List.fromList([4, 3, 2, 1]),
+      query: {'talkToken': secondToken},
+    );
+
+    expect(first.statusCode, HttpStatus.ok);
+    expect(second.statusCode, HttpStatus.ok);
+    expect(
+      (second.body['session'] as Map)[MiuCamProtocolV2.talkAttemptId],
+      'attempt-b',
+    );
+    expect(lateFirstStop.body['ok'], isFalse);
+    expect(successorAudio.statusCode, HttpStatus.ok);
+
+    final successorStop = await _postJson(
+      client,
+      base.port,
+      MiuCamProtocolV2.talkStop,
+      {
+        MiuCamProtocolV2.talkAttemptId: 'attempt-b',
+        'talkToken': secondToken,
+      },
+      bearerToken: anne.token,
+    );
+    expect(successorStop.body['ok'], isTrue);
+
+    final stopBeforeStart = await _postJson(
+      client,
+      base.port,
+      MiuCamProtocolV2.talkStop,
+      {MiuCamProtocolV2.talkAttemptId: 'attempt-c'},
+      bearerToken: anne.token,
+    );
+    final cancelledStart = await _postJson(
+      client,
+      base.port,
+      MiuCamProtocolV2.talkStart,
+      {MiuCamProtocolV2.talkAttemptId: 'attempt-c'},
+      bearerToken: anne.token,
+    );
+
+    expect(stopBeforeStart.body['ok'], isFalse);
+    expect(cancelledStart.statusCode, HttpStatus.conflict);
+    expect(cancelledStart.body['code'], 'TALK_START_CANCELLED');
+  });
+
+  test(
+      'v2 lifecycle endpointleri eski trusted bearer ile eksik veya gecersiz attempt kabul etmez',
+      () async {
+    final tokenService = PairingTokenService();
+    // This token exists before the v2-only server starts, mirroring a trusted
+    // client persisted by an older app build.
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Eski Anne',
+      deviceId: 'legacy-anne',
+    );
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    Future<void> expectInvalidAttempt(
+      String path,
+      Map<String, Object?> body,
+      String code,
+    ) async {
+      final response = await _postJson(
+        client,
+        base.port,
+        path,
+        body,
+        bearerToken: trusted.token,
+        includeAttemptFixture: false,
+      );
+      expect(response.statusCode, HttpStatus.badRequest, reason: path);
+      expect(response.body['ok'], isFalse, reason: path);
+      expect(response.body['code'], code, reason: path);
+    }
+
+    await expectInvalidAttempt(
+      MiuCamProtocolV2.sessionStart,
+      {'clientId': trusted.clientId},
+      MiuCamProtocolV2.invalidStreamAttemptIdCode,
+    );
+    await expectInvalidAttempt(
+      MiuCamProtocolV2.sessionStart,
+      {
+        'clientId': trusted.clientId,
+        MiuCamProtocolV2.streamAttemptId: ' invalid',
+      },
+      MiuCamProtocolV2.invalidStreamAttemptIdCode,
+    );
+
+    final activeStream = await _postJson(
+      client,
+      base.port,
+      MiuCamProtocolV2.sessionStart,
+      {
+        'clientId': trusted.clientId,
+        MiuCamProtocolV2.streamAttemptId: 'stream-current',
+      },
+      bearerToken: trusted.token,
+    );
+    final streamToken = activeStream.body['streamToken']! as String;
+    await expectInvalidAttempt(
+      MiuCamProtocolV2.sessionStop,
+      {'clientId': trusted.clientId},
+      MiuCamProtocolV2.invalidStreamAttemptIdCode,
+    );
+    await expectInvalidAttempt(
+      MiuCamProtocolV2.sessionStop,
+      {
+        'clientId': trusted.clientId,
+        MiuCamProtocolV2.streamAttemptId: <String>[],
+      },
+      MiuCamProtocolV2.invalidStreamAttemptIdCode,
+    );
+    expect(tokenService.validateStreamToken(streamToken), isNotNull);
+
+    await expectInvalidAttempt(
+      MiuCamProtocolV2.talkStart,
+      const {},
+      MiuCamProtocolV2.invalidTalkAttemptIdCode,
+    );
+    await expectInvalidAttempt(
+      MiuCamProtocolV2.talkStart,
+      {MiuCamProtocolV2.talkAttemptId: 'bad attempt'},
+      MiuCamProtocolV2.invalidTalkAttemptIdCode,
+    );
+
+    final activeTalk = await _postJson(
+      client,
+      base.port,
+      MiuCamProtocolV2.talkStart,
+      {MiuCamProtocolV2.talkAttemptId: 'talk-current'},
+      bearerToken: trusted.token,
+    );
+    final talkToken =
+        (activeTalk.body['session'] as Map)['talkToken']! as String;
+    await expectInvalidAttempt(
+      MiuCamProtocolV2.talkStop,
+      {'talkToken': talkToken},
+      MiuCamProtocolV2.invalidTalkAttemptIdCode,
+    );
+    await expectInvalidAttempt(
+      MiuCamProtocolV2.talkStop,
+      {
+        'talkToken': talkToken,
+        MiuCamProtocolV2.talkAttemptId: '',
+      },
+      MiuCamProtocolV2.invalidTalkAttemptIdCode,
+    );
+    final stillActive = await _postBytes(
+      client,
+      base.port,
+      MiuCamProtocolV2.talkAudio,
+      Uint8List.fromList([1, 0]),
+      query: {'talkToken': talkToken},
+    );
+    expect(stillActive.statusCode, HttpStatus.ok);
+
+    final exactTalkStop = await _postJson(
+      client,
+      base.port,
+      MiuCamProtocolV2.talkStop,
+      {
+        'talkToken': talkToken,
+        MiuCamProtocolV2.talkAttemptId: 'talk-current',
+      },
+      bearerToken: trusted.token,
+    );
+    final exactStreamStop = await _postJson(
+      client,
+      base.port,
+      MiuCamProtocolV2.sessionStop,
+      {
+        'clientId': trusted.clientId,
+        MiuCamProtocolV2.streamAttemptId: 'stream-current',
+      },
+      bearerToken: trusted.token,
+    );
+    expect(exactTalkStop.body['ok'], isTrue);
+    expect(exactStreamStop.body['ok'], isTrue);
+  });
+
   test('ücretsiz yayın süresi dolduğunda session start 402 döner', () async {
     final tokenService = PairingTokenService();
     final server = await _testServer(
@@ -392,13 +623,16 @@ Future<({int statusCode, Map<String, Object?> body})> _postJson(
   Map<String, Object?> body, {
   String? bearerToken,
   Map<String, String>? query,
+  bool includeAttemptFixture = true,
 }) async {
   final request = await client.postUrl(_uri(port, path, query: query));
   request.headers.contentType = ContentType.json;
   if (bearerToken != null) {
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $bearerToken');
   }
-  request.write(jsonEncode(body));
+  request.write(jsonEncode(
+    includeAttemptFixture ? _withV2AttemptFixture(path, body) : body,
+  ));
   final response = await request.close();
   final responseBody = await utf8.decoder.bind(response).join();
   final json =
@@ -407,6 +641,27 @@ Future<({int statusCode, Map<String, Object?> body})> _postJson(
     statusCode: response.statusCode,
     body: json is Map ? Map<String, Object?>.from(json) : <String, Object?>{},
   );
+}
+
+Map<String, Object?> _withV2AttemptFixture(
+  String path,
+  Map<String, Object?> body,
+) {
+  final fixture = Map<String, Object?>.of(body);
+  if (path == MiuCamProtocolV2.sessionStart ||
+      path == MiuCamProtocolV2.sessionStop) {
+    fixture.putIfAbsent(
+      MiuCamProtocolV2.streamAttemptId,
+      () => 'feature-stream-fixture-attempt',
+    );
+  }
+  if (path == MiuCamProtocolV2.talkStart || path == MiuCamProtocolV2.talkStop) {
+    fixture.putIfAbsent(
+      MiuCamProtocolV2.talkAttemptId,
+      () => 'feature-talk-fixture-attempt',
+    );
+  }
+  return fixture;
 }
 
 Future<({int statusCode, Map<String, Object?> body})> _postBytes(

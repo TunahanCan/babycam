@@ -22,6 +22,7 @@ class MainActivity : FlutterActivity() {
         MiuCamEngineOwner.attachActivity(flutterEngine)
         val appContext = applicationContext
         fun pcmAudioPlayer() = MiuCamNativeRuntime.audioPlayer(appContext)
+        val pcmAudioOperations = MiuCamNativeRuntime.pcmAudioOperations
 
         EventChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -138,29 +139,64 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "start" -> {
-                    try {
-                        val args = call.arguments as? Map<*, *>
-                        val sampleRate =
-                            (args?.get("sampleRate") as? Number)?.toInt() ?: 16000
-                        val channels =
-                            (args?.get("channels") as? Number)?.toInt() ?: 1
-                        pcmAudioPlayer().start(sampleRate, channels)
-                        result.success(null)
-                    } catch (error: Exception) {
-                        result.error(
-                            "PCM_AUDIO_START_FAILED",
-                            error.message,
-                            pcmAudioPlayer().status()
-                        )
+                    val args = call.arguments as? Map<*, *>
+                    val sampleRate =
+                        (args?.get("sampleRate") as? Number)?.toInt() ?: 16000
+                    val channels =
+                        (args?.get("channels") as? Number)?.toInt() ?: 1
+                    val leaseId = (args?.get("leaseId") as? Number)?.toLong()
+                    val operationId =
+                        (args?.get("operationId") as? Number)?.toLong()
+                    val owned = leaseId != null && operationId != null
+                    val claimed = !owned ||
+                        pcmAudioOperations.claimStart(leaseId!!, operationId!!)
+                    if (!claimed) {
+                        result.success(false)
+                    } else {
+                        if (!owned) pcmAudioOperations.clearOwnership()
+                        try {
+                            pcmAudioPlayer().start(sampleRate, channels)
+                            result.success(true)
+                        } catch (error: Exception) {
+                            if (owned) {
+                                pcmAudioOperations.releaseFailedStart(
+                                    leaseId!!,
+                                    operationId!!
+                                )
+                            } else {
+                                pcmAudioOperations.clearOwnership()
+                            }
+                            result.error(
+                                "PCM_AUDIO_START_FAILED",
+                                error.message,
+                                pcmAudioPlayer().status()
+                            )
+                        }
                     }
                 }
                 "write" -> {
-                    val bytes = call.arguments as? ByteArray
+                    val args = call.arguments as? Map<*, *>
+                    val bytes = args?.get("bytes") as? ByteArray
+                        ?: call.arguments as? ByteArray
+                    val leaseId = (args?.get("leaseId") as? Number)?.toLong()
+                    val operationId =
+                        (args?.get("operationId") as? Number)?.toLong()
+                    val owned = leaseId != null && operationId != null
                     if (bytes == null) {
+                        result.success(false)
+                    } else if (
+                        owned &&
+                        !pcmAudioOperations.claimWrite(leaseId!!, operationId!!)
+                    ) {
+                        result.success(false)
+                    } else if (!owned && !pcmAudioOperations.acceptsLegacyWrite()) {
                         result.success(false)
                     } else {
                         pcmAudioPlayer().write(bytes) { accepted ->
-                            result.success(accepted)
+                            result.success(
+                                accepted &&
+                                    (!owned || pcmAudioOperations.owns(leaseId!!))
+                            )
                         }
                     }
                 }
@@ -168,6 +204,7 @@ class MainActivity : FlutterActivity() {
                 "playTestTone" -> {
                     try {
                         val args = call.arguments as? Map<*, *>
+                        pcmAudioOperations.clearOwnership()
                         pcmAudioPlayer().playTestTone(
                             sampleRate =
                                 (args?.get("sampleRate") as? Number)?.toInt() ?: 16000,
@@ -190,8 +227,29 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "stop" -> {
-                    pcmAudioPlayer().stop()
-                    result.success(null)
+                    val args = call.arguments as? Map<*, *>
+                    val leaseId = (args?.get("leaseId") as? Number)?.toLong()
+                    val operationId =
+                        (args?.get("operationId") as? Number)?.toLong()
+                    val reset = args?.get("reset") as? Boolean ?: false
+                    val owned = operationId != null && (reset || leaseId != null)
+                    if (!owned) {
+                        pcmAudioOperations.clearOwnership()
+                        pcmAudioPlayer().stop()
+                        result.success(true)
+                    } else {
+                        val shouldStop = pcmAudioOperations.claimStop(
+                            leaseId = leaseId,
+                            operationId = operationId!!,
+                            reset = reset
+                        )
+                        if (shouldStop == null) {
+                            result.success(false)
+                        } else {
+                            if (shouldStop) pcmAudioPlayer().stop()
+                            result.success(shouldStop)
+                        }
+                    }
                 }
                 else -> result.notImplemented()
             }

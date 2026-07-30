@@ -230,6 +230,71 @@ void main() {
     await bridge.close();
   });
 
+  test('hanging native attach does not block successor reconciliation',
+      () async {
+    final bridge = _FakeBridge()..hangFirstAttach = true;
+    final source = AndroidServiceMediaSource(
+      bridge: bridge,
+      nativeOperationTimeout: const Duration(milliseconds: 20),
+    );
+
+    await expectLater(
+      source.reconcile(
+        video: true,
+        audio: false,
+        onVideoFrame: (_) {},
+        onAudioChunk: (_) {},
+      ),
+      throwsA(isA<TimeoutException>()),
+    );
+
+    await source.reconcile(
+      video: true,
+      audio: false,
+      onVideoFrame: (_) {},
+      onAudioChunk: (_) {},
+    );
+    expect(source.videoActive, isTrue);
+    expect(bridge.attachCalls, 2);
+
+    bridge.releaseFirstAttach();
+    await _waitUntil(
+      () =>
+          bridge.attachCalls >= 3 &&
+          bridge.nativeAttached &&
+          bridge.nativeVideoDemand,
+    );
+
+    expect(source.videoActive, isTrue);
+    expect(bridge.detachCalls, 1);
+    await source.stop();
+    await bridge.close();
+  });
+
+  test('late native attach is detached when demand was rolled back', () async {
+    final bridge = _FakeBridge()..hangFirstAttach = true;
+    final source = AndroidServiceMediaSource(
+      bridge: bridge,
+      nativeOperationTimeout: const Duration(milliseconds: 20),
+    );
+
+    await expectLater(
+      source.reconcile(
+        video: true,
+        audio: false,
+        onVideoFrame: (_) {},
+        onAudioChunk: (_) {},
+      ),
+      throwsA(isA<TimeoutException>()),
+    );
+    await source.stop();
+    bridge.releaseFirstAttach();
+    await _waitUntil(() => bridge.detachCalls == 1);
+
+    expect(source.isActive, isFalse);
+    await bridge.close();
+  });
+
   test(
       'unexpected event stream close reattaches and restores exact media demand',
       () async {
@@ -315,6 +380,170 @@ void main() {
     expect(audioDiscontinuities, [true, true]);
 
     await source.stop();
+    await bridge.close();
+  });
+
+  test('hanging reconnect cannot block stop and successor demand', () async {
+    final bridge = _FakeBridge()..hangAttachCall(2);
+    final source = AndroidServiceMediaSource(
+      bridge: bridge,
+      nativeOperationTimeout: const Duration(milliseconds: 30),
+      reconnectBackoff: const [Duration.zero],
+    );
+
+    await source.reconcile(
+      video: true,
+      audio: false,
+      onVideoFrame: (_) {},
+      onAudioChunk: (_) {},
+    );
+    await bridge.closeCurrentEventStream();
+    await _waitUntil(() => bridge.attachCalls == 2);
+
+    final stopping = source.stop();
+    final successor = source.reconcile(
+      video: false,
+      audio: true,
+      onVideoFrame: (_) {},
+      onAudioChunk: (_) {},
+    );
+    await Future.wait([stopping, successor])
+        .timeout(const Duration(milliseconds: 250));
+    expect(source.audioActive, isTrue);
+
+    bridge.releaseAttachCall(2);
+    await _waitUntil(
+      () =>
+          bridge.nativeAttached &&
+          !bridge.nativeVideoDemand &&
+          bridge.nativeAudioDemand,
+    );
+    expect(source.audioActive, isTrue);
+    await source.stop();
+    await bridge.close();
+  });
+
+  test('late old clear-demand is repaired to successor exact demand', () async {
+    final bridge = _FakeBridge()..hangDemandCall(2);
+    final source = AndroidServiceMediaSource(
+      bridge: bridge,
+      nativeOperationTimeout: const Duration(milliseconds: 30),
+      reconnectBackoff: const [Duration(milliseconds: 10)],
+    );
+
+    await source.reconcile(
+      video: true,
+      audio: false,
+      onVideoFrame: (_) {},
+      onAudioChunk: (_) {},
+    );
+    await expectLater(source.stop(), throwsA(isA<TimeoutException>()));
+    await source.reconcile(
+      video: false,
+      audio: true,
+      onVideoFrame: (_) {},
+      onAudioChunk: (_) {},
+    );
+    expect(bridge.nativeAudioDemand, isTrue);
+
+    bridge.releaseDemandCall(2);
+    await _waitUntil(
+      () =>
+          bridge.nativeAttached &&
+          !bridge.nativeVideoDemand &&
+          bridge.nativeAudioDemand &&
+          bridge.demandCalls >= 4,
+    );
+
+    expect(source.audioActive, isTrue);
+    await source.stop();
+    await bridge.close();
+  });
+
+  test('late old detach is repaired without detaching successor', () async {
+    final bridge = _FakeBridge()..hangDetachCall(1);
+    final source = AndroidServiceMediaSource(
+      bridge: bridge,
+      nativeOperationTimeout: const Duration(milliseconds: 30),
+      reconnectBackoff: const [Duration(milliseconds: 10)],
+    );
+
+    await source.reconcile(
+      video: true,
+      audio: false,
+      onVideoFrame: (_) {},
+      onAudioChunk: (_) {},
+    );
+    await expectLater(source.stop(), throwsA(isA<TimeoutException>()));
+    await source.reconcile(
+      video: false,
+      audio: true,
+      onVideoFrame: (_) {},
+      onAudioChunk: (_) {},
+    );
+
+    bridge.releaseDetachCall(1);
+    await _waitUntil(
+      () =>
+          bridge.nativeAttached &&
+          bridge.nativeAudioDemand &&
+          bridge.attachCalls >= 3,
+    );
+
+    expect(source.audioActive, isTrue);
+    await source.stop();
+    await bridge.close();
+  });
+
+  test('late attach cleanup retries when compensating detach hangs', () async {
+    final bridge = _FakeBridge()..hangFirstAttach = true;
+    final source = AndroidServiceMediaSource(
+      bridge: bridge,
+      nativeOperationTimeout: const Duration(milliseconds: 20),
+      reconnectBackoff: const [Duration(milliseconds: 10)],
+    );
+
+    await expectLater(
+      source.reconcile(
+        video: true,
+        audio: false,
+        onVideoFrame: (_) {},
+        onAudioChunk: (_) {},
+      ),
+      throwsA(isA<TimeoutException>()),
+    );
+    try {
+      await source.stop();
+    } catch (_) {}
+    final compensatingDetach = bridge.detachCalls + 1;
+    bridge.hangDetachCall(compensatingDetach);
+    bridge.releaseFirstAttach();
+
+    await _waitUntil(() => bridge.detachCalls > compensatingDetach);
+    expect(bridge.nativeAttached, isFalse);
+    await bridge.close();
+  });
+
+  test('immediate detach failure retains lease and retries cleanup', () async {
+    final bridge = _FakeBridge();
+    final source = AndroidServiceMediaSource(
+      bridge: bridge,
+      nativeOperationTimeout: const Duration(milliseconds: 30),
+      reconnectBackoff: const [Duration(milliseconds: 10)],
+    );
+    await source.reconcile(
+      video: true,
+      audio: false,
+      onVideoFrame: (_) {},
+      onAudioChunk: (_) {},
+    );
+    bridge.detachFailuresRemaining = 1;
+
+    await expectLater(source.stop(), throwsA(isA<StateError>()));
+    await _waitUntil(() => bridge.detachCalls >= 2);
+
+    expect(bridge.nativeAttached, isFalse);
+    expect(source.isActive, isFalse);
     await bridge.close();
   });
 
@@ -549,6 +778,19 @@ void main() {
   });
 }
 
+Future<void> _waitUntil(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 1),
+}) async {
+  final stopwatch = Stopwatch()..start();
+  while (!condition()) {
+    if (stopwatch.elapsed >= timeout) {
+      fail('Condition was not met within $timeout.');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+}
+
 class _FakeBridge implements AndroidServiceMediaBridgePort {
   final _eventControllers = <StreamController<Object?>>[];
   final _readyCallNotifications = StreamController<int>.broadcast(sync: true);
@@ -560,6 +802,16 @@ class _FakeBridge implements AndroidServiceMediaBridgePort {
   int detachCalls = 0;
   int hardwareDemandMutations = 0;
   int readyFailuresRemaining = 0;
+  int detachFailuresRemaining = 0;
+  bool hangFirstAttach = false;
+  final Completer<void> _firstAttachRelease = Completer<void>();
+  final _attachReleases = <int, Completer<void>>{};
+  final _demandReleases = <int, Completer<void>>{};
+  final _detachReleases = <int, Completer<void>>{};
+  bool nativeAttached = false;
+  bool nativeVideoDemand = false;
+  bool nativeAudioDemand = false;
+  int demandCalls = 0;
 
   @override
   Stream<Object?> get events {
@@ -596,11 +848,48 @@ class _FakeBridge implements AndroidServiceMediaBridgePort {
     required int maxVideoFps,
   }) async {
     attachCalls++;
+    if (hangFirstAttach && attachCalls == 1) {
+      await _firstAttachRelease.future;
+    }
+    final release = _attachReleases[attachCalls];
+    if (release != null) await release.future;
+    nativeAttached = true;
     return {
       'consumerAttached': true,
       'jpegQuality': jpegQuality,
       'maxVideoFps': maxVideoFps,
     };
+  }
+
+  void releaseFirstAttach() {
+    if (!_firstAttachRelease.isCompleted) _firstAttachRelease.complete();
+  }
+
+  void hangAttachCall(int call) {
+    _attachReleases[call] = Completer<void>();
+  }
+
+  void releaseAttachCall(int call) {
+    final release = _attachReleases[call];
+    if (release != null && !release.isCompleted) release.complete();
+  }
+
+  void hangDemandCall(int call) {
+    _demandReleases[call] = Completer<void>();
+  }
+
+  void releaseDemandCall(int call) {
+    final release = _demandReleases[call];
+    if (release != null && !release.isCompleted) release.complete();
+  }
+
+  void hangDetachCall(int call) {
+    _detachReleases[call] = Completer<void>();
+  }
+
+  void releaseDetachCall(int call) {
+    final release = _detachReleases[call];
+    if (release != null && !release.isCompleted) release.complete();
   }
 
   @override
@@ -621,6 +910,15 @@ class _FakeBridge implements AndroidServiceMediaBridgePort {
   @override
   Future<Map<Object?, Object?>> detach() async {
     detachCalls++;
+    final release = _detachReleases[detachCalls];
+    if (release != null) await release.future;
+    if (detachFailuresRemaining > 0) {
+      detachFailuresRemaining--;
+      throw StateError('native detach failed');
+    }
+    nativeAttached = false;
+    nativeVideoDemand = false;
+    nativeAudioDemand = false;
     return {'consumerAttached': false};
   }
 
@@ -633,11 +931,16 @@ class _FakeBridge implements AndroidServiceMediaBridgePort {
     required bool audio,
     bool encodeVideo = true,
   }) async {
+    demandCalls++;
     consumerDemands.add((
       video: video,
       audio: audio,
       encodeVideo: encodeVideo,
     ));
+    final release = _demandReleases[demandCalls];
+    if (release != null) await release.future;
+    nativeVideoDemand = video;
+    nativeAudioDemand = audio;
     return {
       'consumerVideo': video,
       'consumerAudio': audio,

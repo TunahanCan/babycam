@@ -140,6 +140,7 @@ class AndroidServiceMediaSource extends ServerMediaSource
     this.jpegQuality = 68,
     this.maxVideoFps = 8,
     this.readyTimeout = const Duration(seconds: 8),
+    this.nativeOperationTimeout = const Duration(seconds: 8),
     List<Duration> reconnectBackoff = _defaultReconnectBackoff,
   })  : _bridge = bridge ?? MethodChannelAndroidServiceMediaBridge(),
         reconnectBackoff = List<Duration>.unmodifiable(reconnectBackoff) {
@@ -155,6 +156,13 @@ class AndroidServiceMediaSource extends ServerMediaSource
         readyTimeout,
         'readyTimeout',
         'must be 500ms..15s',
+      );
+    }
+    if (nativeOperationTimeout <= Duration.zero) {
+      throw ArgumentError.value(
+        nativeOperationTimeout,
+        'nativeOperationTimeout',
+        'must be positive',
       );
     }
     if (reconnectBackoff.isEmpty || reconnectBackoff.length > 10) {
@@ -179,6 +187,7 @@ class AndroidServiceMediaSource extends ServerMediaSource
   final int jpegQuality;
   final int maxVideoFps;
   final Duration readyTimeout;
+  final Duration nativeOperationTimeout;
   final List<Duration> reconnectBackoff;
   late int _effectiveJpegQuality = jpegQuality;
   late int _effectiveMaxVideoFps = maxVideoFps;
@@ -196,6 +205,8 @@ class AndroidServiceMediaSource extends ServerMediaSource
   bool _nativeConsumerAttached = false;
   bool _videoDemand = false;
   bool _audioDemand = false;
+  bool _requestedVideoDemand = false;
+  bool _requestedAudioDemand = false;
   bool _videoEncodingDemand = true;
   bool _videoActive = false;
   bool _audioActive = false;
@@ -217,6 +228,9 @@ class AndroidServiceMediaSource extends ServerMediaSource
   int? _reconnectLoopGeneration;
   Timer? _reconnectTimer;
   Completer<bool>? _reconnectDelayCompleter;
+  bool _nativeRepairScheduled = false;
+  Timer? _nativeRepairTimer;
+  int _nativeRepairAttempt = 0;
 
   @override
   bool get isActive => _videoActive || _audioActive;
@@ -256,12 +270,19 @@ class AndroidServiceMediaSource extends ServerMediaSource
   /// payload on every analysis frame.
   Future<void> setVideoEncodingDemand(bool enabled) =>
       _operations.run(() async {
+        final deadline = _NativeOperationDeadline(nativeOperationTimeout);
         _videoEncodingDemand = enabled;
         if (_attached) {
-          await _bridge.setConsumerDemand(
-            video: _videoDemand,
-            audio: _audioDemand,
-            encodeVideo: _videoDemand && enabled,
+          final generation = _demandGeneration;
+          await _runNativeMutation(
+            () => _bridge.setConsumerDemand(
+              video: _videoDemand,
+              audio: _audioDemand,
+              encodeVideo: _videoDemand && enabled,
+            ),
+            generation: generation,
+            label: 'set video encoding demand',
+            deadline: deadline,
           );
         }
       });
@@ -277,12 +298,19 @@ class AndroidServiceMediaSource extends ServerMediaSource
   }
 
   Future<void> _applyMediaPolicy(int jpegQuality, int maxVideoFps) async {
+    final deadline = _NativeOperationDeadline(nativeOperationTimeout);
     _effectiveJpegQuality = jpegQuality;
     _effectiveMaxVideoFps = maxVideoFps;
     if (_attached) {
-      await _bridge.setMediaPolicy(
-        jpegQuality: jpegQuality,
-        maxVideoFps: maxVideoFps,
+      final generation = _demandGeneration;
+      await _runNativeMutation(
+        () => _bridge.setMediaPolicy(
+          jpegQuality: jpegQuality,
+          maxVideoFps: maxVideoFps,
+        ),
+        generation: generation,
+        label: 'set media policy',
+        deadline: deadline,
       );
     }
   }
@@ -295,10 +323,13 @@ class AndroidServiceMediaSource extends ServerMediaSource
     required ServerAudioChunkSink onAudioChunk,
     ServerMediaErrorSink? onError,
   }) {
+    _requestedVideoDemand = video;
+    _requestedAudioDemand = audio;
     final generation = _beginDemandGeneration();
     return _operations.run(
       () async {
         if (generation != _demandGeneration) return;
+        final deadline = _NativeOperationDeadline(nativeOperationTimeout);
         await _applyDemand(
           generation: generation,
           video: video,
@@ -306,6 +337,7 @@ class AndroidServiceMediaSource extends ServerMediaSource
           onVideoFrame: onVideoFrame,
           onAudioChunk: onAudioChunk,
           onError: onError,
+          deadline: deadline,
         );
       },
     );
@@ -313,10 +345,15 @@ class AndroidServiceMediaSource extends ServerMediaSource
 
   @override
   Future<void> stop() {
+    _requestedVideoDemand = false;
+    _requestedAudioDemand = false;
     final generation = _beginDemandGeneration();
     return _operations.run(() async {
       if (generation != _demandGeneration) return;
-      await _stopConsumer();
+      await _stopConsumer(
+        generation,
+        deadline: _NativeOperationDeadline(nativeOperationTimeout),
+      );
     });
   }
 
@@ -341,7 +378,9 @@ class AndroidServiceMediaSource extends ServerMediaSource
     required ServerVideoFrameSink onVideoFrame,
     required ServerAudioChunkSink onAudioChunk,
     required ServerMediaErrorSink? onError,
+    required _NativeOperationDeadline deadline,
   }) async {
+    if (generation != _demandGeneration) return;
     if (audio != _audioDemand) {
       _resetAudioContinuity();
     }
@@ -352,21 +391,32 @@ class AndroidServiceMediaSource extends ServerMediaSource
     _audioDemand = audio;
     if (!video) _latestPreviewFrame = null;
     if (!video && !audio) {
-      await _stopConsumer();
+      await _stopConsumer(generation, deadline: deadline);
       return;
     }
 
     try {
-      await _ensureAttached(generation);
-      await _bridge.setConsumerDemand(
-        video: video,
-        audio: audio,
-        encodeVideo: video && _videoEncodingDemand,
+      await _ensureAttached(generation, deadline: deadline);
+      if (generation != _demandGeneration) return;
+      await _runNativeMutation(
+        () => _bridge.setConsumerDemand(
+          video: video,
+          audio: audio,
+          encodeVideo: video && _videoEncodingDemand,
+        ),
+        generation: generation,
+        label: 'set consumer demand',
+        deadline: deadline,
       );
-      await _bridge.awaitReady(
-        video: video,
-        audio: audio,
-        timeout: readyTimeout,
+      if (generation != _demandGeneration) return;
+      await _boundedNative(
+        _bridge.awaitReady(
+          video: video,
+          audio: audio,
+          timeout: readyTimeout,
+        ),
+        'await native readiness',
+        deadline: deadline,
       );
       if (generation != _demandGeneration || !_attached) {
         throw StateError(
@@ -377,70 +427,93 @@ class AndroidServiceMediaSource extends ServerMediaSource
       _audioActive = audio;
       _lastError = null;
     } catch (error, stack) {
+      if (generation != _demandGeneration) return;
       _recordError(error, stack);
-      await _bestEffortDetach();
+      await _bestEffortDetach(deadline);
+      _scheduleNativeRepairRetry();
       rethrow;
     }
   }
 
-  Future<void> _ensureAttached(int generation) async {
+  Future<void> _ensureAttached(
+    int generation, {
+    required _NativeOperationDeadline deadline,
+  }) async {
     if (_attached) return;
+    final eventStreamGeneration = _ensureEventSubscription();
+    _nativeConsumerAttached = true;
+    await _runNativeMutation(
+      () => _bridge.attach(
+        jpegQuality: _effectiveJpegQuality,
+        maxVideoFps: _effectiveMaxVideoFps,
+      ),
+      generation: generation,
+      label: 'attach native consumer',
+      deadline: deadline,
+      onLateSuccess: () => _nativeConsumerAttached = true,
+    );
+    if (generation != _demandGeneration ||
+        eventStreamGeneration != _eventStreamGeneration) {
+      _scheduleNativeRepair();
+      return;
+    }
+    _attached = true;
+  }
+
+  int _ensureEventSubscription() {
+    if (_eventSubscription != null) return _eventStreamGeneration;
     final eventStreamGeneration = ++_eventStreamGeneration;
     _eventSubscription = _bridge.events.listen(
       _handleNativeEvent,
       onError: (Object error, StackTrace stack) => _recordError(error, stack),
       onDone: () => _handleEventStreamDone(
-        demandGeneration: generation,
         eventStreamGeneration: eventStreamGeneration,
       ),
       cancelOnError: false,
     );
-    try {
-      await _bridge.attach(
-        jpegQuality: _effectiveJpegQuality,
-        maxVideoFps: _effectiveMaxVideoFps,
-      );
-      _nativeConsumerAttached = true;
-      if (eventStreamGeneration != _eventStreamGeneration) {
-        throw StateError(
-          'Android service media event stream closed while attaching.',
-        );
-      }
-      _attached = true;
-    } catch (_) {
-      _eventStreamGeneration += 1;
-      await _eventSubscription?.cancel();
-      _eventSubscription = null;
-      rethrow;
-    }
+    return eventStreamGeneration;
   }
 
-  Future<void> _stopConsumer() async {
+  Future<void> _stopConsumer(
+    int generation, {
+    required _NativeOperationDeadline deadline,
+  }) async {
     Object? firstError;
     StackTrace? firstStack;
+    var detached = false;
     if (_nativeConsumerAttached) {
       try {
-        await _bridge.setConsumerDemand(
-          video: false,
-          audio: false,
-          encodeVideo: false,
+        await _runNativeMutation(
+          () => _bridge.setConsumerDemand(
+            video: false,
+            audio: false,
+            encodeVideo: false,
+          ),
+          generation: generation,
+          label: 'clear consumer demand',
+          deadline: deadline,
         );
       } catch (error, stack) {
         firstError = error;
         firstStack = stack;
       }
+      if (generation != _demandGeneration) return;
       try {
-        await _bridge.detach();
+        await _runNativeMutation(
+          _bridge.detach,
+          generation: generation,
+          label: 'detach native consumer',
+          deadline: deadline,
+        );
+        detached = true;
       } catch (error, stack) {
         firstError ??= error;
         firstStack ??= stack;
       }
+      if (generation != _demandGeneration) return;
+      if (detached) _nativeConsumerAttached = false;
     }
-    _eventStreamGeneration += 1;
-    await _eventSubscription?.cancel();
-    _eventSubscription = null;
     _attached = false;
-    _nativeConsumerAttached = false;
     _videoDemand = false;
     _audioDemand = false;
     _videoActive = false;
@@ -452,28 +525,90 @@ class AndroidServiceMediaSource extends ServerMediaSource
     _errorSink = null;
     _lastNativeStateErrorKey = null;
     if (firstError != null) {
+      if (_nativeConsumerAttached) _scheduleNativeRepairRetry();
       Error.throwWithStackTrace(firstError, firstStack ?? StackTrace.current);
     }
   }
 
-  Future<void> _bestEffortDetach() async {
-    try {
-      if (_nativeConsumerAttached) {
-        await _bridge.setConsumerDemand(
-          video: false,
-          audio: false,
-          encodeVideo: false,
+  Future<T> _boundedNative<T>(
+    Future<T> operation,
+    String label, {
+    _NativeOperationDeadline? deadline,
+  }) =>
+      operation.timeout(
+        deadline?.remaining ?? nativeOperationTimeout,
+        onTimeout: () => throw TimeoutException(
+          'Android service $label timed out.',
+          deadline?.timeout ?? nativeOperationTimeout,
+        ),
+      );
+
+  Future<T> _runNativeMutation<T>(
+    Future<T> Function() callback, {
+    required int generation,
+    required String label,
+    _NativeOperationDeadline? deadline,
+    void Function()? onLateSuccess,
+  }) {
+    final operation = Future<T>.sync(callback);
+    var timedOut = false;
+    operation.then<void>(
+      (_) {
+        if (timedOut || generation != _demandGeneration) {
+          onLateSuccess?.call();
+          _scheduleNativeRepair();
+        }
+      },
+      onError: (Object _, StackTrace __) {
+        if (timedOut || generation != _demandGeneration) {
+          _scheduleNativeRepair();
+        }
+      },
+    );
+    return operation.timeout(
+      deadline?.remaining ?? nativeOperationTimeout,
+      onTimeout: () {
+        timedOut = true;
+        throw TimeoutException(
+          'Android service $label timed out.',
+          deadline?.timeout ?? nativeOperationTimeout,
         );
-        await _bridge.detach();
+      },
+    );
+  }
+
+  Future<void> _bestEffortDetach(_NativeOperationDeadline deadline) async {
+    final generation = _demandGeneration;
+    if (_nativeConsumerAttached) {
+      try {
+        await _runNativeMutation(
+          () => _bridge.setConsumerDemand(
+            video: false,
+            audio: false,
+            encodeVideo: false,
+          ),
+          generation: generation,
+          label: 'clear failed consumer demand',
+          deadline: deadline,
+        );
+      } catch (_) {
+        // Detach can still release the native lease.
       }
-    } catch (_) {
-      // Preserve the acquisition error that caused cleanup.
+      try {
+        await _runNativeMutation(
+          _bridge.detach,
+          generation: generation,
+          label: 'detach failed native consumer',
+          deadline: deadline,
+        );
+        if (generation == _demandGeneration) {
+          _nativeConsumerAttached = false;
+        }
+      } catch (_) {
+        // Preserve the acquisition error that caused cleanup.
+      }
     }
-    _eventStreamGeneration += 1;
-    await _eventSubscription?.cancel();
-    _eventSubscription = null;
     _attached = false;
-    _nativeConsumerAttached = false;
     _videoDemand = false;
     _audioDemand = false;
     _videoActive = false;
@@ -486,6 +621,9 @@ class AndroidServiceMediaSource extends ServerMediaSource
   int _beginDemandGeneration() {
     final generation = ++_demandGeneration;
     _cancelReconnectDelay();
+    _nativeRepairTimer?.cancel();
+    _nativeRepairTimer = null;
+    _nativeRepairAttempt = 0;
     return generation;
   }
 
@@ -493,7 +631,6 @@ class AndroidServiceMediaSource extends ServerMediaSource
       generation == _demandGeneration && (_videoDemand || _audioDemand);
 
   void _handleEventStreamDone({
-    required int demandGeneration,
     required int eventStreamGeneration,
   }) {
     if (eventStreamGeneration != _eventStreamGeneration) return;
@@ -501,6 +638,7 @@ class AndroidServiceMediaSource extends ServerMediaSource
     _eventSubscription = null;
     _attached = false;
     _resetMediaContinuity();
+    final demandGeneration = _demandGeneration;
     if (!_hasDemandFor(demandGeneration)) return;
 
     _recordError(
@@ -590,24 +728,34 @@ class AndroidServiceMediaSource extends ServerMediaSource
     required int attempt,
   }) async {
     if (!_hasDemandFor(generation)) return _ReconnectResult.cancelled;
+    final deadline = _NativeOperationDeadline(nativeOperationTimeout);
     try {
-      await _ensureAttached(generation);
+      await _ensureAttached(generation, deadline: deadline);
       if (!_hasDemandFor(generation)) {
-        await _detachPreservingDemand();
+        await _detachPreservingDemand(generation, deadline: deadline);
         return _ReconnectResult.cancelled;
       }
-      await _bridge.setConsumerDemand(
-        video: _videoDemand,
-        audio: _audioDemand,
-        encodeVideo: _videoDemand && _videoEncodingDemand,
+      await _runNativeMutation(
+        () => _bridge.setConsumerDemand(
+          video: _videoDemand,
+          audio: _audioDemand,
+          encodeVideo: _videoDemand && _videoEncodingDemand,
+        ),
+        generation: generation,
+        label: 'restore consumer demand',
+        deadline: deadline,
       );
-      await _bridge.awaitReady(
-        video: _videoDemand,
-        audio: _audioDemand,
-        timeout: readyTimeout,
+      await _boundedNative(
+        _bridge.awaitReady(
+          video: _videoDemand,
+          audio: _audioDemand,
+          timeout: readyTimeout,
+        ),
+        'await reconnect readiness',
+        deadline: deadline,
       );
       if (!_hasDemandFor(generation)) {
-        await _detachPreservingDemand();
+        await _detachPreservingDemand(generation, deadline: deadline);
         return _ReconnectResult.cancelled;
       }
       if (!_attached) {
@@ -630,33 +778,136 @@ class AndroidServiceMediaSource extends ServerMediaSource
           stack,
         );
       }
-      await _detachPreservingDemand();
+      await _detachPreservingDemand(generation, deadline: deadline);
       return _hasDemandFor(generation)
           ? _ReconnectResult.failed
           : _ReconnectResult.cancelled;
     }
   }
 
-  Future<void> _detachPreservingDemand() async {
-    try {
-      if (_nativeConsumerAttached) {
-        await _bridge.setConsumerDemand(
-          video: false,
-          audio: false,
-          encodeVideo: false,
-        );
-        await _bridge.detach();
-      }
-    } catch (_) {
-      // The retry telemetry already carries the actionable acquisition error.
+  Future<void> _detachPreservingDemand(
+    int generation, {
+    required _NativeOperationDeadline deadline,
+  }) async {
+    if (generation != _demandGeneration &&
+        (_requestedVideoDemand || _requestedAudioDemand)) {
+      return;
     }
-    _eventStreamGeneration += 1;
-    await _eventSubscription?.cancel();
-    _eventSubscription = null;
+    var detached = false;
+    if (_nativeConsumerAttached) {
+      try {
+        await _runNativeMutation(
+          () => _bridge.setConsumerDemand(
+            video: false,
+            audio: false,
+            encodeVideo: false,
+          ),
+          generation: generation,
+          label: 'clear reconnect demand',
+          deadline: deadline,
+        );
+      } catch (_) {
+        // A detach attempt remains useful after a demand mutation failure.
+      }
+      try {
+        await _runNativeMutation(
+          _bridge.detach,
+          generation: generation,
+          label: 'detach reconnect consumer',
+          deadline: deadline,
+        );
+        detached = true;
+      } catch (_) {
+        // The durable may-be-attached flag below keeps cleanup retryable.
+      }
+    }
+    if (generation != _demandGeneration &&
+        (_requestedVideoDemand || _requestedAudioDemand)) {
+      return;
+    }
     _attached = false;
-    _nativeConsumerAttached = false;
+    if (detached) _nativeConsumerAttached = false;
     _resetMediaContinuity();
     _lastNativeStateErrorKey = null;
+    if (!detached && _nativeConsumerAttached) {
+      _scheduleNativeRepairRetry();
+    }
+  }
+
+  void _scheduleNativeRepair() {
+    if (_nativeRepairScheduled) return;
+    _nativeRepairScheduled = true;
+    unawaited(_operations.run(() async {
+      _nativeRepairScheduled = false;
+      await _repairLatestNativeState();
+    }).catchError((Object error, StackTrace stack) {
+      _nativeRepairScheduled = false;
+      _recordError(error, stack);
+      _scheduleNativeRepairRetry();
+    }));
+  }
+
+  Future<void> _repairLatestNativeState() async {
+    final generation = _demandGeneration;
+    final deadline = _NativeOperationDeadline(nativeOperationTimeout);
+    final video = _requestedVideoDemand;
+    final audio = _requestedAudioDemand;
+    if (!video && !audio) {
+      await _detachPreservingDemand(generation, deadline: deadline);
+      if (generation == _demandGeneration && _nativeConsumerAttached) {
+        _scheduleNativeRepairRetry();
+      } else {
+        _nativeRepairAttempt = 0;
+      }
+      return;
+    }
+
+    _nativeRepairTimer?.cancel();
+    _nativeRepairTimer = null;
+    _nativeRepairAttempt = 0;
+    _videoDemand = video;
+    _audioDemand = audio;
+    _attached = false;
+    await _ensureAttached(generation, deadline: deadline);
+    if (generation != _demandGeneration) return;
+    await _runNativeMutation(
+      () => _bridge.setConsumerDemand(
+        video: video,
+        audio: audio,
+        encodeVideo: video && _videoEncodingDemand,
+      ),
+      generation: generation,
+      label: 'repair consumer demand',
+      deadline: deadline,
+    );
+    if (generation != _demandGeneration) return;
+    await _boundedNative(
+      _bridge.awaitReady(
+        video: video,
+        audio: audio,
+        timeout: readyTimeout,
+      ),
+      'await repaired native readiness',
+      deadline: deadline,
+    );
+    if (generation != _demandGeneration || !_attached) return;
+    _videoActive = video;
+    _audioActive = audio;
+    _lastError = null;
+  }
+
+  void _scheduleNativeRepairRetry() {
+    if (_nativeRepairTimer != null) return;
+    final backoffIndex = min(_nativeRepairAttempt, reconnectBackoff.length - 1);
+    final configuredDelay = reconnectBackoff[backoffIndex];
+    final delay = configuredDelay < const Duration(milliseconds: 10)
+        ? const Duration(milliseconds: 10)
+        : configuredDelay;
+    _nativeRepairAttempt++;
+    _nativeRepairTimer = Timer(delay, () {
+      _nativeRepairTimer = null;
+      _scheduleNativeRepair();
+    });
   }
 
   void _resetMediaContinuity() {
@@ -875,3 +1126,15 @@ const _defaultReconnectBackoff = <Duration>[
 ];
 
 enum _ReconnectResult { succeeded, failed, cancelled }
+
+final class _NativeOperationDeadline {
+  _NativeOperationDeadline(this.timeout) : _started = Stopwatch()..start();
+
+  final Duration timeout;
+  final Stopwatch _started;
+
+  Duration get remaining {
+    final remaining = timeout - _started.elapsed;
+    return remaining > Duration.zero ? remaining : Duration.zero;
+  }
+}

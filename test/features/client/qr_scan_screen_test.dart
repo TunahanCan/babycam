@@ -144,6 +144,62 @@ void main() {
     expect(find.text('QR kod metni'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+      'dar yatay ekranda klavye açıkken manuel giriş kaydırılabilir kalır',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(667, 320));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(tester.view.resetViewInsets);
+    final gateway = _FakeQRCameraPermissionGateway(
+      statusResult: CameraPermissionStatus.denied,
+      requestResult: CameraPermissionStatus.denied,
+    );
+
+    await tester.pumpWidget(
+      _App(
+        gateway: gateway,
+        textScaler: const TextScaler.linear(2),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.showKeyboard(find.byType(TextField));
+    tester.view.viewInsets = const FakeViewPadding(bottom: 200);
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('qr-keyboard-scroll')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('qr-manual-entry-panel')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.enterText(find.byType(TextField), 'miucam://pair?x=1');
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('qr-manual-submit')),
+    );
+    await tester.pump();
+
+    expect(find.byType(TextField).hitTestable(), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('qr-manual-submit')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('qr-manual-submit')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(tester.takeException(), isNull);
+  });
 }
 
 class _App extends StatelessWidget {

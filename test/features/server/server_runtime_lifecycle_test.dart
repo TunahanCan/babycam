@@ -165,8 +165,7 @@ void main() {
     expect(runtime.currentState.activeClients, 0);
   });
 
-  test('Media stop devam eden start bittikten sonra kaynakları kapatır',
-      () async {
+  test('Media stop başlamamış queued start talebini coalesce eder', () async {
     final startCompleter = Completer<void>();
     var startCount = 0;
     var stopCount = 0;
@@ -186,8 +185,8 @@ void main() {
     await start;
     await stop;
 
-    expect(startCount, 1);
-    expect(stopCount, 1);
+    expect(startCount, 0);
+    expect(stopCount, 0);
     expect(media.isActive, isFalse);
   });
 
@@ -211,7 +210,7 @@ void main() {
     expect(media.isActive, isTrue);
   });
 
-  test('Media start hata alırsa aktif kalmaz ve stop çağırmaz', () async {
+  test('Media start hata alırsa belirsiz kaynağı stop ile temizler', () async {
     var stopCount = 0;
     final media = MediaRuntimeController(
       onStart: () async => throw StateError('camera unavailable'),
@@ -222,7 +221,7 @@ void main() {
     await media.stop();
 
     expect(media.isActive, isFalse);
-    expect(stopCount, 0);
+    expect(stopCount, 1);
   });
 
   test('Server local preview media hatasını state içine yazar', () async {
@@ -238,6 +237,7 @@ void main() {
     expect(runtime.currentState.cameraActive, isFalse);
     expect(runtime.currentState.activeClients, 0);
     expect(runtime.currentState.errorMessage, contains('camera unavailable'));
+    expect(runtime.currentState.errorKind, ServerRuntimeErrorKind.media);
   });
 
   test('remote session kapaninca aktif local preview mediaActive kalir',
@@ -412,6 +412,86 @@ void main() {
     await runtime.startStreamSession('client-webrtc', options);
 
     expect(runtime.currentState.activeClients, 1);
+    expect(runtime.currentState.externalCaptureActive, isTrue);
+    expect(media.isActive, isFalse);
+  });
+
+  test('concurrent same-options session start still reconciles hardware',
+      () async {
+    var videoStarts = 0;
+    final media = MediaRuntimeController(
+      onStartVideo: () async => videoStarts++,
+    );
+    final runtime = ServerRuntime(mediaRuntime: media);
+    addTearDown(runtime.dispose);
+    const options = StreamSessionOptions(video: true, audio: false);
+
+    final first = runtime.startStreamSession('same-client', options);
+    final second = runtime.startStreamSession('same-client', options);
+    await Future.wait([first, second]);
+
+    expect(videoStarts, 1);
+    expect(media.videoActive, isTrue);
+    expect(runtime.currentState.activeClients, 1);
+    expect(runtime.currentState.cameraActive, isTrue);
+  });
+
+  test('failed concurrent same-options start does not retain phantom session',
+      () async {
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(
+        onStartVideo: () async => throw StateError('camera failed'),
+      ),
+    );
+    addTearDown(runtime.dispose);
+    const options = StreamSessionOptions(video: true, audio: false);
+
+    final first = runtime.startStreamSession('same-client', options);
+    final second = runtime.startStreamSession('same-client', options);
+    await first;
+    await expectLater(second, throwsA(isA<StateError>()));
+
+    expect(runtime.currentState.activeClients, 0);
+    expect(runtime.currentState.cameraActive, isFalse);
+  });
+
+  test('failed superseding start restores the last applied external session',
+      () async {
+    var failAudioStart = false;
+    final media = MediaRuntimeController(
+      onStartVideo: () async {},
+      onStopVideo: () async {},
+      onStartAudio: () async {
+        if (failAudioStart) throw StateError('microphone failed');
+      },
+      onStopAudio: () async {},
+    );
+    final runtime = ServerRuntime(mediaRuntime: media);
+    addTearDown(runtime.dispose);
+    const applied = StreamSessionOptions(
+      video: true,
+      audio: true,
+      transport: ServerStreamTransport.webRtc,
+    );
+
+    await runtime.startStreamSession('same-client', applied);
+    await runtime.activateExternalCapture('same-client');
+    failAudioStart = true;
+
+    final superseded = runtime.startStreamSession(
+      'same-client',
+      const StreamSessionOptions(video: true, audio: false),
+    );
+    final failing = runtime.startStreamSession(
+      'same-client',
+      const StreamSessionOptions(video: false, audio: true),
+    );
+    await superseded;
+    await expectLater(failing, throwsA(isA<StateError>()));
+
+    expect(runtime.currentState.activeClients, 1);
+    expect(runtime.currentState.activeVideoClients, 1);
+    expect(runtime.currentState.activeAudioClients, 1);
     expect(runtime.currentState.externalCaptureActive, isTrue);
     expect(media.isActive, isFalse);
   });

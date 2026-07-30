@@ -131,8 +131,20 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
         await _rejectInvalidJsonBody(request, error);
         return;
       }
+      late final String attemptId;
+      try {
+        attemptId = _talkAttemptIdForRequest(body);
+      } on FormatException {
+        await _rejectInvalidAttemptId(
+          request,
+          code: protocol_v2.MiuCamProtocolV2.invalidTalkAttemptIdCode,
+          field: protocol_v2.MiuCamProtocolV2.talkAttemptId,
+        );
+        return;
+      }
       final session = await _features.startTalk(
         clientId: clientId,
+        attemptId: attemptId,
         sampleRate: (body?['sampleRate'] as num?)?.toInt() ??
             MiuCamServer._audioSampleRate,
         channels:
@@ -149,6 +161,13 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
         'ok': false,
         'code': 'TALK_SESSION_BUSY',
         'activeSession': error.activeSession.toJson(),
+      });
+    } on TalkSessionCancelledException {
+      request.response.statusCode = HttpStatus.conflict;
+      await _writeJson(request.response, {
+        'ok': false,
+        'code': 'TALK_START_CANCELLED',
+        'message': 'The talk session start was already cancelled.',
       });
     }
   }
@@ -169,9 +188,21 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
       await _rejectInvalidJsonBody(request, error);
       return;
     }
+    late final String attemptId;
+    try {
+      attemptId = _talkAttemptIdForRequest(body);
+    } on FormatException {
+      await _rejectInvalidAttemptId(
+        request,
+        code: protocol_v2.MiuCamProtocolV2.invalidTalkAttemptIdCode,
+        field: protocol_v2.MiuCamProtocolV2.talkAttemptId,
+      );
+      return;
+    }
     final stopped = await _features.stopTalk(
       clientId: clientId,
       token: body?['talkToken']?.toString(),
+      attemptId: attemptId,
     );
     _updateResourceWatchdog();
     await _writeJson(request.response, {

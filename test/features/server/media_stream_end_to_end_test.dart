@@ -594,7 +594,7 @@ Future<({int statusCode, Map<String, Object?> body})> _postJson(
   request.headers
     ..contentType = ContentType.json
     ..set(HttpHeaders.authorizationHeader, 'Bearer $bearerToken');
-  request.write(jsonEncode(body));
+  request.write(jsonEncode(_withV2AttemptFixture(path, body)));
   final response = await request.close();
   final responseBody = await utf8.decoder.bind(response).join();
   final json =
@@ -603,4 +603,19 @@ Future<({int statusCode, Map<String, Object?> body})> _postJson(
     statusCode: response.statusCode,
     body: json is Map ? Map<String, Object?>.from(json) : <String, Object?>{},
   );
+}
+
+Map<String, Object?> _withV2AttemptFixture(
+  String path,
+  Map<String, Object?> body,
+) {
+  final fixture = Map<String, Object?>.of(body);
+  if (path == MiuCamProtocolV2.sessionStart ||
+      path == MiuCamProtocolV2.sessionStop) {
+    fixture.putIfAbsent(
+      MiuCamProtocolV2.streamAttemptId,
+      () => 'media-stream-fixture-attempt',
+    );
+  }
+  return fixture;
 }

@@ -9,6 +9,7 @@ import 'package:miucam/app/app_role.dart';
 import 'package:miucam/core/media/adaptive_media_profile.dart';
 import 'package:miucam/core/protocol/alert_event_dto.dart';
 import 'package:miucam/core/protocol/device_feature_models.dart';
+import 'package:miucam/core/protocol/miucam_protocol.dart';
 import 'package:miucam/core/protocol/pairing_payload.dart';
 import 'package:miucam/core/protocol/pairing_session.dart';
 import 'package:miucam/core/theme/miucam_theme.dart';
@@ -592,7 +593,7 @@ PairingPayload _payload({
   int port = 8080,
 }) =>
     PairingPayload(
-      schemaVersion: 1,
+      schemaVersion: MiuCamProtocolV2.schemaVersion,
       host: host,
       port: port,
       deviceId: 'server-lg-g6',

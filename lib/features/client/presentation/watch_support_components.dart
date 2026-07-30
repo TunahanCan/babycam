@@ -507,25 +507,34 @@ class _Nav extends StatelessWidget {
             AppStrings.of(context).ui('navSettings')
           ].asMap().entries)
             Expanded(
-              child: InkWell(
+              child: Semantics(
+                button: true,
+                selected: tab == entry.key,
+                label: entry.value,
                 onTap: () => onTap(entry.key),
-                borderRadius: BorderRadius.circular(26),
-                child: Container(
-                  alignment: Alignment.center,
-                  decoration: ShapeDecoration(
-                    color: tab == entry.key
-                        ? const Color(0xFFFFDCE6)
-                        : Colors.transparent,
-                    shape: const StadiumBorder(),
-                  ),
-                  child: Text(
-                    entry.value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: tab == entry.key ? _navy : _slate,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
+                child: ExcludeSemantics(
+                  child: InkWell(
+                    onTap: () => onTap(entry.key),
+                    borderRadius: BorderRadius.circular(26),
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      alignment: Alignment.center,
+                      decoration: ShapeDecoration(
+                        color: tab == entry.key
+                            ? const Color(0xFFFFDCE6)
+                            : Colors.transparent,
+                        shape: const StadiumBorder(),
+                      ),
+                      child: Text(
+                        entry.value,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: tab == entry.key ? _navy : _slate,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -582,7 +591,7 @@ class _Top extends StatelessWidget {
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints.tightFor(width: 48, height: 48),
           onPressed: () => Navigator.maybePop(context),
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          icon: const BackButtonIcon(),
           color: _navy,
         ),
         Expanded(

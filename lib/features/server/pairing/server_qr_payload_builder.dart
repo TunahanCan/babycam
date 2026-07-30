@@ -1,4 +1,5 @@
 import '../../../core/miucam_protocol.dart';
+import '../../../core/protocol/miucam_protocol.dart';
 import '../../../core/protocol/pairing_payload.dart';
 import '../../../core/security/transport_config.dart';
 import 'pairing_token_service.dart';
@@ -22,7 +23,7 @@ class ServerQrPayloadBuilder {
       Map<String, Object?>? capabilities}) {
     final transport = transportConfig ?? this.transportConfig;
     return PairingPayload(
-      schemaVersion: 1,
+      schemaVersion: MiuCamProtocolV2.schemaVersion,
       host: host,
       port: port,
       deviceId: deviceId,

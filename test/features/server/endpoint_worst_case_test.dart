@@ -845,8 +845,9 @@ Future<({int statusCode, Map<String, Object?> body})> _postJson(
   int port,
   String path,
   String? token,
-  Map<String, Object?> body,
-) async {
+  Map<String, Object?> body, {
+  bool includeAttemptFixture = true,
+}) async {
   final request = await client.postUrl(Uri(
     scheme: 'http',
     host: InternetAddress.loopbackIPv4.address,
@@ -857,7 +858,9 @@ Future<({int statusCode, Map<String, Object?> body})> _postJson(
   if (token != null) {
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
   }
-  request.write(jsonEncode(body));
+  request.write(jsonEncode(
+    includeAttemptFixture ? _withV2AttemptFixture(path, body) : body,
+  ));
   final response = await request.close();
   final responseBody = await utf8.decoder.bind(response).join();
   final json =
@@ -866,6 +869,27 @@ Future<({int statusCode, Map<String, Object?> body})> _postJson(
     statusCode: response.statusCode,
     body: json is Map ? Map<String, Object?>.from(json) : <String, Object?>{},
   );
+}
+
+Map<String, Object?> _withV2AttemptFixture(
+  String path,
+  Map<String, Object?> body,
+) {
+  final fixture = Map<String, Object?>.of(body);
+  if (path == MiuCamProtocolV2.sessionStart ||
+      path == MiuCamProtocolV2.sessionStop) {
+    fixture.putIfAbsent(
+      MiuCamProtocolV2.streamAttemptId,
+      () => 'worst-case-stream-fixture-attempt',
+    );
+  }
+  if (path == MiuCamProtocolV2.talkStart || path == MiuCamProtocolV2.talkStop) {
+    fixture.putIfAbsent(
+      MiuCamProtocolV2.talkAttemptId,
+      () => 'worst-case-talk-fixture-attempt',
+    );
+  }
+  return fixture;
 }
 
 Future<({int statusCode, Map<String, Object?> body})> _postWithoutBody(

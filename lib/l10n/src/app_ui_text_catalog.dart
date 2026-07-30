@@ -1477,12 +1477,13 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'État du service'
   },
   'serviceStatusSubtitle': {
-    'tr': 'Kamera, mikrofon ve WebSocket sunucu alanında izlenir.',
-    'en': 'Camera, microphone, and WebSocket are monitored in the Server area.',
-    'zh': '摄像头、麦克风和 WebSocket 在服务器区域监控。',
-    'hi': 'कैमरा, माइक्रोफ़ोन और WebSocket सर्वर क्षेत्र में देखे जाते हैं।',
-    'es': 'Cámara, micrófono y WebSocket se vigilan en el área del servidor.',
-    'fr': 'Caméra, micro et WebSocket sont suivis dans la zone serveur.'
+    'tr': 'Oda kamerası, sesi ve ebeveyn bağlantıları burada izlenir.',
+    'en': 'The room camera, audio, and parent connections are monitored here.',
+    'zh': '可在此查看房间摄像头、声音和家长设备连接状态。',
+    'hi': 'कमरे का कैमरा, आवाज़ और अभिभावक कनेक्शन यहाँ देखे जाते हैं।',
+    'es':
+        'Aquí se supervisan la cámara, el sonido y las conexiones parentales.',
+    'fr': 'La caméra, le son et les connexions des parents sont suivis ici.'
   },
   'serverSettings': {
     'tr': 'Sunucu ayarları',
@@ -1593,12 +1594,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Flux arrêté'
   },
   'serverStreamErrorBody': {
-    'tr': 'Kamera izinlerini ve bağlantıyı kontrol edip tekrar dene.',
-    'en': 'Check camera permissions and the connection, then try again.',
-    'zh': '检查摄像头权限和网络连接，然后重试。',
-    'hi': 'कैमरा अनुमति और कनेक्शन जाँचकर फिर कोशिश करें।',
-    'es': 'Revisa los permisos de cámara y la conexión, y prueba de nuevo.',
-    'fr': 'Vérifiez les autorisations caméra et la connexion, puis réessayez.'
+    'tr': 'Kamera ve mikrofon izinlerini, ardından bağlantıyı kontrol et.',
+    'en': 'Check camera and microphone permissions, then the connection.',
+    'zh': '请检查摄像头和麦克风权限，然后检查网络连接。',
+    'hi': 'कैमरा और माइक्रोफ़ोन की अनुमति, फिर कनेक्शन जाँचें।',
+    'es': 'Revisa los permisos de cámara y micrófono, y después la conexión.',
+    'fr': 'Vérifiez les autorisations caméra et microphone, puis la connexion.'
   },
   'serverStreamStoppedBody': {
     'tr': 'Kamera, mikrofon ve ebeveyn bağlantıları kapatıldı.',
@@ -1890,13 +1891,21 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'Micrófono',
     'fr': 'Micro'
   },
+  'alertConnection': {
+    'tr': 'Uyarı bağlantısı',
+    'en': 'Alert connection',
+    'zh': '提醒连接',
+    'hi': 'चेतावनी कनेक्शन',
+    'es': 'Conexión de alertas',
+    'fr': 'Connexion des alertes'
+  },
   'clientCount': {
     'tr': 'Ebeveyn cihazı sayısı',
-    'en': 'Client count',
-    'zh': '客户端数量',
-    'hi': 'क्लाइंट संख्या',
-    'es': 'Número de clientes',
-    'fr': 'Nombre de clients'
+    'en': 'Parent devices',
+    'zh': '家长设备数量',
+    'hi': 'अभिभावक डिवाइस',
+    'es': 'Dispositivos parentales',
+    'fr': 'Appareils parents'
   },
   'active': {
     'tr': 'Aktif',
@@ -1931,12 +1940,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Désactivé'
   },
   'eventClientsCount': {
-    'tr': '{count} olay bağlantısı',
-    'en': '{count} event client(s)',
-    'zh': '{count} 个事件连接',
-    'hi': '{count} घटना कनेक्शन',
-    'es': '{count} conexión de eventos',
-    'fr': '{count} connexion événement'
+    'tr': '{count} uyarı bağlantısı',
+    'en': '{count} alert connection(s)',
+    'zh': '{count} 个提醒连接',
+    'hi': '{count} चेतावनी कनेक्शन',
+    'es': '{count} conexión(es) de alertas',
+    'fr': '{count} connexion(s) d’alerte'
   },
   'connectedCount': {
     'tr': '{count} bağlı',
@@ -2310,12 +2319,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Notification locale'
   },
   'sentToClientDevice': {
-    'tr': 'Client cihazına gönderilir',
-    'en': 'Sent to the Client device',
-    'zh': '发送到 Client 设备',
-    'hi': 'Client डिवाइस को भेजा जाता है',
-    'es': 'Se envía al dispositivo Client',
-    'fr': 'Envoyé à l’appareil Client'
+    'tr': 'Ebeveyn cihazına gönderilir',
+    'en': 'Sent to the parent device',
+    'zh': '发送到家长设备',
+    'hi': 'अभिभावक डिवाइस को भेजा जाता है',
+    'es': 'Se envía al dispositivo de los padres',
+    'fr': 'Envoyé à l’appareil parent'
   },
   'saving': {
     'tr': 'Kaydediliyor',
@@ -2841,6 +2850,19 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr':
         'La commande de la chambre n’a pas pu être appliquée. Vérifiez la connexion et réessayez.',
   },
+  'microphonePermissionRequired': {
+    'tr':
+        'Konuşmak için mikrofon izni gerekli. İzni cihaz ayarlarından açabilirsin.',
+    'en':
+        'Microphone permission is required to talk. You can enable it in device settings.',
+    'zh': '对讲需要麦克风权限。你可以在设备设置中开启。',
+    'hi':
+        'बात करने के लिए माइक्रोफ़ोन की अनुमति ज़रूरी है। इसे डिवाइस सेटिंग में चालू करें।',
+    'es':
+        'Se necesita permiso para usar el micrófono. Puedes activarlo en los ajustes del dispositivo.',
+    'fr':
+        'L’autorisation du microphone est nécessaire pour parler. Activez-la dans les réglages de l’appareil.',
+  },
   'watchReconnectingSubtitle': {
     'tr': 'Canlı görüntü yeniden kuruluyor. Birkaç saniye içinde devam edecek.',
     'en': 'Restoring the live view. It should continue in a few seconds.',
@@ -2978,12 +3000,12 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Volume de la chambre',
   },
   'platformRuntimeContractTitle': {
-    'tr': 'Arka plan çalışma sözleşmesi',
-    'en': 'Background runtime contract',
-    'zh': '后台运行约定',
-    'hi': 'बैकग्राउंड संचालन नियम',
-    'es': 'Contrato de ejecución en segundo plano',
-    'fr': 'Contrat d’exécution en arrière-plan',
+    'tr': 'Arka planda çalışma',
+    'en': 'Background operation',
+    'zh': '后台运行',
+    'hi': 'बैकग्राउंड में संचालन',
+    'es': 'Funcionamiento en segundo plano',
+    'fr': 'Fonctionnement en arrière-plan',
   },
   'iosForegroundOnlyContract': {
     'tr': 'iOS kamera yayını yalnız uygulama ön plandayken sürer.',
@@ -2998,25 +3020,26 @@ const appUiTextCatalog = <String, Map<String, String>>{
   },
   'androidServiceActiveContract': {
     'tr':
-        'Android foreground service kamera ve mikrofon talebini sahipleniyor.',
+        'Kamera ve mikrofon, uygulama arka plandayken çalışmaya devam edebilir.',
     'en':
-        'The Android foreground service owns the active camera and microphone demand.',
-    'zh': 'Android 前台服务正在管理摄像头和麦克风需求。',
+        'The camera and microphone can keep working while the app is in the background.',
+    'zh': '应用在后台时，摄像头和麦克风可继续工作。',
     'hi':
-        'Android फ़ोरग्राउंड सेवा कैमरा और माइक्रोफ़ोन की ज़िम्मेदारी संभाल रही है।',
+        'ऐप के बैकग्राउंड में रहने पर कैमरा और माइक्रोफ़ोन काम करते रह सकते हैं।',
     'es':
-        'El servicio en primer plano de Android controla la cámara y el micrófono.',
-    'fr': 'Le service Android au premier plan gère la caméra et le microphone.',
+        'La cámara y el micrófono pueden seguir funcionando con la app en segundo plano.',
+    'fr':
+        'La caméra et le microphone peuvent continuer lorsque l’app est en arrière-plan.',
   },
   'androidServiceInactiveContract': {
-    'tr': 'Arka plan yayını için Android foreground service henüz aktif değil.',
-    'en':
-        'The Android foreground service is not active for background streaming yet.',
-    'zh': '用于后台直播的 Android 前台服务尚未启用。',
-    'hi':
-        'बैकग्राउंड स्ट्रीम के लिए Android फ़ोरग्राउंड सेवा अभी सक्रिय नहीं है।',
-    'es': 'El servicio en primer plano de Android aún no está activo.',
-    'fr': 'Le service Android au premier plan n’est pas encore actif.',
+    'tr': 'Kamera ve mikrofonun arka planda çalışması henüz aktif değil.',
+    'en': 'Camera and microphone use in the background is not active yet.',
+    'zh': '后台使用摄像头和麦克风的功能尚未启用。',
+    'hi': 'बैकग्राउंड में कैमरा और माइक्रोफ़ोन का उपयोग अभी सक्रिय नहीं है।',
+    'es':
+        'El uso de la cámara y el micrófono en segundo plano aún no está activo.',
+    'fr':
+        'L’utilisation de la caméra et du microphone en arrière-plan n’est pas encore active.',
   },
   'platformRuntimeUnknownContract': {
     'tr': 'Bu platformda arka plan kamera yayını desteklenmiyor.',

@@ -25,7 +25,7 @@ class ClientLiveAudioPipeline {
     this.maxBufferedAudio = const Duration(milliseconds: 320),
     this.nativeQueueTarget = const Duration(milliseconds: 80),
     RetryPolicy? retryPolicy,
-  })  : _audioOutput = audioOutput,
+  })  : _audioOutputCoordinator = _coordinatorFor(audioOutput),
         _clientFactory = clientFactory,
         _retryPolicy = retryPolicy ??
             ExponentialBackoffPolicy(
@@ -33,7 +33,7 @@ class ClientLiveAudioPipeline {
               maxDelay: maxRetryDelay,
             );
 
-  final PcmAudioSink _audioOutput;
+  final _PcmAudioOutputCoordinator _audioOutputCoordinator;
   final HttpClient Function()? _clientFactory;
   final RetryPolicy _retryPolicy;
   final Duration connectTimeout;
@@ -50,7 +50,10 @@ class ClientLiveAudioPipeline {
   _PipelineRun? _run;
   int _generation = 0;
   bool _outputStarted = false;
+  bool _audioOutputStartInFlight = false;
   int? _audioOutputOwnerGeneration;
+  Object? _audioOutputLease;
+  Future<void>? _immediateAudioOutputStop;
   Future<void> _audioOutputOperation = Future<void>.value();
   final Stopwatch _playoutClock = Stopwatch()..start();
   ClientAudioJitterBuffer? _buffer;
@@ -60,6 +63,12 @@ class ClientLiveAudioPipeline {
   _PipelineRun? _playoutTimerRun;
 
   bool get isRunning => _run != null;
+
+  static final Expando<_PcmAudioOutputCoordinator> _outputCoordinators =
+      Expando<_PcmAudioOutputCoordinator>('miucamPcmAudioOutputCoordinator');
+
+  static _PcmAudioOutputCoordinator _coordinatorFor(PcmAudioSink output) =>
+      _outputCoordinators[output] ??= _PcmAudioOutputCoordinator(output);
 
   Future<void> start({
     required Uri uri,
@@ -88,6 +97,13 @@ class ClientLiveAudioPipeline {
   }
 
   Future<void> stop() async {
+    cancelImmediately();
+    await _stopAudioOutput();
+  }
+
+  /// Invalidates the run and closes network/native playback without waiting
+  /// behind a pending platform start operation.
+  void cancelImmediately() {
     _generation++;
     _run = null;
     _closeClient();
@@ -95,7 +111,25 @@ class ClientLiveAudioPipeline {
     _buffer = null;
     _frameAssembler = null;
     _jitterEstimator = null;
-    await _stopAudioOutput();
+    final shouldStopOutput = _outputStarted ||
+        _audioOutputStartInFlight ||
+        _audioOutputOwnerGeneration != null;
+    final lease = _audioOutputLease;
+    _audioOutputLease = null;
+    _audioOutputOwnerGeneration = null;
+    _outputStarted = false;
+    if (shouldStopOutput && lease != null) {
+      late final Future<void> stopOperation;
+      stopOperation = _audioOutputCoordinator
+          .stop(owner: lease, timeout: connectTimeout)
+          .whenComplete(() {
+        if (identical(_immediateAudioOutputStop, stopOperation)) {
+          _immediateAudioOutputStop = null;
+        }
+      });
+      _immediateAudioOutputStop = stopOperation;
+      unawaited(stopOperation);
+    }
   }
 
   Future<void> _runLoop(int generation, _PipelineRun run) async {
@@ -322,7 +356,12 @@ class ClientLiveAudioPipeline {
     Uint8List frame,
   ) async {
     final startedAtUs = MediaSessionTelemetry.shared.nowUs;
-    final accepted = await _audioOutput.write(frame);
+    final lease = _audioOutputLease;
+    if (lease == null) return false;
+    final accepted = await _audioOutputCoordinator.write(
+      owner: lease,
+      pcm16le: frame,
+    );
     MediaSessionTelemetry.shared.recordDurationUs(
       MediaMetricName.audioOutputWrite,
       MediaSessionTelemetry.shared.nowUs - startedAtUs,
@@ -382,7 +421,10 @@ class ClientLiveAudioPipeline {
     Map<String, Object?> nativeStatus = const {};
     if (_outputStarted || event == 'error') {
       try {
-        nativeStatus = await _audioOutput.status();
+        final lease = _audioOutputLease;
+        if (lease != null) {
+          nativeStatus = await _audioOutputCoordinator.status(owner: lease);
+        }
       } catch (_) {}
     }
     if (!identical(_run, run)) return;
@@ -437,14 +479,32 @@ class ClientLiveAudioPipeline {
   }) =>
       _queueAudioOutputOperation(() async {
         if (!_isCurrent(generation, run)) return false;
-        await _audioOutput.start(
-          sampleRate: sampleRate,
-          channels: channels,
-        );
+        final lease = Object();
+        _audioOutputLease = lease;
+        _audioOutputStartInFlight = true;
+        try {
+          await _audioOutputCoordinator.start(
+            owner: lease,
+            sampleRate: sampleRate,
+            channels: channels,
+            timeout: connectTimeout,
+          );
+        } catch (_) {
+          if (identical(_audioOutputLease, lease)) {
+            _audioOutputLease = null;
+          }
+          rethrow;
+        } finally {
+          _audioOutputStartInFlight = false;
+        }
         if (!_isCurrent(generation, run)) {
-          try {
-            await _audioOutput.stop();
-          } catch (_) {}
+          await _audioOutputCoordinator.stop(
+            owner: lease,
+            timeout: connectTimeout,
+          );
+          if (identical(_audioOutputLease, lease)) {
+            _audioOutputLease = null;
+          }
           return false;
         }
         _audioOutputOwnerGeneration = generation;
@@ -454,16 +514,31 @@ class ClientLiveAudioPipeline {
 
   Future<void> _stopAudioOutput({int? ownerGeneration}) =>
       _queueAudioOutputOperation(() async {
+        final immediateStop = _immediateAudioOutputStop;
+        if (immediateStop != null) {
+          try {
+            await immediateStop.timeout(connectTimeout);
+          } catch (_) {}
+        }
         if (ownerGeneration != null &&
             _audioOutputOwnerGeneration != ownerGeneration) {
           return;
         }
+        final lease = _audioOutputLease;
         try {
-          await _audioOutput.stop();
+          if (lease != null) {
+            await _audioOutputCoordinator.stop(
+              owner: lease,
+              timeout: connectTimeout,
+            );
+          }
         } catch (_) {
         } finally {
           if (ownerGeneration == null ||
               _audioOutputOwnerGeneration == ownerGeneration) {
+            if (identical(_audioOutputLease, lease)) {
+              _audioOutputLease = null;
+            }
             _audioOutputOwnerGeneration = null;
             _outputStarted = false;
           }
@@ -510,6 +585,151 @@ class ClientLiveAudioPipeline {
     if (value is num) return value.round();
     if (value is String) return int.tryParse(value);
     return null;
+  }
+}
+
+class _PcmAudioOutputCoordinator {
+  _PcmAudioOutputCoordinator(this._output);
+
+  final PcmAudioSink _output;
+  final Set<Object> _cancelledOwners = HashSet<Object>.identity();
+  Object? _activeOwner;
+  Object? _startingOwner;
+  Future<void>? _settlingStart;
+  Completer<void>? _settlingCompleter;
+
+  Future<void> start({
+    required Object owner,
+    required int sampleRate,
+    required int channels,
+    required Duration timeout,
+  }) async {
+    await _waitUntilStartSettled(timeout);
+
+    final settle = Completer<void>();
+    _settlingCompleter = settle;
+    _settlingStart = settle.future;
+    _startingOwner = owner;
+
+    final previousOwner = _activeOwner;
+    _activeOwner = null;
+    if (previousOwner != null && !identical(previousOwner, owner)) {
+      await _stopNative(timeout);
+    }
+    if (_cancelledOwners.contains(owner)) {
+      await _stopNative(timeout);
+      _finishStart(owner, settle);
+      throw StateError('PCM audio output start was cancelled.');
+    }
+
+    late final Future<void> nativeStart;
+    try {
+      nativeStart = _output.start(
+        sampleRate: sampleRate,
+        channels: channels,
+      );
+    } catch (_) {
+      _finishStart(owner, settle);
+      rethrow;
+    }
+
+    try {
+      await nativeStart.timeout(timeout);
+    } on TimeoutException {
+      _cancelledOwners.add(owner);
+      unawaited(_stopNative(timeout));
+      unawaited(_settleLateStart(
+        owner: owner,
+        operation: nativeStart,
+        settle: settle,
+        timeout: timeout,
+      ));
+      rethrow;
+    } catch (_) {
+      _finishStart(owner, settle);
+      rethrow;
+    }
+
+    if (_cancelledOwners.contains(owner)) {
+      await _stopNative(timeout);
+      _finishStart(owner, settle);
+      throw StateError('PCM audio output start was cancelled.');
+    }
+    _activeOwner = owner;
+    _finishStart(owner, settle);
+  }
+
+  Future<void> stop({
+    required Object owner,
+    required Duration timeout,
+  }) async {
+    if (identical(_startingOwner, owner)) {
+      _cancelledOwners.add(owner);
+      await _stopNative(timeout);
+      return;
+    }
+    if (!identical(_activeOwner, owner)) return;
+    _activeOwner = null;
+    await _stopNative(timeout);
+  }
+
+  Future<bool> write({
+    required Object owner,
+    required Uint8List pcm16le,
+  }) async {
+    if (!identical(_activeOwner, owner)) return false;
+    return _output.write(pcm16le);
+  }
+
+  Future<Map<String, Object?>> status({required Object owner}) async {
+    if (!identical(_activeOwner, owner)) return const {};
+    return _output.status();
+  }
+
+  Future<void> _waitUntilStartSettled(Duration timeout) async {
+    while (true) {
+      final settling = _settlingStart;
+      if (settling == null) return;
+      await settling.timeout(
+        timeout,
+        onTimeout: () => throw TimeoutException(
+          'A previous PCM audio output start is still settling.',
+          timeout,
+        ),
+      );
+    }
+  }
+
+  Future<void> _settleLateStart({
+    required Object owner,
+    required Future<void> operation,
+    required Completer<void> settle,
+    required Duration timeout,
+  }) async {
+    try {
+      await operation;
+    } catch (_) {
+      // The start failed after its caller timed out. The native stop below is
+      // still required because platform calls can fail after partial setup.
+    }
+    await _stopNative(timeout);
+    _finishStart(owner, settle);
+  }
+
+  Future<void> _stopNative(Duration timeout) async {
+    try {
+      await _output.stop().timeout(timeout);
+    } catch (_) {}
+  }
+
+  void _finishStart(Object owner, Completer<void> settle) {
+    _cancelledOwners.remove(owner);
+    if (identical(_startingOwner, owner)) _startingOwner = null;
+    if (identical(_settlingCompleter, settle)) {
+      _settlingCompleter = null;
+      _settlingStart = null;
+    }
+    if (!settle.isCompleted) settle.complete();
   }
 }
 

@@ -22,7 +22,8 @@ class RoomControlsPanel extends StatefulWidget {
   State<RoomControlsPanel> createState() => _RoomControlsPanelState();
 }
 
-class _RoomControlsPanelState extends State<RoomControlsPanel> {
+class _RoomControlsPanelState extends State<RoomControlsPanel>
+    with WidgetsBindingObserver {
   StreamSubscription<ClientRoomControlSnapshot>? _subscription;
   late ClientRoomControlSnapshot _snapshot;
   String _trackId = 'white_noise';
@@ -30,10 +31,12 @@ class _RoomControlsPanelState extends State<RoomControlsPanel> {
   bool _comfortBusy = false;
   bool _talkBusy = false;
   int? _talkPointer;
+  int _talkIntentGeneration = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _snapshot = widget.controls.currentState;
     _listen();
     _refresh();
@@ -42,19 +45,40 @@ class _RoomControlsPanelState extends State<RoomControlsPanel> {
   @override
   void didUpdateWidget(covariant RoomControlsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.controls, widget.controls)) {
+    final controlsChanged = !identical(oldWidget.controls, widget.controls);
+    final sessionChanged = oldWidget.session != widget.session;
+    if (controlsChanged || sessionChanged) {
+      _talkIntentGeneration++;
+      _talkPointer = null;
+      _talkBusy = false;
+      unawaited(oldWidget.controls.stopTalking().catchError((_) {}));
+    }
+    if (controlsChanged) {
       _subscription?.cancel();
       _snapshot = widget.controls.currentState;
       _listen();
     }
-    if (oldWidget.session != widget.session) _refresh();
+    if (sessionChanged) _refresh();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _subscription?.cancel();
-    if (_snapshot.talking) unawaited(widget.controls.stopTalking());
+    _talkIntentGeneration++;
+    _talkPointer = null;
+    // stopTalking serializes behind an in-flight start, so requesting cleanup
+    // unconditionally also closes the race where this panel disappears before
+    // the first `talking: true` snapshot arrives.
+    unawaited(widget.controls.stopTalking().catchError((_) {}));
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _endTalking(force: true);
+    }
   }
 
   @override
@@ -63,6 +87,8 @@ class _RoomControlsPanelState extends State<RoomControlsPanel> {
     final comfort = _snapshot.comfort;
     final playing = comfort?.playing ?? false;
     final talking = _snapshot.talking;
+    final canStopTalking = talking || _talkPointer != null;
+    final talkControlEnabled = !_talkBusy || canStopTalking;
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
@@ -139,11 +165,11 @@ class _RoomControlsPanelState extends State<RoomControlsPanel> {
             Semantics(
               container: true,
               button: true,
-              enabled: !_talkBusy,
+              enabled: talkControlEnabled,
               toggled: talking,
               label: strings.ui(talking ? 'talkingNow' : 'holdToTalk'),
               hint: strings.ui('talkAccessibilityHint'),
-              onTap: _talkBusy ? null : _toggleTalkingFromSemantics,
+              onTap: talkControlEnabled ? _toggleTalkingFromSemantics : null,
               excludeSemantics: true,
               child: Listener(
                 onPointerDown: _startTalking,
@@ -288,13 +314,17 @@ class _RoomControlsPanelState extends State<RoomControlsPanel> {
 
   void _beginTalking(int pointer) {
     if (_talkPointer != null || _talkBusy || _snapshot.talking) return;
+    final generation = ++_talkIntentGeneration;
     _talkPointer = pointer;
     setState(() => _talkBusy = true);
     unawaited(widget.controls.startTalking(widget.session).then((_) {
-      if (mounted) setState(() => _talkBusy = false);
+      if (mounted && generation == _talkIntentGeneration) {
+        setState(() => _talkBusy = false);
+      }
     }).catchError((Object error) {
+      if (!mounted || generation != _talkIntentGeneration) return;
       _talkPointer = null;
-      if (mounted) setState(() => _talkBusy = false);
+      setState(() => _talkBusy = false);
       widget.onError?.call(error);
     }));
   }
@@ -305,9 +335,8 @@ class _RoomControlsPanelState extends State<RoomControlsPanel> {
   }
 
   void _toggleTalkingFromSemantics() {
-    if (_talkBusy) return;
-    if (_snapshot.talking || _talkPointer != null) {
-      _endTalking();
+    if (_snapshot.talking || _talkPointer != null || _talkBusy) {
+      _endTalking(force: true);
     } else {
       // A synthetic pointer identifier keeps the same single-flight ownership
       // as touch while allowing TalkBack and VoiceOver to toggle talk mode.
@@ -315,11 +344,19 @@ class _RoomControlsPanelState extends State<RoomControlsPanel> {
     }
   }
 
-  void _endTalking() {
-    if (_talkPointer == null && !_snapshot.talking) return;
+  void _endTalking({bool force = false}) {
+    if (!force && _talkPointer == null && !_snapshot.talking && !_talkBusy) {
+      return;
+    }
+    final generation = ++_talkIntentGeneration;
     _talkPointer = null;
+    if (mounted && _talkBusy) {
+      setState(() => _talkBusy = false);
+    }
     unawaited(widget.controls.stopTalking().catchError((Object error) {
-      widget.onError?.call(error);
+      if (mounted && generation == _talkIntentGeneration) {
+        widget.onError?.call(error);
+      }
     }));
   }
 }

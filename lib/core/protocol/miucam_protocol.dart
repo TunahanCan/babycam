@@ -1,9 +1,14 @@
 class MiuCamProtocolV2 {
-  static const schemaVersion = 1;
+  // Version 2 makes operation-attempt ownership mandatory for stream and
+  // talk lifecycle safety. Version-1 peers are intentionally rejected at
+  // pairing so a staged update cannot reintroduce stop-before-start races.
+  static const schemaVersion = 2;
   static const pairConfirm = '/pair/confirm';
   static const authRenew = '/auth/renew';
   static const sessionStart = '/session/start';
   static const sessionStop = '/session/stop';
+  static const streamAttemptId = 'streamAttemptId';
+  static const invalidStreamAttemptIdCode = 'INVALID_STREAM_ATTEMPT_ID';
   static const qualityReport = '/quality/report';
   static const comfortState = '/comfort/state';
   static const comfortCommand = '/comfort/command';
@@ -13,6 +18,8 @@ class MiuCamProtocolV2 {
   static const talkStop = '/talk/stop';
   static const talkAudio = '/talk/audio';
   static const talkVideo = '/talk/video';
+  static const talkAttemptId = 'talkAttemptId';
+  static const invalidTalkAttemptIdCode = 'INVALID_TALK_ATTEMPT_ID';
   static const video = '/video';
   static const audio = '/audio';
   static const webRtcOffer = '/webrtc/offer';

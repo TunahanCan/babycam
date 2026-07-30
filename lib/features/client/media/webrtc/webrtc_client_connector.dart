@@ -14,6 +14,13 @@ abstract class WebRtcClientConnector {
     required bool audio,
   });
 
+  /// Cancels peer negotiations that have not returned a media handle yet.
+  ///
+  /// Implementations must synchronously signal cancellation/close networking
+  /// before their returned future first yields. This lets lifecycle teardown
+  /// preempt a pending WebRTC start without disposing the reusable connector.
+  Future<void> cancelPendingConnections() async {}
+
   Future<void> dispose();
 }
 

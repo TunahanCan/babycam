@@ -8,7 +8,15 @@ import '../../../core/protocol/device_feature_models.dart';
 import '../../../core/protocol/miucam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
+import '../../../core/security/secure_random_token_generator.dart';
 import '../../server/media/microphone_capture_service.dart';
+
+class RoomMicrophonePermissionException implements Exception {
+  const RoomMicrophonePermissionException();
+
+  @override
+  String toString() => 'Microphone permission is required for talk.';
+}
 
 class ClientRoomControlSnapshot {
   const ClientRoomControlSnapshot({
@@ -33,31 +41,30 @@ class ClientRoomControls {
     this.timeout = const Duration(seconds: 5),
     Duration? talkFlushTimeout,
     Future<void> Function(HttpClientRequest request)? talkRequestFlusher,
+    SecureRandomTokenGenerator? talkAttemptTokenGenerator,
   })  : _microphone = microphone ??
             MicrophoneCaptureService(sampleRate: 16000, channels: 1),
         _clientFactory = clientFactory ?? HttpClient.new,
+        _talkAttemptTokenGenerator =
+            talkAttemptTokenGenerator ?? SecureRandomTokenGenerator(),
         talkFlushTimeout = talkFlushTimeout ?? timeout,
         _talkRequestFlusher =
             talkRequestFlusher ?? ((request) => request.flush());
 
   final MicrophoneCaptureService _microphone;
   final HttpClient Function() _clientFactory;
+  final SecureRandomTokenGenerator _talkAttemptTokenGenerator;
   final Future<void> Function(HttpClientRequest request) _talkRequestFlusher;
   final Duration timeout;
   final Duration talkFlushTimeout;
   final _states = StreamController<ClientRoomControlSnapshot>.broadcast();
   ClientRoomControlSnapshot _state = const ClientRoomControlSnapshot();
-  HttpClient? _talkClient;
-  HttpClientRequest? _talkRequest;
-  PairingSession? _talkSession;
-  String? _talkToken;
+  _TalkAttempt? _activeTalkAttempt;
+  final Set<_TalkAttempt> _ownedTalkAttempts = {};
   Future<void>? _startInFlight;
   Future<void>? _stopInFlight;
-  Future<void>? _flushInFlight;
-  Object? _talkPumpError;
-  final _pendingTalkChunks = ListQueue<Uint8List>();
   static const _maxPendingTalkChunks = 12;
-  int _chunksSinceFlush = 0;
+  int _talkIntentGeneration = 0;
   bool _disposed = false;
 
   ClientRoomControlSnapshot get currentState => _state;
@@ -108,10 +115,26 @@ class ClientRoomControls {
   }
 
   Future<void> startTalking(PairingSession session) async {
-    if (_disposed || _state.talking || _stopInFlight != null) return;
+    if (_disposed || _state.talking) return;
+    final stopping = _stopInFlight;
+    if (stopping != null) {
+      try {
+        await stopping;
+      } catch (_) {
+        // Local cleanup is final even when the remote stop reported an error.
+      }
+      if (_disposed || _state.talking) return;
+    }
     final inFlight = _startInFlight;
     if (inFlight != null) return inFlight;
-    final operation = _startTalking(session);
+    final generation = ++_talkIntentGeneration;
+    final attempt = _TalkAttempt(
+      session: session,
+      id: _talkAttemptTokenGenerator.generateHex(byteCount: 16),
+      generation: generation,
+    );
+    _ownedTalkAttempts.add(attempt);
+    final operation = _startTalking(attempt);
     _startInFlight = operation;
     try {
       await operation;
@@ -120,20 +143,55 @@ class ClientRoomControls {
     }
   }
 
-  Future<void> _startTalking(PairingSession session) async {
+  Future<void> _startTalking(
+    _TalkAttempt attempt,
+  ) async {
+    final session = attempt.session;
+    final generation = attempt.generation;
+    late final bool hasPermission;
+    try {
+      hasPermission = await _microphone.ensurePermission(
+        preserveResolvedDecisionWhenCancelled: true,
+      );
+    } catch (_) {
+      _ownedTalkAttempts.remove(attempt);
+      rethrow;
+    }
+    if (!hasPermission) {
+      _ownedTalkAttempts.remove(attempt);
+      throw const RoomMicrophonePermissionException();
+    }
+    if (!_isTalkIntentCurrent(generation)) {
+      _ownedTalkAttempts.remove(attempt);
+      return;
+    }
+
     String token;
     try {
+      // From this point a concurrent stop must send an attempt-scoped
+      // tombstone: the request may reach the room after local cancellation.
+      attempt.startRequestIssued = true;
       final start = await _requestJson(
         session,
         MiuCamProtocolV2.talkStart,
         method: 'POST',
-        body: const {
+        body: {
           'sampleRate': 16000,
           'channels': 1,
           'codec': 'pcm_s16le',
+          MiuCamProtocolV2.talkAttemptId: attempt.id,
         },
       );
       final sessionJson = start?['session'];
+      final echoedAttemptId = sessionJson is Map
+          ? sessionJson[MiuCamProtocolV2.talkAttemptId]
+          : null;
+      if (session.payload.schemaVersion >= MiuCamProtocolV2.schemaVersion &&
+          (echoedAttemptId is! String || echoedAttemptId != attempt.id)) {
+        throw StateError(
+          'Talk start did not confirm the current attempt id.',
+        );
+      }
       final candidate = sessionJson is Map
           ? sessionJson['talkToken']?.toString().trim()
           : null;
@@ -141,27 +199,36 @@ class ClientRoomControls {
         throw StateError('Talk start did not return a talk token.');
       }
       token = candidate;
+      attempt.token = token;
     } catch (error, stackTrace) {
-      await _stopUncertainTalkStart(session);
+      await _stopTalkAttemptBestEffort(attempt);
       Error.throwWithStackTrace(error, stackTrace);
+    }
+    if (!_isTalkIntentCurrent(generation)) {
+      await _stopTalkAttemptBestEffort(attempt);
+      return;
     }
     // Store cleanup ownership as soon as the room has created the session.
     // Every following failure can now issue /talk/stop instead of orphaning it.
-    _talkSession = session;
-    _talkToken = token;
-    _chunksSinceFlush = 0;
-    _talkPumpError = null;
-    _pendingTalkChunks.clear();
+    _activeTalkAttempt = attempt;
 
     try {
-      if (_disposed) throw StateError('Room controls are disposed.');
+      if (!_isTalkIntentCurrent(generation)) {
+        await _abortTalkAttempt(attempt);
+        return;
+      }
       final client = _clientFactory()..connectionTimeout = timeout;
-      _talkClient = client;
+      attempt.audioClient = client;
       final uri = ServerEndpointBuilder(session).http(
         MiuCamProtocolV2.talkAudio,
         query: {'talkToken': token},
       );
       final request = await client.postUrl(uri).timeout(timeout);
+      attempt.audioRequest = request;
+      if (!_isTalkIntentCurrent(generation)) {
+        await _abortTalkAttempt(attempt);
+        return;
+      }
       request.headers
         ..contentType = ContentType('audio', 'L16', parameters: {
           'rate': '16000',
@@ -172,12 +239,14 @@ class ClientRoomControls {
           HttpHeaders.authorizationHeader,
           'Bearer ${session.sessionToken}',
         );
-      _talkRequest = request;
       final started = await _microphone.start(
         onChunk: (chunk) {
-          _enqueueTalkChunk(chunk.streamPcm16le);
+          if (identical(_activeTalkAttempt, attempt)) {
+            _enqueueTalkChunk(attempt, chunk.streamPcm16le);
+          }
         },
         onError: (error, _) {
+          if (!identical(_activeTalkAttempt, attempt)) return;
           _emit(ClientRoomControlSnapshot(
             comfort: _state.comfort,
             talking: false,
@@ -189,7 +258,18 @@ class ClientRoomControls {
         },
       );
       if (!started) {
+        if (!_isTalkIntentCurrent(generation)) {
+          await _abortTalkAttempt(attempt);
+          return;
+        }
+        if (_microphone.snapshot.permissionGranted == false) {
+          throw const RoomMicrophonePermissionException();
+        }
         throw StateError('Microphone permission is required for talk.');
+      }
+      if (!_isTalkIntentCurrent(generation)) {
+        await _abortTalkAttempt(attempt);
+        return;
       }
       _emit(ClientRoomControlSnapshot(
         comfort: _state.comfort,
@@ -198,49 +278,63 @@ class ClientRoomControls {
         talkBytesDropped: _state.talkBytesDropped,
       ));
     } catch (error) {
-      await _abortTalk();
+      await _abortTalkAttempt(attempt);
       rethrow;
     }
   }
 
-  Future<void> _stopUncertainTalkStart(PairingSession session) async {
+  Future<bool> _stopTalkAttemptBestEffort(_TalkAttempt attempt) async {
     try {
-      // The server permits the authenticated owning client to stop without a
-      // token, which is exactly what is needed when the start response is lost
-      // or malformed after room output already switched to talk mode.
       await _requestJson(
-        session,
+        attempt.session,
         MiuCamProtocolV2.talkStop,
         method: 'POST',
-        body: const {},
+        body: {
+          MiuCamProtocolV2.talkAttemptId: attempt.id,
+          if (attempt.token != null) 'talkToken': attempt.token,
+        },
       );
-    } catch (_) {}
+      _ownedTalkAttempts.remove(attempt);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> stopTalking() {
     final inFlight = _stopInFlight;
     if (inFlight != null) return inFlight;
 
+    _talkIntentGeneration++;
+    // The underlying microphone service invalidates and detaches a native
+    // start that outlives its cleanup timeout. Mirror that ownership boundary
+    // here so a permanently pending old intent cannot poison the next press.
+    _startInFlight = null;
+    // Invalidates a pending permission/capture operation synchronously before
+    // any remote cleanup awaits network or recorder work.
+    final activeAttempt = _activeTalkAttempt;
+    final attempts = Set<_TalkAttempt>.from(_ownedTalkAttempts);
+    _activeTalkAttempt = null;
+    final microphoneStop = _microphone.stop();
     late final Future<void> operation;
-    operation = _stopTalking().whenComplete(() {
+    operation = _stopTalking(
+      microphoneStop: microphoneStop,
+      activeAttempt: activeAttempt,
+      attempts: attempts,
+    ).whenComplete(() {
       if (identical(_stopInFlight, operation)) _stopInFlight = null;
     });
     _stopInFlight = operation;
     return operation;
   }
 
-  Future<void> _stopTalking() async {
-    final starting = _startInFlight;
-    if (starting != null) {
-      try {
-        await starting;
-      } catch (_) {
-        return;
-      }
-    }
-    final session = _talkSession;
-    final token = _talkToken;
-    if (session == null || token == null) return;
+  Future<void> _stopTalking({
+    required Future<void> microphoneStop,
+    required _TalkAttempt? activeAttempt,
+    required Set<_TalkAttempt> attempts,
+  }) async {
+    // Claim remote cleanup ownership before awaiting so a cancelled start
+    // cannot issue a duplicate stop for the same lease.
     Object? error;
 
     Future<bool> attempt(Future<void> Function() operation) async {
@@ -253,20 +347,18 @@ class ClientRoomControls {
       }
     }
 
-    try {
-      await attempt(_microphone.stop);
+    Future<void> closeActiveUpload() async {
+      if (activeAttempt == null) return;
       final pumpDrained = await attempt(
-        () => _drainTalkPump().timeout(talkFlushTimeout),
+        () => _drainTalkPump(activeAttempt).timeout(talkFlushTimeout),
       );
       if (!pumpDrained) {
         // A blocked socket must not retain stop ownership. Force-closing the
         // streaming client lets the independent /talk/stop request proceed.
-        _talkClient?.close(force: true);
-        _talkClient = null;
-        _talkRequest = null;
+        activeAttempt.audioClient?.close(force: true);
       } else {
-        final request = _talkRequest;
-        _talkRequest = null;
+        final request = activeAttempt.audioRequest;
+        activeAttempt.audioRequest = null;
         if (request != null) {
           await attempt(() async {
             final response = await request.close().timeout(timeout);
@@ -280,23 +372,45 @@ class ClientRoomControls {
           });
         }
       }
-      await attempt(() async {
-        await _requestJson(
-          session,
-          MiuCamProtocolV2.talkStop,
-          method: 'POST',
-          body: {'talkToken': token},
-        );
-      });
+      activeAttempt.audioClient?.close(force: true);
+      activeAttempt.audioClient = null;
+    }
+
+    final pendingRemoteStops = <_TalkAttempt, Future<bool>>{
+      for (final owned in attempts)
+        if (!identical(owned, activeAttempt) && owned.startRequestIssued)
+          owned: _stopTalkAttemptBestEffort(owned),
+    };
+    for (final owned in attempts) {
+      if (!owned.startRequestIssued) {
+        _ownedTalkAttempts.remove(owned);
+      }
+    }
+    try {
+      // Recorder/platform teardown and room/socket teardown deliberately run
+      // independently. A stuck recorder must never retain a server talk lease.
+      await Future.wait([
+        attempt(() => microphoneStop.timeout(timeout)),
+        closeActiveUpload(),
+        ...pendingRemoteStops.values.map((stop) async {
+          if (!await stop) {
+            error ??=
+                StateError('A pending talk attempt could not be stopped.');
+          }
+        }),
+      ]);
+      if (activeAttempt != null &&
+          !await _stopTalkAttemptBestEffort(activeAttempt)) {
+        error ??= StateError('The active talk session could not be stopped.');
+      }
     } finally {
-      _talkClient?.close(force: true);
-      _talkClient = null;
-      _talkRequest = null;
-      _talkSession = null;
-      _talkToken = null;
-      _flushInFlight = null;
-      _talkPumpError = null;
-      _pendingTalkChunks.clear();
+      activeAttempt?.audioClient?.close(force: true);
+      activeAttempt?.audioClient = null;
+      activeAttempt?.audioRequest = null;
+      if (identical(_activeTalkAttempt, activeAttempt)) {
+        _activeTalkAttempt = null;
+      }
+      activeAttempt?.clearPump();
       _emit(ClientRoomControlSnapshot(
         comfort: _state.comfort,
         talking: false,
@@ -308,6 +422,9 @@ class ClientRoomControls {
     final terminalError = error;
     if (terminalError != null) throw terminalError;
   }
+
+  bool _isTalkIntentCurrent(int generation) =>
+      !_disposed && generation == _talkIntentGeneration;
 
   Future<void> dispose() async {
     if (_disposed) return;
@@ -355,39 +472,35 @@ class ClientRoomControls {
     }
   }
 
-  Future<void> _abortTalk() async {
-    final session = _talkSession;
-    final token = _talkToken;
-    try {
-      await _microphone.stop();
-    } catch (_) {}
-    try {
-      await _talkRequest?.close().timeout(timeout);
-    } catch (_) {}
-    if (session != null && token != null) {
-      try {
-        await _requestJson(
-          session,
-          MiuCamProtocolV2.talkStop,
-          method: 'POST',
-          body: {'talkToken': token},
-        );
-      } catch (_) {}
+  Future<void> _abortTalkAttempt(_TalkAttempt attempt) async {
+    final ownsActiveState = identical(_activeTalkAttempt, attempt);
+    if (ownsActiveState) {
+      _activeTalkAttempt = null;
     }
-    _talkClient?.close(force: true);
-    _talkClient = null;
-    _talkRequest = null;
-    _talkSession = null;
-    _talkToken = null;
-    _flushInFlight = null;
-    _talkPumpError = null;
-    _pendingTalkChunks.clear();
+    final microphoneStop =
+        ownsActiveState ? _microphone.stop() : Future<void>.value();
+    // This is a failure path, so there is no useful audio body to drain.
+    // Waiting for request.close() can deadlock with a room endpoint that waits
+    // for the streaming body before accepting the independent stop request.
+    attempt.audioClient?.close(force: true);
+    attempt.audioClient = null;
+    attempt.audioRequest = null;
+    final roomStop = _stopTalkAttemptBestEffort(attempt);
+    await Future.wait([
+      microphoneStop.timeout(timeout).catchError((_) {}),
+      roomStop,
+    ]);
+    if (ownsActiveState) attempt.clearPump();
   }
 
-  void _enqueueTalkChunk(Uint8List chunk) {
-    if (_talkRequest == null || chunk.isEmpty) return;
-    if (_pendingTalkChunks.length >= _maxPendingTalkChunks) {
-      final dropped = _pendingTalkChunks.removeFirst();
+  void _enqueueTalkChunk(_TalkAttempt attempt, Uint8List chunk) {
+    if (!identical(_activeTalkAttempt, attempt) ||
+        attempt.audioRequest == null ||
+        chunk.isEmpty) {
+      return;
+    }
+    if (attempt.pendingChunks.length >= _maxPendingTalkChunks) {
+      final dropped = attempt.pendingChunks.removeFirst();
       _emit(ClientRoomControlSnapshot(
         comfort: _state.comfort,
         talking: true,
@@ -395,50 +508,54 @@ class ClientRoomControls {
         talkBytesDropped: _state.talkBytesDropped + dropped.length,
       ));
     }
-    _pendingTalkChunks.addLast(Uint8List.fromList(chunk));
-    _ensureTalkPump();
+    attempt.pendingChunks.addLast(Uint8List.fromList(chunk));
+    _ensureTalkPump(attempt);
   }
 
-  void _ensureTalkPump() {
-    if (_flushInFlight != null) return;
-    if (_pendingTalkChunks.isEmpty || _talkRequest == null) return;
+  void _ensureTalkPump(_TalkAttempt attempt) {
+    if (attempt.flushInFlight != null) return;
+    if (attempt.pendingChunks.isEmpty || attempt.audioRequest == null) return;
     late final Future<void> pump;
-    pump = _pumpTalkChunks().catchError((Object error) {
-      _talkPumpError = error;
-      _pendingTalkChunks.clear();
+    pump = _pumpTalkChunks(attempt).catchError((Object error) {
+      attempt.pumpError = error;
+      attempt.pendingChunks.clear();
     }).whenComplete(() {
-      if (identical(_flushInFlight, pump)) _flushInFlight = null;
-      if (_talkPumpError == null &&
-          _pendingTalkChunks.isNotEmpty &&
-          _talkRequest != null) {
-        scheduleMicrotask(_ensureTalkPump);
-      } else if (_talkPumpError != null && _talkSession != null) {
+      if (identical(attempt.flushInFlight, pump)) {
+        attempt.flushInFlight = null;
+      }
+      if (attempt.pumpError == null &&
+          attempt.pendingChunks.isNotEmpty &&
+          attempt.audioRequest != null) {
+        scheduleMicrotask(() => _ensureTalkPump(attempt));
+      } else if (attempt.pumpError != null &&
+          identical(_activeTalkAttempt, attempt)) {
         scheduleMicrotask(() {
           unawaited(stopTalking().catchError((_) {}));
         });
       }
     });
-    _flushInFlight = pump;
+    attempt.flushInFlight = pump;
   }
 
-  Future<void> _drainTalkPump() async {
-    while (_flushInFlight != null || _pendingTalkChunks.isNotEmpty) {
-      _ensureTalkPump();
-      final current = _flushInFlight;
+  Future<void> _drainTalkPump(_TalkAttempt attempt) async {
+    while (attempt.flushInFlight != null || attempt.pendingChunks.isNotEmpty) {
+      _ensureTalkPump(attempt);
+      final current = attempt.flushInFlight;
       if (current == null) break;
       await current;
     }
-    final error = _talkPumpError;
+    final error = attempt.pumpError;
     if (error != null) throw error;
   }
 
-  Future<void> _pumpTalkChunks() async {
-    final request = _talkRequest;
+  Future<void> _pumpTalkChunks(_TalkAttempt attempt) async {
+    final request = attempt.audioRequest;
     if (request == null) return;
-    while (_pendingTalkChunks.isNotEmpty && identical(_talkRequest, request)) {
-      final chunk = _pendingTalkChunks.removeFirst();
+    while (attempt.pendingChunks.isNotEmpty &&
+        identical(attempt.audioRequest, request)) {
+      final chunk = attempt.pendingChunks.removeFirst();
       request.add(chunk);
-      _chunksSinceFlush++;
+      attempt.chunksSinceFlush++;
       _emit(ClientRoomControlSnapshot(
         comfort: _state.comfort,
         talking: true,
@@ -446,8 +563,9 @@ class ClientRoomControls {
         talkBytesDropped: _state.talkBytesDropped,
       ));
     }
-    if (_chunksSinceFlush > 0 && identical(_talkRequest, request)) {
-      _chunksSinceFlush = 0;
+    if (attempt.chunksSinceFlush > 0 &&
+        identical(attempt.audioRequest, request)) {
+      attempt.chunksSinceFlush = 0;
       await _talkRequestFlusher(request).timeout(talkFlushTimeout);
     }
   }
@@ -455,5 +573,32 @@ class ClientRoomControls {
   void _emit(ClientRoomControlSnapshot state) {
     _state = state;
     if (!_states.isClosed) _states.add(state);
+  }
+}
+
+class _TalkAttempt {
+  _TalkAttempt({
+    required this.session,
+    required this.id,
+    required this.generation,
+  });
+
+  final PairingSession session;
+  final String id;
+  final int generation;
+  String? token;
+  HttpClient? audioClient;
+  HttpClientRequest? audioRequest;
+  bool startRequestIssued = false;
+  final pendingChunks = ListQueue<Uint8List>();
+  Future<void>? flushInFlight;
+  Object? pumpError;
+  int chunksSinceFlush = 0;
+
+  void clearPump() {
+    pendingChunks.clear();
+    flushInFlight = null;
+    pumpError = null;
+    chunksSinceFlush = 0;
   }
 }

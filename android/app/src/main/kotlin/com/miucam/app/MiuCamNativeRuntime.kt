@@ -16,12 +16,14 @@ import android.os.Handler
 import android.os.Looper
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.sin
 
 object MiuCamNativeRuntime {
     @Volatile
     private var player: PcmAudioPlayer? = null
+    internal val pcmAudioOperations = PcmAudioOperationOwner()
 
     fun initialize(context: Context) {
         audioPlayer(context)
@@ -35,13 +37,73 @@ object MiuCamNativeRuntime {
     }
 }
 
+internal class PcmAudioOperationOwner {
+    private var lastOperationId = Long.MIN_VALUE
+    private var activeLeaseId: Long? = null
+
+    @Synchronized
+    fun claimStart(leaseId: Long, operationId: Long): Boolean {
+        if (operationId <= lastOperationId) return false
+        lastOperationId = operationId
+        activeLeaseId = leaseId
+        return true
+    }
+
+    @Synchronized
+    fun releaseFailedStart(leaseId: Long, operationId: Long) {
+        if (lastOperationId == operationId && activeLeaseId == leaseId) {
+            activeLeaseId = null
+        }
+    }
+
+    @Synchronized
+    fun claimWrite(leaseId: Long, operationId: Long): Boolean {
+        if (operationId <= lastOperationId || activeLeaseId != leaseId) {
+            return false
+        }
+        lastOperationId = operationId
+        return true
+    }
+
+    /// Returns null for a stale operation, otherwise whether native output
+    /// should be stopped for this lease/reset.
+    @Synchronized
+    fun claimStop(
+        leaseId: Long?,
+        operationId: Long,
+        reset: Boolean
+    ): Boolean? {
+        if (operationId <= lastOperationId) return null
+        lastOperationId = operationId
+        val shouldStop = reset || (leaseId != null && activeLeaseId == leaseId)
+        if (shouldStop) activeLeaseId = null
+        return shouldStop
+    }
+
+    @Synchronized
+    fun owns(leaseId: Long): Boolean = activeLeaseId == leaseId
+
+    @Synchronized
+    fun clearOwnership() {
+        activeLeaseId = null
+    }
+
+    @Synchronized
+    fun acceptsLegacyWrite(): Boolean = activeLeaseId == null
+}
+
 class PcmAudioPlayer(private val context: Context) {
-    private val executor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val executorSequence = AtomicInteger(0)
+    private var executor: ExecutorService = newWriteExecutor()
+    private val cleanupExecutor: ExecutorService =
+        Executors.newCachedThreadPool { runnable ->
+            Thread(runnable, "miucam-pcm-cleanup").apply { isDaemon = true }
+        }
     private val mainHandler = Handler(Looper.getMainLooper())
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var audioTrack: AudioTrack? = null
     private var generation = 0
-    private val pendingWrites = AtomicInteger(0)
+    private var pendingWrites = AtomicInteger(0)
     private val maxPendingWrites = 6
     private var sampleRate = 0
     private var channels = 0
@@ -180,6 +242,8 @@ class PcmAudioPlayer(private val context: Context) {
     fun write(bytes: ByteArray, completion: (Boolean) -> Unit) {
         val track: AudioTrack
         val currentGeneration: Int
+        val currentExecutor: ExecutorService
+        val currentPendingWrites: AtomicInteger
         synchronized(this) {
             val activeTrack = audioTrack
             if (activeTrack == null || pausedForFocusLoss) {
@@ -192,75 +256,88 @@ class PcmAudioPlayer(private val context: Context) {
                 completion(false)
                 return
             }
-            if (pendingWrites.incrementAndGet() > maxPendingWrites) {
-                pendingWrites.decrementAndGet()
+            currentPendingWrites = pendingWrites
+            if (currentPendingWrites.incrementAndGet() > maxPendingWrites) {
+                currentPendingWrites.decrementAndGet()
                 writesDropped += 1
                 completion(false)
                 return
             }
             track = activeTrack
             currentGeneration = generation
+            currentExecutor = executor
         }
         val payload = bytes.copyOf()
-        executor.execute {
-            var accepted = false
-            var totalWritten = 0
-            try {
-                val shouldWrite = synchronized(this) {
-                    currentGeneration == generation &&
-                        audioTrack === track &&
-                        !pausedForFocusLoss
-                }
-                if (shouldWrite) {
-                    while (totalWritten < payload.size) {
-                        val stillCurrent = synchronized(this) {
-                            currentGeneration == generation &&
-                                audioTrack === track &&
-                                !pausedForFocusLoss
-                        }
-                        if (!stillCurrent) break
-                        val written = track.write(
-                            payload,
-                            totalWritten,
-                            payload.size - totalWritten,
-                            AudioTrack.WRITE_BLOCKING
-                        )
-                        if (written <= 0) {
-                            throw IllegalStateException("AudioTrack.write returned $written")
-                        }
-                        totalWritten += written
-                    }
-                    synchronized(this) {
-                        val isStillCurrent = currentGeneration == generation &&
+        try {
+            currentExecutor.execute {
+                var accepted = false
+                var totalWritten = 0
+                try {
+                    val shouldWrite = synchronized(this) {
+                        currentGeneration == generation &&
                             audioTrack === track &&
                             !pausedForFocusLoss
-                        if (totalWritten == payload.size && isStillCurrent) {
-                            accepted = true
-                            writesAccepted += 1
-                            bytesWritten += totalWritten.toLong()
-                            sessionFramesWritten +=
-                                totalWritten.toLong() / maxOf(1, channels * 2)
-                            lastWriteAtMs = System.currentTimeMillis()
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                                underrunCount = track.underrunCount
-                            }
-                        } else {
-                            recordPartialWrite(totalWritten, isStillCurrent)
-                        }
                     }
-                } else {
-                    synchronized(this) { writesDropped += 1 }
+                    if (shouldWrite) {
+                        while (totalWritten < payload.size) {
+                            val stillCurrent = synchronized(this) {
+                                currentGeneration == generation &&
+                                    audioTrack === track &&
+                                    !pausedForFocusLoss
+                            }
+                            if (!stillCurrent) break
+                            val written = track.write(
+                                payload,
+                                totalWritten,
+                                payload.size - totalWritten,
+                                AudioTrack.WRITE_BLOCKING
+                            )
+                            if (written <= 0) {
+                                throw IllegalStateException(
+                                    "AudioTrack.write returned $written"
+                                )
+                            }
+                            totalWritten += written
+                        }
+                        synchronized(this) {
+                            val isStillCurrent = currentGeneration == generation &&
+                                audioTrack === track &&
+                                !pausedForFocusLoss
+                            if (totalWritten == payload.size && isStillCurrent) {
+                                accepted = true
+                                writesAccepted += 1
+                                bytesWritten += totalWritten.toLong()
+                                sessionFramesWritten +=
+                                    totalWritten.toLong() / maxOf(1, channels * 2)
+                                lastWriteAtMs = System.currentTimeMillis()
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                    underrunCount = track.underrunCount
+                                }
+                            } else {
+                                recordPartialWrite(totalWritten, isStillCurrent)
+                            }
+                        }
+                    } else {
+                        synchronized(this) { writesDropped += 1 }
+                    }
+                } catch (error: Exception) {
+                    synchronized(this) {
+                        recordPartialWrite(totalWritten, currentGeneration == generation)
+                        writeErrors += 1
+                        lastError = "${error.javaClass.simpleName}: ${error.message}"
+                    }
+                } finally {
+                    currentPendingWrites.decrementAndGet()
+                    mainHandler.post { completion(accepted) }
                 }
-            } catch (error: Exception) {
-                synchronized(this) {
-                    recordPartialWrite(totalWritten, currentGeneration == generation)
-                    writeErrors += 1
-                    lastError = "${error.javaClass.simpleName}: ${error.message}"
-                }
-            } finally {
-                pendingWrites.decrementAndGet()
-                mainHandler.post { completion(accepted) }
             }
+        } catch (_: RejectedExecutionException) {
+            currentPendingWrites.decrementAndGet()
+            synchronized(this) {
+                writesDropped += 1
+                lastError = "write rejected because playback generation stopped"
+            }
+            mainHandler.post { completion(false) }
         }
     }
 
@@ -338,9 +415,13 @@ class PcmAudioPlayer(private val context: Context) {
         generation += 1
         val track = audioTrack
         audioTrack = null
+        val retiredExecutor = executor
+        executor = newWriteExecutor()
+        pendingWrites = AtomicInteger(0)
+        retiredExecutor.shutdownNow()
         pausedForFocusLoss = false
         if (track != null) {
-            executor.execute {
+            cleanupExecutor.execute {
                 try {
                     track.pause()
                     track.flush()
@@ -354,6 +435,14 @@ class PcmAudioPlayer(private val context: Context) {
         MiuCamPlatformRuntime.emit("audioPlaybackStopped")
         MiuCamPlatformRuntime.setAudioOutputActive(false, "audio_playback_stopped")
     }
+
+    private fun newWriteExecutor(): ExecutorService =
+        Executors.newSingleThreadExecutor { runnable ->
+            val sequence = executorSequence.incrementAndGet()
+            Thread(runnable, "miucam-pcm-write-$sequence").apply {
+                isDaemon = true
+            }
+        }
 
     @Synchronized
     private fun recordPartialWrite(totalWritten: Int, isStillCurrent: Boolean) {

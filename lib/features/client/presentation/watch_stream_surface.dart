@@ -29,7 +29,8 @@ class _StreamSurface extends StatefulWidget {
   State<_StreamSurface> createState() => _StreamSurfaceState();
 }
 
-class _StreamSurfaceState extends State<_StreamSurface> {
+class _StreamSurfaceState extends State<_StreamSurface>
+    with WidgetsBindingObserver {
   ClientMediaStreamSupervisor? _supervisor;
   WebRtcClientMediaSupervisor? _webRtcSupervisor;
   Uint8List? _latestFrame;
@@ -39,6 +40,7 @@ class _StreamSurfaceState extends State<_StreamSurface> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _syncSupervisor();
   }
 
@@ -50,13 +52,14 @@ class _StreamSurfaceState extends State<_StreamSurface> {
 
   @override
   void dispose() {
-    final supervisor = _supervisor;
-    _supervisor = null;
-    unawaited(supervisor?.stop());
-    final webRtcSupervisor = _webRtcSupervisor;
-    _webRtcSupervisor = null;
-    unawaited(webRtcSupervisor?.stop());
+    WidgetsBinding.instance.removeObserver(this);
+    _stopLocalSupervisors();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _stopLocalSupervisors();
   }
 
   @override
@@ -128,6 +131,11 @@ class _StreamSurfaceState extends State<_StreamSurface> {
   }
 
   void _syncSupervisor() {
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    if (lifecycleState != null && lifecycleState != AppLifecycleState.resumed) {
+      _stopLocalSupervisors();
+      return;
+    }
     final session = widget.session;
     final activeStream = widget.activeStream;
     final nextKey = session == null || activeStream == null
@@ -142,6 +150,7 @@ class _StreamSurfaceState extends State<_StreamSurface> {
     _streamKey = nextKey;
     final previous = _supervisor;
     _supervisor = null;
+    previous?.cancelImmediately();
     unawaited(previous?.stop());
     final previousWebRtc = _webRtcSupervisor;
     _webRtcSupervisor = null;
@@ -213,6 +222,18 @@ class _StreamSurfaceState extends State<_StreamSurface> {
       widget.onFatalError(error);
     }));
     if (mounted) setState(() {});
+  }
+
+  void _stopLocalSupervisors() {
+    _streamKey = null;
+    final supervisor = _supervisor;
+    _supervisor = null;
+    supervisor?.cancelImmediately();
+    unawaited(supervisor?.stop());
+    final webRtcSupervisor = _webRtcSupervisor;
+    _webRtcSupervisor = null;
+    unawaited(webRtcSupervisor?.stop());
+    _latestFrame = null;
   }
 
   void _updateAudioPlayback(ActiveStreamSession? activeStream) {

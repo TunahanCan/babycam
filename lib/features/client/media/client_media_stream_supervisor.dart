@@ -115,6 +115,7 @@ class ClientMediaStreamSupervisor {
       onSessionRefreshRequired;
   final ValueChanged<ClientMediaStreamFailure>? onFatalError;
   final _audioOperations = SerializedAsyncExecutor();
+  final Set<Future<void>> _detachedAudioStops = {};
 
   HttpClient? _videoClient;
   ClientLiveAudioPipeline? _audioPipeline;
@@ -188,6 +189,10 @@ class ClientMediaStreamSupervisor {
         _handleAudioError(error);
       },
     );
+    if (!_isCurrentAudioPipeline(generation, pipeline)) {
+      pipeline.cancelImmediately();
+      await pipeline.stop();
+    }
   }
 
   Future<void> _stopAudioPipeline() async {
@@ -197,12 +202,46 @@ class ClientMediaStreamSupervisor {
   }
 
   Future<void> stop() async {
-    if (!_started && _videoClient == null && _audioPipeline == null) return;
+    if (!_started &&
+        _videoClient == null &&
+        _audioPipeline == null &&
+        _detachedAudioStops.isEmpty) {
+      return;
+    }
+    final audio = _detachLocalTransports();
+    if (audio != null) _trackDetachedAudioStop(audio);
+    final pendingStops = List<Future<void>>.from(_detachedAudioStops);
+    if (pendingStops.isNotEmpty) await Future.wait(pendingStops);
+  }
+
+  /// Stops socket reads and native audio eagerly for lifecycle teardown.
+  ///
+  /// The asynchronous [stop] remains useful for callers that can await full
+  /// cleanup, while this method guarantees that pausing does not depend on a
+  /// later widget frame or an already queued audio start operation.
+  void cancelImmediately() {
+    final audio = _detachLocalTransports();
+    if (audio != null) _trackDetachedAudioStop(audio);
+  }
+
+  ClientLiveAudioPipeline? _detachLocalTransports() {
     _started = false;
     _generation++;
     healthState?.setAudioExpected(false);
+    healthState?.setWatchActive(false);
     _closeVideoClient();
-    await _audioOperations.run(_stopAudioPipeline);
+    final audio = _audioPipeline;
+    _audioPipeline = null;
+    audio?.cancelImmediately();
+    return audio;
+  }
+
+  void _trackDetachedAudioStop(ClientLiveAudioPipeline audio) {
+    late final Future<void> operation;
+    operation = audio.stop().catchError((_) {}).whenComplete(() {
+      _detachedAudioStops.remove(operation);
+    });
+    _detachedAudioStops.add(operation);
   }
 
   Future<void> _videoLoop(int generation) async {

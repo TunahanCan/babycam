@@ -71,6 +71,13 @@ abstract interface class WebRtcPeerLifecycleSource {
   Stream<WebRtcPeerLifecycleEvent> get peerEvents;
 }
 
+/// Optional cancellation hook for a signaling request whose HTTP owner has
+/// timed out. Implementations must invalidate ownership synchronously before
+/// awaiting native cleanup so a late plugin result cannot publish a peer.
+abstract interface class WebRtcPendingOfferController {
+  Future<void> cancelPendingOffer(String clientId);
+}
+
 abstract interface class WebRtcMediaPolicyController {
   Future<void> applyMediaPolicy(WebRtcMediaPolicy policy);
 }

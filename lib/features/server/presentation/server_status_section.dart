@@ -14,18 +14,22 @@ class ServerLiveStatusCard extends StatelessWidget {
     required this.onConnectParent,
     required this.onRetry,
     required this.onRestart,
+    required this.onOpenAppSettings,
   });
 
   final ServerRuntimeState state;
   final VoidCallback onConnectParent;
   final VoidCallback onRetry;
   final VoidCallback? onRestart;
+  final VoidCallback onOpenAppSettings;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final stopped = state.phase == ServerRuntimePhase.stopped;
     final failed = state.phase == ServerRuntimePhase.error;
+    final showSettingsRecovery =
+        failed && state.errorKind == ServerRuntimeErrorKind.media;
     final connectedParents = connectedParentCount(state);
     final preparing = !stopped &&
         !failed &&
@@ -88,30 +92,55 @@ class ServerLiveStatusCard extends StatelessWidget {
               (stopped && onRestart != null) ||
               (!stopped && connectedParents == 0)) ...[
             const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: failed
-                  ? FilledButton.icon(
-                      onPressed: onRetry,
-                      icon: const Icon(Icons.refresh_rounded),
-                      style: _primaryButtonStyle(),
-                      label: Text(strings.ui('tryAgain')),
-                    )
-                  : stopped
-                      ? FilledButton.icon(
-                          onPressed: onRestart,
-                          icon: const Icon(Icons.restart_alt_rounded),
-                          style: _primaryButtonStyle(),
-                          label: Text(strings.ui('restartRoomStream')),
-                        )
-                      : FilledButton.icon(
-                          onPressed: onConnectParent,
-                          icon: const Icon(Icons.qr_code_2_rounded),
-                          style: _primaryButtonStyle(),
-                          label: Text(strings.ui('connectParentDevice')),
-                        ),
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: SizedBox(
+                width: double.infinity,
+                child: failed
+                    ? FilledButton.icon(
+                        onPressed: onRetry,
+                        icon: const Icon(Icons.refresh_rounded),
+                        style: _primaryButtonStyle(),
+                        label: Text(strings.ui('tryAgain')),
+                      )
+                    : stopped
+                        ? FilledButton.icon(
+                            onPressed: onRestart,
+                            icon: const Icon(Icons.restart_alt_rounded),
+                            style: _primaryButtonStyle(),
+                            label: Text(strings.ui('restartRoomStream')),
+                          )
+                        : FilledButton.icon(
+                            onPressed: onConnectParent,
+                            icon: const Icon(Icons.qr_code_2_rounded),
+                            style: _primaryButtonStyle(),
+                            label: Text(strings.ui('connectParentDevice')),
+                          ),
+              ),
             ),
+            if (showSettingsRecovery) ...[
+              const SizedBox(height: 10),
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: onOpenAppSettings,
+                    icon: const Icon(Icons.settings_rounded),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: MiuCamDesignTokens.serverText,
+                      side: const BorderSide(
+                        color: MiuCamDesignTokens.serverOutline,
+                      ),
+                    ),
+                    label: Text(
+                      strings.ui('openAppSettings'),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
           const SizedBox(height: 14),
           _ServerHealthStrip(state: state, stopped: stopped, failed: failed),

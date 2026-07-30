@@ -30,7 +30,8 @@ class ServerCompositionRoot {
       Future<void> Function()? startMediaOverride,
       Future<void> Function()? stopOverride,
       bool broadcastPaywallEnabled = MiuCamFeatureFlags.broadcastPaywallEnabled,
-      TransportConfig transportConfig = TransportConfig.local}) {
+      TransportConfig transportConfig = TransportConfig.local,
+      Duration mediaOperationTimeout = const Duration(seconds: 8)}) {
     createCount++;
     final tokenService = PairingTokenService(
       trustedClientRepository: SharedPreferencesTrustedClientRepository(
@@ -56,14 +57,16 @@ class ServerCompositionRoot {
         final demand = nativeMediaDemand;
         final playback = nativePlaybackDemand;
         try {
-          await platformContract.setMediaDemand(
-            active: !demand.isEmpty || playback,
-            camera: demand.video,
-            microphone: demand.audio,
-            playback: playback,
-            nativeCameraCapture: demand.serviceVideoCapture,
-            nativeMicrophoneCapture: demand.serviceAudioCapture,
-          );
+          await platformContract
+              .setMediaDemand(
+                active: !demand.isEmpty || playback,
+                camera: demand.video,
+                microphone: demand.audio,
+                playback: playback,
+                nativeCameraCapture: demand.serviceVideoCapture,
+                nativeMicrophoneCapture: demand.serviceAudioCapture,
+              )
+              .timeout(mediaOperationTimeout);
         } catch (_) {
           // Unsupported/test targets intentionally have no native channel.
         }
@@ -95,6 +98,7 @@ class ServerCompositionRoot {
         ? AndroidServiceMediaSource(
             jpegQuality: 68,
             maxVideoFps: 8,
+            nativeOperationTimeout: mediaOperationTimeout,
           )
         : null;
     late final ServerRuntime runtime;
@@ -140,6 +144,7 @@ class ServerCompositionRoot {
           deviceIdProvider: () => serverDeviceId,
         ),
         webRtcGateway: webRtcGateway,
+        mediaLifecycleOperationTimeout: mediaOperationTimeout,
         // ServerRuntime owns the authoritative per-session media demand. The
         // HTTP server must not eagerly acquire both camera and microphone.
         startMediaOnSessionStart: false);
@@ -151,10 +156,12 @@ class ServerCompositionRoot {
             onStopVideo: server.stopVideoRuntime,
             onStartAudio: server.startAudioRuntime,
             onStopAudio: server.stopAudioRuntime,
+            operationTimeout: mediaOperationTimeout,
           )
         : MediaRuntimeController(
             onStart: startMediaOverride,
             onStop: server.stopMediaRuntime,
+            operationTimeout: mediaOperationTimeout,
           );
     final platformLifecycle = PlatformMediaLifecycleCoordinator(
       events: platformContract.events,
@@ -166,6 +173,7 @@ class ServerCompositionRoot {
     );
     runtime = ServerRuntime(
       mediaRuntime: media,
+      mediaOperationTimeout: mediaOperationTimeout,
       platformLifecycle: platformLifecycle,
       previewSource: () => nativeMediaSource ?? server.cameraController,
       mediaProfile: () => server.activeMediaProfile,

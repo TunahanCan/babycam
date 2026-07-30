@@ -13,17 +13,27 @@ class RoomAudioCoordinator {
     this.sampleRate = 16000,
     this.channels = 1,
     this.frameDuration = const Duration(milliseconds: 100),
+    this.nativeOperationTimeout = const Duration(seconds: 2),
     ComfortPcmGenerator? generator,
     FutureOr<void> Function(bool active)? onOutputDemandChanged,
   })  : _sink = sink,
         _generator = generator ?? ComfortPcmGenerator(sampleRate: sampleRate),
-        _onOutputDemandChanged = onOutputDemandChanged;
+        _onOutputDemandChanged = onOutputDemandChanged {
+    if (nativeOperationTimeout <= Duration.zero) {
+      throw ArgumentError.value(
+        nativeOperationTimeout,
+        'nativeOperationTimeout',
+        'must be positive',
+      );
+    }
+  }
 
   final PcmAudioSink _sink;
   final ComfortPcmGenerator _generator;
   final int sampleRate;
   final int channels;
   final Duration frameDuration;
+  final Duration nativeOperationTimeout;
   FutureOr<void> Function(bool active)? _onOutputDemandChanged;
 
   final _operations = SerializedAsyncExecutor();
@@ -34,6 +44,7 @@ class RoomAudioCoordinator {
   bool _comfortRequested = false;
   bool _comfortWriteInFlight = false;
   bool _disposed = false;
+  PcmAudioPlaybackLease? _activePlaybackLease;
   final _modeChanges = StreamController<RoomAudioMode>.broadcast(sync: true);
   int _generation = 0;
   int _writesAccepted = 0;
@@ -128,8 +139,14 @@ class RoomAudioCoordinator {
       final payload = alignedLength == pcm16le.length
           ? pcm16le
           : Uint8List.sublistView(pcm16le, 0, alignedLength);
+      final playbackLease = _activePlaybackLease;
+      if (playbackLease == null) {
+        _writesDropped++;
+        return;
+      }
       try {
-        accepted = await _sink.write(payload);
+        accepted =
+            await playbackLease.write(payload).timeout(nativeOperationTimeout);
         _recordWrite(accepted, payload.length);
       } catch (error) {
         _lastError = error;
@@ -158,7 +175,7 @@ class RoomAudioCoordinator {
   Future<Map<String, Object?>> snapshot() async {
     Map<String, Object?> native = const {};
     try {
-      native = await _sink.status();
+      native = await _sink.status().timeout(nativeOperationTimeout);
     } catch (error) {
       _lastError = error;
     }
@@ -215,6 +232,11 @@ class RoomAudioCoordinator {
     }
     final trackId = _comfortTrackId;
     if (trackId == null) return;
+    final playbackLease = _activePlaybackLease;
+    if (playbackLease == null) {
+      _writesDropped++;
+      return;
+    }
     _comfortWriteInFlight = true;
     final frame = _generator.nextFrame(
       trackId: trackId,
@@ -223,7 +245,8 @@ class RoomAudioCoordinator {
     );
     unawaited(() async {
       try {
-        final accepted = await _sink.write(frame);
+        final accepted =
+            await playbackLease.write(frame).timeout(nativeOperationTimeout);
         if (generation == _generation) _recordWrite(accepted, frame.length);
       } catch (error) {
         _lastError = error;
@@ -260,8 +283,21 @@ class RoomAudioCoordinator {
   }
 
   Future<void> _stopSinkBestEffort() async {
+    final playbackLease = _activePlaybackLease;
+    _activePlaybackLease = null;
     try {
-      await _sink.stop();
+      if (playbackLease != null) {
+        await playbackLease.stop().timeout(nativeOperationTimeout);
+      } else {
+        final sink = _sink;
+        if (sink is PcmAudioLeaseSink) {
+          await (sink as PcmAudioLeaseSink)
+              .resetPlayback()
+              .timeout(nativeOperationTimeout);
+        } else {
+          await sink.stop().timeout(nativeOperationTimeout);
+        }
+      }
     } catch (error) {
       _lastError = error;
     }
@@ -271,19 +307,38 @@ class RoomAudioCoordinator {
     required int sampleRate,
     required int channels,
   }) async {
-    await _publishOutputDemand(true);
+    final playbackLease = _newPlaybackLease();
     try {
-      await _sink.start(sampleRate: sampleRate, channels: channels);
+      await _publishOutputDemand(true);
+      _activePlaybackLease = playbackLease;
+      await playbackLease
+          .start(sampleRate: sampleRate, channels: channels)
+          .timeout(nativeOperationTimeout);
     } catch (error, stackTrace) {
+      if (identical(_activePlaybackLease, playbackLease)) {
+        _activePlaybackLease = null;
+      }
+      try {
+        await playbackLease.stop().timeout(nativeOperationTimeout);
+      } catch (_) {}
       await _publishOutputDemandBestEffort(false);
       Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
+  PcmAudioPlaybackLease _newPlaybackLease() {
+    final sink = _sink;
+    if (sink is PcmAudioLeaseSink) {
+      return (sink as PcmAudioLeaseSink).createPlaybackLease();
+    }
+    return _LegacyPcmAudioPlaybackLease(sink);
+  }
+
   Future<void> _publishOutputDemand(bool active) async {
     final callback = _onOutputDemandChanged;
     if (callback == null) return;
-    await Future<void>.sync(() => callback(active));
+    await Future<void>.sync(() => callback(active))
+        .timeout(nativeOperationTimeout);
   }
 
   Future<void> _publishOutputDemandBestEffort(bool active) async {
@@ -311,6 +366,39 @@ class RoomAudioCoordinator {
     }
 
     return _operations.run(run);
+  }
+}
+
+class _LegacyPcmAudioPlaybackLease implements PcmAudioPlaybackLease {
+  _LegacyPcmAudioPlaybackLease(this._sink);
+
+  final PcmAudioSink _sink;
+  bool _retired = false;
+  Future<void>? _stopOperation;
+
+  @override
+  Future<void> start({
+    required int sampleRate,
+    required int channels,
+  }) {
+    if (_retired) {
+      return Future<void>.error(
+        StateError('PCM playback lease is retired.'),
+      );
+    }
+    return _sink.start(sampleRate: sampleRate, channels: channels);
+  }
+
+  @override
+  Future<bool> write(Uint8List pcm16le) =>
+      _retired ? Future<bool>.value(false) : _sink.write(pcm16le);
+
+  @override
+  Future<void> stop() {
+    final current = _stopOperation;
+    if (current != null) return current;
+    _retired = true;
+    return _stopOperation = _sink.stop();
   }
 }
 

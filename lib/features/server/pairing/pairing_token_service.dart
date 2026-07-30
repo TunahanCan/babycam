@@ -293,8 +293,10 @@ class PairingTokenService {
   }
 
   bool hasValidStreamTokenForClient(String clientId) {
-    pruneExpiredStreamTokens();
-    return _streamTokens.values.any((record) => record.clientId == clientId);
+    final nowMs = _now().millisecondsSinceEpoch;
+    return _streamTokens.values.any(
+      (record) => record.clientId == clientId && record.expiresAtMs > nowMs,
+    );
   }
 
   void revokeStreamTokensForClient(String clientId) {

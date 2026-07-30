@@ -230,7 +230,7 @@ const _deUiText = <String, String>{
   'qrIpTicketSubtitle': 'Zeige diesen Code dem Eltern-Gerät im selben WLAN.',
   'serviceStatus': 'Dienststatus',
   'serviceStatusSubtitle':
-      'Kamera, Mikrofon und WebSocket werden im Server-Bereich überwacht.',
+      'Hier werden Zimmerkamera, Ton und Eltern-Verbindungen überwacht.',
   'serverSettings': 'Server-Einstellungen',
   'serverSettingsSubtitle':
       'Wähle ein Raumprofil und passe es bei Bedarf in den erweiterten Einstellungen an.',
@@ -246,7 +246,7 @@ const _deUiText = <String, String>{
   'roomStreamReady': 'Übertragung aktiv',
   'serverStreamStoppedTitle': 'Übertragung gestoppt',
   'serverStreamErrorBody':
-      'Prüfe Kameraberechtigung und Verbindung und versuche es erneut.',
+      'Prüfe Kamera- und Mikrofonberechtigung und danach die Verbindung.',
   'serverStreamStoppedBody':
       'Kamera, Mikrofon und Eltern-Verbindungen sind ausgeschaltet.',
   'restartRoomStream': 'Stream neu starten',
@@ -295,12 +295,13 @@ const _deUiText = <String, String>{
   'copyAddress': 'Adresse kopieren',
   'camera': 'Kamera',
   'microphone': 'Mikrofon',
-  'clientCount': 'Client-Anzahl',
+  'alertConnection': 'Warnverbindung',
+  'clientCount': 'Anzahl Eltern-Geräte',
   'active': 'Aktiv',
   'partlyActive': 'Teilweise aktiv',
   'preparing': 'Vorbereitung',
   'off': 'Aus',
-  'eventClientsCount': '{count} Ereignis-Clients',
+  'eventClientsCount': '{count} Warnverbindung(en)',
   'connectedCount': '{count} verbunden',
   'parent': 'Eltern',
   'waiting': 'Wartet',
@@ -357,7 +358,7 @@ const _deUiText = <String, String>{
   'motionMinimumDurationDescription':
       'Wie lange Bewegung sichtbar bleiben muss.',
   'localNotification': 'Lokale Benachrichtigung',
-  'sentToClientDevice': 'An Eltern-Gerät gesendet',
+  'sentToClientDevice': 'An das Eltern-Gerät gesendet',
   'saving': 'Speichert',
   'realSettings': 'Aktive Einstellungen',
   'babyRoomHeader': 'Babyzimmer',
@@ -429,6 +430,8 @@ const _deUiText = <String, String>{
       'Wähle den Ton, der auf dem Babyzimmer-Gerät abgespielt wird.',
   'roomControlFailed':
       'Die Raumsteuerung konnte nicht angewendet werden. Prüfe die Verbindung und versuche es erneut.',
+  'microphonePermissionRequired':
+      'Zum Sprechen ist die Mikrofonberechtigung nötig. Aktiviere sie in den Geräteeinstellungen.',
   'watchReconnectingSubtitle':
       'Die Live-Ansicht wird wiederhergestellt. Sie läuft in wenigen Sekunden weiter.',
   'watchStartingSubtitle':
@@ -450,13 +453,13 @@ const _deUiText = <String, String>{
   'talkAccessibilityHint':
       'Mit Screenreader aktivieren, um das Sprechen zu starten oder zu beenden.',
   'roomVolume': 'Raumlautstärke',
-  'platformRuntimeContractTitle': 'Hintergrund-Laufzeitvertrag',
+  'platformRuntimeContractTitle': 'Hintergrundbetrieb',
   'iosForegroundOnlyContract':
       'Unter iOS läuft der Kamerastream nur im Vordergrund weiter.',
   'androidServiceActiveContract':
-      'Der Android-Vordergrunddienst verwaltet Kamera und Mikrofon.',
+      'Kamera und Mikrofon können weiterlaufen, während die App im Hintergrund ist.',
   'androidServiceInactiveContract':
-      'Der Android-Vordergrunddienst ist noch nicht aktiv.',
+      'Kamera und Mikrofon sind im Hintergrund noch nicht aktiv.',
   'platformRuntimeUnknownContract':
       'Hintergrund-Kamerastreaming ist auf dieser Plattform nicht verfügbar.',
   'processRecoveryForegroundContract':
@@ -705,7 +708,7 @@ const _arUiText = <String, String>{
   'qrIpTicketSubtitle': 'اعرض هذا الرمز على جهاز الوالدين في نفس Wi‑Fi.',
   'serviceStatus': 'حالة الخدمة',
   'serviceStatusSubtitle':
-      'تتم مراقبة الكاميرا والميكروفون وWebSocket في منطقة الخادم.',
+      'تُعرض هنا حالة كاميرا الغرفة والصوت واتصالات الوالدين.',
   'serverSettings': 'إعدادات الخادم',
   'serverSettingsSubtitle':
       'اختر ملفاً جاهزاً للغرفة وعدّله من الإعدادات المتقدمة عند الحاجة.',
@@ -720,7 +723,8 @@ const _arUiText = <String, String>{
   'babyRoomMode': 'وضع غرفة الطفل',
   'roomStreamReady': 'البث نشط',
   'serverStreamStoppedTitle': 'تم إيقاف البث',
-  'serverStreamErrorBody': 'تحقق من إذن الكاميرا والاتصال ثم حاول مرة أخرى.',
+  'serverStreamErrorBody':
+      'تحقق من أذونات الكاميرا والميكروفون، ثم تحقق من الاتصال.',
   'serverStreamStoppedBody': 'تم إيقاف الكاميرا والميكروفون واتصالات الوالدين.',
   'restartRoomStream': 'إعادة تشغيل البث',
   'serverMediaPreparingBody': 'يتم تجهيز صورة الكاميرا؛ أبقِ الهاتف ثابتاً.',
@@ -759,12 +763,13 @@ const _arUiText = <String, String>{
   'copyAddress': 'نسخ العنوان',
   'camera': 'الكاميرا',
   'microphone': 'الميكروفون',
-  'clientCount': 'عدد العملاء',
+  'alertConnection': 'اتصال التنبيهات',
+  'clientCount': 'عدد أجهزة الوالدين',
   'active': 'نشط',
   'partlyActive': 'نشط جزئياً',
   'preparing': 'يتم التجهيز',
   'off': 'متوقف',
-  'eventClientsCount': '{count} عملاء أحداث',
+  'eventClientsCount': '{count} اتصال تنبيهات',
   'connectedCount': '{count} متصل',
   'parent': 'الوالد',
   'waiting': 'انتظار',
@@ -882,6 +887,8 @@ const _arUiText = <String, String>{
   'comfortAudioDescription': 'اختر الصوت الذي سيعمل على جهاز غرفة الطفل.',
   'roomControlFailed':
       'تعذر تنفيذ التحكم بالغرفة. تحقق من الاتصال وحاول مرة أخرى.',
+  'microphonePermissionRequired':
+      'يلزم إذن الميكروفون للتحدث. يمكنك تفعيله من إعدادات الجهاز.',
   'watchReconnectingSubtitle':
       'تتم استعادة العرض المباشر. سيستمر خلال بضع ثوانٍ.',
   'watchStartingSubtitle': 'جارٍ إنشاء اتصال آمن بكاميرا غرفة الطفل.',
@@ -901,13 +908,13 @@ const _arUiText = <String, String>{
   'talkAccessibilityHint':
       'فعّل الزر لبدء التحدث أو إيقافه عند استخدام قارئ الشاشة.',
   'roomVolume': 'مستوى صوت الغرفة',
-  'platformRuntimeContractTitle': 'عقد التشغيل في الخلفية',
+  'platformRuntimeContractTitle': 'التشغيل في الخلفية',
   'iosForegroundOnlyContract':
       'على iOS يستمر بث الكاميرا فقط عندما يكون التطبيق في الواجهة.',
   'androidServiceActiveContract':
-      'تدير خدمة Android الأمامية الكاميرا والميكروفون النشطين.',
+      'يمكن للكاميرا والميكروفون متابعة العمل عندما يكون التطبيق في الخلفية.',
   'androidServiceInactiveContract':
-      'خدمة Android الأمامية للبث في الخلفية غير نشطة بعد.',
+      'استخدام الكاميرا والميكروفون في الخلفية غير نشط بعد.',
   'platformRuntimeUnknownContract':
       'بث الكاميرا في الخلفية غير متاح على هذه المنصة.',
   'processRecoveryForegroundContract':

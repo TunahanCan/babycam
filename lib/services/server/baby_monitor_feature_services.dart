@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:typed_data';
 
 import '../../core/protocol/device_feature_models.dart';
@@ -267,17 +268,31 @@ class TalkSessionBusyException implements Exception {
   final TalkSession activeSession;
 }
 
+class TalkSessionCancelledException implements Exception {
+  const TalkSessionCancelledException();
+}
+
 class TalkSessionRegistry {
   TalkSessionRegistry({
     DateTime Function()? now,
     SecureRandomTokenGenerator? tokenGenerator,
     this.sessionTtl = const Duration(seconds: 45),
+    this.attemptTombstoneTtl = const Duration(minutes: 2),
+    this.maxAttemptTombstones = 256,
   })  : _now = now ?? DateTime.now,
-        _tokenGenerator = tokenGenerator ?? SecureRandomTokenGenerator();
+        _tokenGenerator = tokenGenerator ?? SecureRandomTokenGenerator() {
+    if (attemptTombstoneTtl <= Duration.zero || maxAttemptTombstones <= 0) {
+      throw ArgumentError('Talk attempt tombstone bounds must be positive.');
+    }
+  }
 
   final DateTime Function() _now;
   final SecureRandomTokenGenerator _tokenGenerator;
   final Duration sessionTtl;
+  final Duration attemptTombstoneTtl;
+  final int maxAttemptTombstones;
+  final LinkedHashMap<_TalkAttemptKey, int> _cancelledAttempts =
+      LinkedHashMap<_TalkAttemptKey, int>();
   TalkSession? _active;
 
   TalkSession? get activeSession {
@@ -285,8 +300,14 @@ class TalkSessionRegistry {
     return _active;
   }
 
-  TalkSession start({required String clientId}) {
+  TalkSession start({
+    required String clientId,
+    String? attemptId,
+  }) {
     _pruneExpired();
+    if (attemptId != null && isAttemptCancelled(clientId, attemptId)) {
+      throw const TalkSessionCancelledException();
+    }
     final active = _active;
     if (active != null && active.clientId != clientId) {
       throw TalkSessionBusyException(active);
@@ -299,15 +320,22 @@ class TalkSessionRegistry {
       expiresAtMs: nowMs + sessionTtl.inMilliseconds,
       audioBytesReceived: 0,
       videoBytesReceived: 0,
+      attemptId: attemptId,
     );
     _active = session;
     return session;
   }
 
-  bool stop({required String clientId, String? token}) {
+  bool stop({
+    required String clientId,
+    String? token,
+    String? attemptId,
+  }) {
     _pruneExpired();
+    if (attemptId != null) cancelAttempt(clientId, attemptId);
     final active = _active;
     if (active == null || active.clientId != clientId) return false;
+    if (attemptId != null && active.attemptId != attemptId) return false;
     if (token != null && token.isNotEmpty && active.token != token) {
       return false;
     }
@@ -348,11 +376,55 @@ class TalkSessionRegistry {
     return _active?.token == token;
   }
 
+  void cancelAttempt(String clientId, String attemptId) {
+    _pruneAttemptTombstones();
+    final key = _TalkAttemptKey(clientId, attemptId);
+    _cancelledAttempts.remove(key);
+    _cancelledAttempts[key] =
+        _now().add(attemptTombstoneTtl).millisecondsSinceEpoch;
+    while (_cancelledAttempts.length > maxAttemptTombstones) {
+      _cancelledAttempts.remove(_cancelledAttempts.keys.first);
+    }
+  }
+
+  bool isAttemptCancelled(String clientId, String attemptId) {
+    _pruneAttemptTombstones();
+    return _cancelledAttempts.containsKey(
+      _TalkAttemptKey(clientId, attemptId),
+    );
+  }
+
+  int get attemptTombstoneCount {
+    _pruneAttemptTombstones();
+    return _cancelledAttempts.length;
+  }
+
   void _pruneExpired() {
     final active = _active;
     if (active == null) return;
     if (active.isExpired(_now().millisecondsSinceEpoch)) _active = null;
   }
+
+  void _pruneAttemptTombstones() {
+    final nowMs = _now().millisecondsSinceEpoch;
+    _cancelledAttempts.removeWhere((_, expiresAtMs) => expiresAtMs <= nowMs);
+  }
+}
+
+class _TalkAttemptKey {
+  const _TalkAttemptKey(this.clientId, this.attemptId);
+
+  final String clientId;
+  final String attemptId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _TalkAttemptKey &&
+      other.clientId == clientId &&
+      other.attemptId == attemptId;
+
+  @override
+  int get hashCode => Object.hash(clientId, attemptId);
 }
 
 bool? _bool(Object? value) {

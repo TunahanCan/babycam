@@ -21,6 +21,7 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
   final Duration icePollInterval;
   final void Function(String message)? onLog;
   final _handles = <_FlutterWebRtcClientMediaHandle>{};
+  final _pendingConnections = <_PendingWebRtcConnection>{};
   Future<bool>? _initializeOperation;
   bool _initialized = false;
   bool _available = false;
@@ -47,8 +48,12 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
 
   Future<bool> _initialize() async {
     try {
-      final video = await getRtpReceiverCapabilities('video');
-      final audio = await getRtpReceiverCapabilities('audio');
+      final video = await getRtpReceiverCapabilities('video').timeout(
+        negotiationTimeout,
+      );
+      final audio = await getRtpReceiverCapabilities('audio').timeout(
+        negotiationTimeout,
+      );
       _available =
           _hasCodec(video, 'video/h264') && _hasCodec(audio, 'audio/opus');
       _initialized = true;
@@ -77,6 +82,8 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
     }
 
     final http = HttpClient()..connectionTimeout = negotiationTimeout;
+    final pending = _PendingWebRtcConnection(http: http);
+    _pendingConnections.add(pending);
     RTCPeerConnection? connection;
     RTCVideoRenderer? renderer;
     _FlutterWebRtcClientMediaHandle? handle;
@@ -90,33 +97,52 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
           'bundlePolicy': 'max-bundle',
           'rtcpMuxPolicy': 'require',
         },
-      );
+      ).timeout(negotiationTimeout);
+      pending
+        ..connection = connection
+        ..ensureActive();
       renderer = RTCVideoRenderer();
-      await renderer.initialize();
+      pending.renderer = renderer;
+      await renderer.initialize().timeout(negotiationTimeout);
+      pending.ensureActive();
 
       if (audio) {
-        final transceiver = await connection.addTransceiver(
-          kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
-          init: RTCRtpTransceiverInit(
-            direction: TransceiverDirection.RecvOnly,
-          ),
+        final transceiver = await connection
+            .addTransceiver(
+              kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
+              init: RTCRtpTransceiverInit(
+                direction: TransceiverDirection.RecvOnly,
+              ),
+            )
+            .timeout(negotiationTimeout);
+        final capabilities = await getRtpReceiverCapabilities('audio').timeout(
+          negotiationTimeout,
         );
-        final capabilities = await getRtpReceiverCapabilities('audio');
-        await transceiver.setCodecPreferences(
-          _pilotCodecs(capabilities.codecs ?? const [], 'audio/opus'),
-        );
+        await transceiver
+            .setCodecPreferences(
+              _pilotCodecs(capabilities.codecs ?? const [], 'audio/opus'),
+            )
+            .timeout(negotiationTimeout);
+        pending.ensureActive();
       }
       if (video) {
-        final transceiver = await connection.addTransceiver(
-          kind: RTCRtpMediaType.RTCRtpMediaTypeVideo,
-          init: RTCRtpTransceiverInit(
-            direction: TransceiverDirection.RecvOnly,
-          ),
+        final transceiver = await connection
+            .addTransceiver(
+              kind: RTCRtpMediaType.RTCRtpMediaTypeVideo,
+              init: RTCRtpTransceiverInit(
+                direction: TransceiverDirection.RecvOnly,
+              ),
+            )
+            .timeout(negotiationTimeout);
+        final capabilities = await getRtpReceiverCapabilities('video').timeout(
+          negotiationTimeout,
         );
-        final capabilities = await getRtpReceiverCapabilities('video');
-        await transceiver.setCodecPreferences(
-          _pilotCodecs(capabilities.codecs ?? const [], 'video/h264'),
-        );
+        await transceiver
+            .setCodecPreferences(
+              _pilotCodecs(capabilities.codecs ?? const [], 'video/h264'),
+            )
+            .timeout(negotiationTimeout);
+        pending.ensureActive();
       }
 
       final connected = Completer<void>();
@@ -161,8 +187,10 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
         }
       };
 
-      final offer = await connection.createOffer();
-      await connection.setLocalDescription(offer);
+      final offer = await connection.createOffer().timeout(negotiationTimeout);
+      pending.ensureActive();
+      await connection.setLocalDescription(offer).timeout(negotiationTimeout);
+      pending.ensureActive();
       final response = await _postJson(
         http: http,
         session: session,
@@ -177,6 +205,7 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
           audio: audio,
         ).toJson(),
       );
+      pending.ensureActive();
       final answer = WebRtcOfferResponse.fromJson(response);
       peerId = answer.peerId;
       handle = _FlutterWebRtcClientMediaHandle(
@@ -184,23 +213,37 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
         videoRenderer: renderer,
         connection: connection,
         onClose: () async {
-          await _closeRemote(
-            http: http,
-            session: session,
-            streamToken: streamToken,
-            peerId: answer.peerId,
-          );
-          http.close(force: true);
+          try {
+            await _closeRemote(
+              http: http,
+              session: session,
+              streamToken: streamToken,
+              peerId: answer.peerId,
+            );
+          } finally {
+            http.close(force: true);
+          }
         },
         onDisposed: (closed) => _handles.remove(closed),
+        cleanupTimeout: negotiationTimeout,
       );
       _handles.add(handle);
-      await connection.setRemoteDescription(RTCSessionDescription(
-        answer.answer.sdp,
-        answer.answer.type,
-      ));
+      pending
+        ..handle = handle
+        ..connection = null
+        ..renderer = null;
+      await connection
+          .setRemoteDescription(RTCSessionDescription(
+            answer.answer.sdp,
+            answer.answer.type,
+          ))
+          .timeout(negotiationTimeout);
+      pending.ensureActive();
       for (final candidate in answer.iceCandidates) {
-        await connection.addCandidate(_toRtcCandidate(candidate));
+        await connection
+            .addCandidate(_toRtcCandidate(candidate))
+            .timeout(negotiationTimeout);
+        pending.ensureActive();
       }
       for (final candidate in pendingLocalCandidates) {
         await _sendCandidate(
@@ -209,7 +252,8 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
           streamToken: streamToken,
           peerId: answer.peerId,
           candidate: candidate,
-        );
+        ).timeout(negotiationTimeout);
+        pending.ensureActive();
       }
       pendingLocalCandidates.clear();
 
@@ -222,21 +266,18 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
         connected: connected.future,
       );
       await connected.future.timeout(negotiationTimeout);
+      pending.ensureActive();
       unawaited(polling.catchError((Object error) {
         onLog?.call('WebRTC ICE poll stopped: $error');
       }));
+      pending.release();
       return handle;
     } catch (error) {
-      if (handle != null) {
-        await handle.close();
-      } else {
-        await connection?.close();
-        await connection?.dispose();
-        await renderer?.dispose();
-        http.close(force: true);
-      }
+      await pending.cleanup(negotiationTimeout);
       if (error is WebRtcNegotiationException) rethrow;
       throw WebRtcNegotiationException('WebRTC negotiation failed: $error');
+    } finally {
+      _pendingConnections.remove(pending);
     }
   }
 
@@ -264,9 +305,11 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
       final raw = response['iceCandidates'];
       if (raw is List) {
         for (final value in raw) {
-          await connection.addCandidate(
-            _toRtcCandidate(WebRtcIceCandidateSignal.fromJson(value)),
-          );
+          await connection
+              .addCandidate(
+                _toRtcCandidate(WebRtcIceCandidateSignal.fromJson(value)),
+              )
+              .timeout(negotiationTimeout);
         }
       }
       if (!done) await Future<void>.delayed(icePollInterval);
@@ -313,14 +356,14 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
     required Map<String, String> query,
     required Map<String, Object?> body,
   }) async {
-    final request = await http.postUrl(
-      ServerEndpointBuilder(session).http(path, query: query),
-    );
+    final request = await http
+        .postUrl(ServerEndpointBuilder(session).http(path, query: query))
+        .timeout(negotiationTimeout);
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.authorizationHeader, 'Bearer ${session.sessionToken}');
     request.write(jsonEncode(body));
-    return _readJson(await request.close());
+    return _readJson(await request.close().timeout(negotiationTimeout));
   }
 
   Future<Map<String, Object?>> _getJson({
@@ -329,14 +372,14 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
     required String path,
     required Map<String, String> query,
   }) async {
-    final request = await http.getUrl(
-      ServerEndpointBuilder(session).http(path, query: query),
-    );
+    final request = await http
+        .getUrl(ServerEndpointBuilder(session).http(path, query: query))
+        .timeout(negotiationTimeout);
     request.headers.set(
       HttpHeaders.authorizationHeader,
       'Bearer ${session.sessionToken}',
     );
-    return _readJson(await request.close());
+    return _readJson(await request.close().timeout(negotiationTimeout));
   }
 
   Future<Map<String, Object?>> _readJson(HttpClientResponse response) async {
@@ -358,13 +401,29 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
   }
 
   @override
+  Future<void> cancelPendingConnections() async {
+    final pending = _pendingConnections.toList(growable: false);
+    // Calling cancel marks every negotiation and force-closes its signaling
+    // client synchronously, before this method reaches its first await.
+    final cancellations = <Future<void>>[
+      for (final connection in pending) connection.cancel(negotiationTimeout),
+    ];
+    await Future.wait(cancellations);
+  }
+
+  @override
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    await cancelPendingConnections();
     final handles = _handles.toList(growable: false);
-    for (final handle in handles) {
-      await handle.close();
-    }
+    await Future.wait([
+      for (final handle in handles)
+        _bestEffort(
+          handle.close,
+          negotiationTimeout,
+        ),
+    ]);
     _handles.clear();
     _available = false;
   }
@@ -401,9 +460,11 @@ class _FlutterWebRtcClientMediaHandle
     required RTCPeerConnection connection,
     required Future<void> Function() onClose,
     required void Function(_FlutterWebRtcClientMediaHandle handle) onDisposed,
+    required Duration cleanupTimeout,
   })  : _connection = connection,
         _onClose = onClose,
-        _onDisposed = onDisposed;
+        _onDisposed = onDisposed,
+        _cleanupTimeout = cleanupTimeout;
 
   @override
   final String peerId;
@@ -412,10 +473,12 @@ class _FlutterWebRtcClientMediaHandle
   final RTCPeerConnection _connection;
   final Future<void> Function() _onClose;
   final void Function(_FlutterWebRtcClientMediaHandle handle) _onDisposed;
+  final Duration _cleanupTimeout;
   final _states = StreamController<RTCPeerConnectionState>.broadcast();
   RTCPeerConnectionState _state =
       RTCPeerConnectionState.RTCPeerConnectionStateNew;
   bool _closed = false;
+  Future<void>? _closeOperation;
 
   @override
   RTCPeerConnectionState get connectionState => _state;
@@ -497,19 +560,65 @@ class _FlutterWebRtcClientMediaHandle
   }
 
   @override
-  Future<void> close() async {
-    if (_closed) return;
+  Future<void> close() {
+    final current = _closeOperation;
+    if (current != null) return current;
+    if (_closed) return Future<void>.value();
     _closed = true;
     _connection.onTrack = null;
     _connection.onIceCandidate = null;
     _connection.onConnectionState = null;
-    await _onClose();
-    videoRenderer.srcObject = null;
-    await _connection.close();
-    await _connection.dispose();
-    await videoRenderer.dispose();
-    await _states.close();
-    _onDisposed(this);
+    Object? detachError;
+    StackTrace? detachStackTrace;
+    try {
+      videoRenderer.srcObject = null;
+    } catch (error, stackTrace) {
+      detachError = error;
+      detachStackTrace = stackTrace;
+    }
+    final operation = _closeResources(
+      detachError: detachError,
+      detachStackTrace: detachStackTrace,
+    );
+    _closeOperation = operation;
+    return operation;
+  }
+
+  Future<void> _closeResources({
+    Object? detachError,
+    StackTrace? detachStackTrace,
+  }) async {
+    Object? firstError = detachError;
+    StackTrace? firstStackTrace = detachStackTrace;
+    Future<void> attempt(Future<void> Function() operation) async {
+      try {
+        await Future<void>.sync(operation).timeout(_cleanupTimeout);
+      } catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
+      }
+    }
+
+    // Remote signaling is best-effort and must never hold the renderer or
+    // native peer alive. Attach error handling immediately, then tear local
+    // resources down in their required order.
+    final remoteClose = attempt(_onClose);
+    await attempt(_connection.close);
+    await attempt(_connection.dispose);
+    await attempt(videoRenderer.dispose);
+    await attempt(_states.close);
+    await remoteClose;
+    try {
+      _onDisposed(this);
+    } catch (error, stackTrace) {
+      firstError ??= error;
+      firstStackTrace ??= stackTrace;
+    }
+
+    final error = firstError;
+    if (error != null) {
+      Error.throwWithStackTrace(error, firstStackTrace ?? StackTrace.current);
+    }
   }
 
   static int _intStat(Object? value) {
@@ -522,4 +631,86 @@ class _FlutterWebRtcClientMediaHandle
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '');
   }
+}
+
+class _PendingWebRtcConnection {
+  _PendingWebRtcConnection({required this.http});
+
+  final HttpClient http;
+  RTCPeerConnection? connection;
+  RTCVideoRenderer? renderer;
+  _FlutterWebRtcClientMediaHandle? handle;
+  bool _cancelled = false;
+  Future<void>? _cleanupOperation;
+
+  void ensureActive() {
+    if (_cancelled) {
+      throw const WebRtcNegotiationException(
+        'WebRTC negotiation was cancelled.',
+      );
+    }
+  }
+
+  Future<void> cancel(Duration timeout) {
+    _cancelled = true;
+    http.close(force: true);
+    return cleanup(timeout);
+  }
+
+  Future<void> cleanup(Duration timeout) {
+    final current = _cleanupOperation;
+    if (current != null) return current;
+    late final Future<void> operation;
+    operation = _cleanup(timeout).whenComplete(() {
+      if (identical(_cleanupOperation, operation)) {
+        _cleanupOperation = null;
+      }
+    });
+    _cleanupOperation = operation;
+    return operation;
+  }
+
+  Future<void> _cleanup(Duration timeout) async {
+    http.close(force: true);
+    final pendingHandle = handle;
+    handle = null;
+    final pendingConnection = connection;
+    connection = null;
+    final pendingRenderer = renderer;
+    renderer = null;
+
+    if (pendingHandle != null) {
+      await _bestEffort(pendingHandle.close, timeout);
+      return;
+    }
+
+    if (pendingConnection != null) {
+      pendingConnection.onTrack = null;
+      pendingConnection.onIceCandidate = null;
+      pendingConnection.onConnectionState = null;
+    }
+    if (pendingRenderer != null) pendingRenderer.srcObject = null;
+    if (pendingConnection != null) {
+      await _bestEffort(pendingConnection.close, timeout);
+      await _bestEffort(pendingConnection.dispose, timeout);
+    }
+    if (pendingRenderer != null) {
+      await _bestEffort(pendingRenderer.dispose, timeout);
+    }
+  }
+
+  void release() {
+    handle = null;
+    connection = null;
+    renderer = null;
+  }
+}
+
+Future<void> _bestEffort(
+  Future<void> Function() operation,
+  Duration timeout,
+) async {
+  try {
+    await Future<void>.sync(operation).timeout(timeout);
+  } catch (_) {}
 }
