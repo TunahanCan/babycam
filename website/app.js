@@ -34,10 +34,40 @@
     setMenuState(nextState, { moveFocus: nextState });
   });
 
+  const focusLinkedSection = (link) => {
+    const url = new URL(link.href);
+    if (
+      !url.hash
+      || url.origin !== window.location.origin
+      || url.pathname !== window.location.pathname
+    ) {
+      return false;
+    }
+
+    let target;
+    try {
+      target = document.getElementById(decodeURIComponent(url.hash.slice(1)));
+    } catch (_) {
+      return false;
+    }
+    if (!target) return false;
+
+    const hadTabIndex = target.hasAttribute("tabindex");
+    if (!hadTabIndex) target.setAttribute("tabindex", "-1");
+    window.requestAnimationFrame(() => {
+      target.focus({ preventScroll: true });
+      if (!hadTabIndex) {
+        target.addEventListener("blur", () => target.removeAttribute("tabindex"), { once: true });
+      }
+    });
+    return true;
+  };
+
   navigation?.addEventListener("click", (event) => {
-    if (!event.target.closest("a")) return;
+    const link = event.target.closest("a");
+    if (!link) return;
     setMenuState(false);
-    if (!desktopNavigation.matches) menuToggle?.focus({ preventScroll: true });
+    if (!desktopNavigation.matches) focusLinkedSection(link);
   });
 
   document.addEventListener("click", (event) => {

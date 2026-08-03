@@ -11,6 +11,7 @@ android/.gradle/
 .flutter-plugins-dependencies
 .packages
 build/
+/_site/
 
 # Android local / generated
 android/.gradle/

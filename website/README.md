@@ -1,20 +1,22 @@
 # MiuCam tanıtım sitesi
 
-MiuCam mobil uygulamasından bağımsız, derleme adımı ve üçüncü taraf çalışma
-zamanı bağımlılığı olmayan statik tanıtım sitesidir.
+MiuCam mobil uygulamasından bağımsız, üçüncü taraf çalışma zamanı bağımlılığı
+olmayan statik tanıtım sitesidir. Küçük bir Node.js derleme adımı, sekiz dil
+için taranabilir HTML sayfaları ve dile özel web manifestleri üretir.
 
 ## Yerelde çalıştırma
 
-Repo kökünden:
+Dağıtımla aynı yapıyı yerelde görmek için repo kökünden:
 
 ```bash
-python3 -m http.server 8080 --directory website
+node website/scripts/build.mjs /tmp/miucam-site
+python3 -m http.server 8080 --directory /tmp/miucam-site
 ```
 
-Ardından `http://localhost:8080` adresini açın. Dosyayı doğrudan
-`file://` ile açmak yerine HTTP sunucusu kullanmak, dağıtım davranışını daha
-doğru temsil eder. Çeviri katalogları çalışma anında `fetch` ile yüklendiği
-için çok dilli yapı `file://` altında güvenilir biçimde çalışmaz.
+Ardından Türkçe için `http://localhost:8080/`, İngilizce için
+`http://localhost:8080/en/` adresini açın. Dosyayı doğrudan `file://` ile
+açmak yerine HTTP sunucusu kullanın; dil değişiminde kataloglar `fetch` ile
+yüklendiği için çok dilli yapı `file://` altında güvenilir çalışmaz.
 
 ## Çok dilli yapı
 
@@ -31,28 +33,45 @@ Site sekiz dili destekler:
 | `hi` | Hintçe | Soldan sağa |
 | `ar` | Arapça | Sağdan sola (RTL) |
 
-Dil, üst menüdeki seçiciden değiştirilebilir veya URL'de `?lang=` parametresiyle
-doğrudan belirtilebilir:
+Her dilin bağımsız ve paylaşılabilir bir URL'si vardır:
 
 ```text
-http://localhost:8080/?lang=en
-http://localhost:8080/privacy.html?lang=ar
+http://localhost:8080/                 # Türkçe
+http://localhost:8080/en/             # İngilizce
+http://localhost:8080/de/             # Almanca
+http://localhost:8080/ar/privacy.html # Arapça gizlilik sayfası
 ```
 
-Geçerli bir `?lang=` değeri ilk tercihtir. Parametre yoksa son seçim
-`miucam.website.language` anahtarıyla `localStorage` üzerinden geri yüklenir;
-ikisi de yoksa Türkçe kullanılır. Seçiciden yapılan değişiklik hem URL'yi hem
-de bu yerel tercihi günceller; site içi sayfa bağlantıları da seçili dili
-`lang` parametresiyle taşır. Böylece depolamanın kapalı olduğu tarayıcılarda da
-sayfa geçişinde dil korunur. Arapça seçildiğinde belgeye `lang="ar"` ve
-`dir="rtl"`, diğer dillerde `dir="ltr"` uygulanır.
+Dil seçici kullanıcıyı ilgili dil rotasına geçirir ve seçimi
+`miucam.website.language` anahtarıyla `localStorage` içinde saklar. Eski
+`?lang=` bağlantıları geriye dönük olarak okunur ve dil rotasına dönüştürülür.
+Arapça sayfalarda `lang="ar"` ve `dir="rtl"`, diğerlerinde `dir="ltr"`
+kullanılır. Kullanıcılar IP veya tarayıcı diliyle otomatik olarak başka bir
+sayfaya yönlendirilmez; uluslararası kampanyalar doğrudan doğru dil URL'sine
+bağlanmalıdır.
+
+Derleme; her dil için yerelleştirilmiş title, description, Open Graph,
+JSON-LD, self-canonical ve karşılıklı `hreflang` etiketlerini HTML kaynağına
+yazar. `sitemap.xml` tüm dil rotalarını bildirir. Böylece içerik yalnız
+JavaScript sonrasında değil, arama ve sosyal paylaşım botlarının aldığı ilk
+HTML içinde de yerelleştirilmiş olur.
+
+Üretim taban URL'si varsayılan olarak `index.html` içindeki canonical'dan
+alınır. Geçici veya özel alan adı derlemelerinde açıkça değiştirilebilir:
+
+```bash
+SITE_URL=https://www.example.org/miucam/ node website/scripts/build.mjs /tmp/miucam-site
+```
+
+Bu değer canonical, `hreflang`, Open Graph, JSON-LD, sitemap ve robots
+adreslerine birlikte uygulanır.
 
 Türkçe kaynak katalog `locales/tr.json` dosyasıdır. Diğer yedi JSON dosyası
 aynı anahtar kümesini eksiksiz taşımalıdır. Yeni bir metin eklerken anahtarı
 sekiz kataloğa da ekleyin; `{year}` gibi çalışma anında biçimlendirilen
 belirteçleri çevirilerde aynen koruyun. Dil listesi veya kodları değişirse
-`i18n.js`, iki sayfadaki dil seçiciler, kataloglar ve doğrulayıcı birlikte
-güncellenmelidir.
+`i18n.js`, `language-init.js`, `scripts/build.mjs`, iki sayfadaki dil
+seçiciler, kataloglar, sitemap ve doğrulayıcı birlikte güncellenmelidir.
 
 ## Doğrulama
 
@@ -60,21 +79,18 @@ güncellenmelidir.
 node --check website/app.js
 node --check website/language-init.js
 node --check website/i18n.js
+node --check website/scripts/build.mjs
 node website/scripts/validate.mjs
+node website/scripts/build.mjs /tmp/miucam-site
+SITE_ROOT=/tmp/miucam-site node website/scripts/validate.mjs
 ```
 
 Doğrulama; sayfa yapısını, yerel bağlantıları, görsel boyut/alt metinlerini,
 JSON-LD verisini, manifest ikonlarını ve temel erişilebilirlik korumalarını
-kontrol eder. Ayrıca iki sayfada dil seçicinin ve `i18n.js` bağlantısının
-bulunduğunu; sekiz locale dosyasının geçerli JSON olduğunu; tüm değerlerin boş
-olmayan stringlerden oluştuğunu; anahtar kümeleriyle `{year}` belirteçlerinin
-Türkçe kaynakla birebir eşleştiğini doğrular.
-
-Dağıtım artifact'i gibi farklı bir kökü aynı kurallarla kontrol etmek için:
-
-```bash
-SITE_ROOT=/path/to/site node website/scripts/validate.mjs
-```
+kontrol eder. Derlenmiş artifact üzerinde ayrıca 16 yerelleştirilmiş sayfanın
+varlığını, doğru `lang`/`dir`, self-canonical, karşılıklı `hreflang` ve sekiz
+yerel manifesti denetler. Locale dosyalarının anahtar kümeleriyle `{year}`
+belirteçleri Türkçe kaynakla birebir eşleşmelidir.
 
 Chrome yüklü bir geliştirme ortamında gerçek tarayıcı smoke testi de çalışır:
 
@@ -82,32 +98,33 @@ Chrome yüklü bir geliştirme ortamında gerçek tarayıcı smoke testi de çal
 node --experimental-websocket website/scripts/browser-smoke.mjs http://127.0.0.1:8080
 ```
 
-Bu kontrol masaüstü, mobil ve gizlilik sayfası senaryolarında kırık görsel,
-JavaScript hatası, yatay taşma, görünmeden kalan animasyon öğesi ve mobil menü
-davranışını denetler; tam sayfa ekran görüntülerini `/tmp/miucam-browser-smoke`
-altına yazar.
+Bu kontrol Türkçe masaüstü, İngilizce tablet, Arapça RTL mobil, 320 px Almanca
+ve Almanca/Arapça gizlilik sayfası senaryolarında kırık görsel, JavaScript
+hatası, yatay taşma, görünmeden kalan animasyon öğesi, dil rotası ve mobil menü
+davranışını denetler; tam sayfa ekran görüntülerini
+`/tmp/miucam-browser-smoke` altına yazar.
 
 ## Dağıtım
 
-`.github/workflows/website.yml`, `website/` klasörünü GitHub Pages artifact'i
-olarak yayınlar. Artifact; HTML/CSS/JavaScript dosyalarının yanında `assets/`
-ve çalışma anında gereken `locales/` klasörünü de içerir. Repo ayarlarında
-**Settings → Pages → Source → GitHub Actions** seçili olmalıdır. Aynı klasör
-Netlify, Cloudflare Pages veya benzeri statik hosting servislerine de doğrudan
-verilebilir; `_headers` dosyası bu servislerde güvenlik ve cache başlıklarını
-etkinleştirir. Locale JSON dosyaları kısa süreli ayrı bir cache kuralı kullanır,
-böylece çeviri düzeltmeleri statik görsellere göre daha hızlı yayılır. GitHub
-Pages `_headers` dosyasını uygulamaz; bu hedefte aynı başlıklar ancak önüne
-destekleyen bir proxy/CDN konularak sağlanabilir.
+`.github/workflows/website.yml`, yerelleştirilmiş siteyi `_site/` içine üretir,
+kaynak ve artifact doğrulamalarını çalıştırır, gerçek tarayıcıyla sınar ve
+GitHub Pages'a yayınlar. Repo ayarlarında bir kez **Settings → Pages → Source →
+GitHub Actions** seçilmelidir; bu ayar kapalıysa `configure-pages` adımı siteyi
+oluşturamaz. Yayından sonra workflow hem ana sayfayı hem `/en/` rotasını HTTP
+ile doğrular.
+
+Aynı artifact Netlify, Cloudflare Pages veya benzeri statik hosting
+servislerine verilebilir. `_headers` bu servislerde güvenlik ve cache
+başlıklarını etkinleştirir. GitHub Pages `_headers` dosyasını uygulamaz; aynı
+başlıklar ancak destekleyen bir proxy/CDN ile sağlanabilir.
 
 Özel alan adı belli olduğunda:
 
-1. `index.html` içindeki geçici GitHub Pages canonical, `og:url`, sosyal görsel
-   ve JSON-LD URL'lerini yeni alan adıyla güncelleyin.
-2. `sitemap.xml` ve `robots.txt` içindeki GitHub Pages URL'sini değiştirin.
-3. Gizlilik metni nihai hale geldiğinde `privacy.html` için canonical ekleyip
-   `noindex` değerini kaldırın.
-4. Hosting sağlayıcısında HTTPS ve alan adı yönlendirmesini etkinleştirin.
+1. CI derleme komutuna sonu `/` ile biten üretim `SITE_URL` değerini ekleyin
+   veya `index.html` içindeki canonical tabanını güncelleyin.
+2. Gizlilik metni ve sorumlu kişi bilgileri nihai hale geldiğinde
+   `privacy.html` üzerindeki `noindex` değerini kaldırın.
+3. Hosting sağlayıcısında HTTPS ve alan adı yönlendirmesini etkinleştirin.
 
 App Store ve Google Play bağlantıları doğrulanana kadar sahte mağaza rozeti
 eklenmemelidir. Gerçek bağlantılar geldiğinde ana CTA alanı güncellenebilir.

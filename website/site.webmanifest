@@ -1,7 +1,7 @@
 {
   "name": "MiuCam",
   "short_name": "MiuCam",
-  "description": "İki telefon. Tek Wi-Fi. Bulutsuz bebek takibi.",
+  "description": "Kullanılmayan bir telefonu, aynı ev Wi-Fi ağında çalışan yerel bir bebek monitörüne dönüştürür.",
   "lang": "tr",
   "start_url": "./",
   "scope": "./",

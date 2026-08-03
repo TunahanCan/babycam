@@ -21,7 +21,7 @@
     />
     <meta
       property="og:description"
-      content="İki telefon. Tek Wi-Fi. Hesapsız ve bulutsuz bebek takibi."
+      content="İki telefon. Tek ev Wi-Fi’ı. Hesapsız, yerel bebek takibi."
     />
     <meta
       property="og:image"
@@ -41,7 +41,7 @@
     />
     <meta
       name="twitter:description"
-      content="İki telefon. Tek Wi-Fi. Hesapsız ve bulutsuz bebek takibi."
+      content="İki telefon. Tek ev Wi-Fi’ı. Hesapsız, yerel bebek takibi."
     />
     <meta
       name="twitter:image"
@@ -53,6 +53,15 @@
     <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png" />
     <link rel="manifest" href="site.webmanifest" />
     <link rel="canonical" href="https://tunahancan.github.io/babycam/" />
+    <link rel="alternate" hreflang="tr" href="https://tunahancan.github.io/babycam/" />
+    <link rel="alternate" hreflang="en" href="https://tunahancan.github.io/babycam/en/" />
+    <link rel="alternate" hreflang="de" href="https://tunahancan.github.io/babycam/de/" />
+    <link rel="alternate" hreflang="fr" href="https://tunahancan.github.io/babycam/fr/" />
+    <link rel="alternate" hreflang="es" href="https://tunahancan.github.io/babycam/es/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://tunahancan.github.io/babycam/zh/" />
+    <link rel="alternate" hreflang="hi" href="https://tunahancan.github.io/babycam/hi/" />
+    <link rel="alternate" hreflang="ar" href="https://tunahancan.github.io/babycam/ar/" />
+    <link rel="alternate" hreflang="x-default" href="https://tunahancan.github.io/babycam/" />
     <link
       rel="preload"
       as="image"
@@ -88,7 +97,7 @@
           class="brand"
           href="#top"
           aria-label="MiuCam ana sayfa"
-          data-i18n="nav.home"
+          data-i18n="nav.homeLabel"
           data-i18n-target="aria-label"
         >
           <img
@@ -136,12 +145,10 @@
           </div>
           <a
             class="button button-small button-primary nav-cta"
-            href="https://github.com/TunahanCan/babycam"
-            target="_blank"
-            rel="noreferrer"
+            href="#uygunluk"
           >
-            GitHub’da incele
-            <span aria-hidden="true">↗</span>
+            <span data-i18n="nav.fit">Evime uygun mu?</span>
+            <span aria-hidden="true">↓</span>
           </a>
         </nav>
       </div>
@@ -161,10 +168,10 @@
               <span class="hero-title-lead" data-i18n="hero.titleLead">Eski telefonunu</span>
               <span data-i18n="hero.titleAccent">evdeki bebek monitörüne dönüştür.</span>
             </h1>
-            <p class="hero-lead">
-              Bir telefonu bebek odasına bırak, diğerinden canlı görüntüyü ve oda
-              sesini takip et. Ağlama benzeri ses ve hareket uyarılarını tek ekranda
-              gör.
+            <p class="hero-lead" data-i18n="hero.lead">
+              Kullanmadığın telefonu bebek odasına bırak; kendi telefonundan canlı
+              görüntüyü ve oda sesini takip et. Temel kamera ve mikrofon medyası ev
+              ağında kalır.
             </p>
             <div class="hero-actions">
               <a class="button button-primary" href="#nasil-calisir">
@@ -179,29 +186,38 @@
                 <span aria-hidden="true">→</span>
               </a>
             </div>
-            <ul class="hero-assurances" aria-label="MiuCam kullanım avantajları">
+            <ul
+              class="hero-assurances"
+              aria-label="MiuCam kullanım avantajları"
+              data-i18n="hero.assurancesLabel"
+              data-i18n-target="aria-label"
+            >
               <li>
                 <svg aria-hidden="true" viewBox="0 0 20 20">
                   <path d="m5 10 3 3 7-7" />
                 </svg>
-                Hesap yok
+                <span data-i18n="hero.assuranceAccount">Hesap yok</span>
               </li>
               <li>
                 <svg aria-hidden="true" viewBox="0 0 20 20">
                   <path d="m5 10 3 3 7-7" />
                 </svg>
-                Zorunlu internet yok
+                <span data-i18n="hero.assuranceInternet">Zorunlu internet yok</span>
               </li>
               <li>
                 <svg aria-hidden="true" viewBox="0 0 20 20">
                   <path d="m5 10 3 3 7-7" />
                 </svg>
-                Temel izlemede bulut aktarımı yok
+                <span data-i18n="hero.assuranceCloud">Temel izlemede bulut aktarımı yok</span>
               </li>
             </ul>
+            <p class="hero-scope" data-i18n="hero.scope">
+              Ev Wi-Fi’ında çalışır · Ev dışından izleme sunmaz · Oda telefonu olarak
+              Android daha esnektir
+            </p>
             <p class="release-status">
               <span class="release-status-dot" aria-hidden="true"></span>
-              <span data-i18n="cta.kicker">Mağaza sürümü hazırlanıyor</span>
+              <span data-i18n="hero.releaseStatus">Mağaza sürümü hazırlanıyor</span>
             </p>
           </div>
 
@@ -289,7 +305,7 @@
                 <path d="M4 12h16M12 4a13 13 0 0 1 0 16M12 4a13 13 0 0 0 0 16" />
               </svg>
             </span>
-            <span data-i18n="trust.locales">8 dil desteği</span>
+            <span data-i18n="trust.localFirst">Yerel ağ öncelikli</span>
           </div>
           <div class="trust-item">
             <span class="trust-icon trust-icon-amber" aria-hidden="true">
@@ -303,23 +319,39 @@
         </div>
       </section>
 
-      <section class="purpose section-pad">
-        <div class="container purpose-grid">
-          <div class="section-heading" data-reveal>
-            <span class="kicker">Daha az cihaz, daha çok huzur</span>
-            <h2>Çekmecedeki telefonu yeniden işe koy.</h2>
-          </div>
-          <div class="purpose-copy" data-reveal data-reveal-delay="100">
-            <p>
-              MiuCam, zaten sahip olduğun iki telefonu anlaşılır bir bebek izleme
-              deneyiminde buluşturur. Ek bir kamera hesabı, karmaşık kurulum veya
-              temel izleme için bulut sunucusu gerekmez.
+      <section id="uygunluk" class="product-fit section-pad">
+        <div class="container">
+          <div class="section-heading centered" data-reveal>
+            <span class="kicker" data-i18n="fit.kicker">Doğru kullanım, daha çok güven</span>
+            <h2 data-i18n="fit.title">MiuCam evine uygun mu?</h2>
+            <p data-i18n="fit.subtitle">
+              En iyi deneyim, ihtiyacın ürünün sınırlarıyla örtüştüğünde başlar.
             </p>
-            <div class="purpose-note">
-              <span aria-hidden="true">✦</span>
-              Ev ağında kalır, ihtiyaç olduğunda yanında olur.
-            </div>
           </div>
+          <div class="fit-grid">
+            <article class="fit-card fit-card-positive" data-reveal>
+              <span class="fit-label" data-i18n="fit.goodLabel">MiuCam iyi bir seçim</span>
+              <h3 data-i18n="fit.goodTitle">Ev içinde sade takip istiyorsan</h3>
+              <ul>
+                <li data-i18n="fit.good1">Kullanabileceğin iki telefon ve güvenilir bir ev Wi-Fi ağı varsa</li>
+                <li data-i18n="fit.good2">Yeni bir kamera almak yerine mevcut cihazını değerlendirmek istiyorsan</li>
+                <li data-i18n="fit.good3">Hesap açmadan, temel medyayı buluta göndermeden takip etmek istiyorsan</li>
+              </ul>
+            </article>
+            <article class="fit-card fit-card-boundary" data-reveal data-reveal-delay="100">
+              <span class="fit-label" data-i18n="fit.limitLabel">Başka bir çözüm gerekebilir</span>
+              <h3 data-i18n="fit.limitTitle">Ev dışından erişim arıyorsan</h3>
+              <ul>
+                <li data-i18n="fit.limit1">Mobil internet üzerinden her yerden izlemek istiyorsan</li>
+                <li data-i18n="fit.limit2">Uygulama kapalıyken garantili uzak bildirim bekliyorsan</li>
+                <li data-i18n="fit.limit3">Tıbbi veya sertifikalı güvenlik takibi gerekiyorsa</li>
+              </ul>
+            </article>
+          </div>
+          <a class="fit-next" href="#nasil-calisir">
+            <span data-i18n="fit.cta">Kurulum adımlarını gör</span>
+            <span aria-hidden="true">↓</span>
+          </a>
         </div>
       </section>
 
@@ -717,7 +749,7 @@
             <div>
               <span class="language-icon" aria-hidden="true">文</span>
               <div>
-                <strong>Sekiz dil, dokuz bölgesel seçenek</strong>
+                <strong>Sekiz dilde arayüz</strong>
                 <p>Türkçe, İngilizce, Çince, Hintçe, İspanyolca, Fransızca, Almanca ve Arapça.</p>
               </div>
             </div>
@@ -768,8 +800,8 @@
             <details name="miucam-faq">
               <summary>Uygulama tamamen kapalıyken uyarı gelir mi?</summary>
               <div data-i18n="faq.closedA">
-                MiuCam olayları canlı yerel bağlantı üzerinden iletir; APNs veya FCM
-                tabanlı uzak bildirim kullanmaz. Ebeveyn uygulaması ve yerel bağlantı
+                MiuCam olayları canlı yerel bağlantı üzerinden iletir; Apple veya Google
+                uzak bildirim altyapısını kullanmaz. Ebeveyn uygulaması ve yerel bağlantı
                 erişilebilir değilse uyarı teslimi garanti edilmez.
               </div>
             </details>
@@ -804,33 +836,29 @@
           <div class="cta-card" data-reveal>
             <div class="cta-orb" aria-hidden="true"></div>
             <div class="cta-copy">
-              <span class="kicker kicker-light">Mağaza sürümü hazırlanıyor</span>
-              <h2>MiuCam yayın yolunda.</h2>
+              <span class="kicker kicker-light">Yayın öncesi</span>
+              <h2>MiuCam evine uyuyorsa, gelişmeleri takip et.</h2>
               <p>
-                İndirme bağlantıları hazır olduğunda burada yer alacak. Şimdilik gerçek
-                uygulama ekranlarını ve geliştirme notlarını inceleyebilirsin.
+                Mağaza bağlantıları hazır olduğunda burada olacak. O zamana kadar nasıl
+                çalıştığını inceleyebilir ve yayın ilerlemesini takip edebilirsin.
               </p>
               <div class="cta-actions">
+                <a class="button button-white" href="#nasil-calisir">
+                  <span data-i18n="cta.how">Nasıl çalıştığını gör</span>
+                  <span aria-hidden="true">↑</span>
+                </a>
                 <a
-                  class="button button-white"
+                  class="button button-ghost-light"
                   href="https://github.com/TunahanCan/babycam"
                   target="_blank"
                   rel="noreferrer"
                 >
-                  GitHub’da teknik ayrıntılar <span aria-hidden="true">↗</span>
+                  <span data-i18n="cta.releaseStatus">Kaynak kodu ve ilerlemeyi gör</span>
+                  <span aria-hidden="true">↗</span>
                 </a>
               </div>
               <div class="cta-meta">
                 <p class="release-note">MiuCam aktif geliştirme aşamasındadır; mağaza bağlantıları yayınlandığında burada yer alacaktır.</p>
-                <a
-                  class="cta-report-link"
-                  href="https://raw.githubusercontent.com/TunahanCan/babycam/master/docs/reports/miucam_cok_dilli_ekranlar_usecase_raporu.pdf"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Ürün raporu <small>PDF · 30 MB</small>
-                  <span aria-hidden="true">↗</span>
-                </a>
               </div>
             </div>
             <img
@@ -853,7 +881,7 @@
             class="brand"
             href="#top"
             aria-label="MiuCam ana sayfa"
-            data-i18n="nav.home"
+            data-i18n="nav.homeLabel"
             data-i18n-target="aria-label"
           >
             <img
@@ -864,7 +892,7 @@
               loading="lazy"
             />
           </a>
-          <p>İki telefon. Tek Wi-Fi. Bulutsuz bebek takibi.</p>
+          <p data-i18n="footer.tagline">İki telefon. Tek ev Wi-Fi’ı. Yerel bebek takibi.</p>
         </div>
         <div class="footer-links">
           <div>
@@ -877,6 +905,15 @@
             <strong>Bilgi</strong>
             <a href="privacy.html">Gizlilik taslağı</a>
             <a href="#sss">Sık sorulanlar</a>
+            <a
+              href="https://raw.githubusercontent.com/TunahanCan/babycam/master/docs/reports/miucam_cok_dilli_ekranlar_usecase_raporu.pdf"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span data-i18n="cta.report">Ürün raporu</span>
+              <small data-i18n="cta.reportSize">Türkçe PDF · 30 MB</small>
+              <span aria-hidden="true">↗</span>
+            </a>
             <a
               href="https://github.com/TunahanCan/babycam"
               target="_blank"

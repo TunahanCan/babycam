@@ -197,6 +197,7 @@ const runScenario = async ({
     language: document.documentElement.lang,
     direction: document.documentElement.dir,
     queryLanguage: new URL(location.href).searchParams.get('lang'),
+    pathname: location.pathname,
     selectedLanguage: document.querySelector('[data-language-selector]')?.value,
     firstHeading: document.querySelector('h1')?.textContent.replace(/\\s+/g, ' ').trim(),
     mismatchedInternalPageLinks: [...document.querySelectorAll('a[href]')]
@@ -204,10 +205,10 @@ const runScenario = async ({
         const url = new URL(link.href);
         const linksToPage = /(?:\\/|\\.html)$/.test(url.pathname);
         if (url.origin !== location.origin || !linksToPage) return false;
-        const linkLanguage = url.searchParams.get('lang');
-        return document.documentElement.lang === 'tr'
-          ? linkLanguage !== null
-          : linkLanguage !== document.documentElement.lang;
+        const supported = ['en', 'de', 'fr', 'es', 'zh', 'hi', 'ar'];
+        const linkLanguage = url.pathname.split('/').filter(Boolean)
+          .find((part) => supported.includes(part)) || 'tr';
+        return linkLanguage !== document.documentElement.lang;
       })
       .map((link) => link.getAttribute('href')),
     width: document.documentElement.clientWidth,
@@ -287,7 +288,7 @@ const runScenario = async ({
     diagnostics.language !== expectedLanguage ||
     diagnostics.direction !== expectedDirection ||
     diagnostics.selectedLanguage !== expectedLanguage ||
-    diagnostics.queryLanguage !== (expectedLanguage === "tr" ? null : expectedLanguage)
+    diagnostics.queryLanguage !== null
   ) {
     failures.push(
       `${name}: dil durumu hatalı (${diagnostics.language}/${diagnostics.direction}/${diagnostics.selectedLanguage})`,
@@ -457,6 +458,12 @@ const runScenario = async ({
               const script = document.querySelector('script[type="application/ld+json"]');
               return !script || JSON.parse(script.textContent).description === catalog['meta.homeDescription'];
             })(),
+            pathMatches: (() => {
+              const routeLanguage = location.pathname.split('/').filter(Boolean)
+                .find((part) => ['en', 'de', 'fr', 'es', 'zh', 'hi', 'ar'].includes(part))
+                || 'tr';
+              return routeLanguage === language;
+            })(),
             hasHorizontalOverflow:
               document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
           });
@@ -480,6 +487,7 @@ const runScenario = async ({
         !result.menuLabelMatches ||
         !result.openGraphLocaleChanged ||
         !result.structuredDataMatches ||
+        !result.pathMatches ||
         result.hasHorizontalOverflow
       ) {
         failures.push(`${name}: ${result.language} dil geçişi veya yerleşimi hatalı`);
@@ -505,6 +513,7 @@ const runScenario = async ({
         return {
           language: document.documentElement.lang,
           query: new URL(window.location.href).searchParams.get('lang'),
+          pathname: window.location.pathname,
           stored: window.localStorage.getItem('miucam.website.language'),
           selected: document.querySelector('[data-language-selector]')?.value,
         };
@@ -513,7 +522,8 @@ const runScenario = async ({
     );
     if (
       switchResult.language !== switchToLanguage ||
-      switchResult.query !== switchToLanguage ||
+      switchResult.query !== null ||
+      !switchResult.pathname.split('/').includes(switchToLanguage) ||
       switchResult.stored !== switchToLanguage ||
       switchResult.selected !== switchToLanguage
     ) {
@@ -540,7 +550,7 @@ try {
   });
   await runScenario({
     name: "tablet-home",
-    path: "/?lang=en",
+    path: "/en/",
     width: 768,
     height: 1024,
     mobile: true,
@@ -550,7 +560,7 @@ try {
   });
   await runScenario({
     name: "mobile-home",
-    path: "/?lang=ar",
+    path: "/ar/",
     width: 375,
     height: 812,
     mobile: true,
@@ -562,7 +572,7 @@ try {
   });
   await runScenario({
     name: "compact-home",
-    path: "/?lang=de",
+    path: "/de/",
     width: 320,
     height: 568,
     mobile: true,
@@ -573,7 +583,7 @@ try {
   });
   await runScenario({
     name: "desktop-privacy",
-    path: "/privacy.html?lang=de",
+    path: "/de/privacy.html",
     width: 1280,
     height: 900,
     mobile: false,
@@ -581,6 +591,73 @@ try {
     expectedDirection: "ltr",
     expectedHeading: "Entwurf der Datenschutzerklärung",
   });
+  await runScenario({
+    name: "mobile-privacy-rtl",
+    path: "/ar/privacy.html",
+    width: 390,
+    height: 844,
+    mobile: true,
+    expectedLanguage: "ar",
+    expectedDirection: "rtl",
+    expectedHeading: "مسودة إشعار الخصوصية",
+    testMenu: true,
+  });
+
+  await client.command("Emulation.setScriptExecutionDisabled", { value: true });
+  await client.command("Emulation.setDeviceMetricsOverride", {
+    width: 375,
+    height: 812,
+    deviceScaleFactor: 1,
+    mobile: true,
+    screenWidth: 375,
+    screenHeight: 812,
+  });
+  await client.command("Page.navigate", { url: new URL("/en/", baseUrl).href });
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (await evaluate("document.readyState === 'complete'")) break;
+    await delay(50);
+  }
+  const noScriptResult = await evaluate(`(() => {
+    const header = document.querySelector('.site-header');
+    const main = document.querySelector('main');
+    return {
+      language: document.documentElement.lang,
+      direction: document.documentElement.dir,
+      hasJsClass: document.documentElement.classList.contains('js'),
+      headerPosition: getComputedStyle(header).position,
+      navPosition: getComputedStyle(document.querySelector('[data-nav]')).position,
+      menuDisplay: getComputedStyle(document.querySelector('[data-menu-toggle]')).display,
+      heading: document.querySelector('h1')?.textContent.replace(/\\s+/g, ' ').trim(),
+      headerOverlapsMain: header.getBoundingClientRect().bottom > main.getBoundingClientRect().top + 1,
+      hasHorizontalOverflow:
+        document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    };
+  })()`);
+  if (
+    noScriptResult.language !== "en"
+    || noScriptResult.direction !== "ltr"
+    || noScriptResult.hasJsClass
+    || noScriptResult.headerPosition !== "relative"
+    || noScriptResult.navPosition !== "static"
+    || noScriptResult.menuDisplay !== "none"
+    || !noScriptResult.heading?.includes("Turn your old phone")
+    || noScriptResult.headerOverlapsMain
+    || noScriptResult.hasHorizontalOverflow
+  ) {
+    failures.push("mobile-no-script: yerelleştirilmiş JS kapalı mobil yedek düzeni bozuk");
+  } else {
+    console.log("mobile-no-script: en/ltr · statik yerelleştirme ve menü düzeni · başarılı");
+  }
+  const noScriptScreenshot = await client.command("Page.captureScreenshot", {
+    format: "png",
+    captureBeyondViewport: true,
+    fromSurface: true,
+  });
+  writeFileSync(
+    resolve(outputDirectory, "mobile-no-script.png"),
+    Buffer.from(noScriptScreenshot.data, "base64"),
+  );
+  await client.command("Emulation.setScriptExecutionDisabled", { value: false });
 
   if (failures.length > 0) {
     console.error(`Tarayıcı smoke testi başarısız (${failures.length} hata):`);

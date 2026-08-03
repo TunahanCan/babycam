@@ -41,15 +41,22 @@ jobs:
           node --check website/app.js
           node --check website/language-init.js
           node --check website/i18n.js
+          node --check website/scripts/build.mjs
           node --check website/scripts/validate.mjs
           node --check website/scripts/browser-smoke.mjs
 
-      - name: Validate pages and assets
+      - name: Validate source pages and assets
         run: node website/scripts/validate.mjs
+
+      - name: Build localized static pages
+        run: node website/scripts/build.mjs _site
+
+      - name: Validate localized artifact
+        run: SITE_ROOT=_site node website/scripts/validate.mjs
 
       - name: Run browser smoke test
         run: |
-          python3 -m http.server 8080 --directory website > /tmp/miucam-site-server.log 2>&1 &
+          python3 -m http.server 8080 --directory _site > /tmp/miucam-site-server.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           curl --fail --silent --retry 20 --retry-connrefused --retry-delay 1 \
@@ -87,21 +94,24 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Assemble public site
-        run: |
-          mkdir _site
-          find website -maxdepth 1 -type f ! -name 'README.md' -exec cp {} _site/ \;
-          cp -R website/assets _site/assets
-          cp -R website/locales _site/locales
-          touch _site/.nojekyll
+        run: node website/scripts/build.mjs _site
 
       - name: Validate public artifact
         run: SITE_ROOT=_site node website/scripts/validate.mjs
 
       - name: Upload site artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: _site
 
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Verify live site
+        run: |
+          page_url="${{ steps.deployment.outputs.page_url }}"
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 \
+            "${page_url%/}/" > /dev/null
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 \
+            "${page_url%/}/en/" > /dev/null

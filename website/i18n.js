@@ -26,6 +26,8 @@
   const storageKey = "miucam.website.language";
   const scriptUrl = document.currentScript?.src || new URL("i18n.js", window.location.href).href;
   const localeBaseUrl = new URL("locales/", scriptUrl);
+  const siteBaseUrl = new URL("./", scriptUrl);
+  const localizedSite = document.documentElement.dataset.localizedSite === "true";
   const catalogs = new Map();
   const bindings = [];
   let currentLanguage = defaultLanguage;
@@ -55,9 +57,37 @@
     const queryLanguage = new URLSearchParams(window.location.search).get("lang");
     if (supportedLanguages.includes(queryLanguage)) return queryLanguage;
 
+    const pageLanguage = document.documentElement.dataset.locale;
+    if (supportedLanguages.includes(pageLanguage)) return pageLanguage;
+
     const storedLanguage = readStoredLanguage();
     if (supportedLanguages.includes(storedLanguage)) return storedLanguage;
     return defaultLanguage;
+  };
+
+  const currentPageName = () =>
+    window.location.pathname.endsWith("/privacy.html") ? "privacy.html" : "";
+
+  const localizedPageUrl = (language) => {
+    const pageName = currentPageName();
+    const relativePath =
+      language === defaultLanguage ? pageName || "./" : `${language}/${pageName}`;
+    const url = new URL(relativePath, siteBaseUrl);
+    url.hash = window.location.hash;
+    return url;
+  };
+
+  const stabilizeResourceUrls = () => {
+    document
+      .querySelectorAll(
+        'link[rel="stylesheet"][href], link[rel="icon"][href], '
+          + 'link[rel="apple-touch-icon"][href], link[rel="preload"][href], img[src]',
+      )
+      .forEach((element) => {
+        const attribute = element.hasAttribute("href") ? "href" : "src";
+        const url = new URL(element.getAttribute(attribute), window.location.href);
+        if (url.origin === window.location.origin) element.setAttribute(attribute, url.href);
+      });
   };
 
   const loadCatalog = async (language) => {
@@ -155,6 +185,17 @@
   };
 
   const updateLanguageUrl = (language) => {
+    if (localizedSite) {
+      const localizedUrl = localizedPageUrl(language);
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${localizedUrl.pathname}${localizedUrl.search}${localizedUrl.hash}`,
+      );
+      document.documentElement.dataset.locale = language;
+      return;
+    }
+
     const url = new URL(window.location.href);
     if (language === defaultLanguage) url.searchParams.delete("lang");
     else url.searchParams.set("lang", language);
@@ -175,7 +216,7 @@
       const linksToPage = sourceHref.startsWith("#") || /(?:\/|\.html)$/.test(url.pathname);
       if (url.origin !== window.location.origin || !linksToPage) return;
 
-      if (language === defaultLanguage) url.searchParams.delete("lang");
+      if (localizedSite || language === defaultLanguage) url.searchParams.delete("lang");
       else url.searchParams.set("lang", language);
       link.setAttribute("href", `${url.pathname}${url.search}${url.hash}`);
     });
@@ -186,12 +227,25 @@
       .querySelector('meta[property="og:locale"]')
       ?.setAttribute("content", openGraphLocales[language]);
 
+    if (localizedSite) {
+      const pageUrl = localizedPageUrl(language).href;
+      document.querySelector('link[rel="canonical"]')?.setAttribute("href", pageUrl);
+      document.querySelector('meta[property="og:url"]')?.setAttribute("content", pageUrl);
+      const manifestPath =
+        language === defaultLanguage ? "site.webmanifest" : `${language}/site.webmanifest`;
+      document
+        .querySelector('link[rel="manifest"]')
+        ?.setAttribute("href", new URL(manifestPath, siteBaseUrl).href);
+    }
+
     const structuredData = document.querySelector('script[type="application/ld+json"]');
     if (!structuredData || !catalog["meta.homeDescription"]) return;
 
     try {
       const value = JSON.parse(structuredData.textContent);
       value.description = catalog["meta.homeDescription"];
+      value.inLanguage = language;
+      if (localizedSite) value.url = localizedPageUrl(language).href;
       structuredData.textContent = JSON.stringify(value);
     } catch (error) {
       console.error("MiuCam structured data could not be localized", error);
@@ -241,6 +295,7 @@
   };
 
   const initialize = async () => {
+    stabilizeResourceUrls();
     const initialLanguage = resolveInitialLanguage();
     const sourceCatalogRequest = loadCatalog(defaultLanguage);
     const initialCatalogRequest =
