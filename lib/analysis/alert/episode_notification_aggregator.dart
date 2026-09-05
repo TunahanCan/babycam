@@ -111,11 +111,20 @@ class EpisodeBasedNotificationAggregator {
   double _maxScore = 0;
   bool _confirmedDelivered = false;
   bool _lastSampleWasActive = false;
+  bool _motionActive = false;
 
   BabyEventEpisodeState get state => _state;
 
   void onMotionResult(MotionAnalysisResult result) {
-    if (!result.isMotion) return;
+    if (result.skippedByFrameRateGate) return;
+    if (result.invalidFrame) {
+      markVideoDiscontinuity();
+      return;
+    }
+    if (!result.isMotion || result.isGlobalLightChange) {
+      _motionActive = false;
+      return;
+    }
     // Motion is only evidence for the current audio episode. Keep a short
     // pending window for a camera burst that arrives just before its audio
     // window, but never carry stale motion into a later episode.
@@ -124,8 +133,10 @@ class EpisodeBasedNotificationAggregator {
         _lastMotionAtMs != null &&
         result.timestampMs - _lastMotionAtMs! > _motionAssociationWindowMs) {
       _motionBursts = 0;
+      _motionActive = false;
     }
-    _motionBursts++;
+    if (!_motionActive) _motionBursts++;
+    _motionActive = true;
     _lastMotionAtMs = result.timestampMs;
   }
 
@@ -138,7 +149,8 @@ class EpisodeBasedNotificationAggregator {
     // Ambient calibration is part of the signal contract. Before it finishes,
     // a loud room, microphone gain change, or startup transient must not start
     // an episode that can later be promoted to a phone notification.
-    if (result.invalidChunk ||
+    if (!audioReliable ||
+        result.invalidChunk ||
         result.isClipped ||
         !result.isCalibrated ||
         result.calibrationState != AudioCalibrationState.calibrated) {
@@ -237,6 +249,7 @@ class EpisodeBasedNotificationAggregator {
   void markVideoDiscontinuity() {
     _lastMotionAtMs = null;
     _motionBursts = 0;
+    _motionActive = false;
   }
 
   void reset() {
@@ -252,6 +265,7 @@ class EpisodeBasedNotificationAggregator {
     _maxScore = 0;
     _confirmedDelivered = false;
     _lastSampleWasActive = false;
+    _motionActive = false;
   }
 
   void _startIfNeeded(int nowMs) {
@@ -260,6 +274,7 @@ class EpisodeBasedNotificationAggregator {
         nowMs - _lastMotionAtMs! > _motionAssociationWindowMs) {
       _motionBursts = 0;
       _lastMotionAtMs = null;
+      _motionActive = false;
     }
     _episodeStartedAtMs = nowMs;
     _state = BabyEventEpisodeState.suspectedCry;

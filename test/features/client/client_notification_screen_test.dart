@@ -47,28 +47,28 @@ void main() {
       ),
     ));
 
-    expect(find.text('Ses kaydi'), findsOneWidget);
-    expect(find.text('Hareket kaydi'), findsOneWidget);
-    expect(find.text('Sistem kaydi'), findsOneWidget);
+    expect(find.text(_body('cryDetected', 'testMessage')), findsOneWidget);
+    expect(find.text(_body('motionDetected', 'testMessage')), findsOneWidget);
+    expect(find.text(_body('batteryLow', 'batteryLow')), findsOneWidget);
     expect(find.text('Son durum bekleniyor'), findsNothing);
 
     await tester.tap(find.text('Hareket').first);
     await tester.pump();
-    expect(find.text('Hareket kaydi'), findsOneWidget);
-    expect(find.text('Ses kaydi'), findsNothing);
-    expect(find.text('Sistem kaydi'), findsNothing);
+    expect(find.text(_body('motionDetected', 'testMessage')), findsOneWidget);
+    expect(find.text(_body('cryDetected', 'testMessage')), findsNothing);
+    expect(find.text(_body('batteryLow', 'batteryLow')), findsNothing);
 
     await tester.tap(find.text('Ses').first);
     await tester.pump();
-    expect(find.text('Ses kaydi'), findsOneWidget);
-    expect(find.text('Hareket kaydi'), findsNothing);
-    expect(find.text('Sistem kaydi'), findsNothing);
+    expect(find.text(_body('cryDetected', 'testMessage')), findsOneWidget);
+    expect(find.text(_body('motionDetected', 'testMessage')), findsNothing);
+    expect(find.text(_body('batteryLow', 'batteryLow')), findsNothing);
 
     await tester.tap(find.text('Sistem').first);
     await tester.pump();
-    expect(find.text('Sistem kaydi'), findsOneWidget);
-    expect(find.text('Ses kaydi'), findsNothing);
-    expect(find.text('Hareket kaydi'), findsNothing);
+    expect(find.text(_body('batteryLow', 'batteryLow')), findsOneWidget);
+    expect(find.text(_body('cryDetected', 'testMessage')), findsNothing);
+    expect(find.text(_body('motionDetected', 'testMessage')), findsNothing);
   });
 
   testWidgets('watch son uyaridan geçmişe geçer ve filtreler gerçekten çalışır',
@@ -96,7 +96,8 @@ void main() {
 
     await tester.pumpWidget(_App(home: WatchScreen(runtime: runtime)));
     await tester.pumpAndSettle();
-    final latestAlert = find.text('Watch hareket kaydı', skipOffstage: false);
+    final latestAlert =
+        find.text(_body('motionDetected', 'testMessage'), skipOffstage: false);
     expect(latestAlert, findsOneWidget);
 
     await tester.drag(
@@ -104,19 +105,19 @@ void main() {
       const Offset(0, -420),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Watch hareket kaydı'));
+    await tester.tap(find.text(_body('motionDetected', 'testMessage')));
     await tester.pumpAndSettle();
     expect(find.text('Uyarı geçmişi'), findsOneWidget);
 
     await tester.tap(find.text('Ses').first);
     await tester.pump();
-    expect(find.text('Watch ses kaydı'), findsOneWidget);
-    expect(find.text('Watch hareket kaydı'), findsNothing);
+    expect(find.text(_body('cryDetected', 'testMessage')), findsOneWidget);
+    expect(find.text(_body('motionDetected', 'testMessage')), findsNothing);
 
     await tester.tap(find.text('Hareket').first);
     await tester.pump();
-    expect(find.text('Watch hareket kaydı'), findsOneWidget);
-    expect(find.text('Watch ses kaydı'), findsNothing);
+    expect(find.text(_body('motionDetected', 'testMessage')), findsOneWidget);
+    expect(find.text(_body('cryDetected', 'testMessage')), findsNothing);
   });
 
   testWidgets('watch hata ekranı teknik ayrıntı sızdırmaz ve retry sunar',
@@ -206,7 +207,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Canlıyı aç'));
+    await tester
+        .tap(find.text(AppStrings(const Locale('tr')).alertDetailsUnavailable));
     await tester.pumpAndSettle();
 
     expect(find.byType(WatchScreen), findsOneWidget);
@@ -238,14 +240,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Dokunulan bildirim'), findsNothing);
+    expect(find.text(AppStrings(const Locale('tr')).alertDetailsUnavailable),
+        findsNothing);
     expect(find.text('Canli izleme rotasi'), findsOneWidget);
 
     taps.add('${NotificationService.alertsPayload}?alertId=alert-tap');
     await tester.pumpAndSettle();
 
     expect(find.text('Canli izleme rotasi'), findsNothing);
-    expect(find.text('Dokunulan bildirim'), findsOneWidget);
+    expect(find.text(AppStrings(const Locale('tr')).alertDetailsUnavailable),
+        findsOneWidget);
   });
 }
 
@@ -309,3 +313,6 @@ const _localizationsDelegates = [
   GlobalWidgetsLocalizations.delegate,
   GlobalCupertinoLocalizations.delegate,
 ];
+
+String _body(String type, String key) => AppStrings(const Locale('tr'))
+    .alertNotificationBody(type: type, messageKey: key)!;

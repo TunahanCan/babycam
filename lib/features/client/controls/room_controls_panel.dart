@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../l10n/app_strings.dart';
 import 'client_room_controls.dart';
+import 'room_audio_detection_notice.dart';
 
 class RoomControlsPanel extends StatefulWidget {
   const RoomControlsPanel({
@@ -122,6 +123,12 @@ class _RoomControlsPanelState extends State<RoomControlsPanel>
             Text(
               strings.ui('comfortAudioDescription'),
               style: const TextStyle(color: Color(0xFF657289), fontSize: 13),
+            ),
+            RoomAudioDetectionNotice(
+              controls: widget.controls,
+              session: widget.session,
+              alwaysShowHelp: true,
+              pollForChanges: false,
             ),
             const SizedBox(height: 12),
             Wrap(

@@ -12,16 +12,21 @@ class ClientAlertHistory {
   }) : _preferences = preferences;
 
   static const storageKey = 'client_alert_history_v1';
+  static const _notificationPendingKey = 'clientNotificationPending';
 
   final SharedPreferences? _preferences;
   final int maxItems;
   final _alerts = <AlertEventDto>[];
+  final _pendingNotificationIds = <String>{};
   final _changes = StreamController<List<AlertEventDto>>.broadcast();
   Future<void> _storageOperation = Future<void>.value();
   var _disposed = false;
 
   List<AlertEventDto> get alerts => List.unmodifiable(_alerts);
   Stream<List<AlertEventDto>> get changes => _changes.stream;
+
+  bool isNotificationPending(String alertId) =>
+      _pendingNotificationIds.contains(alertId);
 
   Future<void> load() async {
     final preferences = _preferences;
@@ -41,7 +46,12 @@ class ClientAlertHistory {
       for (final item in decoded) {
         if (item is! Map) continue;
         final alert = AlertEventDto.fromJson(Map<String, Object?>.from(item));
-        if (alert != null) loaded.add(alert);
+        if (alert != null) {
+          loaded.add(alert);
+          if (item[_notificationPendingKey] == true) {
+            _pendingNotificationIds.add(alert.id);
+          }
+        }
       }
       _replaceWith(_mergeAlerts([..._alerts, ...loaded]));
       await _persist();
@@ -63,8 +73,21 @@ class ClientAlertHistory {
     }
   }
 
+  /// Stores history and unfinished notification delivery in the same write.
+  /// A process restart must not mistake a history entry for a posted banner.
+  Future<void> addPendingNotification(AlertEventDto alert) {
+    _pendingNotificationIds.add(alert.id);
+    return add(alert);
+  }
+
+  Future<void> markNotificationHandled(String alertId) async {
+    if (!_pendingNotificationIds.remove(alertId)) return;
+    await _persist();
+  }
+
   Future<void> clear() async {
     _alerts.clear();
+    _pendingNotificationIds.clear();
     try {
       await _removePersisted();
     } finally {
@@ -93,6 +116,8 @@ class ClientAlertHistory {
     _alerts
       ..clear()
       ..addAll(alerts);
+    final retainedIds = alerts.map((alert) => alert.id).toSet();
+    _pendingNotificationIds.removeWhere((id) => !retainedIds.contains(id));
   }
 
   Future<void> _persist() async {
@@ -101,7 +126,13 @@ class ClientAlertHistory {
     await _enqueueStorage(() async {
       await preferences.setString(
         storageKey,
-        jsonEncode(_alerts.map((alert) => alert.toJson()).toList()),
+        jsonEncode(_alerts
+            .map((alert) => {
+                  ...alert.toJson(),
+                  if (_pendingNotificationIds.contains(alert.id))
+                    _notificationPendingKey: true,
+                })
+            .toList()),
       );
     });
   }

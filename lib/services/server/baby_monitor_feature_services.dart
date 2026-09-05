@@ -237,6 +237,8 @@ class NightLightController {
         mode = 'screenGlow';
         error = 'TORCH_UNAVAILABLE_SCREEN_GLOW_FALLBACK';
       }
+    } else {
+      await _setTorchBestEffort(torchSetter, false);
     }
     _state = _state.copyWith(
       enabled: true,

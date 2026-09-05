@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="miucam_server_channel_name">MiuCam Server</string>
+    <string name="miucam_server_channel_name">MiuCam Sunucusu</string>
     <string name="miucam_alert_connection_channel_name">MiuCam Bildirim Bağlantısı</string>
     <string name="miucam_server_channel_description">MiuCam yerel sunucu ve medya etkinliği</string>
     <string name="miucam_alert_connection_channel_description">Bebek odası bildirim bağlantısını arka planda etkin tutar</string>

@@ -6,8 +6,50 @@ import 'package:miucam/features/client/alerts/client_alert_delivery_coordinator.
 import 'package:miucam/features/client/alerts/client_alert_history.dart';
 import 'package:miucam/features/client/alerts/client_notification_service.dart';
 import 'package:miucam/services/notification_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('failed native notification remains retryable after process restart',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final original = ClientAlertHistory(preferences: preferences);
+    final restored = ClientAlertHistory(preferences: preferences);
+    final completed = ClientAlertHistory(preferences: preferences);
+    addTearDown(original.dispose);
+    addTearDown(restored.dispose);
+    addTearDown(completed.dispose);
+    final alert = _alert(id: 'interrupted-platform-delivery');
+    final firstDelivery = ClientAlertDeliveryCoordinator(
+      history: original,
+      notifications: _RetryingNotificationService(),
+    );
+
+    await expectLater(firstDelivery.deliver(alert), throwsStateError);
+    await restored.load();
+    expect(restored.alerts, hasLength(1));
+    expect(restored.isNotificationPending(alert.id), isTrue);
+
+    final notifications = _RecordingNotificationService();
+    final retryDelivery = ClientAlertDeliveryCoordinator(
+      history: restored,
+      notifications: notifications,
+    );
+    await retryDelivery.deliver(alert);
+    expect(notifications.alerts.map((item) => item.id), [alert.id]);
+    expect(restored.alerts, hasLength(1));
+
+    await completed.load();
+    expect(completed.isNotificationPending(alert.id), isFalse);
+    await ClientAlertDeliveryCoordinator(
+      history: completed,
+      notifications: notifications,
+    ).deliver(alert);
+    expect(notifications.alerts, hasLength(1));
+  });
+
   test(
       'concurrent and reconnect copies produce one history entry and one notification',
       () async {
@@ -144,6 +186,27 @@ void main() {
     expect(history.alerts.map((item) => item.id), ['history-only']);
     expect(notifications.calls, 1);
   });
+
+  test('disabled notification channel uses history without reconnect loop',
+      () async {
+    final history = _RecordingAlertHistory();
+    final notifications = _PermanentFailureNotificationService(
+      error: 'notification_channel_disabled',
+    );
+    final delivery = ClientAlertDeliveryCoordinator(
+      history: history,
+      notifications: notifications,
+    );
+    addTearDown(history.dispose);
+    final alert = _alert(id: 'channel-disabled');
+
+    await delivery.deliver(alert);
+    await delivery.deliver(alert);
+
+    expect(history.alerts, hasLength(1));
+    expect(history.isNotificationPending(alert.id), isFalse);
+    expect(notifications.calls, 1);
+  });
 }
 
 class _RecordingAlertHistory extends ClientAlertHistory {
@@ -217,6 +280,11 @@ class _RetryingNotificationService extends ClientNotificationService {
 }
 
 class _PermanentFailureNotificationService extends ClientNotificationService {
+  _PermanentFailureNotificationService({
+    this.error = 'notification_permission_denied',
+  });
+
+  final String error;
   int calls = 0;
 
   @override
@@ -225,7 +293,7 @@ class _PermanentFailureNotificationService extends ClientNotificationService {
     return NotificationDeliveryReceipt(
       notificationId: NotificationService.notificationIdFor(alert.id),
       posted: false,
-      error: 'notification_permission_denied',
+      error: error,
     );
   }
 }

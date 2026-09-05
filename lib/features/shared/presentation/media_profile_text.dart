@@ -47,10 +47,24 @@ String localizedMediaProfileLabel(
 String localizedMediaProfileSummary(
   AppStrings strings,
   MediaQualityProfile profile,
-) =>
-    '${localizedMediaProfileLabel(strings, profile)} · '
-    '${profile.width}x${profile.height} · '
-    '${profile.targetFps}fps · JPG ${profile.jpegQuality}';
+) {
+  final frameRateUnit = _mediaText(
+    strings,
+    tr: 'kare/sn',
+    en: 'fps',
+    zh: '帧/秒',
+    hi: 'फ़्रेम/सेकंड',
+    es: 'fps',
+    fr: 'images/s',
+    de: 'Bilder/s',
+    ar: 'إطار/ثانية',
+  );
+  return '${localizedMediaProfileLabel(strings, profile)} · '
+      '${strings.formatNumber(profile.width)} × '
+      '${strings.formatNumber(profile.height)} · '
+      '${strings.formatNumber(profile.targetFps)} $frameRateUnit · '
+      'JPG ${strings.formatNumber(profile.jpegQuality)}';
+}
 
 String _normal(AppStrings strings) => _mediaText(
       strings,

@@ -1101,12 +1101,55 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Quitter l’horloge de nuit'
   },
   'nightClockAudioAlertsOn': {
-    'tr': 'Video kapalı; ses ve uyarılar açık.',
-    'en': 'Video is off; audio and alerts stay on.',
-    'zh': '视频已关闭；声音和提醒保持开启。',
-    'hi': 'वीडियो बंद है; ऑडियो और अलर्ट चालू हैं।',
-    'es': 'El video está apagado; audio y alertas siguen activos.',
-    'fr': 'La vidéo est coupée ; audio et alertes restent actifs.'
+    'tr': 'Video kapalı; ses ve bildirim bağlantısı açık.',
+    'en': 'Video is off; audio and the alert connection are active.',
+    'zh': '视频已关闭；声音和提醒连接保持开启。',
+    'hi': 'वीडियो बंद है; ऑडियो और अलर्ट कनेक्शन सक्रिय हैं।',
+    'es':
+        'El video está apagado; el audio y la conexión de alertas están activos.',
+    'fr':
+        'La vidéo est coupée ; l’audio et la connexion des alertes sont actifs.'
+  },
+  'roomAudioDetectionHelp': {
+    'tr':
+        'Rahatlatıcı ses veya bas-konuş açıkken ağlama ve yüksek ses algılama duraklar. Canlı ses ve hareket algılama devam eder.',
+    'en':
+        'Cry and loud-sound detection pause while comfort audio or talk is active. Live audio and motion detection continue.',
+    'zh': '播放安抚音频或对讲时，哭声和大声检测会暂停。实时音频和运动检测继续运行。',
+    'hi':
+        'सुकून देने वाला ऑडियो या बातचीत चालू होने पर रोने और तेज़ आवाज़ की पहचान रुक जाती है। लाइव ऑडियो और हलचल की पहचान जारी रहती है।',
+    'es':
+        'La detección de llanto y sonidos fuertes se pausa mientras se reproduce audio relajante o se usa la función de hablar. El audio en directo y la detección de movimiento continúan.',
+    'fr':
+        'La détection des pleurs et des sons forts est suspendue pendant la lecture de sons apaisants ou une conversation. L’audio en direct et la détection de mouvement restent actifs.'
+  },
+  'roomAudioDetectionPaused': {
+    'tr': 'Ağlama ve yüksek ses algılama duraklatıldı.',
+    'en': 'Cry and loud-sound detection paused.',
+    'zh': '哭声和大声检测已暂停。',
+    'hi': 'रोने और तेज़ आवाज़ की पहचान रुकी हुई है।',
+    'es': 'Detección de llanto y sonidos fuertes en pausa.',
+    'fr': 'Détection des pleurs et des sons forts suspendue.'
+  },
+  'roomAudioDetectionResumeHelp': {
+    'tr':
+        'Algılamayı sürdürmek için rahatlatıcı sesi duraklatın veya konuşmayı bitirin.',
+    'en': 'Pause comfort audio or end talk to resume detection.',
+    'zh': '暂停安抚音频或结束对讲以恢复检测。',
+    'hi':
+        'पहचान फिर से शुरू करने के लिए सुकून देने वाला ऑडियो रोकें या बातचीत समाप्त करें।',
+    'es':
+        'Pausa el audio relajante o termina de hablar para reanudar la detección.',
+    'fr':
+        'Mettez les sons apaisants en pause ou terminez la conversation pour reprendre la détection.'
+  },
+  'alertConnectionOn': {
+    'tr': 'Bildirim bağlantısı açık',
+    'en': 'Alert connection active',
+    'zh': '提醒连接已开启',
+    'hi': 'अलर्ट कनेक्शन सक्रिय',
+    'es': 'Conexión de alertas activa',
+    'fr': 'Connexion des alertes active'
   },
   'notificationsOn': {
     'tr': 'Bildirim açık',

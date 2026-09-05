@@ -18,8 +18,16 @@ class LumaDownsampler {
     if (frame.width < outputWidth || frame.height < outputHeight) return false;
     if (frame.rowStride <= 0 || frame.pixelStride <= 0) return false;
     if (frame.yPlane.isEmpty) return false;
+    final isBgra = frame.pixelFormat == LumaPixelFormat.bgra8888;
+    if (isBgra && frame.pixelStride < 4) return false;
+    final sampleBytes = isBgra ? 3 : 1;
+    if (frame.rowStride < (frame.width - 1) * frame.pixelStride + sampleBytes) {
+      return false;
+    }
     final lastOffset = (frame.height - 1) * frame.rowStride +
-        (frame.width - 1) * frame.pixelStride;
+        (frame.width - 1) * frame.pixelStride +
+        sampleBytes -
+        1;
     return lastOffset >= 0 && lastOffset < frame.yPlane.length;
   }
 
@@ -28,6 +36,8 @@ class LumaDownsampler {
     if (!canDownsample(frame) || output.length < outputWidth * outputHeight) {
       return false;
     }
+    final isBgra = frame.pixelFormat == LumaPixelFormat.bgra8888;
+    final lumaScale = isBgra ? 1000 : 1;
     var outIndex = 0;
     for (var y = 0; y < outputHeight; y++) {
       final startY = (y * frame.height) ~/ outputHeight;
@@ -40,12 +50,21 @@ class LumaDownsampler {
         for (var sourceY = startY; sourceY < endY; sourceY++) {
           final rowStart = sourceY * frame.rowStride;
           for (var sourceX = startX; sourceX < endX; sourceX++) {
-            sum += frame.yPlane[rowStart + sourceX * frame.pixelStride];
+            final offset = rowStart + sourceX * frame.pixelStride;
+            if (isBgra) {
+              // Convert while averaging, without allocating a full-resolution
+              // intermediate Y plane. Blue alone misses red/green movement.
+              sum += 114 * frame.yPlane[offset] +
+                  587 * frame.yPlane[offset + 1] +
+                  299 * frame.yPlane[offset + 2];
+            } else {
+              sum += frame.yPlane[offset];
+            }
             count++;
           }
         }
         if (count == 0) return false;
-        output[outIndex++] = (sum / count).round();
+        output[outIndex++] = (sum / (count * lumaScale)).round();
       }
     }
     return true;

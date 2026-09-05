@@ -26,7 +26,7 @@ void main() {
       expect(budget.shouldProcess(1011), isTrue);
     });
 
-    test('minimum aralık güncellenince bütçe resetlenir', () {
+    test('profile updates preserve pacing across the last accepted frame', () {
       final budget =
           MediaFrameBudget(minInterval: const Duration(milliseconds: 120));
 
@@ -34,9 +34,37 @@ void main() {
       budget.updateMinInterval(const Duration(milliseconds: 250));
 
       expect(budget.minInterval, const Duration(milliseconds: 250));
-      expect(budget.shouldProcess(1010), isTrue);
+      expect(budget.shouldProcess(1010), isFalse);
       expect(budget.shouldProcess(1200), isFalse);
-      expect(budget.shouldProcess(1260), isTrue);
+      expect(budget.shouldProcess(1250), isTrue);
+    });
+
+    test('wall clock rollback does not freeze video until old time catches up',
+        () {
+      final budget =
+          MediaFrameBudget(minInterval: const Duration(milliseconds: 120));
+
+      expect(budget.shouldProcess(60000), isTrue);
+      expect(budget.shouldProcess(1000), isTrue);
+      expect(budget.shouldProcess(1119), isFalse);
+      expect(budget.shouldProcess(1120), isTrue);
+    });
+
+    test('rapid content profile oscillation cannot bypass the FPS cap', () {
+      final budget =
+          MediaFrameBudget(minInterval: const Duration(milliseconds: 125));
+      final acceptedAt = <int>[];
+      for (var frame = 0; frame < 30; frame++) {
+        final timestamp = frame * 33;
+        budget.updateMinInterval(
+            Duration(milliseconds: frame.isEven ? 125 : 167));
+        if (budget.shouldProcess(timestamp)) acceptedAt.add(timestamp);
+      }
+
+      expect(acceptedAt.length, lessThanOrEqualTo(8));
+      for (var i = 1; i < acceptedAt.length; i++) {
+        expect(acceptedAt[i] - acceptedAt[i - 1], greaterThanOrEqualTo(125));
+      }
     });
   });
 

@@ -16,6 +16,7 @@ import 'package:miucam/features/client/media/watch_screen.dart';
 import 'package:miucam/features/role_selection/role_selection_screen.dart';
 import 'package:miucam/features/shared/presentation/miucam_design_tokens.dart';
 import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/features/shared/presentation/localized_time.dart';
 
 void main() {
   testWidgets('seçili dil ve oda rolü küçük metinde AA kontrastı sağlar',
@@ -78,7 +79,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    for (final time in ['12:10', '12:20', '12:30']) {
+    final context = tester.element(find.byType(WatchScreen));
+    for (final minute in [10, 20, 30]) {
+      final time = formatAlertTimestamp(
+          context, DateTime(2026, 7, 29, 12, minute).millisecondsSinceEpoch);
       final timeText = tester.widget<Text>(find.text(time));
       expect(
         _contrastRatio(timeText.style!.color!, Colors.white),

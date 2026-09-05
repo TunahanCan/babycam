@@ -25,7 +25,7 @@ class _LiveMetricGrid extends StatelessWidget {
         : _VideoPanel._networkLabel(strings, quality!.tier);
     final latencyLabel = quality?.rttMs == null
         ? strings.ui('measuring')
-        : '${quality!.rttMs} ms';
+        : localizedMillisecondsLabel(strings, quality!.rttMs!);
     final audioLabel = audioEnabled
         ? profile?.audioFirst == true
             ? strings.ui('audioPriority')
@@ -36,7 +36,7 @@ class _LiveMetricGrid extends StatelessWidget {
         : alertsConnected
             ? systemNotificationsEnabled == false
                 ? strings.ui('notificationsInAppOnly')
-                : strings.ui('notificationsOn')
+                : strings.ui('alertConnectionOn')
             : strings.ui('clientTitleReconnecting');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -252,7 +252,7 @@ class _AlertTimeline extends StatelessWidget {
         else
           for (final alert in items) ...[
             _Timeline(
-              _formatAlertTime(alert.timestampMs),
+              formatAlertTimestamp(context, alert.timestampMs),
               _alertTitle(strings, alert),
               alert.localizedMessage(strings),
               _alertColor(alert),
@@ -300,12 +300,6 @@ Color _alertColor(AlertEventDto alert) {
   };
 }
 
-String _formatAlertTime(int timestampMs) {
-  final time = DateTime.fromMillisecondsSinceEpoch(timestampMs);
-  return '${time.hour.toString().padLeft(2, '0')}:'
-      '${time.minute.toString().padLeft(2, '0')}';
-}
-
 class _Timeline extends StatelessWidget {
   const _Timeline(this.time, this.title, this.text, this.color);
 
@@ -319,32 +313,20 @@ class _Timeline extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: _cardDecoration(),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 44,
-            child: Text(time,
-                style: TextStyle(
-                    color: color, fontSize: 14, fontWeight: FontWeight.w900)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: const TextStyle(
-                        color: _navy,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900)),
-                const SizedBox(height: 5),
-                Text(text,
-                    style: const TextStyle(
-                        color: _slate, fontSize: 14, height: 1.25)),
-              ],
-            ),
-          ),
+          Text(time,
+              style: TextStyle(
+                  color: color, fontSize: 14, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          Text(title,
+              style: const TextStyle(
+                  color: _navy, fontSize: 17, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 5),
+          Text(text,
+              style:
+                  const TextStyle(color: _slate, fontSize: 14, height: 1.25)),
         ],
       ),
     );

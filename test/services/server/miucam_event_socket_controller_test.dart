@@ -7,7 +7,29 @@ import 'package:miucam/features/server/pairing/pairing_token_service.dart';
 import 'package:miucam/services/server/active_client_registry.dart';
 import 'package:miucam/services/server/miucam_event_socket_controller.dart';
 
+import '../../support/blackhole_tcp_proxy.dart';
+
 void main() {
+  test('silent network loss releases the dead event socket lease', () async {
+    final harness = await _ControllerHarness.start(
+      reconnectGracePeriod: Duration.zero,
+      pingInterval: const Duration(milliseconds: 100),
+    );
+    final proxy = await BlackholeTcpProxy.start(harness.port);
+    final client = await _connect(proxy.port);
+    client.listen((_) {});
+    addTearDown(() async {
+      await proxy.close();
+      await client.close();
+      await harness.close();
+    });
+    await _waitUntil(() => harness.controller.clientCount == 1);
+
+    proxy.blackholeExistingConnections();
+
+    await _waitUntil(() => harness.controller.clientCount == 0);
+  });
+
   test('short reconnect keeps analysis armed and replays only alerts after ACK',
       () async {
     var connectedCalls = 0;
@@ -170,6 +192,7 @@ class _ControllerHarness {
 
   static Future<_ControllerHarness> start({
     required Duration reconnectGracePeriod,
+    Duration pingInterval = const Duration(seconds: 15),
     Duration maxReplayAge = const Duration(minutes: 2),
     int Function()? replayNowMs,
   }) async {
@@ -189,6 +212,7 @@ class _ControllerHarness {
       connectedLog: (_) => 'connected',
       onLog: (_) {},
       reconnectGracePeriod: reconnectGracePeriod,
+      pingInterval: pingInterval,
       maxReplayAge: maxReplayAge,
       replayNowMs: replayNowMs,
     );

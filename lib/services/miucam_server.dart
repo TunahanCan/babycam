@@ -756,6 +756,9 @@ class MiuCamServer {
   }
 
   Future<bool> _setTorchEnabled(bool enabled) async {
+    if (mediaSource case final ServerMediaTorchSink source) {
+      return source.setTorchEnabled(enabled);
+    }
     final controller = cameraController;
     if (controller == null || !controller.value.isInitialized) return false;
     await controller.setFlashMode(enabled ? FlashMode.torch : FlashMode.off);

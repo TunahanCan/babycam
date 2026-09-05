@@ -167,6 +167,17 @@ class ClientLiveAudioPipeline {
     final client = (_clientFactory?.call() ?? HttpClient())
       ..connectionTimeout = connectTimeout;
     _client = client;
+    ({Object error, StackTrace stackTrace})? playoutFailure;
+    void reportPlayoutFailure(Object error, StackTrace stackTrace) {
+      if (!_isCurrent(generation, run) || !identical(_client, client)) return;
+      playoutFailure ??= (error: error, stackTrace: stackTrace);
+      _stopPlayoutTimer(run);
+      // The network may still be healthy. Close this connection to wake the
+      // response reader and let its existing retry/cleanup path rebuild output.
+      client.close(force: true);
+    }
+
+    run.onPlayoutError = reportPlayoutFailure;
     final parser = WavPcmStreamParser();
     _buffer = null;
     _frameAssembler = null;
@@ -264,6 +275,12 @@ class ClientLiveAudioPipeline {
         await _startPlayoutIfReady(generation, run);
       }
       throw HttpException('Audio stream ended', uri: run.uri);
+    } catch (_) {
+      final failure = playoutFailure;
+      if (failure != null) {
+        Error.throwWithStackTrace(failure.error, failure.stackTrace);
+      }
+      rethrow;
     } finally {
       _stopPlayoutTimer(run);
       if (_client == client) _client = null;
@@ -302,8 +319,13 @@ class ClientLiveAudioPipeline {
     final pumpInterval = Duration(
       microseconds: max(1000, frameDuration.inMicroseconds ~/ 2),
     );
+    final reportFailure = run.onPlayoutError;
     _playoutTimer = Timer.periodic(pumpInterval, (_) {
-      unawaited(_pumpPlayout(generation, run));
+      unawaited(_pumpPlayout(generation, run).catchError(
+        (Object error, StackTrace stackTrace) {
+          reportFailure?.call(error, stackTrace);
+        },
+      ));
     });
     _playoutTimerRun = run;
     await _pumpPlayout(generation, run);
@@ -358,10 +380,12 @@ class ClientLiveAudioPipeline {
     final startedAtUs = MediaSessionTelemetry.shared.nowUs;
     final lease = _audioOutputLease;
     if (lease == null) return false;
-    final accepted = await _audioOutputCoordinator.write(
-      owner: lease,
-      pcm16le: frame,
-    );
+    final accepted = await _audioOutputCoordinator
+        .write(
+          owner: lease,
+          pcm16le: frame,
+        )
+        .timeout(connectTimeout);
     MediaSessionTelemetry.shared.recordDurationUs(
       MediaMetricName.audioOutputWrite,
       MediaSessionTelemetry.shared.nowUs - startedAtUs,
@@ -423,7 +447,9 @@ class ClientLiveAudioPipeline {
       try {
         final lease = _audioOutputLease;
         if (lease != null) {
-          nativeStatus = await _audioOutputCoordinator.status(owner: lease);
+          nativeStatus = await _audioOutputCoordinator
+              .status(owner: lease)
+              .timeout(connectTimeout);
         }
       } catch (_) {}
     }
@@ -1051,6 +1077,7 @@ class _PipelineRun {
   int reconnects = 0;
   int? lastWriteAtMs;
   Object? lastError;
+  void Function(Object error, StackTrace stackTrace)? onPlayoutError;
   bool playoutWriteInFlight = false;
   int nativeQueueUntilUs = 0;
 }

@@ -18,11 +18,13 @@ class MiuCamEventSocketController {
     required this.connectedLog,
     required this.onLog,
     this.reconnectGracePeriod = const Duration(seconds: 10),
+    this.pingInterval = const Duration(seconds: 15),
     this.maxReplayAlerts = 128,
     this.maxReplayClientCursors = 64,
     this.maxReplayAge = const Duration(minutes: 2),
     int Function()? replayNowMs,
   })  : assert(!reconnectGracePeriod.isNegative),
+        assert(pingInterval > Duration.zero),
         assert(maxReplayAlerts > 0),
         assert(maxReplayClientCursors > 0),
         assert(maxReplayAge > Duration.zero),
@@ -40,6 +42,7 @@ class MiuCamEventSocketController {
   final String Function(String remoteAddress) connectedLog;
   final void Function(String message) onLog;
   final Duration reconnectGracePeriod;
+  final Duration pingInterval;
   final int maxReplayAlerts;
   final int maxReplayClientCursors;
   final Duration maxReplayAge;
@@ -82,6 +85,8 @@ class MiuCamEventSocketController {
     late final WebSocket socket;
     try {
       socket = await WebSocketTransformer.upgrade(request);
+      // Release dead event leases even when the OS never reports a TCP close.
+      socket.pingInterval = pingInterval;
     } catch (_) {
       connectionLease.release();
       rethrow;

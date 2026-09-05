@@ -363,13 +363,16 @@ class _TrustedDevicesCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (clients.isNotEmpty)
-                TextButton(
-                  onPressed: busy ? null : onRevokeAll,
-                  child: Text(strings.ui('revokeAllDevices')),
-                ),
             ],
           ),
+          if (clients.isNotEmpty)
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton(
+                onPressed: busy ? null : onRevokeAll,
+                child: Text(strings.ui('revokeAllDevices')),
+              ),
+            ),
           const SizedBox(height: 8),
           Text(
             strings.ui('trustedDevicesDescription'),
@@ -730,7 +733,7 @@ class _ServerSettingsCard extends StatelessWidget {
       _SettingSliderSpec(
         title: strings.ui('cryThreshold'),
         description: strings.ui('cryThresholdDescription'),
-        valueLabel: (value) => '%${(value * 100).round()}',
+        valueLabel: (value) => strings.formatPercent((value * 100).round()),
         value: cryScoreThreshold,
         min: .45,
         max: .95,
@@ -741,7 +744,7 @@ class _ServerSettingsCard extends StatelessWidget {
       _SettingSliderSpec(
         title: strings.ui('motionThreshold'),
         description: strings.ui('motionThresholdDescription'),
-        valueLabel: (value) => '%${(value * 100).round()}',
+        valueLabel: (value) => strings.formatPercent((value * 100).round()),
         value: motionThreshold,
         min: .10,
         max: .60,

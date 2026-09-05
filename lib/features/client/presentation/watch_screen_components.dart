@@ -38,8 +38,7 @@ class _WatchNightClockViewState extends State<_WatchNightClockView> {
     final strings = AppStrings.of(context);
     final state = widget.state;
     final quality = state.networkQuality?.tier ?? NetworkQualityTier.unknown;
-    final time = '${_now.hour.toString().padLeft(2, '0')}:'
-        '${_now.minute.toString().padLeft(2, '0')}';
+    final time = formatLocalTime(context, _now);
     return SafeArea(
       child: LayoutBuilder(
         builder: (context, constraints) => SingleChildScrollView(
@@ -101,6 +100,13 @@ class _WatchNightClockViewState extends State<_WatchNightClockView> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
+                  if (state.session != null &&
+                      widget.runtime.roomControls != null)
+                    RoomAudioDetectionNotice(
+                      controls: widget.runtime.roomControls!,
+                      session: state.session!,
+                      dark: true,
+                    ),
                   const Spacer(),
                   StreamBuilder<List<AlertEventDto>>(
                     stream: widget.runtime.alertUpdates,
@@ -130,7 +136,7 @@ class _WatchNightClockViewState extends State<_WatchNightClockView> {
                                 child: Text(
                                   alert == null
                                       ? strings.ui('waitingLatestStatus')
-                                      : '${_formatAlertTime(alert.timestampMs)} · '
+                                      : '${formatAlertTimestamp(context, alert.timestampMs)} · '
                                           '${_alertTitle(strings, alert)}',
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,

@@ -106,6 +106,8 @@ void main() {
     );
     expect(comfortStarted.statusCode, HttpStatus.ok);
     expect((comfortStarted.body['state'] as Map)['playing'], isTrue);
+    expect(comfortStarted.body['audioDetection'],
+        {'paused': true, 'reason': 'comfort'});
     source.emitAudio(_sustainedCry());
     final streamedAudio = await audioProbe.firstPcm.timeout(
       const Duration(seconds: 2),
@@ -123,6 +125,8 @@ void main() {
       bearerToken: trusted.token,
     );
     expect((comfortStopped.body['state'] as Map)['playing'], isFalse);
+    expect(comfortStopped.body['audioDetection'],
+        {'paused': false, 'reason': null});
     final talkStarted = await _postJson(
       client,
       base.port,
@@ -134,6 +138,13 @@ void main() {
     final talkToken =
         ((talkStarted.body['session'] as Map)['talkToken'] as String?) ?? '';
     expect(talkToken, isNotEmpty);
+    final duringTalk = await _getJson(
+      client,
+      base.port,
+      MiuCamProtocolV2.status,
+      trusted.token,
+    );
+    expect(duringTalk['audioDetection'], {'paused': true, 'reason': 'talk'});
     source.emitAudio(_sustainedCry());
     await _settleEvents();
     expect(received, isEmpty, reason: 'Ebeveyn konuşması analiz edilmemeli.');
@@ -158,6 +169,7 @@ void main() {
     );
 
     expect(received, hasLength(1));
+    expect(status['audioDetection'], {'paused': false, 'reason': null});
     expect(localAlerts, hasLength(1));
     expect(history.alerts, hasLength(1));
     expect(notifications.alerts, hasLength(1));

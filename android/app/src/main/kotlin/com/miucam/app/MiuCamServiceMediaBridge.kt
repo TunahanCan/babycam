@@ -29,6 +29,15 @@ object MiuCamServiceMediaBridge : EventChannel.StreamHandler {
     private val waiterSequence = AtomicLong(0)
     private val eventQueue = ArrayDeque<QueuedEvent>()
     private val readyWaiters = mutableListOf<ReadyWaiter>()
+    private var captureEngine: MiuCamServiceMediaCapture? = null
+
+    internal fun registerCaptureEngine(capture: MiuCamServiceMediaCapture) {
+        captureEngine = capture
+    }
+
+    internal fun unregisterCaptureEngine(capture: MiuCamServiceMediaCapture) {
+        if (captureEngine === capture) captureEngine = null
+    }
 
     @Volatile
     private var eventSink: EventChannel.EventSink? = null
@@ -155,6 +164,15 @@ object MiuCamServiceMediaBridge : EventChannel.StreamHandler {
                         .coerceIn(1, 15)
                 enqueueControl("mediaPolicyChanged", snapshot())
                 result.success(snapshot())
+            }
+            "setTorchEnabled" -> {
+                val enabled = call.argument<Boolean>("enabled") ?: false
+                val capture = captureEngine
+                if (capture == null) {
+                    result.success(false)
+                } else {
+                    capture.setTorchEnabled(enabled) { applied -> result.success(applied) }
+                }
             }
             "awaitReady" -> {
                 val arguments = call.arguments as? Map<*, *>
@@ -322,6 +340,7 @@ object MiuCamServiceMediaBridge : EventChannel.StreamHandler {
     }
 
     private fun detachConsumer(reason: String) {
+        captureEngine?.setTorchEnabled(false) {}
         val waiters: List<ReadyWaiter>
         synchronized(this) {
             consumerAttached = false

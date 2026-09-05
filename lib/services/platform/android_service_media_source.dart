@@ -38,8 +38,14 @@ abstract interface class AndroidServiceMediaBridgePort {
   Future<Map<Object?, Object?>> resetDiagnostics();
 }
 
+abstract interface class AndroidServiceMediaTorchBridgePort {
+  Future<bool> setTorchEnabled(bool enabled);
+}
+
 class MethodChannelAndroidServiceMediaBridge
-    implements AndroidServiceMediaBridgePort {
+    implements
+        AndroidServiceMediaBridgePort,
+        AndroidServiceMediaTorchBridgePort {
   MethodChannelAndroidServiceMediaBridge({
     MethodChannel methodChannel =
         const MethodChannel('miucam/android_service_media'),
@@ -109,6 +115,14 @@ class MethodChannelAndroidServiceMediaBridge
   Future<Map<Object?, Object?>> resetDiagnostics() =>
       _invokeMap('resetDiagnostics');
 
+  @override
+  Future<bool> setTorchEnabled(bool enabled) async =>
+      await _methodChannel.invokeMethod<bool>(
+        'setTorchEnabled',
+        {'enabled': enabled},
+      ) ??
+      false;
+
   Future<Map<Object?, Object?>> _invokeMap(
     String method, [
     Map<String, Object?>? arguments,
@@ -134,6 +148,7 @@ class AndroidServiceMediaSource extends ServerMediaSource
         ServerJpegPreviewSource,
         ServerLumaFrameSource,
         ServerMediaPolicySink,
+        ServerMediaTorchSink,
         ServerAudioChunkMetadataSource {
   AndroidServiceMediaSource({
     AndroidServiceMediaBridgePort? bridge,
@@ -264,6 +279,24 @@ class AndroidServiceMediaSource extends ServerMediaSource
       );
 
   Future<Map<Object?, Object?>> nativeSnapshot() => _bridge.snapshot();
+
+  @override
+  Future<bool> setTorchEnabled(bool enabled) => _operations.run(() async {
+        final bridge = _bridge;
+        if (bridge is! AndroidServiceMediaTorchBridgePort ||
+            (enabled && !videoActive)) {
+          return false;
+        }
+        try {
+          return await (bridge as AndroidServiceMediaTorchBridgePort)
+              .setTorchEnabled(enabled)
+              .timeout(Duration(
+                milliseconds: min(nativeOperationTimeout.inMilliseconds, 2500),
+              ));
+        } catch (_) {
+          return false;
+        }
+      });
 
   /// Controls expensive JPEG production independently from camera/luma
   /// capture. Motion-only notification demand needs luma frames, not an MJPEG

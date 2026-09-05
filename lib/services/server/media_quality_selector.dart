@@ -51,20 +51,24 @@ class MediaQualitySelector {
     final current = _currentProfile;
     if (current == null) {
       _currentProfile = desired;
-      _stableSinceMs = _nowMs();
+      _stableSinceMs = null;
       return desired;
     }
-    final currentSeverity = _profileSeverity(current);
-    final desiredSeverity = _profileSeverity(desired);
-    if (desiredSeverity > currentSeverity) {
+    final budgetChange = _compareVideoBudget(desired, current);
+    if (budgetChange < 0) {
       _currentProfile = desired;
       _stableSinceMs = null;
       return desired;
     }
-    if (desiredSeverity < currentSeverity) {
-      if (reports.any((report) => report.recentlyReconnected)) return current;
+    if (budgetChange > 0) {
+      if (reports.any((report) => report.recentlyReconnected)) {
+        _stableSinceMs = null;
+        return current;
+      }
       final nowMs = _nowMs();
-      _stableSinceMs ??= nowMs;
+      if (_stableSinceMs == null || nowMs < _stableSinceMs!) {
+        _stableSinceMs = nowMs;
+      }
       if (nowMs - _stableSinceMs! < _upgradeCooldown.inMilliseconds) {
         return current;
       }
@@ -79,7 +83,10 @@ class MediaQualitySelector {
       return upgraded;
     }
     _currentProfile = desired;
-    _stableSinceMs ??= _nowMs();
+    // Time spent needing the current restricted profile is not evidence that
+    // a higher bitrate is sustainable. A renewed bad report also interrupts
+    // an upgrade window that had already started.
+    _stableSinceMs = null;
     return desired;
   }
 
@@ -123,23 +130,33 @@ class MediaQualitySelector {
     required DeviceCapabilityTier deviceTier,
     required int activeClientCount,
   }) {
-    final nextTier = switch (_profileSeverity(current)) {
-      >= 4 => NetworkQualityTier.critical,
-      3 => NetworkQualityTier.weak,
-      _ => NetworkQualityTier.good,
-    };
-    final stepped = MediaQualityProfile.forDeviceTier(deviceTier)
-        .adaptForNetwork(nextTier)
-        .adaptForClientLoad(activeClientCount);
-    return _profileSeverity(stepped) < _profileSeverity(current)
-        ? stepped
-        : desired;
+    final base = MediaQualityProfile.forDeviceTier(deviceTier);
+    var next = desired;
+    for (final tier in const [
+      NetworkQualityTier.offline,
+      NetworkQualityTier.critical,
+      NetworkQualityTier.weak,
+      NetworkQualityTier.good,
+    ]) {
+      final candidate =
+          base.adaptForNetwork(tier).adaptForClientLoad(activeClientCount);
+      if (_compareVideoBudget(candidate, current) > 0 &&
+          _compareVideoBudget(candidate, next) < 0) {
+        next = candidate;
+      }
+    }
+    return desired.audioFirst && !next.audioFirst
+        ? next.copyWith(audioFirst: true)
+        : next;
   }
 
-  int _profileSeverity(MediaQualityProfile profile) {
-    if (profile.id.contains('survival') || profile.targetFps <= 1) return 4;
-    if (profile.height <= 240) return 3;
-    if (profile.height <= 360) return 2;
-    return 1;
+  // Resolution alone misses 360p/5fps -> 360p/8fps recovery and groups shared
+  // 480p with full 720p. Include every video budget dimension in hysteresis.
+  int _compareVideoBudget(MediaQualityProfile a, MediaQualityProfile b) {
+    final pixels = (a.width * a.height).compareTo(b.width * b.height);
+    if (pixels != 0) return pixels;
+    final fps = a.targetFps.compareTo(b.targetFps);
+    if (fps != 0) return fps;
+    return a.jpegQuality.compareTo(b.jpegQuality);
   }
 }

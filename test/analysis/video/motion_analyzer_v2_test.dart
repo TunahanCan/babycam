@@ -102,6 +102,10 @@ void main() {
     final result = analyzer.analyze(makeFrame(data, width, height, 600));
     expect(result.rawScore, greaterThan(0.2));
     expect(result.score, greaterThan(0.1));
+    // A small moving patch must not be interpreted as whole-frame motion by
+    // the content-aware FPS policy (whose activity threshold is 0.04).
+    expect(result.normalizedMotionEnergy, lessThan(0.04));
+    expect(result.normalizedMotionEnergy, inInclusiveRange(0, 1));
   });
 
   test('isolated sensor speckles do not become motion', () {
@@ -178,6 +182,7 @@ void main() {
         600));
     expect(result.isGlobalLightChange, isTrue);
     expect(result.isMotion, isFalse);
+    expect(result.normalizedMotionEnergy, 0);
   });
 
   test('başlangıç exposure yerleşirken karar karantinası motion üretmez', () {

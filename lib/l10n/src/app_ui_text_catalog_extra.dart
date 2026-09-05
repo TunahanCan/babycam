@@ -180,7 +180,15 @@ const _deUiText = <String, String>{
   'exitFullScreen': 'Vollbild verlassen',
   'nightClock': 'Nachtuhr',
   'exitNightClock': 'Nachtuhr verlassen',
-  'nightClockAudioAlertsOn': 'Video ist aus; Audio und Warnungen bleiben an.',
+  'nightClockAudioAlertsOn':
+      'Video ist aus; Audio und Warnverbindung sind aktiv.',
+  'roomAudioDetectionHelp':
+      'Die Erkennung von Weinen und lauten Geräuschen pausiert, während beruhigende Klänge oder die Sprechfunktion aktiv sind. Live-Audio und Bewegungserkennung bleiben aktiv.',
+  'roomAudioDetectionPaused':
+      'Erkennung von Weinen und lauten Geräuschen pausiert.',
+  'roomAudioDetectionResumeHelp':
+      'Pausiere die beruhigenden Klänge oder beende das Sprechen, um die Erkennung fortzusetzen.',
+  'alertConnectionOn': 'Warnverbindung aktiv',
   'notificationsOn': 'Warnungen an',
   'notificationsInAppOnly': 'Hinweise nur in der App',
   'notificationsOff': 'Warnungen aus',
@@ -659,8 +667,13 @@ const _arUiText = <String, String>{
   'exitFullScreen': 'الخروج من ملء الشاشة',
   'nightClock': 'ساعة الليل',
   'exitNightClock': 'الخروج من ساعة الليل',
-  'nightClockAudioAlertsOn':
-      'الفيديو متوقف؛ يبقى الصوت والتنبيهات قيد التشغيل.',
+  'nightClockAudioAlertsOn': 'الفيديو متوقف؛ الصوت واتصال التنبيهات نشطان.',
+  'roomAudioDetectionHelp':
+      'يتوقف اكتشاف البكاء والأصوات العالية مؤقتاً أثناء تشغيل الصوت المهدئ أو التحدث. يستمر الصوت المباشر واكتشاف الحركة.',
+  'roomAudioDetectionPaused': 'تم إيقاف اكتشاف البكاء والأصوات العالية مؤقتاً.',
+  'roomAudioDetectionResumeHelp':
+      'أوقف الصوت المهدئ مؤقتاً أو أنهِ التحدث لاستئناف الاكتشاف.',
+  'alertConnectionOn': 'اتصال التنبيهات نشط',
   'notificationsOn': 'التنبيهات مفعلة',
   'notificationsInAppOnly': 'تنبيهات داخل التطبيق فقط',
   'notificationsOff': 'التنبيهات متوقفة',

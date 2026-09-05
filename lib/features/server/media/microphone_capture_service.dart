@@ -82,6 +82,7 @@ class MicrophoneCaptureService {
   int? _lastStartAttemptAtMs;
   int? _lastChunkAtMs;
   int _lastChunkBytes = 0;
+  Uint8List _pendingPcmBytes = Uint8List(0);
 
   bool get isActive =>
       _subscription != null ||
@@ -174,6 +175,8 @@ class MicrophoneCaptureService {
 
     _captureRequested = true;
     final generation = ++_generation;
+    _pendingPcmBytes = Uint8List(0);
+    _streamLeveler.reset();
     late final Future<bool> operation;
     operation = _start(
       generation: generation,
@@ -270,6 +273,7 @@ class MicrophoneCaptureService {
     _restartAttempt = 0;
     _terminalHandledGeneration = null;
     _generation++;
+    _pendingPcmBytes = Uint8List(0);
     _permissionGeneration++;
     // A permission can be revoked while the app is in system settings. Keep
     // the grant only for the preflight-to-start handoff of one capture lease;
@@ -420,6 +424,7 @@ class MicrophoneCaptureService {
   }
 
   void _handleChunk(Uint8List pcm16le, MicrophoneChunkHandler onChunk) {
+    if (pcm16le.isEmpty) return;
     _restartAttempt = 0;
     _terminalHandledGeneration = null;
     final now = _nowMs();
@@ -429,9 +434,30 @@ class MicrophoneCaptureService {
     _bytesCaptured += pcm16le.length;
     _lastFailureReason = null;
     _lastStartError = null;
+    // Recorder/plugin chunks can split a PCM sample. Align before analysis
+    // and gain processing so no trailing byte is lost or read as a new sample.
+    final pending = _pendingPcmBytes;
+    final combined = pending.isEmpty
+        ? pcm16le
+        : (Uint8List(pending.length + pcm16le.length)
+          ..setRange(0, pending.length, pending)
+          ..setRange(pending.length, pending.length + pcm16le.length, pcm16le));
+    final frameBytes = channels * 2;
+    final alignedLength = combined.length - combined.length % frameBytes;
+    _pendingPcmBytes = alignedLength == combined.length
+        ? Uint8List(0)
+        : Uint8List.fromList(Uint8List.sublistView(combined, alignedLength));
+    if (alignedLength == 0) return;
+    final aligned = alignedLength == combined.length
+        ? combined
+        : Uint8List.sublistView(combined, 0, alignedLength);
     onChunk(MicrophonePcmChunk(
-      rawPcm16le: pcm16le,
-      streamPcm16le: _streamLeveler.processPcm16le(pcm16le),
+      rawPcm16le: aligned,
+      streamPcm16le: _streamLeveler.processPcm16le(
+        aligned,
+        sampleRate: sampleRate,
+        channels: channels,
+      ),
       sampleRate: sampleRate,
       channels: channels,
       timestampMs: now,

@@ -68,6 +68,11 @@ hazır değilse paywall kapalı bırakılmalıdır.
 
 ## Cihaz kabul testi
 
+Son sınırlı cihaz doğrulaması: [5 Eylül 2026 LG H870 raporu](reports/lg_h870_validation_2026-09-05.md).
+Takip çalışması: [ses/görüntü analizi ve bildirim lokalizasyonu](reports/alert_pipeline_localization_2026-09-05.md)
+(889 test, tüm 9 locale ve LG native dil kontrolü).
+Bu rapor aşağıdaki çoklu cihaz ve platform kapılarının yerine geçmez.
+
 - En az bir güncel ve bir eski desteklenen iPhone/iPad.
 - Android 13, 14, 15 ve 16 üzerinde gerçek cihaz testi.
 - Ekran kilidi, Wi-Fi internet yok, Wi-Fi değişimi ve zayıf sinyal senaryoları.

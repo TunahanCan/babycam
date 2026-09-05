@@ -1,3 +1,3 @@
 "NSCameraUsageDescription" = "MiuCam, bebek odasını yayınlamak ve eşleştirme QR kodlarını taramak için kamerayı kullanır.";
 "NSLocalNetworkUsageDescription" = "MiuCam, bebek odası ve ebeveyn cihazlarını bulup bağlamak için yerel ağınızı kullanır.";
-"NSMicrophoneUsageDescription" = "MiuCam, Server modunda bebek odası sesini yayınlamak ve önemli sesleri algılamak için mikrofonu kullanır.";
+"NSMicrophoneUsageDescription" = "MiuCam, bebek odası sesini yayınlamak, önemli sesleri algılamak ve odaya konuşmanızı sağlamak için mikrofonu kullanır.";

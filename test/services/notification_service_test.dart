@@ -5,9 +5,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miucam/core/protocol/alert_event_dto.dart';
+import 'package:miucam/features/client/alerts/client_alert_delivery_coordinator.dart';
+import 'package:miucam/features/client/alerts/client_alert_history.dart';
 import 'package:miucam/features/client/alerts/client_notification_service.dart';
 import 'package:miucam/l10n/app_strings.dart';
 import 'package:miucam/services/notification_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -128,6 +131,32 @@ void main() {
     expect(service.lastError, contains('boom'));
     expect(service.notificationsAttempted, 1);
     expect(service.notificationsPosted, 0);
+  });
+
+  test('disabled Android channel is permanent without blocking other channels',
+      () async {
+    final plugin = _FakeNotificationsPlugin(
+      android: _FakeAndroidNotifications(),
+    );
+    final service = NotificationService(
+      AppStrings(const Locale('en')),
+      plugin: plugin,
+    );
+
+    final blocked = await service.showAlert('Cry detected', alertId: 'cry');
+    expect(blocked.posted, isFalse);
+    expect(blocked.error, 'notification_channel_disabled');
+    expect(plugin.showCalls, 0);
+
+    final allowed = await service.showAlert(
+      'Motion detected',
+      alertId: 'motion',
+      severity: 'info',
+    );
+    expect(allowed.posted, isTrue);
+    expect(plugin.showCalls, 1);
+    expect(plugin.lastDetails?.android?.channelId,
+        NotificationService.updatesChannelId);
   });
 
   test('Android alert uses message semantics and a deep-link payload',
@@ -263,6 +292,147 @@ void main() {
     expect(plugin.lastBody, startsWith('Anne,'));
   });
 
+  for (final locale in AppStrings.supportedLocales) {
+    test('injected client notifications use parent locale $locale', () async {
+      final plugin = _FakeNotificationsPlugin();
+      final strings = AppStrings(locale);
+      final service = ClientNotificationService(
+        service: NotificationService(strings, plugin: plugin),
+      );
+      // Replay/storage retains the original wire text. It must never override
+      // the selected parent locale, including when metadata was not retained.
+      for (final event in const [
+        ('cryDetected', 'parentCryAlert'),
+        ('loudSound', 'parentLoudSoundAlert'),
+        ('motionDetected', 'parentMotionAlert'),
+        ('globalLightChange', 'parentLightChangeAlert'),
+        ('cryDetected', 'parentEpisodeHighCryAlert'),
+        ('loudSound', 'parentEpisodeShortSoundAlert'),
+        ('cryDetected', 'parentEpisodeCryAlert'),
+      ]) {
+        final alert = AlertEventDto(
+          id: '${locale.toLanguageTag()}-${event.$2}',
+          type: event.$1,
+          severity: 'warning',
+          messageKey: event.$2,
+          message: 'SERVER LANGUAGE MUST NOT LEAK',
+          score: .7,
+          timestampMs: 42,
+          sourceDeviceId: 'server',
+        );
+        final restored = AlertEventDto.fromJson(alert.toJson())!;
+        final receipt = await service.showAlert(restored);
+        expect(receipt.posted, isTrue);
+        expect(plugin.lastTitle, restored.localizedTitle(strings));
+        expect(plugin.lastBody, restored.localizedNotificationBody(strings));
+        expect(plugin.lastBody, isNot(contains('SERVER LANGUAGE')));
+        expect(plugin.lastDetails?.android?.channelName,
+            strings.notificationChannelName);
+      }
+    });
+  }
+
+  test('queued alert uses locale selected while plugin permission waits',
+      () async {
+    final initialization = Completer<bool?>();
+    final plugin = _FakeNotificationsPlugin(
+      initialization: initialization.future,
+    );
+    final service = ClientNotificationService(
+      service:
+          NotificationService(AppStrings(const Locale('en')), plugin: plugin),
+    );
+    const alert = AlertEventDto(
+      id: 'queued-locale',
+      type: 'motionDetected',
+      severity: 'info',
+      messageKey: 'parentMotionAlert',
+      message: 'SERVER LANGUAGE MUST NOT LEAK',
+      score: .7,
+      timestampMs: 42,
+      sourceDeviceId: 'server',
+    );
+    final pending = service.showAlert(alert);
+    service.updateStrings(AppStrings(const Locale('tr')));
+    initialization.complete(true);
+    expect((await pending).posted, isTrue);
+    expect(plugin.lastTitle, 'Bebek odasında hareket var');
+    expect(plugin.lastBody, startsWith('Anne,'));
+    expect(plugin.lastDetails?.android?.channelName,
+        AppStrings(const Locale('tr')).notificationUpdatesChannelName);
+  });
+
+  test('pending replay after restart uses new parent language exactly once',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final originalHistory = ClientAlertHistory(preferences: preferences);
+    final restoredHistory = ClientAlertHistory(preferences: preferences);
+    addTearDown(originalHistory.dispose);
+    addTearDown(restoredHistory.dispose);
+    const alert = AlertEventDto(
+      id: 'restart-locale',
+      type: 'cryDetected',
+      severity: 'warning',
+      messageKey: 'parentCryAlert',
+      message: 'SERVER LANGUAGE MUST NOT LEAK',
+      score: .7,
+      timestampMs: 42,
+      sourceDeviceId: 'server',
+    );
+    final initialDelivery = ClientAlertDeliveryCoordinator(
+      history: originalHistory,
+      notifications: ClientNotificationService(
+        service: NotificationService(
+          AppStrings(const Locale('tr')),
+          plugin:
+              _FakeNotificationsPlugin(showError: StateError('interrupted')),
+        ),
+      ),
+    );
+    await expectLater(initialDelivery.deliver(alert), throwsStateError);
+    await restoredHistory.load();
+    expect(restoredHistory.isNotificationPending(alert.id), isTrue);
+    final plugin =
+        _FakeNotificationsPlugin(reportPostedNotificationAsActive: true);
+    final strings = AppStrings(const Locale('fr'));
+    final restoredDelivery = ClientAlertDeliveryCoordinator(
+      history: restoredHistory,
+      notifications: ClientNotificationService(
+        service: NotificationService(strings, plugin: plugin),
+      ),
+    );
+    final replayed = restoredHistory.alerts.single;
+    await restoredDelivery.deliver(replayed);
+    await restoredDelivery.deliver(replayed);
+    expect(plugin.showCalls, 1);
+    expect(plugin.lastBody, alert.localizedNotificationBody(strings));
+    expect(plugin.lastBody, isNot(contains('SERVER LANGUAGE')));
+    expect(restoredHistory.isNotificationPending(alert.id), isFalse);
+  });
+
+  test('locale change immediately relabels channels without another alert',
+      () async {
+    final android = _FakeAndroidNotifications();
+    final plugin = _FakeNotificationsPlugin(android: android);
+    final service =
+        NotificationService(AppStrings(const Locale('en')), plugin: plugin);
+    expect(await service.initialize(), isTrue);
+    final tr = AppStrings(const Locale('tr'));
+    final ar = AppStrings(const Locale('ar', 'QA'));
+    service.updateStrings(tr);
+    service.updateStrings(ar);
+    await Future<void>.delayed(Duration.zero);
+    expect(android.createdChannels[NotificationService.channelId]?.name,
+        ar.notificationChannelName);
+    expect(android.createdChannels[NotificationService.updatesChannelId]?.name,
+        ar.notificationUpdatesChannelName);
+    expect(android.createdChannels[NotificationService.channelId]?.description,
+        ar.ui('notificationChannelDescription'));
+    expect(android.permissionRequests, 0);
+    expect(plugin.showCalls, 0);
+  });
+
   test('notification tap stream accepts only MiuCam alert payloads', () async {
     final plugin = _FakeNotificationsPlugin();
     final service = NotificationService(
@@ -321,6 +491,7 @@ class _FakeNotificationsPlugin implements FlutterLocalNotificationsPlugin {
     this.reportPostedNotificationAsActive = false,
     this.showError,
     this.launchDetails = const NotificationAppLaunchDetails(false),
+    this.android,
   });
 
   final Future<bool?>? initialization;
@@ -328,6 +499,7 @@ class _FakeNotificationsPlugin implements FlutterLocalNotificationsPlugin {
   final bool reportPostedNotificationAsActive;
   final Object? showError;
   final NotificationAppLaunchDetails? launchDetails;
+  final AndroidFlutterLocalNotificationsPlugin? android;
 
   int initializeCalls = 0;
   int showCalls = 0;
@@ -381,9 +553,51 @@ class _FakeNotificationsPlugin implements FlutterLocalNotificationsPlugin {
 
   @override
   dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.memberName == #resolvePlatformSpecificImplementation &&
+        invocation.typeArguments.single ==
+            AndroidFlutterLocalNotificationsPlugin) {
+      return android;
+    }
     // NotificationService resolves platform-specific permission handlers. A
     // null implementation models a platform where no extra permission API is
     // exposed, while keeping this fake independent from plugin internals.
     return null;
   }
+}
+
+class _FakeAndroidNotifications
+    implements AndroidFlutterLocalNotificationsPlugin {
+  final createdChannels = <String, AndroidNotificationChannel>{};
+  int permissionRequests = 0;
+
+  @override
+  Future<void> createNotificationChannel(
+      AndroidNotificationChannel notificationChannel) async {
+    createdChannels[notificationChannel.id] = notificationChannel;
+  }
+
+  @override
+  Future<bool?> requestNotificationsPermission() async {
+    permissionRequests++;
+    return true;
+  }
+
+  @override
+  Future<bool?> areNotificationsEnabled() async => true;
+
+  @override
+  Future<List<AndroidNotificationChannel>?> getNotificationChannels() async => [
+        const AndroidNotificationChannel(
+          NotificationService.channelId,
+          'Alerts',
+          importance: Importance.none,
+        ),
+        const AndroidNotificationChannel(
+          NotificationService.updatesChannelId,
+          'Updates',
+        ),
+      ];
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

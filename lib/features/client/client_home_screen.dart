@@ -13,7 +13,10 @@ import '../../services/discovery/miucam_service_discovery.dart';
 import '../../services/notification_service.dart';
 import '../shared/presentation/miucam_design_tokens.dart';
 import '../shared/presentation/miucam_shells.dart';
+import '../shared/presentation/localized_time.dart';
+import '../shared/presentation/localized_room_name.dart';
 import 'client_runtime.dart';
+import 'controls/room_audio_detection_notice.dart';
 import 'media/watch_screen.dart';
 import 'pairing/client_pairing_flow.dart';
 import 'pairing/pairing_failure.dart';
@@ -166,7 +169,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
               )
             else ...[
               _RoomCard(
-                title: state.session!.payload.deviceName,
+                title: localizedRoomName(
+                    strings, state.session!.payload.deviceName),
                 status: _clientRoomStatus(strings, state.phase),
                 tone: _clientRoomTone(state.phase),
                 alertsActive: state.alertsActive,
@@ -176,6 +180,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
                 onWatch:
                     watchAvailable ? () => _openWatch(context, state) : null,
               ),
+              if (widget.runtime.roomControls != null)
+                RoomAudioDetectionNotice(
+                  controls: widget.runtime.roomControls!,
+                  session: state.session!,
+                ),
               if (watchAvailable) ...[
                 const SizedBox(height: 16),
                 _ClientWatchSummary(onWatch: () => _openWatch(context, state)),
@@ -296,8 +305,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
       await ClientPairingFlow(widget.runtime).pairAndArmAlerts(payload);
       if (!context.mounted) return;
       setState(() => _tab = _ClientHomeTab.watch);
-      _showMessage(context,
-          strings.uiFormat('pairedMessage', {'name': payload.deviceName}));
+      _showMessage(
+          context,
+          strings.uiFormat('pairedMessage',
+              {'name': localizedRoomName(strings, payload.deviceName)}));
     } catch (error) {
       if (!context.mounted) return;
       _showMessage(context, _pairingFailureMessage(strings, error));
@@ -319,8 +330,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
       await ClientPairingFlow(widget.runtime).pairAndArmAlerts(payload);
       if (!context.mounted) return;
       setState(() => _tab = _ClientHomeTab.watch);
-      _showMessage(context,
-          strings.uiFormat('pairedMessage', {'name': payload.deviceName}));
+      _showMessage(
+          context,
+          strings.uiFormat('pairedMessage',
+              {'name': localizedRoomName(strings, payload.deviceName)}));
     } catch (error) {
       if (!context.mounted) return;
       _showMessage(context, _pairingFailureMessage(strings, error));
@@ -341,7 +354,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
       setState(() => _tab = _ClientHomeTab.watch);
       _showMessage(
         context,
-        strings.uiFormat('pairedMessage', {'name': payload.deviceName}),
+        strings.uiFormat('pairedMessage',
+            {'name': localizedRoomName(strings, payload.deviceName)}),
       );
     } catch (error) {
       if (!context.mounted) return;

@@ -18,6 +18,7 @@ import android.os.Process
 import android.os.SystemClock
 import android.util.Size
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.Camera
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.resolutionselector.ResolutionSelector
@@ -74,6 +75,8 @@ internal class MiuCamServiceMediaCapture(
     private var cameraGeneration = 0
     private var cameraStarting = false
     private var cameraProvider: ProcessCameraProvider? = null
+    private var boundCamera: Camera? = null
+    private var torchGeneration = 0
     private var imageAnalysis: ImageAnalysis? = null
     private var lastEncodedFrameAtNs = 0L
     private var audioGeneration = 0
@@ -87,6 +90,53 @@ internal class MiuCamServiceMediaCapture(
         baseDelayMs = MICROPHONE_RETRY_BASE_DELAY_MS,
         maxDelayMs = MICROPHONE_RETRY_MAX_DELAY_MS
     )
+
+    init {
+        MiuCamServiceMediaBridge.registerCaptureEngine(this)
+    }
+
+    fun setTorchEnabled(enabled: Boolean, onComplete: (Boolean) -> Unit) {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        val camera = boundCamera
+        if (destroyed || !cameraActive || camera == null || !camera.cameraInfo.hasFlashUnit()) {
+            onComplete(false)
+            return
+        }
+        val generation = ++torchGeneration
+        val operation = try {
+            camera.cameraControl.enableTorch(enabled)
+        } catch (_: RuntimeException) {
+            onComplete(false)
+            return
+        }
+        var completed = false
+        val timeout = Runnable {
+            if (!completed) {
+                completed = true
+                if (enabled && generation == torchGeneration && boundCamera === camera) {
+                    // A timed-out ON must not leave an unacknowledged light on.
+                    torchGeneration += 1
+                    try { camera.cameraControl.enableTorch(false) } catch (_: RuntimeException) {}
+                }
+                operation.cancel(true)
+                onComplete(false)
+            }
+        }
+        mainHandler.postDelayed(timeout, 1_500L)
+        operation.addListener({
+            if (!completed) {
+                completed = true
+                mainHandler.removeCallbacks(timeout)
+                val applied = try {
+                    operation.get()
+                    !destroyed && cameraActive && boundCamera === camera && generation == torchGeneration
+                } catch (_: Exception) {
+                    false
+                }
+                onComplete(applied)
+            }
+        }, mainExecutor)
+    }
 
     fun reconcile(camera: Boolean, microphone: Boolean) {
         check(Looper.myLooper() == Looper.getMainLooper()) {
@@ -115,6 +165,7 @@ internal class MiuCamServiceMediaCapture(
     fun shutdown(reason: String) {
         if (destroyed) return
         destroyed = true
+        MiuCamServiceMediaBridge.unregisterCaptureEngine(this)
         cameraRequested = false
         microphoneRequested = false
         cancelMicrophoneRetry()
@@ -184,7 +235,7 @@ internal class MiuCamServiceMediaCapture(
                         previous.clearAnalyzer()
                         provider.unbind(previous)
                     }
-                    provider.bindToLifecycle(lifecycleOwner, selector, analysis)
+                    boundCamera = provider.bindToLifecycle(lifecycleOwner, selector, analysis)
                     cameraProvider = provider
                     imageAnalysis = analysis
                     cameraStarting = false
@@ -202,6 +253,9 @@ internal class MiuCamServiceMediaCapture(
 
     private fun stopCamera(clearError: Boolean) {
         cameraGeneration += 1
+        torchGeneration += 1
+        try { boundCamera?.cameraControl?.enableTorch(false) } catch (_: RuntimeException) {}
+        boundCamera = null
         cameraStarting = false
         cameraActive = false
         lastEncodedFrameAtNs = 0L
@@ -219,11 +273,8 @@ internal class MiuCamServiceMediaCapture(
     }
 
     private fun failCamera(message: String) {
-        cameraStarting = false
-        cameraActive = false
+        stopCamera(clearError = false)
         cameraError = message
-        imageAnalysis?.clearAnalyzer()
-        imageAnalysis = null
         MiuCamServiceMediaBridge.publishCaptureError("camera", message)
         publishState()
     }

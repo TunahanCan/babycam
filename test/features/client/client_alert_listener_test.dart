@@ -9,7 +9,48 @@ import 'package:miucam/core/protocol/pairing_session.dart';
 import 'package:miucam/features/client/alerts/client_alert_listener.dart';
 import 'package:miucam/features/client/media/client_stream_health_state.dart';
 
+import '../../support/blackhole_tcp_proxy.dart';
+
 void main() {
+  test('silent network loss reconnects with the last delivered alert cursor',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final upstreamSockets = <WebSocket>[];
+    final cursors = <String?>[];
+    server.listen((request) async {
+      cursors.add(
+        request.uri.queryParameters[MiuCamProtocolV2.alertCursorQuery],
+      );
+      final socket = await WebSocketTransformer.upgrade(request);
+      upstreamSockets.add(socket);
+      socket.listen((_) {});
+      socket.add(_alertJson('alert-${cursors.length}'));
+    });
+    final proxy = await BlackholeTcpProxy.start(server.port);
+    final received = <String>[];
+    final listener = ClientAlertListener(
+      pingInterval: const Duration(milliseconds: 100),
+      reconnectDelay: const Duration(milliseconds: 20),
+      onAlert: (alert) => received.add(alert.id),
+    );
+    addTearDown(() async {
+      await proxy.close();
+      await listener.stop();
+      for (final socket in upstreamSockets) {
+        await socket.close();
+      }
+      await server.close(force: true);
+    });
+
+    await listener.start(_session(proxy.port));
+    await _waitUntil(() => received.contains('alert-1'));
+    proxy.blackholeExistingConnections();
+
+    await _waitUntil(() => received.contains('alert-2'));
+    expect(cursors.take(2), [null, 'alert-1']);
+    expect(listener.isConnected, isTrue);
+  });
+
   test(
       'websocket kapaninca otomatik reconnect edip bildirimi almaya devam eder',
       () async {

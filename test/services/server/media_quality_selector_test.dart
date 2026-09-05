@@ -4,6 +4,91 @@ import 'package:miucam/core/media/client_quality_tracker.dart';
 import 'package:miucam/services/server/media_quality_selector.dart';
 
 void main() {
+  test('same resolution FPS recovery waits for sustained healthy reports', () {
+    var nowMs = 1000;
+    final selector = MediaQualitySelector(nowMs: () => nowMs);
+    MediaQualityProfile select(NetworkQualityTier tier) => selector.select(
+          deviceTier: DeviceCapabilityTier.modern,
+          networkTier: tier,
+          activeClientCount: 1,
+        );
+
+    expect(select(NetworkQualityTier.critical).targetFps, 5);
+    nowMs += 60000;
+    expect(select(NetworkQualityTier.critical).targetFps, 5);
+    expect(select(NetworkQualityTier.weak).targetFps, 5);
+    nowMs += 29999;
+    expect(select(NetworkQualityTier.weak).targetFps, 5);
+    nowMs++;
+    expect(select(NetworkQualityTier.weak).targetFps, 8);
+  });
+
+  test('renewed degradation restarts the upgrade stability window', () {
+    var nowMs = 1000;
+    final selector = MediaQualitySelector(nowMs: () => nowMs);
+    MediaQualityProfile select(NetworkQualityTier tier) => selector.select(
+          deviceTier: DeviceCapabilityTier.modern,
+          networkTier: tier,
+          activeClientCount: 1,
+        );
+
+    select(NetworkQualityTier.critical);
+    expect(select(NetworkQualityTier.good).targetFps, 5);
+    nowMs += 29000;
+    expect(select(NetworkQualityTier.critical).targetFps, 5);
+    nowMs += 1000;
+    expect(select(NetworkQualityTier.good).targetFps, 5);
+    nowMs += 30000;
+    final upgraded = select(NetworkQualityTier.good);
+    expect(upgraded.height, 360);
+    expect(upgraded.targetFps, 8);
+  });
+
+  test('shared 480p to 720p recovery respects the upgrade cooldown', () {
+    var nowMs = 1000;
+    final selector = MediaQualitySelector(nowMs: () => nowMs);
+    MediaQualityProfile select(int clients) => selector.select(
+          deviceTier: DeviceCapabilityTier.modern,
+          networkTier: NetworkQualityTier.good,
+          activeClientCount: clients,
+        );
+
+    expect(select(2).height, 480);
+    expect(select(1).height, 480);
+    nowMs += 30000;
+    expect(select(1).height, 720);
+  });
+
+  test('reconnect restarts an in-progress upgrade stability window', () {
+    var nowMs = 1000;
+    final selector = MediaQualitySelector(nowMs: () => nowMs);
+    MediaQualityProfile select({bool reconnect = false}) => selector.select(
+          deviceTier: DeviceCapabilityTier.modern,
+          networkTier: NetworkQualityTier.good,
+          activeClientCount: 1,
+          worstReport: ClientQualityReport(
+            clientId: 'parent',
+            networkTier: NetworkQualityTier.good,
+            createdAtMs: nowMs,
+            recentlyReconnected: reconnect,
+            watchActive: true,
+          ),
+        );
+
+    selector.select(
+      deviceTier: DeviceCapabilityTier.modern,
+      networkTier: NetworkQualityTier.critical,
+      activeClientCount: 1,
+    );
+    select();
+    nowMs += 29000;
+    select(reconnect: true);
+    nowMs += 1000;
+    expect(select().targetFps, 5);
+    nowMs += 30000;
+    expect(select().targetFps, 8);
+  });
+
   test('tek modern client iyi ağda 720p profil seçer', () {
     final selector = MediaQualitySelector();
     final profile = selector.select(
@@ -113,7 +198,16 @@ void main() {
         watchActive: true,
       ),
     );
-    expect(oneStepUpgrade.height, 720);
+    expect(oneStepUpgrade.height, 360);
+    expect(oneStepUpgrade.targetFps, 8);
+
+    nowMs += 30000;
+    final fullRecovery = selector.select(
+      deviceTier: DeviceCapabilityTier.modern,
+      networkTier: NetworkQualityTier.good,
+      activeClientCount: 1,
+    );
+    expect(fullRecovery.height, 720);
   });
 
   test('video timeout critical yapar, audio underrun sadece audio-first yapar',

@@ -639,7 +639,7 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
   }
 
   void _handleMotionAnalysisResult(MotionAnalysisResult result) {
-    _lastMotionEnergy = result.meanDiff;
+    _lastMotionEnergy = result.normalizedMotionEnergy;
   }
 
   LumaFrame _toLumaFrame(
@@ -648,12 +648,15 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
     int? monotonicTimestampMs,
   }) {
     final yPlane = frame.planes.first;
+    final isBgra = frame.format.group == ImageFormatGroup.bgra8888 ||
+        (frame.planes.length == 1 && (yPlane.bytesPerPixel ?? 1) >= 4);
     return LumaFrame(
       yPlane: yPlane.bytes,
       width: frame.width,
       height: frame.height,
       rowStride: yPlane.bytesPerRow,
-      pixelStride: yPlane.bytesPerPixel ?? 1,
+      pixelStride: yPlane.bytesPerPixel ?? (isBgra ? 4 : 1),
+      pixelFormat: isBgra ? LumaPixelFormat.bgra8888 : LumaPixelFormat.luma8,
       timestampMs: timestampMs,
       monotonicTimestampMs: monotonicTimestampMs,
     );
@@ -1068,6 +1071,13 @@ extension _MiuCamServerMediaPolicyController on MiuCamServer {
     return _serverBattery;
   }
 
+  Map<String, Object?> _audioDetectionStatus() => {
+        'paused': _features.roomAudio.mode != RoomAudioMode.idle,
+        'reason': _features.roomAudio.mode == RoomAudioMode.idle
+            ? null
+            : _features.roomAudio.mode.name,
+      };
+
   Map<String, Object?> _streamHealthStatus(int nowMs) {
     final video = _videoStreamService.snapshot;
     final audio = _audioStreamService.snapshot;
@@ -1093,6 +1103,7 @@ extension _MiuCamServerMediaPolicyController on MiuCamServer {
       'framesDroppedBeforeEncode': _videoFramesDroppedBeforeEncode,
       'framesSkippedByPolicy': _videoFramesSkippedByPolicy,
       'selfAudioSuppressedChunks': _selfAudioSuppressedChunks,
+      'audioDetection': _audioDetectionStatus(),
       'mediaProfileApplyFailureCount': _mediaProfileApplyFailureCount,
       'lastMediaProfileApplyError': _lastMediaProfileApplyError?.toString(),
       'lastMediaProfileApplyErrorAtMs': _lastMediaProfileApplyErrorAtMs,

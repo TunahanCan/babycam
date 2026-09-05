@@ -10,6 +10,55 @@ import 'package:miucam/l10n/app_strings.dart';
 import 'package:miucam/services/server/alert_protocol_adapter.dart';
 
 void main() {
+  test('semantic message keys keep filtering and translated copy consistent',
+      () {
+    const alert = AlertEventDto(
+      id: 'older-generic-envelope',
+      type: 'systemWarning',
+      severity: 'warning',
+      messageKey: 'parentMotionAlert',
+      message: 'SERVER_LANGUAGE_MUST_NOT_LEAK',
+      score: .5,
+      timestampMs: 1,
+      sourceDeviceId: 'server',
+    );
+    expect(alert.category, AlertCategory.motion);
+    for (final locale in AppStrings.supportedLocales) {
+      final strings = AppStrings(locale);
+      expect(
+          alert.localizedTitle(strings),
+          strings.alertNotificationTitle(
+              type: 'motionDetected', messageKey: 'parentMotionAlert'));
+      expect(
+          alert.localizedMessage(strings),
+          strings.alertNotificationBody(
+              type: 'motionDetected', messageKey: 'parentMotionAlert'));
+      expect(
+          alert.localizedMessage(strings), isNot(contains('SERVER_LANGUAGE')));
+    }
+  });
+
+  test('unknown legacy messages stay localized without rewriting wire data',
+      () {
+    const alert = AlertEventDto(
+      id: 'old-protocol',
+      type: 'legacyAlert',
+      severity: 'info',
+      messageKey: 'legacyAlert',
+      message: 'SUNUCU DİLİNDE UYARI',
+      score: 0,
+      timestampMs: 1,
+      sourceDeviceId: 'server',
+    );
+    for (final locale in AppStrings.supportedLocales) {
+      final strings = AppStrings(locale);
+      expect(alert.localizedMessage(strings), strings.alertDetailsUnavailable);
+      expect(alert.localizedNotificationBody(strings),
+          strings.alertDetailsUnavailable);
+    }
+    expect(AlertEventDto.fromJson(alert.toJson())!.message, alert.message);
+  });
+
   test('alert kategorileri event tipinden kesin olarak belirlenir', () {
     expect(_categoryOf('cryDetected', 'parentCryAlert'), AlertCategory.audio);
     expect(
@@ -75,7 +124,7 @@ void main() {
     expect(message, isNot(contains('Motion detected')));
   });
 
-  test('eksik analiz metadata geldiğinde sunucunun gerçek mesajını korur', () {
+  test('eksik analiz metadata sayi uydurmadan ebeveyn dilinde gösterilir', () {
     const dto = AlertEventDto(
       id: 'legacy-cry',
       type: 'cryDetected',
@@ -88,7 +137,12 @@ void main() {
       sourceDeviceId: 'server',
     );
 
-    expect(dto.localizedMessage(AppStrings(const Locale('en'))), dto.message);
+    final strings = AppStrings(const Locale('en'));
+    expect(
+        dto.localizedMessage(strings), dto.localizedNotificationBody(strings));
+    expect(dto.localizedMessage(strings), isNot(contains('Anne')));
+    expect(dto.localizedMessage(strings), isNot(contains('0%')));
+    expect(dto.toJson()['message'], dto.message);
   });
 
   test('yanlış tipte veya aralık dışı metadata güvenli mesaja düşer', () {
@@ -121,8 +175,14 @@ void main() {
     );
     final strings = AppStrings(AppStrings.fallbackLocale);
 
-    expect(invalidCry.localizedMessage(strings), invalidCry.message);
-    expect(invalidEpisode.localizedMessage(strings), invalidEpisode.message);
+    expect(invalidCry.localizedMessage(strings),
+        invalidCry.localizedNotificationBody(strings));
+    expect(invalidEpisode.localizedMessage(strings),
+        invalidEpisode.localizedNotificationBody(strings));
+    expect(invalidCry.localizedMessage(strings),
+        isNot(contains('Server fallback')));
+    expect(invalidEpisode.localizedMessage(strings),
+        isNot(contains('Episode fallback')));
   });
 
   test('hareket zamanı null olan uzun ağlama olayı client dilinde kalır', () {
@@ -194,7 +254,9 @@ void main() {
       dto.localizedNotificationBody(strings),
       isNot(contains('test bildirimi')),
     );
-    expect(dto.localizedMessage(strings), dto.message);
+    expect(
+        dto.localizedMessage(strings), dto.localizedNotificationBody(strings));
+    expect(dto.toJson()['message'], dto.message);
   });
 
   test('opsiyonel alert alanlari geriye uyumlu round-trip edilir', () {

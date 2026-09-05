@@ -4,32 +4,40 @@ import 'dart:typed_data';
 class MjpegStreamParser {
   static final _headerEnd = Uint8List.fromList([13, 10, 13, 10]);
   static final _contentLengthPattern = RegExp(
-    r'content-length:\s*(\d+)',
+    r'^content-length:([^\r\n]*)\r?$',
     caseSensitive: false,
+    multiLine: true,
   );
+  static final _unsignedIntegerPattern = RegExp(r'^\d+$');
   static final _sequencePattern = RegExp(
-    r'x-miucam-sequence:\s*(\d+)',
+    r'^x-miucam-sequence:[ \t]*(\d+)[ \t]*\r?$',
     caseSensitive: false,
+    multiLine: true,
   );
   static final _capturedAtPattern = RegExp(
-    r'x-miucam-captured-at-ms:\s*(\d+)',
+    r'^x-miucam-captured-at-ms:[ \t]*(\d+)[ \t]*\r?$',
     caseSensitive: false,
+    multiLine: true,
   );
   static final _sentAtPattern = RegExp(
-    r'x-miucam-sent-at-ms:\s*(\d+)',
+    r'^x-miucam-sent-at-ms:[ \t]*(\d+)[ \t]*\r?$',
     caseSensitive: false,
+    multiLine: true,
   );
   static final _capturedMonoPattern = RegExp(
-    r'x-miucam-captured-mono-us:\s*(\d+)',
+    r'^x-miucam-captured-mono-us:[ \t]*(\d+)[ \t]*\r?$',
     caseSensitive: false,
+    multiLine: true,
   );
   static final _encodeDurationPattern = RegExp(
-    r'x-miucam-encode-duration-us:\s*(\d+)',
+    r'^x-miucam-encode-duration-us:[ \t]*(\d+)[ \t]*\r?$',
     caseSensitive: false,
+    multiLine: true,
   );
   static final _traceIdPattern = RegExp(
-    r'x-miucam-trace-id:\s*([^\r\n]+)',
+    r'^x-miucam-trace-id:[ \t]*([^\r\n]+)\r?$',
     caseSensitive: false,
+    multiLine: true,
   );
   static const _maxHeaderBytes = 16 * 1024;
   static const _maxFrameBytes = 2 * 1024 * 1024;
@@ -242,9 +250,15 @@ class MjpegStreamParser {
   }
 
   int? _contentLength(String header) {
-    final match = _contentLengthPattern.firstMatch(header);
-    if (match == null) return null;
-    return int.tryParse(match.group(1) ?? '');
+    final matches = _contentLengthPattern.allMatches(header).iterator;
+    if (!matches.moveNext()) return null;
+    final value = matches.current.group(1)?.trim() ?? '';
+    // Ambiguous lengths and numeric prefixes of malformed values would move
+    // the body boundary and turn subsequent valid frames into JPEG garbage.
+    if (matches.moveNext() || !_unsignedIntegerPattern.hasMatch(value)) {
+      return null;
+    }
+    return int.tryParse(value);
   }
 
   int? _headerInt(String header, RegExp pattern) {

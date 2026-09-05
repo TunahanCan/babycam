@@ -34,7 +34,7 @@ class ClientAlertDeliveryCoordinator {
         StackTrace? notificationStack;
         if (!alreadyInHistory) {
           try {
-            await _history.add(alert);
+            await _history.addPendingNotification(alert);
           } catch (_) {
             // ClientAlertHistory keeps the item in memory even if persistence
             // fails. Check the resulting surface below instead of assuming the
@@ -57,6 +57,7 @@ class ClientAlertDeliveryCoordinator {
         if (notificationDelivered) {
           _notificationRetryAlertIds.remove(alert.id);
           _remember(alert.id);
+          await _markNotificationHandled(alert.id);
           return;
         }
 
@@ -68,6 +69,7 @@ class ClientAlertDeliveryCoordinator {
             _isPermanentNotificationFailure(receipt?.error)) {
           _notificationRetryAlertIds.remove(alert.id);
           _remember(alert.id);
+          await _markNotificationHandled(alert.id);
           return;
         }
 
@@ -88,13 +90,26 @@ class ClientAlertDeliveryCoordinator {
   Future<void> drain() => _operations.drain();
 
   bool _wasAlreadyDelivered(String alertId) {
-    if (_notificationRetryAlertIds.contains(alertId)) return false;
+    if (_notificationRetryAlertIds.contains(alertId) ||
+        _history.isNotificationPending(alertId)) {
+      return false;
+    }
     return _rememberedAlertIds.contains(alertId) ||
         _history.alerts.any((alert) => alert.id == alertId);
   }
 
+  Future<void> _markNotificationHandled(String alertId) async {
+    try {
+      await _history.markNotificationHandled(alertId);
+    } catch (_) {
+      // The banner or permanent history fallback is already available. A
+      // bookkeeping write failure must not stall subsequent alert delivery.
+    }
+  }
+
   bool _isPermanentNotificationFailure(String? error) =>
       error == 'notification_permission_denied' ||
+      error == 'notification_channel_disabled' ||
       error == 'native_notifications_unsupported';
 
   void _remember(String alertId) {

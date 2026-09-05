@@ -12,6 +12,7 @@ class MediaFrameBudget {
   bool shouldProcess(int timestampMs) {
     final lastAcceptedMs = _lastAcceptedMs;
     if (lastAcceptedMs != null &&
+        timestampMs >= lastAcceptedMs &&
         timestampMs - lastAcceptedMs < _minInterval.inMilliseconds) {
       return false;
     }
@@ -22,7 +23,8 @@ class MediaFrameBudget {
   void updateMinInterval(Duration minInterval) {
     if (_minInterval == minInterval) return;
     _minInterval = minInterval;
-    reset();
+    // Keep the last accepted timestamp: content-driven profiles may change on
+    // every capture callback, and resetting would bypass both FPS limits.
   }
 
   void reset() {

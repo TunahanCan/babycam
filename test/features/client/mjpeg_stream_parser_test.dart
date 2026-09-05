@@ -5,6 +5,49 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:miucam/features/client/media/mjpeg_stream_parser.dart';
 
 void main() {
+  test('header names are exact and malformed lengths cannot desync frames', () {
+    for (final header in [
+      'X-Content-Length: 3',
+      'Content-Length: 3garbage',
+      'Content-Length: 3\r\nContent-Length: 100',
+    ]) {
+      final parser = MjpegStreamParser();
+      final bytes = Uint8List.fromList(
+        utf8.encode('--frame\r\n$header\r\n\r\nabc\r\n') + _frame([9, 8, 7]),
+      );
+
+      final frames = parser.add(bytes);
+
+      expect(frames, hasLength(1), reason: header);
+      expect(frames.single, [9, 8, 7], reason: header);
+      expect(parser.metrics.invalidParts, 1, reason: header);
+    }
+  });
+
+  test('all byte boundaries preserve frames and keepalives', () {
+    final bytes = Uint8List.fromList(
+      _frame([255, 216, 13, 10, 255, 217]) +
+          utf8.encode('--frame\r\nContent-Length: 0\r\n\r\n\r\n') +
+          _frame([1, 2, 3]),
+    );
+    for (var split = 0; split <= bytes.length; split++) {
+      final parser = MjpegStreamParser();
+      final frames = [
+        ...parser.add(Uint8List.sublistView(bytes, 0, split)),
+        ...parser.add(Uint8List.sublistView(bytes, split)),
+      ];
+      expect(
+          frames,
+          [
+            [255, 216, 13, 10, 255, 217],
+            [1, 2, 3],
+          ],
+          reason: 'TCP split at $split');
+      expect(parser.metrics.keepAliveParts, 1);
+      expect(parser.bufferedBytes, 0);
+    }
+  });
+
   test('parcali MJPEG header ve frame verisini birlestirir', () {
     final parser = MjpegStreamParser();
     final stream = _frame([1, 2, 3, 4]) + _frame([5, 6]);

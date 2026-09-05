@@ -25,6 +25,7 @@ class ClientRoomControlSnapshot {
     this.talkBytesSent = 0,
     this.talkBytesDropped = 0,
     this.lastError,
+    this.audioDetectionPaused,
   });
 
   final ComfortAudioState? comfort;
@@ -32,6 +33,10 @@ class ClientRoomControlSnapshot {
   final int talkBytesSent;
   final int talkBytesDropped;
   final Object? lastError;
+  final bool? audioDetectionPaused;
+
+  bool get isAudioDetectionPaused =>
+      talking || (audioDetectionPaused ?? comfort?.playing ?? false);
 }
 
 class ClientRoomControls {
@@ -66,23 +71,30 @@ class ClientRoomControls {
   static const _maxPendingTalkChunks = 12;
   int _talkIntentGeneration = 0;
   bool _disposed = false;
+  int _comfortRefreshGeneration = 0;
+  int _comfortCommandGeneration = 0;
 
   ClientRoomControlSnapshot get currentState => _state;
   Stream<ClientRoomControlSnapshot> get states => _states.stream;
 
   Future<ComfortAudioState?> refreshComfort(PairingSession session) async {
+    final generation = ++_comfortRefreshGeneration;
     final json = await _requestJson(
       session,
       MiuCamProtocolV2.comfortState,
       method: 'GET',
     );
     final comfort = ComfortAudioState.fromJson(json?['state']);
-    _emit(ClientRoomControlSnapshot(
-      comfort: comfort,
-      talking: _state.talking,
-      talkBytesSent: _state.talkBytesSent,
-      talkBytesDropped: _state.talkBytesDropped,
-    ));
+    if (_disposed || generation != _comfortRefreshGeneration) return comfort;
+    _emit(
+        ClientRoomControlSnapshot(
+          comfort: comfort,
+          talking: _state.talking,
+          talkBytesSent: _state.talkBytesSent,
+          talkBytesDropped: _state.talkBytesDropped,
+          audioDetectionPaused: _readAudioDetectionPaused(json),
+        ),
+        preserveDetectionState: false);
     return comfort;
   }
 
@@ -93,6 +105,8 @@ class ClientRoomControls {
     double? volume,
     bool? loop,
   }) async {
+    final generation = ++_comfortCommandGeneration;
+    _comfortRefreshGeneration++;
     final json = await _requestJson(
       session,
       MiuCamProtocolV2.comfortCommand,
@@ -105,12 +119,17 @@ class ClientRoomControls {
       },
     );
     final comfort = ComfortAudioState.fromJson(json?['state']);
-    _emit(ClientRoomControlSnapshot(
-      comfort: comfort ?? _state.comfort,
-      talking: _state.talking,
-      talkBytesSent: _state.talkBytesSent,
-      talkBytesDropped: _state.talkBytesDropped,
-    ));
+    if (_disposed || generation != _comfortCommandGeneration) return comfort;
+    _comfortRefreshGeneration++;
+    _emit(
+        ClientRoomControlSnapshot(
+          comfort: comfort ?? _state.comfort,
+          talking: _state.talking,
+          talkBytesSent: _state.talkBytesSent,
+          talkBytesDropped: _state.talkBytesDropped,
+          audioDetectionPaused: _readAudioDetectionPaused(json),
+        ),
+        preserveDetectionState: false);
     return comfort;
   }
 
@@ -570,9 +589,26 @@ class ClientRoomControls {
     }
   }
 
-  void _emit(ClientRoomControlSnapshot state) {
-    _state = state;
-    if (!_states.isClosed) _states.add(state);
+  bool? _readAudioDetectionPaused(Map<String, Object?>? json) {
+    final detection = json?['audioDetection'];
+    final paused = detection is Map ? detection['paused'] : null;
+    return paused is bool ? paused : null;
+  }
+
+  void _emit(
+    ClientRoomControlSnapshot state, {
+    bool preserveDetectionState = true,
+  }) {
+    _state = ClientRoomControlSnapshot(
+      comfort: state.comfort,
+      talking: state.talking,
+      talkBytesSent: state.talkBytesSent,
+      talkBytesDropped: state.talkBytesDropped,
+      lastError: state.lastError,
+      audioDetectionPaused: state.audioDetectionPaused ??
+          (preserveDetectionState ? _state.audioDetectionPaused : null),
+    );
+    if (!_states.isClosed) _states.add(_state);
   }
 }
 

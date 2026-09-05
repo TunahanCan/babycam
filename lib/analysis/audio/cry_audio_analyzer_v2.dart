@@ -60,6 +60,10 @@ class CryAudioAnalyzerV2 {
       _state == AudioCalibrationState.calibrated ? _ambientDbfs : null;
 
   void startCalibration({int? timestampMs}) {
+    // A requested baseline must contain only audio captured afterwards. The
+    // previous sliding window otherwise counts up to a full second of old
+    // room audio toward a newly requested calibration.
+    markDiscontinuity();
     _state = AudioCalibrationState.calibrating;
     _calibrationStartMs = timestampMs;
     _calibrationDbfs.clear();
@@ -306,8 +310,10 @@ class CryAudioAnalyzerV2 {
         !likely &&
         !isLoud &&
         raw < config.cryOffThreshold) {
-      _ambientDbfs = _ambientDbfs * (1 - config.ambientUpdateAlpha) +
-          dbfs * config.ambientUpdateAlpha;
+      _ambientDbfs = (_ambientDbfs * (1 - config.ambientUpdateAlpha) +
+              dbfs * config.ambientUpdateAlpha)
+          .clamp(_minimumUsableAmbientDbfs, 0)
+          .toDouble();
     }
     sw.stop();
     return AudioAnalysisResult(

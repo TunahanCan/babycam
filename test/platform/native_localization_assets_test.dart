@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:miucam/l10n/app_strings.dart';
 
 const _androidStringKeys = {
   'miucam_server_channel_name',
@@ -30,16 +31,14 @@ const _iosPermissionKeys = {
 
 void main() {
   test('Android foreground-service copy is complete in every app language', () {
-    const localeDirectories = [
-      'values',
-      'values-tr',
-      'values-zh',
-      'values-hi',
-      'values-es',
-      'values-fr',
-      'values-de',
-      'values-ar',
-    ];
+    // ar-SA and ar-QA intentionally resolve to the same neutral Arabic pack.
+    final localeDirectories = AppStrings.supportedLocales.map((locale) =>
+        locale.languageCode == 'en'
+            ? 'values'
+            : 'values-${locale.languageCode}');
+    final fallback = _androidStrings(
+      File('android/app/src/main/res/values/strings.xml').readAsStringSync(),
+    );
 
     for (final directory in localeDirectories) {
       final file = File('android/app/src/main/res/$directory/strings.xml');
@@ -53,6 +52,13 @@ void main() {
       for (final entry in values.entries) {
         expect(entry.value.trim(), isNotEmpty,
             reason: '$directory:${entry.key} is blank');
+        if (directory != 'values') {
+          expect(entry.value, isNot(fallback[entry.key]),
+              reason: '$directory:${entry.key} falls back to English');
+        }
+        expect(_nativePlaceholders(entry.value),
+            _nativePlaceholders(fallback[entry.key]!),
+            reason: '$directory:${entry.key} changes native placeholders');
       }
     }
 
@@ -69,16 +75,8 @@ void main() {
 
   test('iOS permission copy is localized and included in the Runner bundle',
       () {
-    const localeDirectories = [
-      'en',
-      'tr',
-      'zh-Hans',
-      'hi',
-      'es',
-      'fr',
-      'de',
-      'ar',
-    ];
+    final localeDirectories = AppStrings.supportedLocales.map((locale) =>
+        locale.languageCode == 'zh' ? 'zh-Hans' : locale.languageCode);
     final project =
         File('ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
 
@@ -92,6 +90,9 @@ void main() {
         expect(entry.value.trim(), isNotEmpty,
             reason: '$locale:${entry.key} is blank');
       }
+      expect(values['NSMicrophoneUsageDescription'], isNot(contains('Server')),
+          reason:
+              '$locale microphone consent should describe both nursery audio and talk');
       expect(
         project,
         contains('$locale.lproj/InfoPlist.strings'),
@@ -130,3 +131,9 @@ Map<String, String> _infoPlistStrings(String source) => {
       ).allMatches(source))
         match.group(1)!: match.group(2)!,
     };
+
+List<String> _nativePlaceholders(String value) => (RegExp(r'%(?:\d+\$)?[sdif@]')
+    .allMatches(value)
+    .map((match) => match.group(0)!)
+    .toList()
+  ..sort());

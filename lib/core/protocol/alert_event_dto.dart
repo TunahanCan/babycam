@@ -32,8 +32,20 @@ class AlertEventDto {
   final String? childId;
   final Map<String, Object?> metadata;
 
+  String get _presentationType => switch (messageKey.trim().toLowerCase()) {
+        'parentcryalert' ||
+        'parentepisodehighcryalert' ||
+        'parentepisodecryalert' =>
+          'cryDetected',
+        'parentloudsoundalert' || 'parentepisodeshortsoundalert' => 'loudSound',
+        'parentmotionalert' => 'motionDetected',
+        'parentlightchangealert' => 'globalLightChange',
+        'batterylow' => 'batteryLow',
+        _ => type,
+      };
+
   AlertCategory get category {
-    final normalizedType = type.trim().toLowerCase();
+    final normalizedType = _presentationType.trim().toLowerCase();
     final normalizedMessageKey = messageKey.trim().toLowerCase();
 
     if (const {
@@ -134,10 +146,10 @@ class AlertEventDto {
   }
 
   String localizedMessage(AppStrings strings) {
-    // A newer client may receive an older/server-side event with a message key
-    // but without the feature metadata needed to rebuild it. Never replace a
-    // valid server message with a template filled with zeroes.
-    if (!_hasLocalizationMetadata) return message;
+    // Wire/history retain the original text for compatibility. Presentation
+    // always belongs to the receiving parent's locale, including old events
+    // without measurements. Never fabricate zero-valued analysis details.
+    if (!_hasLocalizationMetadata) return _localizedFallback(strings);
     return switch (messageKey) {
       'parentCryAlert' => strings.parentCryAlert(
           confidencePercent: _int('confidencePercent'),
@@ -170,17 +182,23 @@ class AlertEventDto {
           seconds: _durationSeconds(),
           networkTier: strings.networkQualityLabel(_networkTier()),
         ),
-      _ => message,
+      _ => _localizedFallback(strings),
     };
   }
 
+  String _localizedFallback(AppStrings strings) =>
+      strings.alertNotificationBody(
+          type: _presentationType, messageKey: messageKey) ??
+      strings.alertDetailsUnavailable;
+
   String localizedTitle(AppStrings strings) => strings.alertNotificationTitle(
-        type: type,
+        type: _presentationType,
         messageKey: messageKey,
       );
 
   String localizedNotificationBody(AppStrings strings) =>
-      strings.alertNotificationBody(type: type, messageKey: messageKey) ??
+      strings.alertNotificationBody(
+          type: _presentationType, messageKey: messageKey) ??
       localizedMessage(strings);
 
   bool get _hasLocalizationMetadata {

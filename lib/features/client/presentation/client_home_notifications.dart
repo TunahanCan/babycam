@@ -67,8 +67,8 @@ class _NotificationList extends StatelessWidget {
       ..sort((a, b) => b.timestampMs.compareTo(a.timestampMs));
     final items = filteredAlerts.isEmpty
         ? [_emptyNotificationSpec(strings)]
-        : filteredAlerts
-            .map((alert) => _notificationSpecFromAlert(strings, alert));
+        : filteredAlerts.map(
+            (alert) => _notificationSpecFromAlert(context, strings, alert));
 
     return Column(
       children: [
@@ -102,6 +102,7 @@ _NotificationSpec _emptyNotificationSpec(AppStrings strings) =>
     );
 
 _NotificationSpec _notificationSpecFromAlert(
+  BuildContext context,
   AppStrings strings,
   AlertEventDto alert,
 ) {
@@ -114,7 +115,7 @@ _NotificationSpec _notificationSpecFromAlert(
     },
     alert.localizedTitle(strings),
     alert.localizedMessage(strings),
-    _formatAlertTime(alert.timestampMs),
+    formatAlertTimestamp(context, alert.timestampMs),
     _severityLabel(strings, alert.severity),
     switch (family) {
       AlertCategory.motion => const Color(0xFFEFFAF5),
@@ -139,12 +140,6 @@ String _severityLabel(AppStrings strings, String severity) {
     return strings.ui('info');
   }
   return strings.ui('system');
-}
-
-String _formatAlertTime(int timestampMs) {
-  final time = DateTime.fromMillisecondsSinceEpoch(timestampMs);
-  return '${time.hour.toString().padLeft(2, '0')}:'
-      '${time.minute.toString().padLeft(2, '0')}';
 }
 
 class _NotificationSpec {
@@ -230,40 +225,40 @@ class _NotificationCard extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 11,
+                              vertical: 6,
+                            ),
+                            decoration: const ShapeDecoration(
+                              color: Colors.white,
+                              shape: StadiumBorder(),
+                            ),
+                            child: Text(
+                              item.badge,
+                              style: const TextStyle(
+                                color: MiuCamDesignTokens.pink,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          if (onWatch != null)
+                            const Icon(
+                              Icons.play_circle_fill_rounded,
+                              color: MiuCamDesignTokens.pink,
+                              size: 22,
+                            ),
+                        ],
+                      ),
                     ],
                   ),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 11,
-                        vertical: 6,
-                      ),
-                      decoration: const ShapeDecoration(
-                        color: Colors.white,
-                        shape: StadiumBorder(),
-                      ),
-                      child: Text(
-                        item.badge,
-                        style: const TextStyle(
-                          color: MiuCamDesignTokens.pink,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                    if (onWatch != null) ...[
-                      const SizedBox(height: 18),
-                      const Icon(
-                        Icons.play_circle_fill_rounded,
-                        color: MiuCamDesignTokens.pink,
-                        size: 22,
-                      ),
-                    ],
-                  ],
                 ),
               ],
             ),

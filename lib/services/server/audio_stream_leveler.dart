@@ -34,11 +34,21 @@ class AudioStreamLeveler {
   final double release;
 
   double _gain = 1;
+  double _appliedGain = 1;
   AudioStreamLevelerSnapshot _lastSnapshot;
 
   AudioStreamLevelerSnapshot get lastSnapshot => _lastSnapshot;
 
-  Uint8List processPcm16le(Uint8List input) {
+  Uint8List processPcm16le(
+    Uint8List input, {
+    int sampleRate = 16000,
+    int channels = 1,
+  }) {
+    if (sampleRate <= 0 ||
+        channels <= 0 ||
+        input.length % (channels * 2) != 0) {
+      throw ArgumentError('PCM input must contain complete sample frames.');
+    }
     if (input.length < 2) {
       _lastSnapshot = AudioStreamLevelerSnapshot(
         inputRms: 0,
@@ -69,7 +79,15 @@ class AudioStreamLeveler {
     _gain = min(_gain, peakLimitedGain);
     if ((_gain - 1).abs() < .02) _gain = 1;
 
-    if (_gain <= 1) {
+    // The RMS controller updates once per chunk. Applying its new gain to
+    // every sample instantly creates a step (and an audible click) even when
+    // the source waveform is continuous. Ramp for 5 ms, sharing the same gain
+    // across channels and retaining the actual endpoint for short chunks.
+    // An imminent peak still takes precedence over a smooth transition.
+    final startingGain = min(_appliedGain, peakLimitedGain);
+    final rampFrames = max(1, sampleRate * 5 ~/ 1000);
+    if (_gain <= 1 && startingGain <= 1) {
+      _appliedGain = _gain;
       _lastSnapshot = AudioStreamLevelerSnapshot(
         inputRms: inputRms,
         outputRms: inputRms,
@@ -86,7 +104,10 @@ class AudioStreamLeveler {
     var outputPeak = 0;
     for (var i = 0; i < sampleCount; i++) {
       final sample = inputView.getInt16(i * 2, Endian.little);
-      final amplified = (sample * _gain).round().clamp(-32768, 32767).toInt();
+      final progress = min(1.0, (i ~/ channels + 1) / rampFrames);
+      _appliedGain = startingGain + (_gain - startingGain) * progress;
+      final amplified =
+          (sample * _appliedGain).round().clamp(-32768, 32767).toInt();
       final absSample = amplified.abs();
       if (absSample > outputPeak) outputPeak = absSample;
       outputSumSquares += amplified * amplified;
@@ -98,13 +119,14 @@ class AudioStreamLeveler {
       outputRms: sqrt(outputSumSquares / sampleCount),
       inputPeak: inputPeak,
       outputPeak: outputPeak,
-      gain: _gain,
+      gain: _appliedGain,
     );
     return output;
   }
 
   void reset() {
     _gain = 1;
+    _appliedGain = 1;
     _lastSnapshot = const AudioStreamLevelerSnapshot(
       inputRms: 0,
       outputRms: 0,

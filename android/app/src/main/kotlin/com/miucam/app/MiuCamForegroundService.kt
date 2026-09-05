@@ -6,13 +6,17 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.lifecycle.LifecycleService
 import io.flutter.embedding.engine.FlutterEngine
+import java.util.Locale
 
-class MiuCamForegroundService : LifecycleService() {
+class MiuCamForegroundService : LifecycleService(),
+    SharedPreferences.OnSharedPreferenceChangeListener {
     private data class RuntimeDemand(
         val camera: Boolean,
         val microphone: Boolean,
@@ -38,6 +42,50 @@ class MiuCamForegroundService : LifecycleService() {
     private var nativeMicrophoneCaptureDemand = false
     private var foregroundStarted = false
     private var runtimeReleased = false
+    private lateinit var localePreferences: SharedPreferences
+
+    override fun onCreate() {
+        super.onCreate()
+        // The Dart ClientPreferencesService uses the legacy shared_preferences
+        // store. Read its saved choice even when no Activity owns the engine.
+        localePreferences = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        localePreferences.registerOnSharedPreferenceChangeListener(this)
+    }
+
+    override fun onSharedPreferenceChanged(preferences: SharedPreferences?, key: String?) {
+        if (key == null || key == LOCALE_LANGUAGE_KEY || key == LOCALE_COUNTRY_KEY) {
+            refreshNotificationLocale()
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // System-language mode must also update an already-running service.
+        refreshNotificationLocale()
+    }
+
+    private fun notificationContext(): Context {
+        val language = localePreferences.getString(LOCALE_LANGUAGE_KEY, null)
+        if (language.isNullOrBlank()) return this
+        val country = localePreferences.getString(LOCALE_COUNTRY_KEY, null)
+        val locale = if (country.isNullOrBlank()) Locale(language) else Locale(language, country)
+        val configuration = Configuration(resources.configuration)
+        configuration.setLocale(locale)
+        return createConfigurationContext(configuration)
+    }
+
+    private fun refreshNotificationLocale() {
+        if (!foregroundStarted || currentDemand().isEmpty) return
+        try {
+            getSystemService(NotificationManager::class.java)?.notify(
+                NOTIFICATION_ID,
+                buildNotification()
+            )
+        } catch (_: SecurityException) {
+            // Revoking notification permission must not tear down capture or
+            // alert transport just because the language changed.
+        }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // LifecycleService requires this call so CameraX observes a STARTED
@@ -149,6 +197,7 @@ class MiuCamForegroundService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        localePreferences.unregisterOnSharedPreferenceChangeListener(this)
         releaseRuntime("service_destroyed")
         super.onDestroy()
     }
@@ -299,6 +348,7 @@ class MiuCamForegroundService : LifecycleService() {
     }
 
     private fun buildNotification(): Notification {
+        val localized = notificationContext()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channelId = if (hasMediaDemand() || serverDemand) {
                 SERVER_CHANNEL_ID
@@ -308,16 +358,16 @@ class MiuCamForegroundService : LifecycleService() {
             val channel = NotificationChannel(
                 channelId,
                 if (hasMediaDemand() || serverDemand) {
-                    getString(R.string.miucam_server_channel_name)
+                    localized.getString(R.string.miucam_server_channel_name)
                 } else {
-                    getString(R.string.miucam_alert_connection_channel_name)
+                    localized.getString(R.string.miucam_alert_connection_channel_name)
                 },
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = if (hasMediaDemand() || serverDemand) {
-                    getString(R.string.miucam_server_channel_description)
+                    localized.getString(R.string.miucam_server_channel_description)
                 } else {
-                    getString(R.string.miucam_alert_connection_channel_description)
+                    localized.getString(R.string.miucam_alert_connection_channel_description)
                 }
                 setSound(null, null)
                 enableVibration(false)
@@ -337,19 +387,19 @@ class MiuCamForegroundService : LifecycleService() {
         )
         val text = when {
             cameraDemand && microphoneDemand && playbackDemand ->
-                getString(R.string.miucam_runtime_camera_microphone_playback)
+                localized.getString(R.string.miucam_runtime_camera_microphone_playback)
             cameraDemand && microphoneDemand ->
-                getString(R.string.miucam_runtime_camera_microphone)
+                localized.getString(R.string.miucam_runtime_camera_microphone)
             cameraDemand && playbackDemand ->
-                getString(R.string.miucam_runtime_camera_playback)
+                localized.getString(R.string.miucam_runtime_camera_playback)
             microphoneDemand && playbackDemand ->
-                getString(R.string.miucam_runtime_microphone_playback)
-            cameraDemand -> getString(R.string.miucam_runtime_camera)
-            microphoneDemand -> getString(R.string.miucam_runtime_microphone)
-            playbackDemand -> getString(R.string.miucam_runtime_playback)
-            serverDemand -> getString(R.string.miucam_runtime_server)
-            alertDemand -> getString(R.string.miucam_runtime_alerts)
-            else -> getString(R.string.miucam_runtime_stopping)
+                localized.getString(R.string.miucam_runtime_microphone_playback)
+            cameraDemand -> localized.getString(R.string.miucam_runtime_camera)
+            microphoneDemand -> localized.getString(R.string.miucam_runtime_microphone)
+            playbackDemand -> localized.getString(R.string.miucam_runtime_playback)
+            serverDemand -> localized.getString(R.string.miucam_runtime_server)
+            alertDemand -> localized.getString(R.string.miucam_runtime_alerts)
+            else -> localized.getString(R.string.miucam_runtime_stopping)
         }
         val channelId = if (hasMediaDemand() || serverDemand) {
             SERVER_CHANNEL_ID
@@ -370,11 +420,11 @@ class MiuCamForegroundService : LifecycleService() {
             .setSmallIcon(R.drawable.ic_stat_miucam)
             .setContentTitle(
                 if (hasMediaDemand()) {
-                    getString(R.string.miucam_runtime_title_media)
+                    localized.getString(R.string.miucam_runtime_title_media)
                 } else if (serverDemand) {
-                    getString(R.string.miucam_runtime_title_server)
+                    localized.getString(R.string.miucam_runtime_title_server)
                 } else {
-                    getString(R.string.miucam_runtime_title_alerts)
+                    localized.getString(R.string.miucam_runtime_title_alerts)
                 }
             )
             .setContentText(text)
@@ -402,6 +452,8 @@ class MiuCamForegroundService : LifecycleService() {
         private const val SERVER_CHANNEL_ID = "miucam_server_runtime"
         private const val ALERT_CHANNEL_ID = "miucam_client_alert_runtime"
         private const val NOTIFICATION_ID = 4101
+        private const val LOCALE_LANGUAGE_KEY = "flutter.client.locale.language"
+        private const val LOCALE_COUNTRY_KEY = "flutter.client.locale.country"
 
         fun startIntent(
             context: Context,

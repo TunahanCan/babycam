@@ -425,7 +425,7 @@ class _RoomCard extends StatelessWidget {
                     inAppOnly
                         ? AppStrings.of(context).ui('notificationsInAppOnly')
                         : alertsReady
-                            ? AppStrings.of(context).ui('notificationsOn')
+                            ? AppStrings.of(context).ui('alertConnectionOn')
                             : alertsReconnecting
                                 ? AppStrings.of(context)
                                     .ui('clientTitleReconnecting')
@@ -758,7 +758,7 @@ class _DiscoveredRoomsCard extends StatelessWidget {
                   ),
                 ),
                 title: Text(
-                  service.name,
+                  localizedRoomName(strings, service.name),
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
                 subtitle: Text(

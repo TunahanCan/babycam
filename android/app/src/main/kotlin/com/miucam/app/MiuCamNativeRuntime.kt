@@ -386,6 +386,8 @@ class PcmAudioPlayer(private val context: Context) {
             "channels" to channels,
             "bufferSizeBytes" to bufferSizeBytes,
             "pendingWrites" to pendingWrites.get(),
+            "playbackHeadFrames" to playbackFrames,
+            "sessionFramesWritten" to sessionFramesWritten,
             "queuedAudioMs" to if (sampleRate > 0) {
                 queuedFrames * 1000L / sampleRate
             } else {

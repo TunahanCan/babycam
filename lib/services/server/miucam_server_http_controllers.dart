@@ -55,6 +55,7 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
       'transport': _transportStatus(),
       'streamHealth': _streamHealthStatus(nowMs),
       'comfort': _features.comfortAudio.state.toJson(),
+      'audioDetection': _audioDetectionStatus(),
       'nightLight': _features.nightLight.state.toJson(),
       'talk': _talkStatus(),
       if (_broadcastAccess != null)
@@ -67,6 +68,7 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
     await _writeJson(request.response, {
       'ok': true,
       'state': _features.comfortAudio.state.toJson(),
+      'audioDetection': _audioDetectionStatus(),
       'tracks': _features.comfortAudio.trackCatalog,
     });
   }
@@ -84,6 +86,7 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
     await _writeJson(request.response, {
       'ok': state.lastError == null,
       'state': state.toJson(),
+      'audioDetection': _audioDetectionStatus(),
       'tracks': _features.comfortAudio.trackCatalog,
     });
   }

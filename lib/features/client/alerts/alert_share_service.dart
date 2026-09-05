@@ -1,12 +1,17 @@
 import '../../../core/protocol/alert_event_dto.dart';
+import '../../../l10n/app_strings.dart';
 
 class AlertShareService {
-  String buildShareText(AlertEventDto alert) {
-    final time = DateTime.fromMillisecondsSinceEpoch(alert.timestampMs);
-    return 'MiuCam uyarısı: ${alert.message}\nSaat: ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}\nSkor: ${alert.score.toStringAsFixed(2)}\nCihaz: ${alert.sourceDeviceId}';
-  }
+  String buildShareText(AlertEventDto alert, {required AppStrings strings}) =>
+      strings.alertShareText(
+        message: alert.localizedMessage(strings),
+        time: DateTime.fromMillisecondsSinceEpoch(alert.timestampMs),
+        score: alert.score,
+        deviceId: alert.sourceDeviceId,
+      );
 
-  Future<void> shareAlert(AlertEventDto alert) async {
-    buildShareText(alert);
+  Future<void> shareAlert(AlertEventDto alert,
+      {required AppStrings strings}) async {
+    buildShareText(alert, strings: strings);
   }
 }

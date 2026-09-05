@@ -7,13 +7,11 @@ class ClientNotificationService {
       : _service = service;
 
   NotificationService? _service;
-  AppStrings? _strings;
   NotificationDeliveryReceipt? _lastDelivery;
 
   NotificationDeliveryReceipt? get lastDelivery => _lastDelivery;
 
   void updateStrings(AppStrings strings) {
-    _strings = strings;
     final service = _service;
     if (service == null) {
       _service = NotificationService(strings);
@@ -36,6 +34,8 @@ class ClientNotificationService {
     required String alertId,
     String? title,
     String severity = 'warning',
+    String Function(AppStrings)? messageBuilder,
+    String Function(AppStrings)? titleBuilder,
   }) async {
     final service = _service;
     if (service == null) {
@@ -50,22 +50,19 @@ class ClientNotificationService {
       alertId: alertId,
       title: title,
       severity: severity,
+      messageBuilder: messageBuilder,
+      titleBuilder: titleBuilder,
     );
     _lastDelivery = delivery;
     return delivery;
   }
 
   Future<NotificationDeliveryReceipt> showAlert(AlertEventDto alert) {
-    final strings = _strings;
     return show(
-      strings == null
-          ? alert.message
-          : alert.localizedNotificationBody(strings),
+      alert.message,
       alertId: alert.id,
-      title: strings?.alertNotificationTitle(
-        type: alert.type,
-        messageKey: alert.messageKey,
-      ),
+      messageBuilder: alert.localizedNotificationBody,
+      titleBuilder: alert.localizedTitle,
       severity: alert.severity,
     );
   }

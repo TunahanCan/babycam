@@ -67,6 +67,23 @@ void main() {
     expect(_peak(output), lessThanOrEqualTo(12000));
     expect(leveler.lastSnapshot.gain, lessThanOrEqualTo(4));
   });
+
+  test('gain artisi kesintisiz tonun chunk sinirina tiklama eklemez', () {
+    final leveler = AudioStreamLeveler();
+    final tone = _pcm16le(List<int>.generate(
+      320,
+      (index) => (200 * cos(2 * pi * 100 * index / 16000)).round(),
+    ));
+    final first = leveler.processPcm16le(tone);
+    final second = leveler.processPcm16le(tone);
+    final lastSample =
+        ByteData.sublistView(first).getInt16(first.length - 2, Endian.little);
+    final nextSample = ByteData.sublistView(second).getInt16(0, Endian.little);
+
+    // The source is continuous at this boundary (both samples round to 200).
+    // A block-wide gain change used to inject a 519-unit step into this tone.
+    expect((nextSample - lastSample).abs(), lessThan(20));
+  });
 }
 
 Uint8List _pcm16le(List<int> samples) {

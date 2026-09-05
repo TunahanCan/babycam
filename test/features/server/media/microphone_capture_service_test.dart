@@ -4,9 +4,61 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miucam/features/server/media/microphone_capture_service.dart';
+import 'package:miucam/services/server/audio_stream_leveler.dart';
 import 'package:record/record.dart';
 
 void main() {
+  test('parcali PCM orneklerini gain ve analizden once kayipsiz birlestirir',
+      () async {
+    final recorder = _FakeRecorder();
+    final service = MicrophoneCaptureService(
+      sampleRate: 16000,
+      channels: 1,
+      recorder: recorder,
+      streamLeveler: AudioStreamLeveler(maxGain: 1),
+    );
+    addTearDown(service.dispose);
+    final chunks = <MicrophonePcmChunk>[];
+    await service.start(onChunk: chunks.add);
+    final raw = _pcm16le([258, -515, 772, -1029]);
+    recorder.add(Uint8List.sublistView(raw, 0, 3));
+    recorder.add(Uint8List.sublistView(raw, 3, 4));
+    recorder.add(Uint8List.sublistView(raw, 4, 7));
+    recorder.add(Uint8List.sublistView(raw, 7));
+    await pumpEventQueue();
+
+    expect(chunks.every((chunk) => chunk.rawPcm16le.length.isEven), isTrue);
+    expect(chunks.expand((chunk) => chunk.rawPcm16le), raw);
+    expect(chunks.expand((chunk) => chunk.streamPcm16le), raw);
+  });
+
+  test('yeni capture eski kismi ornegi ve gain durumunu devralmaz', () async {
+    final recorder = _FakeRecorder();
+    final service = MicrophoneCaptureService(
+      sampleRate: 16000,
+      channels: 1,
+      recorder: recorder,
+    );
+    addTearDown(service.dispose);
+    final chunks = <MicrophonePcmChunk>[];
+    final raw = _pcm16le(List<int>.filled(320, 20));
+    await service.start(onChunk: chunks.add);
+    recorder.add(raw);
+    await pumpEventQueue();
+    final firstOutput = chunks.single.streamPcm16le;
+    recorder.add(Uint8List.fromList([123]));
+    await pumpEventQueue();
+    await service.stop();
+    chunks.clear();
+
+    await service.start(onChunk: chunks.add);
+    recorder.add(raw);
+    await pumpEventQueue();
+
+    expect(chunks.single.rawPcm16le, raw);
+    expect(chunks.single.streamPcm16le, firstOutput);
+  });
+
   test('dusuk RMS mikrofon sinyalini canli yayin icin yukseltir', () async {
     var nowMs = 1000;
     final recorder = _FakeRecorder();

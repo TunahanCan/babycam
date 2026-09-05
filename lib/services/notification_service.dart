@@ -70,6 +70,7 @@ class NotificationService {
   AppStrings _strings;
   final FlutterLocalNotificationsPlugin _plugin;
   Future<bool>? _initializing;
+  Future<void> _channelRefresh = Future<void>.value();
   var _pluginInitialized = false;
   var _enabled = false;
   var _notificationsAttempted = 0;
@@ -82,7 +83,13 @@ class NotificationService {
   String? get lastError => _lastError;
 
   void updateStrings(AppStrings strings) {
+    final localeChanged = _strings.locale != strings.locale;
     _strings = strings;
+    if (localeChanged && _pluginInitialized && _supportsNativeNotifications) {
+      unawaited(_refreshAndroidChannels().catchError((Object _) {
+        // The next delivery retries channel metadata along with permission.
+      }));
+    }
   }
 
   Future<bool> initialize() {
@@ -147,24 +154,7 @@ class NotificationService {
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     if (android != null) {
-      await android.createNotificationChannel(AndroidNotificationChannel(
-        channelId,
-        _strings.notificationChannelName,
-        description: _strings.ui('notificationChannelDescription'),
-        importance: Importance.high,
-        playSound: true,
-        enableVibration: true,
-        showBadge: true,
-      ));
-      await android.createNotificationChannel(AndroidNotificationChannel(
-        updatesChannelId,
-        _strings.notificationUpdatesChannelName,
-        description: _strings.ui('notificationChannelDescription'),
-        importance: Importance.defaultImportance,
-        playSound: false,
-        enableVibration: false,
-        showBadge: true,
-      ));
+      await _refreshAndroidChannels();
       final alreadyEnabled = await android.areNotificationsEnabled();
       if (alreadyEnabled == true) return true;
       final granted = await android.requestNotificationsPermission();
@@ -183,11 +173,44 @@ class NotificationService {
     return true;
   }
 
+  Future<void> _refreshAndroidChannels() {
+    final operation = _channelRefresh.then((_) async {
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (android == null) return;
+      final strings = _strings;
+      await android.createNotificationChannel(AndroidNotificationChannel(
+        channelId,
+        strings.notificationChannelName,
+        description: strings.ui('notificationChannelDescription'),
+        importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
+        showBadge: true,
+      ));
+      await android.createNotificationChannel(AndroidNotificationChannel(
+        updatesChannelId,
+        strings.notificationUpdatesChannelName,
+        description: strings.ui('notificationChannelDescription'),
+        importance: Importance.defaultImportance,
+        playSound: false,
+        enableVibration: false,
+        showBadge: true,
+      ));
+    });
+    // Keep rapid locale changes ordered without making a failed refresh poison
+    // all later notification attempts.
+    _channelRefresh = operation.catchError((Object _) {});
+    return operation;
+  }
+
   Future<NotificationDeliveryReceipt> showAlert(
     String message, {
     required String alertId,
     String? title,
     String severity = 'warning',
+    String Function(AppStrings)? messageBuilder,
+    String Function(AppStrings)? titleBuilder,
   }) async {
     final notificationId = notificationIdFor(alertId);
     _notificationsAttempted++;
@@ -207,19 +230,33 @@ class NotificationService {
     }
 
     try {
-      final contentTitle = title ?? _strings.notificationTitle;
       final interruptive = _isInterruptive(severity);
+      final deliveryChannelId = interruptive ? channelId : updatesChannelId;
+      if (await _isAndroidChannelDisabled(deliveryChannelId)) {
+        _lastError = 'notification_channel_disabled';
+        return NotificationDeliveryReceipt(
+          notificationId: notificationId,
+          posted: false,
+          error: _lastError,
+        );
+      }
+      // Resolve after permission/plugin waits so a language change during a
+      // queued or replayed delivery cannot post stale server-language copy.
+      final strings = _strings;
+      final contentTitle =
+          titleBuilder?.call(strings) ?? title ?? strings.notificationTitle;
+      final contentMessage = messageBuilder?.call(strings) ?? message;
       await _plugin.show(
         notificationId,
         contentTitle,
-        message,
+        contentMessage,
         NotificationDetails(
           android: AndroidNotificationDetails(
-            interruptive ? channelId : updatesChannelId,
+            deliveryChannelId,
             interruptive
-                ? _strings.notificationChannelName
-                : _strings.notificationUpdatesChannelName,
-            channelDescription: _strings.ui('notificationChannelDescription'),
+                ? strings.notificationChannelName
+                : strings.notificationUpdatesChannelName,
+            channelDescription: strings.ui('notificationChannelDescription'),
             icon: 'ic_stat_miucam',
             importance:
                 interruptive ? Importance.high : Importance.defaultImportance,
@@ -237,7 +274,7 @@ class NotificationService {
             onlyAlertOnce: true,
             ticker: contentTitle,
             styleInformation: BigTextStyleInformation(
-              message,
+              contentMessage,
               contentTitle: contentTitle,
               summaryText: 'MiuCam',
             ),
@@ -285,6 +322,24 @@ class NotificationService {
         normalized == 'critical' ||
         normalized == 'high' ||
         normalized == 'medium';
+  }
+
+  Future<bool> _isAndroidChannelDisabled(String deliveryChannelId) async {
+    if (defaultTargetPlatform != TargetPlatform.android) return false;
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) return false;
+    try {
+      final channels = await android.getNotificationChannels();
+      return channels?.any((channel) =>
+              channel.id == deliveryChannelId &&
+              channel.importance == Importance.none) ??
+          false;
+    } catch (_) {
+      // Older embeddings may not expose channel settings. Preserve the
+      // normal post/verification path when this optional query is unavailable.
+      return false;
+    }
   }
 
   Future<bool?> _verifyActive(int notificationId) async {

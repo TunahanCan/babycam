@@ -248,7 +248,7 @@ void main() {
       final expected = _placeholderNames(entry.value['en'] ?? '');
       for (final locale in locales) {
         final actual = _placeholderNames(AppStrings(locale).ui(entry.key));
-        if (actual.length != expected.length || !actual.containsAll(expected)) {
+        if (actual.join('\u0000') != expected.join('\u0000')) {
           mismatches.add(
             '${entry.key} ${locale.toLanguageTag()}: '
             'expected $expected, actual $actual',
@@ -567,7 +567,8 @@ void main() {
   });
 }
 
-Set<String> _placeholderNames(String value) => RegExp(r'\{([^{}]+)\}')
+List<String> _placeholderNames(String value) => (RegExp(r'\{([^{}]+)\}')
     .allMatches(value)
     .map((match) => match.group(1)!)
-    .toSet();
+    .toList()
+  ..sort());

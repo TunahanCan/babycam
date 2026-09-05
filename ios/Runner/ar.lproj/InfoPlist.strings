@@ -1,3 +1,3 @@
 "NSCameraUsageDescription" = "يستخدم MiuCam الكاميرا لبث غرفة الطفل ومسح رموز QR الخاصة بالاقتران.";
 "NSLocalNetworkUsageDescription" = "يستخدم MiuCam شبكتك المحلية للعثور على جهازي غرفة الطفل والوالدين وربطهما.";
-"NSMicrophoneUsageDescription" = "يستخدم MiuCam الميكروفون في وضع Server لبث صوت غرفة الطفل ورصد الأصوات المهمة.";
+"NSMicrophoneUsageDescription" = "يستخدم MiuCam الميكروفون لبث صوت غرفة الطفل ورصد الأصوات المهمة وإيصال صوتكِ إلى الغرفة.";

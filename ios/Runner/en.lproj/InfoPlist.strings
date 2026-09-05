@@ -1,3 +1,3 @@
 "NSCameraUsageDescription" = "MiuCam uses the camera to stream the nursery and scan pairing QR codes.";
 "NSLocalNetworkUsageDescription" = "MiuCam uses your local network to find and connect the nursery and parent devices.";
-"NSMicrophoneUsageDescription" = "MiuCam uses the microphone in Server mode to stream nursery audio and detect important sounds.";
+"NSMicrophoneUsageDescription" = "MiuCam uses the microphone to stream nursery audio, detect important sounds, and let you talk to the room.";

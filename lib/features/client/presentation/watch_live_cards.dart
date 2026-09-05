@@ -219,7 +219,7 @@ class _LatestAlertCard extends StatelessWidget {
                         item == null
                             ? strings.ui('lastAlert')
                             : '${strings.ui('lastAlert')} · '
-                                '${_formatAlertTime(item.timestampMs)}',
+                                '${formatAlertTimestamp(context, item.timestampMs)}',
                         style: const TextStyle(
                           color: _navy,
                           fontSize: 13,

@@ -1,0 +1,345 @@
+{
+  "date": "2026-09-05",
+  "device": "LG H870",
+  "android": "9 / API 28",
+  "physicalPhones": 1,
+  "sourceBaseCommit": "a006457c3a1fe551e0fc95d8b5f871eb55d88561",
+  "changes": "Uncommitted working tree; see associated report and regression tests",
+  "toolchain": {
+    "flutter": "3.44.2",
+    "dart": "3.12.2",
+    "java": "21 Amazon Corretto"
+  },
+  "artifacts": {
+    "soakApkSha256": "f29daae62ef5464fde9eff7980a6384acd93e0d61671f24f9d915a7d940472c1",
+    "profileApkSha256": "98f2782f2cb43ab30cd9bed4ce6468e7e1abbc4d3e19d5db92e0055cceead7e9",
+    "releaseAabSha256": "6cb4f71b4c3c09a8df2df443d98cd42d5b98eadef40b04717a485fb7f808cab0"
+  },
+  "automaticChecks": {
+    "flutterTests": 816,
+    "flutterTestFailures": 0,
+    "kotlinJvmTests": 7,
+    "analysis": "pass",
+    "format": "pass",
+    "profileBuild": "pass",
+    "releaseBundle": "built_unsigned"
+  },
+  "longRun": {
+    "scope": "host LAN receive; no physical playout latency claim",
+    "seconds": 1800,
+    "result": "pass",
+    "media": [
+      {
+        "kind": "video",
+        "result": "pass",
+        "failures": [],
+        "requestedDurationMs": 1800000,
+        "durationMs": 1800012,
+        "deadlineReached": true,
+        "earlyEof": false,
+        "bytes": 52735769,
+        "firstPayloadMs": 75,
+        "lastPayloadMs": 1799972,
+        "receiveGapP95Ms": 295,
+        "receiveGapMaxMs": 550,
+        "receiveGapP95Method": "bounded 1 ms histogram; overflow uses maximum",
+        "tailGapMs": 28,
+        "maxAllowedReceiveGapMs": 5000,
+        "gapsOver500Ms": 5,
+        "frames": 9411,
+        "dimensions": [
+          480,
+          640
+        ],
+        "invalidJpegs": 0,
+        "parserInvalidParts": 0
+      },
+      {
+        "kind": "audio",
+        "result": "pass",
+        "failures": [],
+        "requestedDurationMs": 1800000,
+        "durationMs": 1800012,
+        "deadlineReached": true,
+        "earlyEof": false,
+        "bytes": 57584640,
+        "firstPayloadMs": 76,
+        "lastPayloadMs": 1799999,
+        "receiveGapP95Ms": 35,
+        "receiveGapMaxMs": 397,
+        "receiveGapP95Method": "bounded 1 ms histogram; overflow uses maximum",
+        "tailGapMs": 1,
+        "maxAllowedReceiveGapMs": 1000,
+        "gapsOver500Ms": 0,
+        "sampleRate": 16000,
+        "channels": 1,
+        "samples": 28792320,
+        "audioDurationMs": 1799520.0,
+        "audioCoverageRatio": 0.9997755460786122,
+        "peak": 8564,
+        "rms": 41.192860732589736,
+        "clippedSamples": 0
+      },
+      {
+        "kind": "status",
+        "result": "pass",
+        "samples": 358,
+        "jsonlBytes": 1721304,
+        "maxStatusBytesPerSample": 16384,
+        "maxSamples": 512,
+        "pollIntervalMs": 5000
+      }
+    ],
+    "decodedJpegSamples": 95,
+    "resources": {
+      "memory": {
+        "count": 49,
+        "firstKiB": 218832,
+        "lastKiB": 216417,
+        "minKiB": 212068,
+        "maxKiB": 221695,
+        "slopeKiBPerMinute": 69.179833,
+        "slopeStandardErrorKiBPerMinute": 55.044587
+      },
+      "memoryGate": {
+        "source": "docs/physical_device_test_matrix.md",
+        "thresholdMiBPerTenMinutes": 1,
+        "comparison": "strictly less than",
+        "observedMiBPerTenMinutes": 0.675584,
+        "result": "pass"
+      },
+      "fitWindow": {
+        "resourceSamples": 59,
+        "missingPssSamples": 0,
+        "warmupExcludedSamples": 10,
+        "cleanupExcludedSamples": 0,
+        "fitSamples": 49,
+        "fitFirstSeconds": 305.481,
+        "fitLastSeconds": 1781.437
+      },
+      "device": {
+        "observedPids": [
+          "31781"
+        ],
+        "sampledProcessLosses": 0,
+        "batteryTemperatureStartC": 36.1,
+        "batteryTemperatureEndC": 40.1,
+        "batteryTemperatureMaxC": 40.1,
+        "profiles": [
+          "legacy_480p"
+        ],
+        "thermalStates": [
+          "unknown"
+        ],
+        "governorStates": [
+          "normal"
+        ]
+      },
+      "counterDelta": {
+        "audioAnalysisErrors": 0,
+        "motionAnalysisErrors": 0,
+        "audioAnalysisDropped": 0,
+        "audioTransportDropped": 0,
+        "videoTransportSkipped": 0,
+        "profileApplyFailures": 0,
+        "reconnects": 0
+      },
+      "connectionAnomalies": 0
+    }
+  },
+  "finalInstalledSmoke": {
+    "result": "pass",
+    "seconds": 60,
+    "media": [
+      {
+        "kind": "video",
+        "result": "pass",
+        "failures": [],
+        "requestedDurationMs": 60000,
+        "durationMs": 60011,
+        "deadlineReached": true,
+        "earlyEof": false,
+        "bytes": 1700741,
+        "firstPayloadMs": 514,
+        "lastPayloadMs": 59911,
+        "receiveGapP95Ms": 302,
+        "receiveGapMaxMs": 463,
+        "receiveGapP95Method": "bounded 1 ms histogram; overflow uses maximum",
+        "tailGapMs": 89,
+        "maxAllowedReceiveGapMs": 5000,
+        "gapsOver500Ms": 0,
+        "frames": 305,
+        "dimensions": [
+          480,
+          640
+        ],
+        "invalidJpegs": 0,
+        "parserInvalidParts": 0
+      },
+      {
+        "kind": "audio",
+        "result": "pass",
+        "failures": [],
+        "requestedDurationMs": 60000,
+        "durationMs": 60010,
+        "deadlineReached": true,
+        "earlyEof": false,
+        "bytes": 1919360,
+        "firstPayloadMs": 37,
+        "lastPayloadMs": 59997,
+        "receiveGapP95Ms": 33,
+        "receiveGapMaxMs": 339,
+        "receiveGapP95Method": "bounded 1 ms histogram; overflow uses maximum",
+        "tailGapMs": 3,
+        "maxAllowedReceiveGapMs": 1000,
+        "gapsOver500Ms": 0,
+        "sampleRate": 16000,
+        "channels": 1,
+        "samples": 959680,
+        "audioDurationMs": 59980.0,
+        "audioCoverageRatio": 1.0002835081633674,
+        "peak": 219,
+        "rms": 23.95938135299559,
+        "clippedSamples": 0
+      },
+      {
+        "kind": "status",
+        "result": "pass",
+        "samples": 12,
+        "jsonlBytes": 56907,
+        "maxStatusBytesPerSample": 16384,
+        "maxSamples": 512,
+        "pollIntervalMs": 5000
+      }
+    ],
+    "controlChecks": 10
+  },
+  "nativeAudio": {
+    "source": "controlled localhost HTTP WAV/PCM16 stream",
+    "runs": 3,
+    "approxSecondsPerRun": 3,
+    "restarts": 2,
+    "playbackHeadAdvanced": true,
+    "steadyStateUnderruns": 0,
+    "droppedWrites": 0,
+    "writeErrors": 0,
+    "scope": "HTTP parser, jitter buffer, real Android AudioTrack and restart; does not test LG microphone capture, external LAN, or acoustic fidelity"
+  },
+  "realNotification": "Native system notification shown, found active and cleaned; separate simulated alert algorithm/delivery regression tests",
+  "audioDetectionState": {
+    "result": "pass",
+    "checks": [
+      {
+        "case": "idle",
+        "path": "/status",
+        "audioDetection": {
+          "paused": false,
+          "reason": null
+        }
+      },
+      {
+        "case": "idle",
+        "path": "/comfort/state",
+        "audioDetection": {
+          "paused": false,
+          "reason": null
+        }
+      },
+      {
+        "case": "comfort_zero_volume",
+        "path": "/status",
+        "audioDetection": {
+          "paused": true,
+          "reason": "comfort"
+        }
+      },
+      {
+        "case": "comfort_zero_volume",
+        "path": "/comfort/state",
+        "audioDetection": {
+          "paused": true,
+          "reason": "comfort"
+        }
+      },
+      {
+        "case": "paused_comfort",
+        "path": "/status",
+        "audioDetection": {
+          "paused": false,
+          "reason": null
+        }
+      },
+      {
+        "case": "paused_comfort",
+        "path": "/comfort/state",
+        "audioDetection": {
+          "paused": false,
+          "reason": null
+        }
+      },
+      {
+        "case": "talk",
+        "path": "/status",
+        "audioDetection": {
+          "paused": true,
+          "reason": "talk"
+        }
+      },
+      {
+        "case": "talk",
+        "path": "/comfort/state",
+        "audioDetection": {
+          "paused": true,
+          "reason": "talk"
+        }
+      },
+      {
+        "case": "talk_stopped",
+        "path": "/status",
+        "audioDetection": {
+          "paused": false,
+          "reason": null
+        }
+      },
+      {
+        "case": "talk_stopped",
+        "path": "/comfort/state",
+        "audioDetection": {
+          "paused": false,
+          "reason": null
+        }
+      }
+    ]
+  },
+  "accessRevocation": {
+    "result": "pass",
+    "action": "server UI revoke all; only two host test clients existed",
+    "actionAt": "2026-09-05T18:44:22.497714+00:00",
+    "activeBefore": {
+      "videoClients": 1,
+      "audioClients": 1,
+      "webSocketClients": 1,
+      "activeStreamClients": 1
+    },
+    "trustedTokenStatusAfter": [
+      401,
+      401
+    ],
+    "scope": "HTTP trusted tokens rejected; active video/audio closed by server UI revocation",
+    "activeMediaClosed": true,
+    "probeExpectedResult": "fail: stream_ended_before_deadline after UI revocation",
+    "probeObservedResult": "fail"
+  },
+  "phoneFinalState": "latest profile installed; server role, preview off, camera/mic permission granted; two host credentials revoked",
+  "requiresNewQrPairing": true,
+  "productionReady": false,
+  "remainingLimits": [
+    "Intermittent user noise not acoustically reproduced with the original device pair",
+    "Comfort/talk pauses all cry/high-sound analysis, including comfort volume zero; now visible in UI",
+    "Second physical phone, current Android and iOS matrix incomplete",
+    "Two-hour release soak, physical startup/latency/underrun gates not measured",
+    "WebRTC pilot, real weak network/AP change, audio route/call interruption and critical thermal response incomplete",
+    "HTTP/WS has no TLS/E2E; server replay is bounded in RAM and no APNs/FCM process-death guarantee",
+    "Unsigned AAB; release signing and iOS build not completed"
+  ]
+}

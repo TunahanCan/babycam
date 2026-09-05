@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:miucam/analysis/alert/alert_config.dart';
 import 'package:miucam/analysis/alert/alert_engine.dart';
 import 'package:miucam/analysis/alert/alert_event.dart';
@@ -7,11 +9,123 @@ import 'package:miucam/analysis/alert/episode_notification_aggregator.dart';
 import 'package:miucam/analysis/audio/audio_analysis_result.dart';
 import 'package:miucam/analysis/audio/audio_calibration_state.dart';
 import 'package:miucam/analysis/video/motion_analysis_result.dart';
+import 'package:miucam/core/media/adaptive_media_profile.dart';
 import 'package:miucam/l10n/app_strings.dart';
+import 'package:miucam/core/protocol/alert_event_dto.dart';
+import 'package:miucam/services/server/alert_protocol_adapter.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+      'analysis alerts keep semantic payload across every sender/receiver locale',
+      () {
+    for (final senderLocale in AppStrings.supportedLocales) {
+      final engine = AlertEngine(
+        strings: AppStrings(senderLocale),
+        config: const AlertConfig(
+          emitLoudSoundAlerts: true,
+          emitGlobalLightChangeInfo: true,
+        ),
+      );
+      addTearDown(engine.dispose);
+      final episodeEngine = AlertEngine(
+        strings: AppStrings(senderLocale),
+        episodeAggregator: EpisodeBasedNotificationAggregator(),
+      );
+      addTearDown(episodeEngine.dispose);
+      AlertEvent? episodeEvent;
+      for (var timestampMs = 0; timestampMs <= 5000; timestampMs += 500) {
+        episodeEvent = episodeEngine
+                .onAudioResult(fakeAudioResult(timestampMs: timestampMs)) ??
+            episodeEvent;
+      }
+      final cases = [
+        (
+          event: episodeEvent!,
+          key: 'parentEpisodeCryAlert',
+          body: (AppStrings s) => s.parentEpisodeCryAlert(
+                seconds: 5,
+                networkTier: s.networkQualityLabel(NetworkQualityTier.unknown),
+              ),
+        ),
+        (
+          event: engine.onAudioResult(fakeAudioResult())!,
+          key: 'parentCryAlert',
+          body: (AppStrings s) => s.parentCryAlert(
+                confidencePercent: 80,
+                ambientDeltaDb: 15,
+                cryBandPercent: 60,
+                calibrated: true,
+              ),
+        ),
+        (
+          event: engine.onAudioResult(fakeAudioResult(
+            timestampMs: 2000,
+            isCryLikely: false,
+            isLoudSound: true,
+            dbfs: -12,
+          ))!,
+          key: 'parentLoudSoundAlert',
+          body: (AppStrings s) =>
+              s.parentLoudSoundAlert(dbfs: -12, ambientDeltaDb: 15),
+        ),
+        (
+          event: engine.onMotionResult(fakeMotionResult())!,
+          key: 'parentMotionAlert',
+          body: (AppStrings s) => s.parentMotionAlert(
+              scorePercent: 50, activeAreaPercent: 10, meanDiff: 12),
+        ),
+        (
+          event: engine.onMotionResult(fakeMotionResult(
+            timestampMs: 2000,
+            isMotion: false,
+            isGlobalLightChange: true,
+          ))!,
+          key: 'parentLightChangeAlert',
+          body: (AppStrings s) =>
+              s.parentLightChangeAlert(scorePercent: 50, lumaShift: 10),
+        ),
+      ];
+      for (final scenario in cases) {
+        final wire = jsonDecode(AlertProtocolAdapter.toJsonText(scenario.event))
+            as Map<String, dynamic>;
+        final received = AlertEventDto.fromJson(wire)!;
+        expect(received.messageKey, scenario.key);
+        expect(received.metadata, scenario.event.metadata);
+        expect(received.type, scenario.event.type.name);
+        for (final receiverLocale in AppStrings.supportedLocales) {
+          final receiverStrings = AppStrings(receiverLocale);
+          expect(received.localizedMessage(receiverStrings),
+              scenario.body(receiverStrings),
+              reason: '${scenario.key}: $senderLocale -> $receiverLocale');
+        }
+      }
+    }
+  });
+
+  test('unreliable audio breaks evidence before a later cry notification', () {
+    var reliable = true;
+    final engine = AlertEngine(
+      config: const AlertConfig(cryCooldownMs: 0),
+      audioReliableProvider: () => reliable,
+      episodeAggregator: EpisodeBasedNotificationAggregator(
+        suspectedCryMs: 500,
+        confirmedCryMs: 1500,
+      ),
+    );
+    addTearDown(engine.dispose);
+    expect(engine.onAudioResult(fakeAudioResult(timestampMs: 0)), isNull);
+    expect(engine.onAudioResult(fakeAudioResult(timestampMs: 500)), isNull);
+    reliable = false;
+    expect(engine.onAudioResult(fakeAudioResult(timestampMs: 1000)), isNull);
+    reliable = true;
+    expect(engine.onAudioResult(fakeAudioResult(timestampMs: 1500)), isNull);
+    expect(engine.onAudioResult(fakeAudioResult(timestampMs: 2000)), isNull);
+    expect(engine.onAudioResult(fakeAudioResult(timestampMs: 2500)), isNull);
+    expect(engine.onAudioResult(fakeAudioResult(timestampMs: 3000)), isNotNull);
+  });
+
   group('AlertEngine cry alerts', () {
     test('isCryLikely false produces no event', () {
       final engine = AlertEngine();

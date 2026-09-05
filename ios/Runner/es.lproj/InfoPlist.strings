@@ -1,3 +1,3 @@
 "NSCameraUsageDescription" = "MiuCam usa la cámara para transmitir la habitación del bebé y escanear códigos QR de vinculación.";
 "NSLocalNetworkUsageDescription" = "MiuCam usa tu red local para encontrar y conectar los dispositivos de la habitación y de los padres.";
-"NSMicrophoneUsageDescription" = "MiuCam usa el micrófono en modo Server para transmitir el audio de la habitación y detectar sonidos importantes.";
+"NSMicrophoneUsageDescription" = "MiuCam usa el micrófono para transmitir el audio de la habitación, detectar sonidos importantes y permitirte hablar con la habitación.";

@@ -12,9 +12,13 @@ import '../../../core/protocol/pairing_session.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../services/monetization/broadcast_access_service.dart';
 import '../../shared/presentation/media_profile_text.dart';
+import '../../shared/presentation/localized_time.dart';
+import '../../shared/presentation/localized_measurement_text.dart';
+import '../../shared/presentation/localized_room_name.dart';
 import '../client_runtime.dart';
 import '../controls/client_room_controls.dart';
 import '../controls/room_controls_panel.dart';
+import '../controls/room_audio_detection_notice.dart';
 import 'active_stream_session.dart';
 import 'client_media_stream_supervisor.dart';
 import 'client_stream_health_state.dart';
@@ -365,6 +369,26 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
             connection: connection,
             retryBusy: _streamRetryBusy,
           ),
+          if (state.session != null && widget.runtime.roomControls != null)
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 8,
+              child: ConstrainedBox(
+                key: const ValueKey('fullscreen-audio-detection-notice'),
+                constraints: BoxConstraints(
+                  maxHeight: (MediaQuery.sizeOf(context).height * .35)
+                      .clamp(0.0, 160.0),
+                ),
+                child: SingleChildScrollView(
+                  child: RoomAudioDetectionNotice(
+                    controls: widget.runtime.roomControls!,
+                    session: state.session!,
+                    dark: true,
+                  ),
+                ),
+              ),
+            ),
           Positioned(
             top: 12,
             left: 12,
@@ -413,14 +437,14 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
     final quality = state.networkQuality;
     final profile = state.mediaProfile;
     final connection = _WatchConnectionPresentation.fromState(state, strings);
-    final roomName = state.session?.deviceName.trim();
+    final roomName = state.session?.deviceName;
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 88),
         children: [
           _Top(
-            title: roomName?.isNotEmpty == true
-                ? roomName!
+            title: roomName != null
+                ? localizedRoomName(strings, roomName)
                 : strings.ui('liveWatching'),
             trailing: _ConnectedBadge(
               text: connection.label,
@@ -485,6 +509,11 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
             systemNotificationsEnabled:
                 widget.runtime.systemNotificationsEnabled,
           ),
+          if (state.session != null && widget.runtime.roomControls != null)
+            RoomAudioDetectionNotice(
+              controls: widget.runtime.roomControls!,
+              session: state.session!,
+            ),
           const SizedBox(height: 18),
           _SectionLabel(
             icon: Icons.tune_rounded,

@@ -7,6 +7,63 @@ import 'package:miucam/features/server/media/server_media_source.dart';
 import 'package:miucam/services/platform/android_service_media_source.dart';
 
 void main() {
+  test('native torch is unavailable before video capture and awaits hardware',
+      () async {
+    final bridge = _FakeBridge();
+    final source = AndroidServiceMediaSource(bridge: bridge);
+    addTearDown(bridge.close);
+    addTearDown(source.stop);
+
+    expect(await source.setTorchEnabled(true), isFalse);
+    expect(bridge.torchRequests, isEmpty);
+    await source.reconcile(
+      video: true,
+      audio: false,
+      onVideoFrame: (_) {},
+      onAudioChunk: (_) {},
+    );
+
+    bridge.torchCompletion = Completer<bool>();
+    var completed = false;
+    final enabled = source.setTorchEnabled(true).then((value) {
+      completed = true;
+      return value;
+    });
+    await _waitUntil(() => bridge.torchRequests.isNotEmpty);
+    expect(completed, isFalse);
+    bridge.torchCompletion!.complete(true);
+    expect(await enabled, isTrue);
+
+    bridge.torchCompletion = null;
+    expect(await source.setTorchEnabled(false), isTrue);
+    expect(bridge.torchRequests, [true, false]);
+  });
+
+  test('native torch failure or timeout returns the screen fallback signal',
+      () async {
+    final bridge = _FakeBridge();
+    final source = AndroidServiceMediaSource(
+      bridge: bridge,
+      nativeOperationTimeout: const Duration(milliseconds: 50),
+    );
+    addTearDown(bridge.close);
+    addTearDown(source.stop);
+    await source.reconcile(
+      video: true,
+      audio: false,
+      onVideoFrame: (_) {},
+      onAudioChunk: (_) {},
+    );
+
+    bridge.torchCompletion = Completer<bool>()..complete(false);
+    expect(await source.setTorchEnabled(true), isFalse);
+    bridge.torchCompletion = Completer<bool>();
+    expect(await source.setTorchEnabled(true), isFalse);
+    bridge.torchCompletion!.complete(false);
+    bridge.torchCompletion = null;
+    expect(await source.setTorchEnabled(false), isTrue);
+  });
+
   test('forwards service JPEG and PCM with exact independent demand', () async {
     final bridge = _FakeBridge();
     final source = AndroidServiceMediaSource(bridge: bridge);
@@ -791,13 +848,25 @@ Future<void> _waitUntil(
   }
 }
 
-class _FakeBridge implements AndroidServiceMediaBridgePort {
+class _FakeBridge
+    implements
+        AndroidServiceMediaBridgePort,
+        AndroidServiceMediaTorchBridgePort {
   final _eventControllers = <StreamController<Object?>>[];
   final _readyCallNotifications = StreamController<int>.broadcast(sync: true);
   StreamController<Object?>? _currentEvents;
   final consumerDemands = <({bool video, bool audio, bool encodeVideo})>[];
   final readyDemands = <({bool video, bool audio})>[];
   final mediaPolicies = <({int jpegQuality, int maxVideoFps})>[];
+  final torchRequests = <bool>[];
+  Completer<bool>? torchCompletion;
+
+  @override
+  Future<bool> setTorchEnabled(bool enabled) async {
+    torchRequests.add(enabled);
+    return torchCompletion?.future ?? Future<bool>.value(true);
+  }
+
   int attachCalls = 0;
   int detachCalls = 0;
   int hardwareDemandMutations = 0;

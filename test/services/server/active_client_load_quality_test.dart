@@ -100,6 +100,7 @@ void main() {
         watchActive: true,
       ),
     );
-    expect(oneStepUpgrade.height, 720);
+    expect(oneStepUpgrade.height, 360);
+    expect(oneStepUpgrade.targetFps, 8);
   });
 }

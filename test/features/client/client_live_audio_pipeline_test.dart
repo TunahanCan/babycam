@@ -7,6 +7,52 @@ import 'package:miucam/features/client/media/client_live_audio_pipeline.dart';
 import 'package:miucam/features/client/media/pcm_audio_output.dart';
 
 void main() {
+  for (final hangs in [false, true]) {
+    test(
+        'periodic native write ${hangs ? 'timeout' : 'error'} reconnects audio',
+        () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        request.response.bufferOutput = false;
+        request.response.headers
+          ..contentType = ContentType('audio', 'wav')
+          ..chunkedTransferEncoding = true;
+        request.response
+          ..add(_wavHeader(pcmBytes: 0))
+          ..add(_pcmFrames(12));
+        await request.response.flush();
+        // Keep the network healthy/open; only the native output fails.
+      });
+      final sink = _FailingPcmAudioSink(hangs: hangs);
+      final errors = <Object>[];
+      final pipeline = ClientLiveAudioPipeline(
+        audioOutput: sink,
+        connectTimeout: const Duration(milliseconds: 100),
+        retryDelay: const Duration(milliseconds: 1),
+      );
+      addTearDown(pipeline.stop);
+      await pipeline.start(
+        uri: Uri(
+          scheme: 'http',
+          host: InternetAddress.loopbackIPv4.address,
+          port: server.port,
+          path: '/audio',
+        ),
+        pairedServerHost: InternetAddress.loopbackIPv4.address,
+        pairedServerPort: server.port,
+        onError: errors.add,
+      );
+
+      await _waitUntil(() => sink.starts.length >= 2 && sink.writes.length > 8);
+
+      expect(errors, hasLength(1));
+      expect(
+          errors.single, hangs ? isA<TimeoutException>() : isA<StateError>());
+      expect(sink.stops, greaterThanOrEqualTo(1));
+    });
+  }
+
   test('Bearer token ile WAV streami acar ve PCM native sinke yazar', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
@@ -544,5 +590,21 @@ class _DelayedStartPcmAudioSink extends _FakePcmAudioSink {
     starts.add((sampleRate: sampleRate, channels: channels));
     if (!startEntered.isCompleted) startEntered.complete();
     await releaseStart.future;
+  }
+}
+
+class _FailingPcmAudioSink extends _FakePcmAudioSink {
+  _FailingPcmAudioSink({required this.hangs});
+
+  final bool hangs;
+
+  @override
+  Future<bool> write(Uint8List pcm16le) async {
+    await super.write(pcm16le);
+    if (writes.length == 8) {
+      if (hangs) return Completer<bool>().future;
+      throw StateError('native audio device disconnected');
+    }
+    return true;
   }
 }

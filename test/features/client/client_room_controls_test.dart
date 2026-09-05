@@ -12,6 +12,44 @@ import 'package:miucam/features/server/media/microphone_capture_service.dart';
 import 'package:record/record.dart';
 
 void main() {
+  test('room detection pause reflects another parent talk and clears on idle',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    var paused = true;
+    server.listen((request) async {
+      expect(request.uri.path, MiuCamProtocolV2.comfortState);
+      expect(request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer trusted-token');
+      await _json(request.response, {
+        'state': {
+          'playing': false,
+          'volume': 0,
+          'loop': true,
+          'updatedAtMs': 1,
+        },
+        'audioDetection': {'paused': paused, 'reason': paused ? 'talk' : null},
+      });
+    });
+    final controls = ClientRoomControls(
+      microphone: MicrophoneCaptureService(
+        recorder: _FakeRecorder(),
+        sampleRate: 16000,
+        channels: 1,
+      ),
+    );
+    addTearDown(controls.dispose);
+
+    await controls.refreshComfort(_session(server.port));
+    expect(controls.currentState.talking, isFalse);
+    expect(controls.currentState.comfort?.playing, isFalse);
+    expect(controls.currentState.isAudioDetectionPaused, isTrue);
+
+    paused = false;
+    await controls.refreshComfort(_session(server.port));
+    expect(controls.currentState.isAudioDetectionPaused, isFalse);
+  });
+
   test('comfort command and microphone PCM reach the room control endpoints',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

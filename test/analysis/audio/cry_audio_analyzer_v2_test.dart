@@ -9,6 +9,45 @@ import 'test_audio_generators.dart';
 
 void main() {
   const sr = 16000;
+  test('adaptive ambient keeps the calibrated digital-silence floor', () {
+    final analyzer = CryAudioAnalyzerV2(
+      config: const AudioAnalysisConfig(ambientUpdateAlpha: .2),
+    )..restoreCalibratedAmbient(-65);
+
+    analyzer.addChunk(AudioChunk(
+      pcm16le: Uint8List(sr * 2 * 10),
+      sampleRate: sr,
+      channels: 1,
+      timestampMs: 10000,
+    ));
+
+    expect(analyzer.calibratedAmbientDbfs, greaterThanOrEqualTo(-65));
+  });
+
+  test('recalibration requires a fresh window after the request', () {
+    final analyzer = CryAudioAnalyzerV2(
+      config: const AudioAnalysisConfig(calibrationMs: 1000),
+    );
+    analyzer.addChunk(AudioChunk(
+      pcm16le: Uint8List(sr * 2),
+      sampleRate: sr,
+      channels: 1,
+      timestampMs: 1000,
+    ));
+    analyzer.startCalibration(timestampMs: 1000);
+
+    final results = analyzer.addChunk(AudioChunk(
+      pcm16le: Uint8List(sr * 2 ~/ 4),
+      sampleRate: sr,
+      channels: 1,
+      timestampMs: 1250,
+    ));
+
+    expect(results, isEmpty);
+    expect(analyzer.calibrationState, AudioCalibrationState.calibrating);
+    expect(analyzer.diagnostics()['calibrationAcceptedMs'], 0);
+  });
+
   test('ekran cry eşiği için off eşiği daima daha düşük türetilir', () {
     expect(AudioAnalysisConfig.hysteresisOffThreshold(.20), closeTo(.14, 1e-9));
     expect(AudioAnalysisConfig.hysteresisOffThreshold(.50), closeTo(.35, 1e-9));

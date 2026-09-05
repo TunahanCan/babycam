@@ -9,6 +9,40 @@ import 'package:miucam/core/media/adaptive_media_profile.dart';
 import 'package:miucam/l10n/app_strings.dart';
 
 void main() {
+  test('unreliable input cannot confirm or preserve an active episode', () {
+    final aggregator = EpisodeBasedNotificationAggregator(
+      suspectedCryMs: 500,
+      confirmedCryMs: 1000,
+    );
+    aggregator.onAudioResult(_audio(timestampMs: 0));
+    aggregator.onAudioResult(_audio(timestampMs: 500));
+
+    expect(
+        aggregator.onAudioResult(_audio(timestampMs: 1000),
+            audioReliable: false),
+        isNull);
+    expect(aggregator.state, BabyEventEpisodeState.quiet);
+    expect(aggregator.onAudioResult(_audio(timestampMs: 1500)), isNull);
+    expect(aggregator.onAudioResult(_audio(timestampMs: 2000)), isNull);
+  });
+
+  test('motion bursts count activity transitions instead of analyzed frames',
+      () {
+    final aggregator = EpisodeBasedNotificationAggregator();
+    aggregator.onMotionResult(_motion(timestampMs: 1000));
+    aggregator.onMotionResult(_motion(timestampMs: 1500));
+    aggregator.onMotionResult(_motion(timestampMs: 2000));
+    BabyEventEpisode? episode;
+    for (var timestampMs = 2000; timestampMs <= 7000; timestampMs += 500) {
+      episode =
+          aggregator.onAudioResult(_audio(timestampMs: timestampMs)) ?? episode;
+    }
+
+    expect(episode, isNotNull);
+    expect(episode!.motionBursts, 1);
+    expect(episode.lastMotionAtMs, 2000);
+  });
+
   test('cry episode suspected -> confirmed ve metadata üretir', () {
     final aggregator = EpisodeBasedNotificationAggregator();
 

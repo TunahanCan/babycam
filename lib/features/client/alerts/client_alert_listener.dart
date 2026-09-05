@@ -15,10 +15,12 @@ class ClientAlertListener {
     this.healthState,
     this.reconnectDelay = const Duration(seconds: 1),
     this.maxReconnectDelay = const Duration(seconds: 8),
+    this.pingInterval = const Duration(seconds: 15),
     this.onAlert,
     HttpClient Function(PairingSession session)? clientFactory,
     RetryPolicy? retryPolicy,
-  })  : _clientFactory = clientFactory,
+  })  : assert(pingInterval > Duration.zero),
+        _clientFactory = clientFactory,
         _retryPolicy = retryPolicy ??
             ExponentialBackoffPolicy(
               initialDelay: reconnectDelay,
@@ -28,6 +30,7 @@ class ClientAlertListener {
   final ClientStreamHealthState? healthState;
   final Duration reconnectDelay;
   final Duration maxReconnectDelay;
+  final Duration pingInterval;
   final FutureOr<void> Function(AlertEventDto alert)? onAlert;
   final HttpClient Function(PairingSession session)? _clientFactory;
   final RetryPolicy _retryPolicy;
@@ -161,6 +164,9 @@ class ClientAlertListener {
         return;
       }
       _socket = socket;
+      // TCP can remain open after Wi-Fi disappears. A missing pong closes
+      // that half-open connection so queued alerts can replay after reconnect.
+      socket.pingInterval = pingInterval;
       _setConnected(true);
       healthState?.markWsConnected();
       final first = _firstConnection;

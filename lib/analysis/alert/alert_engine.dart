@@ -107,7 +107,12 @@ class AlertEngine {
   /// Handles one audio analysis result and returns the emitted alert, if any.
   AlertEvent? onAudioResult(AudioAnalysisResult result) {
     final audioReliable = _audioReliableProvider?.call() ?? true;
-    if (!audioReliable) return null;
+    if (!audioReliable) {
+      // Ignoring a bad interval without clearing it would join the valid
+      // evidence on either side into an apparently continuous cry episode.
+      markAudioDiscontinuity();
+      return null;
+    }
     final episode = _episodeAggregator?.onAudioResult(
       result,
       streamQualityTier:

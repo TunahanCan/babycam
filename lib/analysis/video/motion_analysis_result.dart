@@ -30,6 +30,12 @@ class MotionAnalysisResult {
   final bool invalidFrame;
   final int processingTimeMicros;
 
+  /// Frame-average residual motion in the same 0..1 units as capture samples.
+  /// meanDiff describes only active pixels, so weight it by their area first.
+  double get normalizedMotionEnergy => invalidFrame || isGlobalLightChange
+      ? 0
+      : (activeAreaRatio * meanDiff / 255).clamp(0.0, 1.0);
+
   Map<String, Object?> toJson() => {
         'timestampMs': timestampMs,
         'score': score,

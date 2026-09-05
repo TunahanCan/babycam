@@ -1,0 +1,191 @@
+{
+  "date": "2026-09-05",
+  "device": "LG H870 / Android 9 / API 28",
+  "baseCommit": "a006457c3a1fe551e0fc95d8b5f871eb55d88561",
+  "changes": "uncommitted working tree; this report follows the earlier LG validation",
+  "supportedLocales": [
+    "tr",
+    "en-US",
+    "zh",
+    "hi",
+    "es",
+    "fr",
+    "de",
+    "ar-SA",
+    "ar-QA"
+  ],
+  "flutterTests": {
+    "passed": 889,
+    "failed": 0
+  },
+  "kotlinJvmTests": {
+    "passed": 7,
+    "failed": 0
+  },
+  "analysis": "pass",
+  "format": "pass",
+  "producerReceiverMatrix": {
+    "senderLocales": 9,
+    "receiverLocales": 9,
+    "alarmPaths": [
+      "cry",
+      "cryEpisode",
+      "loudSound",
+      "motion",
+      "lightChange"
+    ],
+    "combinations": 405,
+    "result": "pass",
+    "scope": "controlled analysis input to actual producer -> adapter JSON -> DTO -> parent-localized output"
+  },
+  "nativeLocaleBefore": {
+    "osLocale": "tr-TR",
+    "appLocaleSelected": "en-US",
+    "notifications": [
+      {
+        "record": "NotificationRecord(0x05285027: pkg=com.miucam.app user=UserHandle{0} id=4101 tag=null importance=2 key=0|com.miucam.app|4101|null|10304appImportanceLocked=false: Notification(channel=miucam_server_runtime pri=0 contentView=null vibrate=null sound=null defaults=0x0 flags=0x6a color=0x00000000 backgroundColor=0x00000000 category=service vis=PRIVATE))",
+        "text": [
+          "android.title=String (MiuCam yerel sunucusu etkin)",
+          "android.text=String (Yerel sunucu ve Wi-Fi bağlantısı etkin tutuluyor.)"
+        ]
+      }
+    ]
+  },
+  "nativeLocaleAfter": [
+    {
+      "result": "pass",
+      "appLocale": "en-US",
+      "osConfig": "config: tr-rTR-ldltr-sw360dp-w360dp-h644dp-normal-long-notround-highdr-nowidecg-port-notnight-xxxhdpi-finger-keysexposed-nokeys-navhidden-nonav-2672x1440-v28",
+      "actual": [
+        {
+          "title": "MiuCam local server is active",
+          "text": "The local server and Wi-Fi connection are being kept active."
+        }
+      ],
+      "expected": {
+        "title": "MiuCam local server is active",
+        "text": "The local server and Wi-Fi connection are being kept active."
+      },
+      "scope": "Real Android foreground-service notification; no simulated baby-alert delivery claim"
+    },
+    {
+      "result": "pass",
+      "appLocale": "ar-QA",
+      "osConfig": "config: tr-rTR-ldltr-sw360dp-w360dp-h644dp-normal-long-notround-highdr-nowidecg-port-notnight-xxxhdpi-finger-keysexposed-nokeys-navhidden-nonav-2672x1440-v28",
+      "actual": [
+        {
+          "title": "خادم MiuCam المحلي نشط",
+          "text": "يتم إبقاء الخادم المحلي واتصال Wi-Fi نشطين."
+        }
+      ],
+      "expected": {
+        "title": "خادم MiuCam المحلي نشط",
+        "text": "يتم إبقاء الخادم المحلي واتصال Wi-Fi نشطين."
+      },
+      "scope": "Real Android foreground-service notification; no simulated baby-alert delivery claim"
+    },
+    {
+      "result": "pass",
+      "appLocale": "system",
+      "osConfig": "config: tr-rTR-ldltr-sw360dp-w360dp-h644dp-normal-long-notround-highdr-nowidecg-port-notnight-xxxhdpi-finger-keysexposed-nokeys-navhidden-nonav-2672x1440-v28",
+      "actual": [
+        {
+          "title": "MiuCam yerel sunucusu etkin",
+          "text": "Yerel sunucu ve Wi-Fi bağlantısı etkin tutuluyor."
+        }
+      ],
+      "expected": {
+        "title": "MiuCam yerel sunucusu etkin",
+        "text": "Yerel sunucu ve Wi-Fi bağlantısı etkin tutuluyor."
+      },
+      "scope": "Real Android foreground-service notification; no simulated baby-alert delivery claim"
+    }
+  ],
+  "finalLan": {
+    "result": "pass",
+    "media": [
+      {
+        "kind": "video",
+        "result": "pass",
+        "failures": [],
+        "requestedDurationMs": 60000,
+        "durationMs": 60007,
+        "deadlineReached": true,
+        "earlyEof": false,
+        "bytes": 1686194,
+        "firstPayloadMs": 522,
+        "lastPayloadMs": 59930,
+        "receiveGapP95Ms": 296,
+        "receiveGapMaxMs": 411,
+        "receiveGapP95Method": "bounded 1 ms histogram; overflow uses maximum",
+        "tailGapMs": 70,
+        "maxAllowedReceiveGapMs": 5000,
+        "gapsOver500Ms": 0,
+        "frames": 303,
+        "dimensions": [
+          480,
+          640
+        ],
+        "invalidJpegs": 0,
+        "parserInvalidParts": 0
+      },
+      {
+        "kind": "audio",
+        "result": "pass",
+        "failures": [],
+        "requestedDurationMs": 60000,
+        "durationMs": 60007,
+        "deadlineReached": true,
+        "earlyEof": false,
+        "bytes": 1919360,
+        "firstPayloadMs": 34,
+        "lastPayloadMs": 60007,
+        "receiveGapP95Ms": 34,
+        "receiveGapMaxMs": 87,
+        "receiveGapP95Method": "bounded 1 ms histogram; overflow uses maximum",
+        "tailGapMs": 0,
+        "maxAllowedReceiveGapMs": 1000,
+        "gapsOver500Ms": 0,
+        "sampleRate": 16000,
+        "channels": 1,
+        "samples": 959680,
+        "audioDurationMs": 59980.0,
+        "audioCoverageRatio": 1.000233465630524,
+        "peak": 207,
+        "rms": 22.940561039825088,
+        "clippedSamples": 0
+      },
+      {
+        "kind": "status",
+        "result": "pass",
+        "samples": 12,
+        "jsonlBytes": 56874,
+        "maxStatusBytesPerSample": 16384,
+        "maxSamples": 512,
+        "pollIntervalMs": 5000
+      }
+    ],
+    "events": {},
+    "scope": "host LAN receive; no physical playout latency claim"
+  },
+  "cleanup": {
+    "result": "pass",
+    "removed": "only host test client",
+    "statusAfter": 401
+  },
+  "phoneFinalState": "latest profile APK; server role; original system locale preference restored; temporary host credentials revoked and file deleted",
+  "artifacts": {
+    "profileApkSha256": "cb38afb4c425870a316ba4ac0eaefe8694bb826066b5e5628510b761874fdca8",
+    "unsignedReleaseAabSha256": "dd468300e572c7be30dc8f028eaca9067801b8e24051aabd46de966c9cfe5818"
+  },
+  "limits": [
+    "No clinical validation or measured sensitivity/specificity on a real baby-audio dataset",
+    "Comfort/talk still suspends cry/high-sound analysis; visible pause notice retained",
+    "Physical notification checks are foreground-service notifications; simulated baby-alert cases are automated tests",
+    "Only English, Arabic-QA and restored system Turkish physically sampled; all 9 locales covered automatically",
+    "No new 30-minute/2-hour soak after these analysis changes",
+    "iOS resources checked, but no iOS build/device test on Linux",
+    "Share text localized; native sharing stub remains",
+    "Unsigned AAB and earlier TLS/E2E/process-death/multi-device release gates remain open"
+  ]
+}

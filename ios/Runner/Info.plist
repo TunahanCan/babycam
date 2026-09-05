@@ -40,7 +40,7 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>MiuCam uses your local network to find and connect the nursery and parent devices.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>MiuCam uses the microphone in Server mode to stream nursery audio and detect important sounds.</string>
+	<string>MiuCam uses the microphone to stream nursery audio, detect important sounds, and let you talk to the room.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

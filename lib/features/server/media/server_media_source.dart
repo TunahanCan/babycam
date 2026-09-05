@@ -111,6 +111,12 @@ abstract interface class ServerMediaPolicySink {
   });
 }
 
+/// Optional torch control for capture engines that own the camera natively.
+/// Returns true only after the requested hardware state has been applied.
+abstract interface class ServerMediaTorchSink {
+  Future<bool> setTorchEnabled(bool enabled);
+}
+
 class ServerMediaSourceSnapshot {
   const ServerMediaSourceSnapshot({
     required this.active,

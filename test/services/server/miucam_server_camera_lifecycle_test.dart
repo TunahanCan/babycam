@@ -31,7 +31,9 @@ void main() {
       onAlert: (_) {},
       mediaPermissions: const _GrantedMediaPermissions(),
       deviceTier: DeviceCapabilityTier.balanced,
-      mediaLifecycleOperationTimeout: const Duration(milliseconds: 30),
+      // The platform fake controls which operation hangs. Leave ordinary
+      // asynchronous initialization enough headroom during parallel builds.
+      mediaLifecycleOperationTimeout: const Duration(milliseconds: 500),
     );
   });
 
@@ -49,15 +51,17 @@ void main() {
   test('stopped hanging start does not capture successor start lease',
       () async {
     cameraPlatform.hangInitializeCall(1);
-    final firstStart = server.startVideoRuntime();
+    // Observe errors immediately: the intentionally hanging start can time
+    // out while we are still awaiting its successor under CI scheduling.
+    final firstStartError = _errorOf(server.startVideoRuntime());
     await _waitUntil(() => cameraPlatform.initializeCalls == 1);
 
-    final stopping = server.stopVideoRuntime();
+    final stoppingError = _errorOf(server.stopVideoRuntime());
     final successorStart = server.startVideoRuntime();
-    await successorStart.timeout(const Duration(seconds: 1));
+    await successorStart.timeout(const Duration(seconds: 3));
 
-    expect(await _errorOf(firstStart), isA<TimeoutException>());
-    expect(await _errorOf(stopping), isA<TimeoutException>());
+    expect(await firstStartError, isA<TimeoutException>());
+    expect(await stoppingError, isA<TimeoutException>());
     expect(server.cameraController?.value.isInitialized, isTrue);
     expect(cameraPlatform.initializeCalls, 2);
     expect(cameraPlatform.disposedCameraIds, isNot(contains(2)));
@@ -75,20 +79,21 @@ void main() {
     expect(cameraPlatform.initializeCalls, 1);
 
     cameraPlatform.hangInitializeCall(2);
-    final profileRestart = server.restartCameraWithProfileForTesting(
+    final profileRestartError =
+        _errorOf(server.restartCameraWithProfileForTesting(
       server.activeMediaProfile.copyWith(
         id: 'test_low_profile',
         cameraPresetKey: 'low',
       ),
-    );
+    ));
     await _waitUntil(() => cameraPlatform.initializeCalls == 2);
 
-    final stopping = server.stopVideoRuntime();
+    final stoppingError = _errorOf(server.stopVideoRuntime());
     final successorStart = server.startVideoRuntime();
-    await successorStart.timeout(const Duration(seconds: 1));
+    await successorStart.timeout(const Duration(seconds: 3));
 
-    expect(await _errorOf(profileRestart), isA<TimeoutException>());
-    expect(await _errorOf(stopping), isA<TimeoutException>());
+    expect(await profileRestartError, isA<TimeoutException>());
+    expect(await stoppingError, isA<TimeoutException>());
     expect(cameraPlatform.initializeCalls, 3);
     expect(cameraPlatform.disposedCameraIds, isNot(contains(3)));
 
@@ -133,7 +138,7 @@ Future<Object?> _errorOf(Future<void> operation) async {
 
 Future<void> _waitUntil(
   bool Function() condition, {
-  Duration timeout = const Duration(seconds: 1),
+  Duration timeout = const Duration(seconds: 3),
 }) async {
   final stopwatch = Stopwatch()..start();
   while (!condition()) {
