@@ -315,6 +315,7 @@ class _RoomCard extends StatelessWidget {
     required this.alertsActive,
     required this.alertsConnected,
     required this.systemNotificationsEnabled,
+    this.broadcastLocked = false,
     this.onWatch,
   });
 
@@ -324,12 +325,14 @@ class _RoomCard extends StatelessWidget {
   final bool alertsActive;
   final bool alertsConnected;
   final bool? systemNotificationsEnabled;
+  final bool broadcastLocked;
   final VoidCallback? onWatch;
 
   @override
   Widget build(BuildContext context) {
-    final alertsReady = alertsActive && alertsConnected;
-    final alertsReconnecting = alertsActive && !alertsConnected;
+    final alertsReady = !broadcastLocked && alertsActive && alertsConnected;
+    final alertsReconnecting =
+        !broadcastLocked && alertsActive && !alertsConnected;
     final inAppOnly = alertsReady && systemNotificationsEnabled == false;
     return Container(
       padding: const EdgeInsets.all(18),
@@ -403,13 +406,15 @@ class _RoomCard extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  inAppOnly
-                      ? Icons.notifications_none_rounded
-                      : alertsReady
-                          ? Icons.notifications_active_rounded
-                          : alertsReconnecting
-                              ? Icons.sync_rounded
-                              : Icons.notifications_off_outlined,
+                  broadcastLocked
+                      ? Icons.lock_outline_rounded
+                      : inAppOnly
+                          ? Icons.notifications_none_rounded
+                          : alertsReady
+                              ? Icons.notifications_active_rounded
+                              : alertsReconnecting
+                                  ? Icons.sync_rounded
+                                  : Icons.notifications_off_outlined,
                   color: inAppOnly
                       ? MiuCamDesignTokens.amber
                       : alertsReady
@@ -422,14 +427,19 @@ class _RoomCard extends StatelessWidget {
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
-                    inAppOnly
-                        ? AppStrings.of(context).ui('notificationsInAppOnly')
-                        : alertsReady
-                            ? AppStrings.of(context).ui('alertConnectionOn')
-                            : alertsReconnecting
-                                ? AppStrings.of(context)
-                                    .ui('clientTitleReconnecting')
-                                : AppStrings.of(context).ui('notificationsOff'),
+                    broadcastLocked
+                        ? AppStrings.of(context)
+                            .ui('broadcastAccessRemoteLockedBody')
+                        : inAppOnly
+                            ? AppStrings.of(context)
+                                .ui('notificationsInAppOnly')
+                            : alertsReady
+                                ? AppStrings.of(context).ui('alertConnectionOn')
+                                : alertsReconnecting
+                                    ? AppStrings.of(context)
+                                        .ui('clientTitleReconnecting')
+                                    : AppStrings.of(context)
+                                        .ui('notificationsOff'),
                     style: const TextStyle(
                       color: MiuCamDesignTokens.navy,
                       fontSize: 13,

@@ -265,6 +265,21 @@ BroadcastPurchaseVerifier defaultBroadcastPurchaseVerifier() {
   return TrustedBackendPurchaseVerifier(endpoint: endpoint);
 }
 
+/// Reject an incomplete billing build before opening a chargeable store sheet.
+/// Store receipts still require verification after checkout and on restore.
+bool isPurchaseVerifierConfigured(BroadcastPurchaseVerifier verifier) {
+  if (verifier is UnavailableBroadcastPurchaseVerifier ||
+      verifier is StorePayloadPurchaseVerifier) {
+    return false;
+  }
+  if (verifier is TrustedBackendPurchaseVerifier) {
+    return verifier.endpoint.hasAuthority &&
+        (verifier.endpoint.scheme == 'https' ||
+            verifier.allowInsecureEndpointForTesting);
+  }
+  return true;
+}
+
 BroadcastPurchaseVerification? validatePurchaseEnvelope(
   PurchaseDetails purchase, {
   required String expectedProductId,

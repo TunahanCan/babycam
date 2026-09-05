@@ -424,8 +424,19 @@ class FlutterWebRtcServerGateway
     MediaStream? localStream,
   }) async {
     if (localStream != null) {
+      // Mute every source before awaiting plugin cleanup. A stuck native stop
+      // must not keep sending the room's audio/video during access removal.
+      final tracks = localStream.getTracks();
+      for (final track in tracks) {
+        // The native enabled setter dispatches an unreturned plugin Future.
+        // Capture that asynchronous failure too, then continue bounded stop.
+        runZonedGuarded<void>(
+          () => track.enabled = false,
+          (error, _) => onLog?.call('WebRTC track mute failed: $error'),
+        );
+      }
       await Future.wait([
-        for (final track in localStream.getTracks())
+        for (final track in tracks)
           _boundedCleanup(
             'track stop',
             track.stop,

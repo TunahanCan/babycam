@@ -184,6 +184,12 @@ class MiuCamServer {
     _activeClientRegistry.bindExpiredSessionReadyCallback(
       _scheduleExpiredClientCleanup,
     );
+    _activeClientRegistry.bindLastMediaConnectionDetached((clientId) {
+      unawaited(
+          _pauseStreamBroadcastIfNoMedia(clientId).catchError((Object error) {
+        onLog('Broadcast transport accounting failed ($clientId): $error');
+      }));
+    });
     _resourcePolicyCoordinator = ServerResourcePolicyCoordinator(
       governor: mediaResourceGovernor ?? const MediaResourceGovernor(),
       monitoringRequired: _isResourceMonitoringRequired,
@@ -208,6 +214,8 @@ class MiuCamServer {
       writeConnectionLimitError: _writeConnectionLimitError,
       onClientConnected: onAlertClientConnected,
       onClientDisconnected: onAlertClientDisconnected,
+      onTransportConnected: _beginAlertBroadcast,
+      onTransportDisconnected: _endAlertBroadcast,
       isDisposed: () => _disposed,
       connectedLog: strings.webSocketClientConnected,
       onLog: onLog,
@@ -220,7 +228,7 @@ class MiuCamServer {
           _effectiveLocalNetworkGuard.isAllowedRemoteAddress(address),
       isEventSocketPath: (path) =>
           path == '/ws/stream' || path == protocol_v2.MiuCamProtocolV2.events,
-      handleEventSocket: _eventSockets.handleUpgrade,
+      handleEventSocket: _handleMeteredEventUpgrade,
       authorize: _authorizeRoute,
       writeLandingPage: _writeLandingPage,
       onLog: onLog,
@@ -313,6 +321,8 @@ class MiuCamServer {
   final MediaSessionTelemetry _mediaTelemetry;
   Timer? _broadcastAccessTimer;
   int _broadcastAccessTimerGeneration = 0;
+  bool _broadcastAccessExpiryRunning = false;
+  final _broadcastEventClientIds = <String>{};
   BatterySnapshot _serverBattery = BatterySnapshot.unknown();
   final _clientBatterySnapshots = <String, BatterySnapshot>{};
   final _webRtcOfferGenerations = <String, int>{};
@@ -927,6 +937,18 @@ class MiuCamServer {
       await request.response.close();
       return null;
     }
+    if (await _rejectLockedBroadcast(request)) return null;
+    // The access snapshot can await storage/catalog work. Ownership must still
+    // match after that await, including in the final post-capture check.
+    final currentClientId =
+        _streamTokenClientId(request.uri.queryParameters['streamToken']);
+    final currentTrusted = _authGuard.trusted(request);
+    if (currentClientId != clientId ||
+        (currentTrusted != null && currentTrusted.clientId != clientId)) {
+      request.response.statusCode = HttpStatus.unauthorized;
+      await request.response.close();
+      return null;
+    }
     return clientId;
   }
 
@@ -934,8 +956,16 @@ class MiuCamServer {
     HttpResponse response,
     String clientId,
   ) async {
+    StreamAttachResult? lease;
     try {
-      return _activeClientRegistry.attachStream(clientId);
+      lease = _activeClientRegistry.attachStream(clientId);
+      await _beginStreamBroadcast(clientId);
+      return lease;
+    } on BroadcastAccessLockedException catch (error) {
+      lease?.release();
+      response.statusCode = HttpStatus.paymentRequired;
+      await _writeBroadcastAccessLocked(response, error.snapshot);
+      return null;
     } on ActiveClientLimitException {
       response.statusCode = HttpStatus.tooManyRequests;
       await _writeJson(response, {
@@ -947,6 +977,9 @@ class MiuCamServer {
     } on ConnectionLimitException catch (error) {
       await _writeConnectionLimitError(response, error);
       return null;
+    } catch (_) {
+      lease?.release();
+      rethrow;
     }
   }
 

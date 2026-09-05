@@ -2,6 +2,68 @@
 // Kept separate so AppStrings stays a small localization facade.
 
 const appUiTextCatalog = <String, Map<String, String>>{
+  'broadcastAccessPriceFallback': {
+    'tr':
+        'Türkiye fiyatı: {price}. Ödeme sırasında mağazandaki güncel fiyat gösterilir.',
+    'en':
+        'Türkiye price: {price}. Your store’s current price is shown at checkout.',
+    'zh': '土耳其价格：{price}。付款时会显示你所在地区商店的当前价格。',
+    'hi':
+        'तुर्किये की कीमत: {price}। भुगतान करते समय आपके स्टोर की मौजूदा कीमत दिखाई जाएगी।',
+    'es':
+        'Precio en Turquía: {price}. Al pagar verás el precio actual de tu tienda.',
+    'fr':
+        'Prix en Turquie : {price}. Le prix actuel de votre boutique s’affiche au moment du paiement.',
+  },
+  'unlockLifetime': {
+    'tr': 'Ömür boyu yayını aç',
+    'en': 'Unlock lifetime broadcasting',
+    'zh': '永久解锁直播',
+    'hi': 'आजीवन प्रसारण खोलें',
+    'es': 'Desbloquear emisión de por vida',
+    'fr': 'Débloquer la diffusion à vie',
+  },
+  'broadcastAccessRemoteUnlockedBody': {
+    'tr':
+        'Oda telefonunda ömür boyu yayın açık. Bu ebeveyn telefonundan satın alma gerekmez. Aynı anda en fazla 5 ebeveyn cihazı izleyebilir.',
+    'en':
+        'Lifetime broadcasting is active on the room phone. No purchase is needed on this parent phone. Up to 5 parent devices can watch at once.',
+    'zh': '房间手机已永久解锁直播。这部家长手机无需购买，最多可供 5 台家长设备同时观看。',
+    'hi':
+        'कमरे के फ़ोन पर आजीवन प्रसारण सक्रिय है। इस अभिभावक फ़ोन पर खरीदारी ज़रूरी नहीं है। एक साथ अधिकतम 5 अभिभावक डिवाइस देख सकते हैं।',
+    'es':
+        'La emisión de por vida está activa en el móvil de la habitación. Este móvil del cuidador no necesita comprar nada. Hasta 5 dispositivos de los cuidadores pueden ver a la vez.',
+    'fr':
+        'La diffusion à vie est activée sur le téléphone de la chambre. Aucun achat n’est nécessaire sur ce téléphone parent. Jusqu’à 5 appareils parents peuvent regarder en même temps.',
+  },
+  'broadcastAccessRemoteTrialBody': {
+    'tr':
+        'Oda telefonunun ses, görüntü veya bildirim takibi için toplam 2 saatlik ücretsiz hakkından kalan: {remaining}. Ömür boyu kullanım oda telefonundan tek seferlik satın alınır. Abonelik yok; aynı anda en fazla 5 izleyici.',
+    'en':
+        'The room phone has {remaining} left from its total 2 free hours of audio, video, or alert monitoring. Lifetime use is a one-time purchase on the room phone. No subscription; up to 5 viewers at once.',
+    'zh':
+        '房间手机用于声音、视频或提醒监测的共 2 小时免费时间还剩 {remaining}。在房间手机上一次性购买即可永久使用。无需订阅，最多支持 5 台设备同时观看。',
+    'hi':
+        'कमरे के फ़ोन पर आवाज़, वीडियो या अलर्ट की निगरानी के कुल 2 मुफ़्त घंटों में {remaining} बाकी है। आजीवन इस्तेमाल के लिए कमरे के फ़ोन पर एक बार खरीदारी करें। कोई सब्सक्रिप्शन नहीं; एक साथ अधिकतम 5 दर्शक।',
+    'es':
+        'Al móvil de la habitación le quedan {remaining} de sus 2 horas gratuitas en total de audio, vídeo o seguimiento de avisos. El uso de por vida se compra una sola vez desde ese móvil. Sin suscripción; hasta 5 espectadores a la vez.',
+    'fr':
+        'Il reste {remaining} sur les 2 heures gratuites au total d’audio, de vidéo ou de suivi des alertes du téléphone de la chambre. L’utilisation à vie s’achète en une fois sur ce téléphone. Sans abonnement ; jusqu’à 5 spectateurs en même temps.',
+  },
+  'broadcastAccessRemoteLockedBody': {
+    'tr':
+        'Oda telefonunun ses, görüntü ve bildirim takibi için toplam 2 saatlik ücretsiz süresi doldu. Devam etmek için ömür boyu kullanımı oda telefonundan tek seferlik satın alın. Bu ebeveyn telefonundan satın alma gerekmez. Abonelik yok; en fazla 5 eşzamanlı izleyici.',
+    'en':
+        'The room phone has used its total 2 free hours of audio, video, and alert monitoring. To continue, buy lifetime use once on the room phone. No purchase is needed on this parent phone. No subscription; up to 5 simultaneous viewers.',
+    'zh':
+        '房间手机用于声音、视频和提醒监测的共 2 小时免费时间已用完。要继续，请在房间手机上一次性购买永久使用权限。这部家长手机无需购买。无需订阅，最多支持 5 台设备同时观看。',
+    'hi':
+        'कमरे के फ़ोन पर आवाज़, वीडियो और अलर्ट की निगरानी के कुल 2 मुफ़्त घंटे समाप्त हो गए हैं। जारी रखने के लिए कमरे के फ़ोन पर एक बार आजीवन इस्तेमाल खरीदें। इस अभिभावक फ़ोन पर खरीदारी ज़रूरी नहीं है। कोई सब्सक्रिप्शन नहीं; एक साथ अधिकतम 5 दर्शक।',
+    'es':
+        'El móvil de la habitación ha agotado sus 2 horas gratuitas en total de audio, vídeo y seguimiento de avisos. Para continuar, compra el uso de por vida una sola vez desde ese móvil. Este móvil del cuidador no necesita comprar nada. Sin suscripción; hasta 5 espectadores simultáneos.',
+    'fr':
+        'Le téléphone de la chambre a utilisé ses 2 heures gratuites au total d’audio, de vidéo et de suivi des alertes. Pour continuer, achetez l’utilisation à vie en une fois sur ce téléphone. Aucun achat n’est nécessaire sur ce téléphone parent. Sans abonnement ; jusqu’à 5 spectateurs simultanés.',
+  },
   'parentDeviceName': {
     'tr': 'Ebeveyn telefonu',
     'en': 'Parent phone',
@@ -2849,50 +2911,55 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'Ouvrir l’aperçu en plein écran',
   },
   'broadcastAccessUnlocked': {
-    'tr': 'Sınırsız yayın kilidi açıldı.',
-    'en': 'Unlimited broadcast access unlocked.',
-    'zh': '无限直播权限已解锁。',
-    'hi': 'असीमित प्रसारण पहुँच खुल गई।',
-    'es': 'Acceso ilimitado desbloqueado.',
-    'fr': 'Accès illimité déverrouillé.',
+    'tr': 'Ömür boyu yayın açıldı.',
+    'en': 'Lifetime broadcasting unlocked.',
+    'zh': '已永久解锁直播。',
+    'hi': 'आजीवन प्रसारण खुल गया।',
+    'es': 'Emisión de por vida desbloqueada.',
+    'fr': 'Diffusion à vie débloquée.',
   },
   'broadcastAccessUnlockedTitle': {
-    'tr': 'Sınırsız yayın açık',
-    'en': 'Unlimited access active',
-    'zh': '无限权限已启用',
-    'hi': 'असीमित पहुँच सक्रिय',
-    'es': 'Acceso ilimitado activo',
-    'fr': 'Accès illimité actif',
+    'tr': 'Ömür boyu yayın açık',
+    'en': 'Lifetime broadcasting active',
+    'zh': '永久直播已启用',
+    'hi': 'आजीवन प्रसारण सक्रिय',
+    'es': 'Emisión de por vida activa',
+    'fr': 'Diffusion à vie activée',
   },
   'broadcastAccessUnlockedBody': {
-    'tr': 'Bu cihazda canlı yayın ve izleme süresi sınırsız.',
-    'en': 'Live broadcasting and watching are unlimited on this device.',
-    'zh': '此设备上的直播和观看时间不受限制。',
-    'hi': 'इस डिवाइस पर लाइव प्रसारण और देखना असीमित है।',
+    'tr':
+        'Bu oda telefonunda ömür boyu, süre sınırı olmadan yayın yapabilirsin. Abonelik yok; aynı anda en fazla 5 ebeveyn cihazı izleyebilir.',
+    'en':
+        'This room phone can broadcast for life with no time limit. No subscription; up to 5 parent devices can watch at once.',
+    'zh': '这部房间手机已永久解锁直播，无时间限制。无需订阅，最多可供 5 台家长设备同时观看。',
+    'hi':
+        'इस कमरे के फ़ोन से आजीवन, बिना समय सीमा के प्रसारण कर सकते हैं। कोई सब्सक्रिप्शन नहीं; एक साथ अधिकतम 5 अभिभावक डिवाइस देख सकते हैं।',
     'es':
-        'La transmisión y la vista en vivo no tienen límite en este dispositivo.',
-    'fr': 'Le direct et le visionnage sont illimités sur cet appareil.',
+        'Este móvil de la habitación puede emitir de por vida, sin límite de tiempo. Sin suscripción; hasta 5 dispositivos de los cuidadores pueden ver a la vez.',
+    'fr':
+        'Ce téléphone de la chambre peut diffuser à vie, sans limite de durée. Sans abonnement ; jusqu’à 5 appareils parents peuvent regarder en même temps.',
   },
   'broadcastAccessTrialTitle': {
-    'tr': '2 saat ücretsiz yayın',
-    'en': '2-hour free broadcast',
-    'zh': '2 小时免费直播',
-    'hi': '2 घंटे मुफ़्त प्रसारण',
-    'es': '2 horas gratis de transmisión',
-    'fr': '2 heures de direct gratuites',
+    'tr': 'Toplam 2 saat ücretsiz yayın',
+    'en': '2 hours of free broadcasting in total',
+    'zh': '共 2 小时免费直播',
+    'hi': 'कुल 2 घंटे मुफ़्त प्रसारण',
+    'es': '2 horas gratis de emisión en total',
+    'fr': '2 heures de diffusion gratuites au total',
   },
   'broadcastAccessTrialBody': {
     'tr':
-        'Kalan ücretsiz süre: {remaining}. Sonrasında tek seferlik {price} ile sınırsız açılır.',
+        'Bu oda telefonunda ses, görüntü veya bildirim takibi için kalan ücretsiz süre: {remaining}. Tek seferlik {price} ile ömür boyu kullanım açılır. Abonelik yok; aynı anda en fazla 5 izleyici.',
     'en':
-        'Free time left: {remaining}. After that, unlock unlimited access once for {price}.',
-    'zh': '剩余免费时间：{remaining}。之后一次性支付 {price} 可解锁无限使用。',
+        'Free time left for audio, video, or alert monitoring on this room phone: {remaining}. Unlock lifetime use here with a one-time purchase of {price}. No subscription; up to 5 viewers at once.',
+    'zh':
+        '这部房间手机用于声音、视频或提醒监测的剩余免费时间：{remaining}。在此手机上一次性支付 {price} 即可永久使用。无需订阅，最多支持 5 台设备同时观看。',
     'hi':
-        'बचा मुफ़्त समय: {remaining}. इसके बाद {price} में एक बार असीमित पहुँच खोलें।',
+        'इस कमरे के फ़ोन पर आवाज़, वीडियो या अलर्ट की निगरानी के लिए बचा मुफ़्त समय: {remaining}। इसी फ़ोन पर एक बार {price} देकर आजीवन इस्तेमाल खोलें। कोई सब्सक्रिप्शन नहीं; एक साथ अधिकतम 5 दर्शक।',
     'es':
-        'Tiempo gratis restante: {remaining}. Después, desbloquea acceso ilimitado por {price}.',
+        'Tiempo gratis restante para audio, vídeo o seguimiento de avisos en este móvil de la habitación: {remaining}. Desbloquea aquí el uso de por vida con un pago único de {price}. Sin suscripción; hasta 5 espectadores a la vez.',
     'fr':
-        'Temps gratuit restant : {remaining}. Ensuite, débloquez l’accès illimité pour {price}.',
+        'Temps gratuit restant pour l’audio, la vidéo ou le suivi des alertes sur ce téléphone de la chambre : {remaining}. Débloquez ici l’utilisation à vie pour un paiement unique de {price}. Sans abonnement ; jusqu’à 5 spectateurs en même temps.',
   },
   'durationMinutesShort': {
     'tr': '{minutes} dk',
@@ -2919,33 +2986,33 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': '{hours} h {minutes} min',
   },
   'broadcastAccessLockedTitle': {
-    'tr': 'Ücretsiz süre doldu',
-    'en': 'Free time ended',
-    'zh': '免费时间已结束',
-    'hi': 'मुफ़्त समय समाप्त',
-    'es': 'Terminó el tiempo gratis',
-    'fr': 'Temps gratuit terminé',
+    'tr': 'Ücretsiz yayın süresi doldu',
+    'en': 'Free broadcasting time has ended',
+    'zh': '免费直播时间已用完',
+    'hi': 'मुफ़्त प्रसारण का समय समाप्त',
+    'es': 'Se acabó el tiempo de emisión gratis',
+    'fr': 'Le temps de diffusion gratuit est écoulé',
   },
   'broadcastAccessLockedBody': {
     'tr':
-        'Canlı yayın için tek seferlik 300 TL ödeme gerekir. Satın alma bu cihazda kalıcı açılır.',
+        'Bu oda telefonundan tek seferlik {price} ödeyerek ömür boyu yayını açabilirsin. Abonelik yok; aynı anda en fazla 5 ebeveyn cihazı izleyebilir.',
     'en':
-        'Live broadcast now requires a one-time 300 TL purchase. The unlock stays on this device.',
-    'zh': '继续直播需要一次性支付 300 TL。解锁会保留在此设备上。',
+        'Unlock lifetime broadcasting on this room phone with a one-time purchase of {price}. No subscription; up to 5 parent devices can watch at once.',
+    'zh': '在这部房间手机上一次性支付 {price} 即可永久解锁直播。无需订阅，最多可供 5 台家长设备同时观看。',
     'hi':
-        'लाइव प्रसारण के लिए अब एक बार 300 TL भुगतान चाहिए। अनलॉक इसी डिवाइस पर रहेगा।',
+        'इस कमरे के फ़ोन पर एक बार {price} देकर आजीवन प्रसारण खोलें। कोई सब्सक्रिप्शन नहीं; एक साथ अधिकतम 5 अभिभावक डिवाइस देख सकते हैं।',
     'es':
-        'La transmisión en vivo requiere un pago único de 300 TL. El desbloqueo queda en este dispositivo.',
+        'Desbloquea la emisión de por vida desde este móvil de la habitación con un pago único de {price}. Sin suscripción; hasta 5 dispositivos de los cuidadores pueden ver a la vez.',
     'fr':
-        'Le direct nécessite maintenant un achat unique de 300 TL. Le déverrouillage reste sur cet appareil.',
+        'Débloquez la diffusion à vie depuis ce téléphone de la chambre pour un paiement unique de {price}. Sans abonnement ; jusqu’à 5 appareils parents peuvent regarder en même temps.',
   },
   'unlockLifetimePrice': {
-    'tr': '{price} ile sınırsız aç',
-    'en': 'Unlock unlimited for {price}',
-    'zh': '支付 {price} 解锁无限使用',
-    'hi': '{price} में असीमित खोलें',
-    'es': 'Desbloquear ilimitado por {price}',
-    'fr': 'Débloquer illimité pour {price}',
+    'tr': '{price} ile ömür boyu yayını aç',
+    'en': 'Unlock for life · {price}',
+    'zh': '永久解锁 · {price}',
+    'hi': '{price} में आजीवन खोलें',
+    'es': 'Desbloquear de por vida · {price}',
+    'fr': 'Débloquer à vie · {price}',
   },
   'restorePurchase': {
     'tr': 'Satın almayı geri yükle',

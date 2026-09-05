@@ -124,6 +124,7 @@ class ActiveClientRegistry {
   final _eventSocketCounts = <String, int>{};
   final _eventSocketLeases = <int, String>{};
   void Function(String clientId)? _onExpiredSessionReady;
+  void Function(String clientId)? _onLastMediaConnectionDetached;
   int _nextConnectionLeaseId = 0;
 
   int get activeClientCount {
@@ -134,6 +135,14 @@ class ActiveClientRegistry {
   int get qualityReportCount => _qualityTracker.reportCount;
 
   int get mediaConnectionCount => _streamConnectionLeases.length;
+
+  int mediaConnectionCountFor(String clientId) =>
+      _streamConnectionCounts[_normalizeClientId(clientId)] ?? 0;
+
+  void bindLastMediaConnectionDetached(
+    void Function(String clientId)? callback,
+  ) =>
+      _onLastMediaConnectionDetached = callback;
 
   int get eventSocketCount => _eventSocketLeases.length;
 
@@ -422,6 +431,9 @@ class ActiveClientRegistry {
     final clientId = _streamConnectionLeases.remove(leaseId);
     if (clientId == null) return;
     _decrementConnectionCount(_streamConnectionCounts, clientId);
+    if (!_streamConnectionCounts.containsKey(clientId)) {
+      _onLastMediaConnectionDetached?.call(clientId);
+    }
     if (_expiredSessionClientsPendingCleanup.contains(clientId)) {
       _notifyExpiredSessionIfReady(clientId);
       return;

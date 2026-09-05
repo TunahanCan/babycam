@@ -219,8 +219,14 @@ class WavAudioStreamService {
     }
   }
 
-  Future<void> _flushWithTimeout(HttpResponse response) =>
-      _responseFlusher(response).timeout(flushTimeout);
+  Future<void> _flushWithTimeout(HttpResponse response) async {
+    await _responseFlusher(response).timeout(flushTimeout);
+    // Server response flushing can swallow the socket error after a peer
+    // disconnect. Check the connection as well as the flush future.
+    if (response.connectionInfo == null) {
+      throw const HttpException('Media connection closed.');
+    }
+  }
 
   void _detachSlowClient(HttpResponse response) {
     removeClient(response);

@@ -180,6 +180,7 @@ class ServerCompositionRoot {
       mediaProfile: () => server.activeMediaProfile,
       onSettingsChanged: server.reloadAnalysisConfig,
       broadcastAccess: broadcastAccess,
+      broadcastAccessChanges: broadcastAccess?.changes,
       onMediaDemandChanged: publishRuntimeDemand,
       onVideoEncodingDemandChanged: nativeMediaSource == null
           ? null

@@ -149,6 +149,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
 
   Widget _buildTab(BuildContext context, ClientRuntimeState state) {
     final strings = AppStrings.of(context);
+    final broadcastLocked = state.broadcastAccess?.isLocked == true;
     final watchAvailable =
         state.session != null && state.phase != ClientRuntimePhase.revoked;
     return switch (_tab) {
@@ -171,8 +172,13 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
               _RoomCard(
                 title: localizedRoomName(
                     strings, state.session!.payload.deviceName),
-                status: _clientRoomStatus(strings, state.phase),
-                tone: _clientRoomTone(state.phase),
+                status: broadcastLocked
+                    ? strings.ui('broadcastAccessLockedTitle')
+                    : _clientRoomStatus(strings, state.phase),
+                tone: broadcastLocked
+                    ? MiuCamDesignTokens.pink
+                    : _clientRoomTone(state.phase),
+                broadcastLocked: broadcastLocked,
                 alertsActive: state.alertsActive,
                 alertsConnected: widget.runtime.alertTransportConnected,
                 systemNotificationsEnabled:

@@ -71,6 +71,7 @@ class ClientCompositionRoot {
     final alerts = alertListener ??
         ClientAlertListener(
           healthState: streamHealth,
+          readBroadcastAccess: remoteBroadcastAccess.snapshot,
           // The listener acknowledges only after this future finishes. That
           // lets a reconnect replay an event whose local persistence/post was
           // interrupted, while the delivery coordinator keeps retries quiet.

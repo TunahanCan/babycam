@@ -24,6 +24,7 @@ class AppStrings {
   static bool _dateSymbolsInitialized = false;
   final _numberFormats = <String, NumberFormat>{};
   final _percentFormats = <int, NumberFormat>{};
+  final _currencyFormats = <String, NumberFormat>{};
 
   static const fallbackLocale = Locale('en', 'US');
 
@@ -132,6 +133,21 @@ class AppStrings {
       if (!useGrouping) result.turnOffGrouping();
       return result;
     });
+    return format.format(value);
+  }
+
+  String formatCurrency(num value,
+      {required String currencyCode, int? decimalDigits}) {
+    if (!value.isFinite) return '—';
+    if (isTurkish && currencyCode == 'TRY') {
+      return '${formatNumber(value, decimalDigits: decimalDigits ?? 2, useGrouping: true)} TL';
+    }
+    final format = _currencyFormats.putIfAbsent(
+        '$currencyCode:$decimalDigits',
+        () => NumberFormat.simpleCurrency(
+            locale: _numberLocale,
+            name: currencyCode,
+            decimalDigits: decimalDigits));
     return format.format(value);
   }
 

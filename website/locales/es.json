@@ -129,7 +129,7 @@
   "privacy.localRoute": "Los datos permanecen en la red doméstica",
   "compat.kicker": "Compatibilidad con plataformas",
   "compat.title": "Aprovecha juntos los teléfonos que ya tienes en casa.",
-  "compat.subtitle": "Asigna las funciones según tus dispositivos y conoce desde el principio las diferencias importantes entre plataformas.",
+  "compat.subtitle": "Elige los roles según tus móviles. Cada móvil de la habitación incluye 2 horas gratuitas en total de vigilancia o avisos; después, un pago único permite usarlo de por vida.",
   "compat.androidVersion": "Android 7.0 y versiones posteriores",
   "compat.roomParentRole": "Función Habitación o Padres",
   "compat.androidService": "Servicio de Android en primer plano para la función Habitación",
@@ -209,7 +209,7 @@
   "privacyPage.networkWarningBody": "La transmisión local actual no ofrece TLS ni cifrado de extremo a extremo. MiuCam solo debe utilizarse en una red Wi-Fi de confianza, protegida con una contraseña segura y cuyo acceso controles. Las redes abiertas o públicas no son adecuadas.",
   "privacyPage.thirdPartiesTitle": "4. Internet y terceros",
   "privacyPage.thirdPartiesP1": "La función de vigilancia básica de MiuCam funciona sin conexión a Internet. El flujo predeterminado del producto no contiene publicidad ni SDK de análisis del comportamiento del usuario, y el contenido de la cámara o el micrófono no se envía a ningún servidor en la nube propiedad de MiuCam.",
-  "privacyPage.thirdPartiesP2": "Si se habilitan las compras opcionales dentro de la aplicación, se puede utilizar la infraestructura de pagos de Apple App Store o Google Play. Los datos de verificación de la compra solo pueden enviarse a un servicio de verificación HTTPS fiable y configurado; el contenido de la cámara y el micrófono no se envía a ese servicio. Estos servicios están sujetos a sus propias políticas de privacidad.",
+  "privacyPage.thirdPartiesP2": "Cada móvil de la habitación incluye 2 horas gratuitas en total. Quienes decidan continuar pueden comprar el uso de por vida con un pago único desde ese móvil a través de Apple App Store o Google Play, cuando la compra esté disponible. Los recibos de compra y los datos de verificación se envían únicamente a un servicio de verificación HTTPS fiable y configurado; no incluyen vídeo de la cámara ni audio del micrófono. Estos servicios tienen sus propias condiciones de privacidad.",
   "privacyPage.storageTitle": "5. Conservación y eliminación",
   "privacyPage.storageItem1": "Cuando se eliminan vinculaciones desde la aplicación, también se borran las claves de acceso seguras correspondientes.",
   "privacyPage.storageItem2": "El historial de eventos y notificaciones se puede borrar desde la aplicación.",
@@ -230,5 +230,7 @@
   "privacyPage.contactBefore": "Para enviar comentarios técnicos, puedes utilizar la",
   "privacyPage.contactLink": "página de GitHub Issues de MiuCam",
   "privacyPage.contactAfter": ". Este canal es público; no compartas información personal, sensible ni relacionada con menores. Con la publicación en las tiendas se anunciará también un canal privado de asistencia del desarrollador.",
-  "privacyPage.changesBody": "Si cambia la forma en que la aplicación trata los datos, se actualizarán este aviso y su fecha de revisión."
+  "privacyPage.changesBody": "Si cambia la forma en que la aplicación trata los datos, se actualizarán este aviso y su fecha de revisión.",
+  "faq.pricingQ": "¿Cuánto cuesta? ¿Hay suscripción?",
+  "faq.pricingA": "Cada móvil de la habitación incluye 2 horas gratuitas en total de audio, vídeo o seguimiento de avisos. El tiempo cuenta mientras al menos una de estas funciones esté activa; tener varios espectadores a la vez no multiplica el consumo. Esperar al escaneo del QR, usar solo la vista previa local o no tener una conexión del cuidador no consume tiempo. Después, el uso de por vida se compra una sola vez desde el móvil de la habitación; el móvil del cuidador no necesita una compra adicional. El precio previsto para Turquía es de 350 TRY; los precios de otras regiones se muestran en la tienda de aplicaciones. No hay suscripción. Hasta 5 dispositivos de los cuidadores pueden ver a la vez; la compra no cambia este límite."
 }

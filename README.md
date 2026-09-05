@@ -236,15 +236,24 @@ grafiğiyle başlatılır.
 </details>
 
 <details>
-<summary><strong>İç test yayın kilidi</strong></summary>
+<summary><strong>Ücretsiz deneme ve ömür boyu yayın</strong></summary>
 
-Normal build'de ücret veya yayın kilidi gösterilmez. Mağaza/paywall entegrasyon
-testi yalnız açık bir derleme bayrağıyla etkinleştirilir:
+Her oda telefonu ses, görüntü ve bildirim takibi için toplam 2 saat ücretsiz
+kullanılır. Birden fazla izleyici süreyi katlamaz. Ardından oda telefonundan
+tek seferlik satın alma ile ömür boyu yayın açılır; abonelik yoktur. Türkiye
+hedef fiyatı 350 TL'dir, ödeme ekranındaki tutar mağazanın yerel ürün fiyatıdır.
+Eşzamanlı 5 ebeveyn cihazı sınırı satın alma sonrasında da geçerlidir.
+
+Bu kural normal derlemelerde açıktır. Gerçek ödeme için mağaza ürünü ve güvenilir
+HTTPS satın alma doğrulaması yapılandırılmalıdır:
 
 ```bash
-flutter run \
-  --dart-define=MIUCAM_BROADCAST_PAYWALL_ENABLED=true
+flutter build appbundle \
+  --dart-define=MIUCAM_PURCHASE_VERIFIER_URL=https://YOUR-BACKEND/verify
 ```
+
+Doğrulama yapılandırılmamışsa ödeme ekranı açılmaz. Ayrıntılar:
+[mağaza hazırlığı ve deneme kuralları](docs/broadcast_pricing.md).
 
 </details>
 

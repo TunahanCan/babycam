@@ -364,11 +364,12 @@ class _ServerBroadcastAccessCardState extends State<ServerBroadcastAccessCard> {
         BroadcastPurchaseStatus.canceled => strings.ui('purchaseCanceled'),
         BroadcastPurchaseStatus.unavailable =>
           strings.ui('purchaseUnavailable'),
-        _ => error.result.message ?? strings.ui('purchaseFailed'),
+        _ => strings.ui('purchaseFailed'),
       };
     }
     if (error is BroadcastAccessLockedException) {
-      return strings.ui('broadcastAccessLockedBody');
+      return strings.uiFormat('broadcastAccessLockedBody',
+          {'price': _priceText(strings, error.snapshot)});
     }
     return strings.ui('purchaseFailed');
   }
@@ -387,10 +388,11 @@ class _ServerBroadcastAccessCardState extends State<ServerBroadcastAccessCard> {
     final body = unlocked
         ? strings.ui('broadcastAccessUnlockedBody')
         : locked
-            ? strings.ui('broadcastAccessLockedBody')
+            ? strings.uiFormat('broadcastAccessLockedBody',
+                {'price': _priceText(strings, snapshot)})
             : strings.uiFormat('broadcastAccessTrialBody', {
                 'remaining': _remainingText(strings, snapshot.remaining),
-                'price': snapshot.priceLabel,
+                'price': _priceText(strings, snapshot),
               });
     return MiuCamCard(
       dark: true,
@@ -436,6 +438,17 @@ class _ServerBroadcastAccessCardState extends State<ServerBroadcastAccessCard> {
               height: 1.25,
             ),
           ),
+          if (!unlocked && !snapshot.hasStorePrice) ...[
+            const SizedBox(height: 8),
+            Text(
+                strings.uiFormat('broadcastAccessPriceFallback', {
+                  'price': _priceText(strings, snapshot),
+                }),
+                style: const TextStyle(
+                    color: MiuCamDesignTokens.serverTextMuted,
+                    fontSize: 12,
+                    height: 1.3)),
+          ],
           if (!unlocked) ...[
             const SizedBox(height: 12),
             ClipRRect(
@@ -472,9 +485,10 @@ class _ServerBroadcastAccessCardState extends State<ServerBroadcastAccessCard> {
                     foregroundColor: MiuCamDesignTokens.serverOnAccent,
                   ),
                   label: Text(
-                    strings.uiFormat('unlockLifetimePrice', {
-                      'price': snapshot.priceLabel,
-                    }),
+                    snapshot.hasStorePrice
+                        ? strings.uiFormat('unlockLifetimePrice',
+                            {'price': snapshot.priceLabel})
+                        : strings.ui('unlockLifetime'),
                   ),
                 ),
                 OutlinedButton.icon(
@@ -498,8 +512,18 @@ class _ServerBroadcastAccessCardState extends State<ServerBroadcastAccessCard> {
     );
   }
 
+  static String _priceText(
+          AppStrings strings, BroadcastAccessSnapshot snapshot) =>
+      snapshot.hasStorePrice
+          ? snapshot.priceLabel
+          : strings.formatCurrency(BroadcastAccessConfig.oneTimePriceTry,
+              currencyCode: 'TRY', decimalDigits: 0);
+
   static String _remainingText(AppStrings strings, Duration duration) {
-    final totalMinutes = duration.inMinutes.clamp(0, 24 * 60);
+    final totalMinutes =
+        (duration.inMilliseconds / Duration.millisecondsPerMinute)
+            .ceil()
+            .clamp(0, 24 * 60);
     final hours = totalMinutes ~/ 60;
     final minutes = totalMinutes % 60;
     if (hours == 0) {

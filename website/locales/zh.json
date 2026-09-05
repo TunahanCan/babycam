@@ -129,7 +129,7 @@
   "privacy.localRoute": "数据路径始终位于家庭网络内",
   "compat.kicker": "平台支持",
   "compat.title": "让家里的手机协同发挥价值。",
-  "compat.subtitle": "根据设备选择角色，并提前了解重要的平台差异。",
+  "compat.subtitle": "根据手机选择房间端或家长端。每部房间手机共提供 2 小时免费监测或提醒服务，之后一次性购买即可永久使用。",
   "compat.androidVersion": "Android 7.0 及以上",
   "compat.roomParentRole": "支持婴儿房和家长角色",
   "compat.androidService": "婴儿房角色使用 Android 前台服务",
@@ -209,7 +209,7 @@
   "privacyPage.networkWarningBody": "当前本地传输不提供 TLS 或端到端加密。MiuCam 只能在你信任、使用强密码且访问受控的 Wi-Fi 网络中使用，不适合开放或公共网络。",
   "privacyPage.thirdPartiesTitle": "4. 互联网与第三方",
   "privacyPage.thirdPartiesP1": "MiuCam 的基础监护功能无需互联网连接即可运行。默认产品流程不含广告或用户行为分析 SDK，摄像头及麦克风媒体也不会发送至 MiuCam 的云端服务器。",
-  "privacyPage.thirdPartiesP2": "如果启用可选的应用内购买，可能会使用 Apple App Store 或 Google Play 的支付基础设施。购买验证数据只能发送至已配置且可信的 HTTPS 验证服务；摄像头和麦克风媒体不会发送至该服务。这些服务受其各自隐私条款约束。",
+  "privacyPage.thirdPartiesP2": "每部房间手机共提供 2 小时免费使用。免费时间用完后，选择继续使用的用户可在购买服务可用时，通过房间手机上的 Apple App Store 或 Google Play 一次性购买永久使用权限。购买凭据和验证信息仅发送至已配置且可信的 HTTPS 验证服务，不包含摄像头画面或麦克风声音。这些服务适用各自的隐私条款。",
   "privacyPage.storageTitle": "5. 存储与删除",
   "privacyPage.storageItem1": "在应用中移除配对时，对应的安全访问密钥也会被删除。",
   "privacyPage.storageItem2": "事件与通知历史可在应用中清除。",
@@ -230,5 +230,7 @@
   "privacyPage.contactBefore": "如需提供技术反馈，可以使用 MiuCam 的",
   "privacyPage.contactLink": "GitHub Issues 页面",
   "privacyPage.contactAfter": "。该渠道公开可见；请勿分享个人、敏感或与儿童相关的数据。应用商店发布时，将另行公布专用的开发者支持渠道。",
-  "privacyPage.changesBody": "如果应用的数据处理方式发生变化，本声明及其更新日期也将相应修订。"
+  "privacyPage.changesBody": "如果应用的数据处理方式发生变化，本声明及其更新日期也将相应修订。",
+  "faq.pricingQ": "MiuCam 如何收费？需要订阅吗？",
+  "faq.pricingA": "每部房间手机共提供 2 小时免费的声音、视频或提醒监测。至少有一项功能运行时才计时，同时观看的设备数量不会使计时加倍。等待扫描二维码、仅使用本地预览或没有家长端连接时不计时。免费时间用完后，在房间手机上一次性购买即可永久使用；家长手机无需另外付费。土耳其的计划价格为 350 土耳其里拉，其他地区的价格在应用商店中显示。无需订阅。最多可供 5 台家长设备同时观看，购买不会改变这一限制。"
 }

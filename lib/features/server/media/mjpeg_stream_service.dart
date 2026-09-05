@@ -252,8 +252,15 @@ class MjpegStreamService {
     _backpressure.clear();
   }
 
-  Future<void> _flushWithTimeout(HttpResponse response) =>
-      _responseFlusher(response).timeout(flushTimeout);
+  Future<void> _flushWithTimeout(HttpResponse response) async {
+    await _responseFlusher(response).timeout(flushTimeout);
+    // dart:io may swallow a peer SocketException while flushing a server
+    // response. Its done future then stays pending until explicitly closed.
+    // Retire that transport now so a disconnected viewer is not billed.
+    if (response.connectionInfo == null) {
+      throw const HttpException('Media connection closed.');
+    }
+  }
 
   Future<void> _closeResponseBestEffort(HttpResponse response) async {
     try {

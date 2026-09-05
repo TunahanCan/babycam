@@ -10,6 +10,7 @@ import '../../l10n/app_strings.dart';
 import '../../services/monetization/broadcast_access_service.dart';
 import '../../services/discovery/miucam_service_discovery.dart';
 import 'alerts/client_alert_history.dart';
+import 'alerts/client_alert_listener.dart';
 import 'controls/client_room_controls.dart';
 import 'media/active_stream_session.dart';
 import 'media/client_stream_health_state.dart';
@@ -93,8 +94,16 @@ class ClientRuntime implements AppRuntime {
         _broadcastAccess = broadcastAccess,
         _updateAlertStrings = updateAlertStrings,
         alertHistory = alertHistory ?? ClientAlertHistory() {
-    _alertConnectionSubscription =
-        alertConnectionStates?.distinct().listen(_setAlertTransportConnected);
+    _alertConnectionSubscription = alertConnectionStates?.distinct().listen(
+      _setAlertTransportConnected,
+      onError: (Object error) {
+        if (error is ClientAlertAccessLockedException) {
+          unawaited(_handleAlertAccessLocked(error).catchError((_) {}));
+        } else if (!_disposed) {
+          reportStartupFailure(error);
+        }
+      },
+    );
   }
 
   final Future<PairingSession> Function(PairingPayload payload) _pair;
@@ -984,6 +993,64 @@ class ClientRuntime implements AppRuntime {
     // the current immutable state again so presentation can show reconnecting
     // without rewriting every runtime transition.
     if (!_states.isClosed) _states.add(_state);
+    final session = _state.session;
+    if (connected &&
+        session != null &&
+        _state.broadcastAccess?.isLocked == true) {
+      unawaited(_refreshAlertAccessAfterReconnect(session).catchError((_) {}));
+    }
+  }
+
+  bool _ownsAlertAccessResult(PairingSession session) {
+    final current = _state.session;
+    return !_disposed &&
+        current != null &&
+        current.clientId == session.clientId &&
+        current.sessionToken == session.sessionToken &&
+        current.payload.host == session.payload.host &&
+        current.payload.port == session.payload.port &&
+        current.payload.transport == session.payload.transport;
+  }
+
+  Future<void> _handleAlertAccessLocked(
+    ClientAlertAccessLockedException error,
+  ) =>
+      _alertOperations.run(() async {
+        if (!_ownsAlertAccessResult(error.session)) return;
+        try {
+          await _stopAlerts?.call();
+        } finally {
+          if (_ownsAlertAccessResult(error.session)) {
+            _alertOwnerSession = null;
+            _setAlertTransportConnected(false);
+            _emit(_copyState(
+              phase: _state.activeStream == null
+                  ? ClientRuntimePhase.pairedIdle
+                  : ClientRuntimePhase.watching,
+              alertsActive: false,
+              error: error,
+              broadcastAccess: error.snapshot,
+            ));
+          }
+        }
+      });
+
+  Future<void> _refreshAlertAccessAfterReconnect(PairingSession session) async {
+    final snapshot = await _refreshRemoteBroadcastAccess?.call(session);
+    if (!_ownsAlertAccessResult(session) ||
+        !_alertTransportConnected ||
+        snapshot == null) {
+      return;
+    }
+    if (snapshot.isLocked) {
+      await _handleAlertAccessLocked(ClientAlertAccessLockedException(
+          session: session, snapshot: snapshot));
+      return;
+    }
+    _emit(_copyState(
+      broadcastAccess: snapshot,
+      clearError: _state.error is BroadcastAccessLockedException,
+    ));
   }
 
   void _setSystemNotificationsEnabled(bool enabled) {

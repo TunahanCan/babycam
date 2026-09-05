@@ -237,46 +237,6 @@ class _WatchHistorySectionState extends State<_WatchHistorySection> {
   }
 }
 
-class _ManagedBroadcastAccessCard extends StatefulWidget {
-  const _ManagedBroadcastAccessCard({
-    required this.snapshot,
-    required this.onUnlock,
-    required this.onRestore,
-  });
-
-  final BroadcastAccessSnapshot snapshot;
-  final Future<void> Function()? onUnlock;
-  final Future<void> Function()? onRestore;
-
-  @override
-  State<_ManagedBroadcastAccessCard> createState() =>
-      _ManagedBroadcastAccessCardState();
-}
-
-class _ManagedBroadcastAccessCardState
-    extends State<_ManagedBroadcastAccessCard> {
-  bool _busy = false;
-
-  Future<void> _run(Future<void> Function()? operation) async {
-    if (_busy || operation == null) return;
-    setState(() => _busy = true);
-    try {
-      await operation();
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => _BroadcastAccessCard(
-        snapshot: widget.snapshot,
-        busy: _busy,
-        onUnlock: widget.onUnlock == null ? null : () => _run(widget.onUnlock),
-        onRestore:
-            widget.onRestore == null ? null : () => _run(widget.onRestore),
-      );
-}
-
 enum _WatchAlertFilter { all, audio, motion, system }
 
 class _WatchConnectionPresentation {

@@ -158,32 +158,6 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> _unlockBroadcastAccess() async {
-    final strings = AppStrings.of(context);
-    try {
-      await widget.runtime.unlockBroadcastAccess();
-      if (!mounted) return;
-      _showSnack(strings.ui('broadcastAccessUnlocked'));
-      _startLiveWatch();
-    } catch (error) {
-      if (!mounted) return;
-      _showSnack(_purchaseMessage(strings, error));
-    }
-  }
-
-  Future<void> _restoreBroadcastAccess() async {
-    final strings = AppStrings.of(context);
-    try {
-      await widget.runtime.restoreBroadcastAccessPurchase();
-      if (!mounted) return;
-      _showSnack(strings.ui('broadcastAccessUnlocked'));
-      _startLiveWatch();
-    } catch (error) {
-      if (!mounted) return;
-      _showSnack(_purchaseMessage(strings, error));
-    }
-  }
-
   void _showSnack(String message) {
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
@@ -211,22 +185,6 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
 
   Future<bool> _openSystemSettings() =>
       widget.openSettings?.call() ?? openAppSettings();
-
-  String _purchaseMessage(AppStrings strings, Object error) {
-    if (error is BroadcastPurchaseException) {
-      return switch (error.result.status) {
-        BroadcastPurchaseStatus.pending => strings.ui('purchasePending'),
-        BroadcastPurchaseStatus.canceled => strings.ui('purchaseCanceled'),
-        BroadcastPurchaseStatus.unavailable =>
-          strings.ui('purchaseUnavailable'),
-        _ => error.result.message ?? strings.ui('purchaseFailed'),
-      };
-    }
-    if (error is BroadcastAccessLockedException) {
-      return strings.ui('broadcastAccessLockedBody');
-    }
-    return strings.ui('purchaseFailed');
-  }
 
   Future<void> _toggleNotifications(ClientRuntimeState state) async {
     if (_notificationsBusy) return;
@@ -455,15 +413,7 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
           ),
           const SizedBox(height: 14),
           if (state.broadcastAccess != null) ...[
-            _ManagedBroadcastAccessCard(
-              snapshot: state.broadcastAccess!,
-              onUnlock: widget.runtime.canManageBroadcastPurchase
-                  ? _unlockBroadcastAccess
-                  : null,
-              onRestore: widget.runtime.canManageBroadcastPurchase
-                  ? _restoreBroadcastAccess
-                  : null,
-            ),
+            _BroadcastAccessCard(snapshot: state.broadcastAccess!),
           ],
           const SizedBox(height: 18),
           _VideoPanel(

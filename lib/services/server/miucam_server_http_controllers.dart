@@ -324,6 +324,10 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
     if (connectionLease == null) return;
     try {
       await startVideoRuntime();
+      if (await _requireStreamAuth(request) != clientId) {
+        connectionLease.release();
+        return;
+      }
       await _handleMjpeg(
         request.response,
         clientId,
@@ -346,6 +350,10 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
     if (connectionLease == null) return;
     try {
       await startAudioRuntime();
+      if (await _requireStreamAuth(request) != clientId) {
+        connectionLease.release();
+        return;
+      }
       await _handleAudio(
         request.response,
         clientId,

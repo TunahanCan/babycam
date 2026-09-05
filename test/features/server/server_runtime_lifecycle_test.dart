@@ -582,10 +582,11 @@ void main() {
     final runtime = ServerRuntime(
       mediaRuntime: media,
       broadcastAccess: access,
+      broadcastAccessChanges: Stream.value(access.beginSnapshot),
     );
     addTearDown(runtime.dispose);
 
-    await runtime.startLocalPreview();
+    await runtime.startStreamSession('parent', const StreamSessionOptions());
     await Future<void>.delayed(const Duration(milliseconds: 45));
 
     expect(access.snapshotCalls, 1);
@@ -605,10 +606,11 @@ void main() {
     final runtime = ServerRuntime(
       mediaRuntime: media,
       broadcastAccess: access,
+      broadcastAccessChanges: Stream.value(access.beginSnapshot),
     );
     addTearDown(runtime.dispose);
 
-    await runtime.startLocalPreview();
+    await runtime.startStreamSession('parent', const StreamSessionOptions());
     final unlock = runtime.unlockBroadcastAccess();
     await Future<void>.delayed(const Duration(milliseconds: 35));
 
@@ -639,10 +641,11 @@ void main() {
     final runtime = ServerRuntime(
       mediaRuntime: media,
       broadcastAccess: access,
+      broadcastAccessChanges: Stream.value(access.beginSnapshot),
     );
     addTearDown(runtime.dispose);
 
-    await runtime.startLocalPreview();
+    await runtime.startStreamSession('parent', const StreamSessionOptions());
     await expectLater(runtime.unlockBroadcastAccess(), throwsStateError);
     await Future<void>.delayed(const Duration(milliseconds: 45));
 
@@ -653,52 +656,63 @@ void main() {
         runtime.currentState.errorMessage, contains('BROADCAST_ACCESS_LOCKED'));
   });
 
-  test('stopLocalPreview inactive access snapshot ile timeri iptal eder',
-      () async {
+  test('local preview remains free after the room trial has expired', () async {
     final access = await _fakeBroadcastAccess(
-      beginSnapshot: _accessSnapshot(active: true, remainingMs: 15),
-      currentSnapshot: _accessSnapshot(active: true, remainingMs: 15),
-      endSessionSnapshot: _accessSnapshot(active: false, remainingMs: 15),
+      beginSnapshot: _accessSnapshot(active: false, remainingMs: 0),
+      currentSnapshot: _accessSnapshot(active: false, remainingMs: 0),
+      beginOperation: () =>
+          throw StateError('Local preview must not start billing'),
     );
     final runtime = ServerRuntime(
       mediaRuntime: MediaRuntimeController(),
       broadcastAccess: access,
     );
     addTearDown(runtime.dispose);
-
     await runtime.startLocalPreview();
+    expect(runtime.currentState.cameraActive, isTrue);
     await runtime.stopLocalPreview();
-    await Future<void>.delayed(const Duration(milliseconds: 45));
-
-    expect(access.snapshotCalls, 0);
     expect(runtime.currentState.cameraActive, isFalse);
+    expect(access.snapshotCalls, 0);
+  });
+
+  test('remote trial expiry preserves an active free local preview', () async {
+    final access = await _fakeBroadcastAccess(
+      beginSnapshot: _accessSnapshot(active: true, remainingMs: 15),
+      currentSnapshot: _accessSnapshot(active: true, remainingMs: 0),
+      endAllSnapshot: _accessSnapshot(active: false, remainingMs: 0),
+    );
+    final changes = StreamController<BroadcastAccessSnapshot>.broadcast();
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(),
+      broadcastAccess: access,
+      broadcastAccessChanges: changes.stream,
+    );
+    addTearDown(runtime.dispose);
+    addTearDown(changes.close);
+    await runtime.startLocalPreview();
+    await runtime.startStreamSession('parent', const StreamSessionOptions());
+    changes.add(access.beginSnapshot);
+    await Future<void>.delayed(const Duration(milliseconds: 45));
+    expect(runtime.currentState.activeClients, 0);
+    expect(runtime.currentState.localPreviewActive, isTrue);
+    expect(runtime.currentState.cameraActive, isTrue);
+    expect(runtime.currentState.broadcastAccess?.isLocked, isTrue);
   });
 
   test('queued preview stop wins over an in-flight preview start', () async {
-    final beginCompleter = Completer<BroadcastAccessSnapshot>();
-    final beginEntered = Completer<void>();
-    final access = await _fakeBroadcastAccess(
-      beginSnapshot: _accessSnapshot(active: true, remainingMs: 1000),
-      currentSnapshot: _accessSnapshot(active: true, remainingMs: 1000),
-      endSessionSnapshot: _accessSnapshot(active: false, remainingMs: 1000),
-      beginOperation: () {
-        beginEntered.complete();
-        return beginCompleter.future;
-      },
-    );
-    final media = MediaRuntimeController();
-    final runtime = ServerRuntime(
-      mediaRuntime: media,
-      broadcastAccess: access,
-    );
+    final startCompleter = Completer<void>();
+    final startEntered = Completer<void>();
+    final media = MediaRuntimeController(onStart: () {
+      startEntered.complete();
+      return startCompleter.future;
+    });
+    final runtime = ServerRuntime(mediaRuntime: media);
     addTearDown(runtime.dispose);
 
     final start = runtime.startLocalPreview();
-    await beginEntered.future;
+    await startEntered.future;
     final stop = runtime.stopLocalPreview();
-    beginCompleter.complete(
-      _accessSnapshot(active: true, remainingMs: 1000),
-    );
+    startCompleter.complete();
     await Future.wait([start, stop]);
 
     expect(media.isActive, isFalse);

@@ -54,17 +54,26 @@ provisioning profile Xcode/App Store Connect üzerinde yapılandırılmalıdır.
   kısıtını aşmak için kullanılmamalı; mağaza açıklaması bu platform sınırını açık
   söylemelidir.
 
-## Opsiyonel satın alma
+## Deneme ve tek seferlik satın alma
 
-Yayın kilidi etkinleştirilecekse iki define birlikte verilmelidir:
+Normal derlemelerde oda telefonunda toplam 2 saatlik deneme sınırı açıktır.
+Ömür boyu yayın ürünü, Türkiye mağazasında 350 TL hedef fiyatıyla tek seferlik
+(non-consumable) ürün olarak yapılandırılmalıdır. Mevcut ürün kimliği fiyat
+değişikliğinde korunur: `miucam_lifetime_unlock_try_300`. Kimlikteki eski sayı
+fiyatı belirlemez; daha önce satın alanların hakkı ve geri yüklemesi korunur.
+
+Gerçek ödeme derlemesi güvenilir HTTPS doğrulama adresini gerektirir:
 
 ```bash
---dart-define=MIUCAM_BROADCAST_PAYWALL_ENABLED=true
---dart-define=MIUCAM_PURCHASE_VERIFIER_URL=https://example.com/verify
+--dart-define=MIUCAM_PURCHASE_VERIFIER_URL=https://YOUR-BACKEND/verify
 ```
 
-Store product ID, fiyat ve trusted backend doğrulaması production değerleriyle
-hazır değilse paywall kapalı bırakılmalıdır.
+Mağaza fiyatı, ürünün satış durumu ve makbuz doğrulaması gerçek hesaplarda
+hazır olmadan bu derleme satışa sunulmamalıdır. Eksik doğrulama adresinde uygulama
+ödeme ekranını açmaz. Sandbox satın alma, geri yükleme, bekleyen/iptal işlem ve
+başarısız doğrulama senaryoları [fiyatlandırma notunda](broadcast_pricing.md)
+açıklanmıştır. Deneme kapatma bayrağı yalnız teşhis derlemeleri içindir:
+`--dart-define=MIUCAM_BROADCAST_PAYWALL_ENABLED=false`.
 
 ## Cihaz kabul testi
 

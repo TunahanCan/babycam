@@ -27,6 +27,15 @@ String _localizedFallback(
 }
 
 const _deUiText = <String, String>{
+  'broadcastAccessPriceFallback':
+      'Preis in der Türkei: {price}. Beim Bezahlen wird der aktuelle Preis deines Stores angezeigt.',
+  'unlockLifetime': 'Übertragung dauerhaft freischalten',
+  'broadcastAccessRemoteUnlockedBody':
+      'Die Übertragung ist auf dem Zimmertelefon dauerhaft freigeschaltet. Auf diesem Elterntelefon ist kein Kauf nötig. Bis zu 5 Elterngeräte können gleichzeitig zusehen.',
+  'broadcastAccessRemoteTrialBody':
+      'Auf dem Zimmertelefon sind noch {remaining} von insgesamt 2 kostenlosen Stunden für Ton, Bild oder Benachrichtigungen übrig. Die dauerhafte Nutzung wird einmalig auf dem Zimmertelefon gekauft. Kein Abo; bis zu 5 Zuschauer gleichzeitig.',
+  'broadcastAccessRemoteLockedBody':
+      'Das Zimmertelefon hat seine insgesamt 2 kostenlosen Stunden für Ton, Bild und Benachrichtigungen aufgebraucht. Kaufe die dauerhafte Nutzung einmalig auf dem Zimmertelefon. Auf diesem Elterntelefon ist kein Kauf nötig. Kein Abo; bis zu 5 Zuschauer gleichzeitig.',
   'parentDeviceName': 'Elterntelefon',
   'rememberedDeviceCount': 'Gespeichert: {count}/{max}',
   'watchingDeviceCount': 'Empfangen: {count}/{max}',
@@ -431,20 +440,20 @@ const _deUiText = <String, String>{
   'videoFitContain': 'Ganzes Bild zeigen',
   'videoFitCover': 'Bildschirm füllen',
   'serverPreviewFullScreen': 'Übertragungs-Vorschau im Vollbild öffnen',
-  'broadcastAccessUnlocked': 'Unbegrenzter Zugriff freigeschaltet.',
-  'broadcastAccessUnlockedTitle': 'Unbegrenzter Zugriff aktiv',
+  'broadcastAccessUnlocked': 'Übertragung dauerhaft freigeschaltet.',
+  'broadcastAccessUnlockedTitle': 'Übertragung dauerhaft aktiv',
   'broadcastAccessUnlockedBody':
-      'Live-Übertragung und Ansicht sind auf diesem Gerät unbegrenzt.',
-  'broadcastAccessTrialTitle': '2 Stunden kostenlose Übertragung',
+      'Dieses Zimmertelefon kann dauerhaft ohne Zeitlimit senden. Kein Abo; bis zu 5 Elterngeräte können gleichzeitig zusehen.',
+  'broadcastAccessTrialTitle': 'Insgesamt 2 Stunden kostenlos senden',
   'broadcastAccessTrialBody':
-      'Kostenlose Zeit übrig: {remaining}. Danach einmalig für {price} unbegrenzt freischalten.',
+      'Verbleibende Gratiszeit für Ton, Bild oder Benachrichtigungen auf diesem Zimmertelefon: {remaining}. Schalte die Nutzung hier einmalig für {price} dauerhaft frei. Kein Abo; bis zu 5 Zuschauer gleichzeitig.',
   'durationMinutesShort': '{minutes} Min.',
   'durationHoursShort': '{hours} Std.',
   'durationHoursMinutesShort': '{hours} Std. {minutes} Min.',
-  'broadcastAccessLockedTitle': 'Kostenlose Zeit beendet',
+  'broadcastAccessLockedTitle': 'Kostenlose Sendezeit aufgebraucht',
   'broadcastAccessLockedBody':
-      'Für Live-Übertragung ist jetzt ein einmaliger Kauf von 300 TL nötig. Die Freischaltung bleibt auf diesem Gerät.',
-  'unlockLifetimePrice': 'Unbegrenzt für {price} freischalten',
+      'Schalte die Übertragung auf diesem Zimmertelefon einmalig für {price} dauerhaft frei. Kein Abo; bis zu 5 Elterngeräte können gleichzeitig zusehen.',
+  'unlockLifetimePrice': 'Dauerhaft freischalten · {price}',
   'restorePurchase': 'Kauf wiederherstellen',
   'purchasePending': 'Kauf ist ausstehend.',
   'purchaseCanceled': 'Kauf wurde abgebrochen.',
@@ -540,6 +549,15 @@ const _deUiText = <String, String>{
 };
 
 const _arUiText = <String, String>{
+  'broadcastAccessPriceFallback':
+      'السعر في تركيا: {price}. يظهر السعر الحالي في متجرك عند الدفع.',
+  'unlockLifetime': 'تفعيل البث مدى الحياة',
+  'broadcastAccessRemoteUnlockedBody':
+      'البث مدى الحياة مفعّل على هاتف الغرفة. لا يلزم الشراء من هاتف الوالدين هذا. يمكن لما يصل إلى ٥ أجهزة للوالدين المشاهدة في الوقت نفسه.',
+  'broadcastAccessRemoteTrialBody':
+      'بقي لهاتف الغرفة {remaining} من إجمالي الساعتين المجانيتين لمتابعة الصوت أو الفيديو أو التنبيهات. يُفعّل الاستخدام مدى الحياة بشراء واحد من هاتف الغرفة. بلا اشتراك؛ حتى ٥ مشاهدين في الوقت نفسه.',
+  'broadcastAccessRemoteLockedBody':
+      'استهلك هاتف الغرفة إجمالي الساعتين المجانيتين لمتابعة الصوت والفيديو والتنبيهات. للمتابعة، اشترِ الاستخدام مدى الحياة مرة واحدة من هاتف الغرفة. لا يلزم الشراء من هاتف الوالدين هذا. بلا اشتراك؛ حتى ٥ مشاهدين في الوقت نفسه.',
   'parentDeviceName': 'هاتف الوالدين',
   'rememberedDeviceCount': 'الأجهزة المحفوظة: {count}/{max}',
   'watchingDeviceCount': 'تستقبل البث: {count}/{max}',
@@ -910,20 +928,20 @@ const _arUiText = <String, String>{
   'videoFitContain': 'إظهار الإطار كاملاً',
   'videoFitCover': 'ملء الشاشة',
   'serverPreviewFullScreen': 'فتح معاينة البث بملء الشاشة',
-  'broadcastAccessUnlocked': 'تم فتح البث غير المحدود.',
-  'broadcastAccessUnlockedTitle': 'الوصول غير المحدود نشط',
+  'broadcastAccessUnlocked': 'تم تفعيل البث مدى الحياة.',
+  'broadcastAccessUnlockedTitle': 'البث مدى الحياة مفعّل',
   'broadcastAccessUnlockedBody':
-      'البث والمشاهدة المباشرة غير محدودين على هذا الجهاز.',
-  'broadcastAccessTrialTitle': 'ساعتان مجانيتان للبث',
+      'يمكن لهاتف الغرفة هذا البث مدى الحياة دون حد زمني. بلا اشتراك؛ ويمكن لما يصل إلى ٥ أجهزة للوالدين المشاهدة في الوقت نفسه.',
+  'broadcastAccessTrialTitle': 'ساعتان مجانيتان للبث إجمالًا',
   'broadcastAccessTrialBody':
-      'الوقت المجاني المتبقي: {remaining}. بعد ذلك افتح الوصول غير المحدود مرة واحدة مقابل {price}.',
+      'الوقت المجاني المتبقي لمتابعة الصوت أو الفيديو أو التنبيهات على هاتف الغرفة هذا: {remaining}. فعّل الاستخدام مدى الحياة من هذا الهاتف بدفعة واحدة قدرها {price}. بلا اشتراك؛ حتى ٥ مشاهدين في الوقت نفسه.',
   'durationMinutesShort': '{minutes} د',
   'durationHoursShort': '{hours} س',
   'durationHoursMinutesShort': '{hours} س {minutes} د',
-  'broadcastAccessLockedTitle': 'انتهى الوقت المجاني',
+  'broadcastAccessLockedTitle': 'انتهى وقت البث المجاني',
   'broadcastAccessLockedBody':
-      'يتطلب البث المباشر الآن شراءً لمرة واحدة بقيمة 300 TL. يبقى الفتح على هذا الجهاز.',
-  'unlockLifetimePrice': 'فتح غير محدود مقابل {price}',
+      'فعّل البث مدى الحياة من هاتف الغرفة هذا بدفعة واحدة قدرها {price}. بلا اشتراك؛ ويمكن لما يصل إلى ٥ أجهزة للوالدين المشاهدة في الوقت نفسه.',
+  'unlockLifetimePrice': 'تفعيل مدى الحياة · {price}',
   'restorePurchase': 'استعادة الشراء',
   'purchasePending': 'الشراء قيد الانتظار.',
   'purchaseCanceled': 'تم إلغاء الشراء.',

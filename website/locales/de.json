@@ -129,7 +129,7 @@
   "privacy.wifiAria": "Verbindung im selben WLAN",
   "compat.kicker": "Plattformunterstützung",
   "compat.title": "Nutze die Smartphones, die du schon zu Hause hast.",
-  "compat.subtitle": "Verteile die Rollen passend zu deinen Geräten und kenne wichtige Plattformunterschiede von Anfang an.",
+  "compat.subtitle": "Wähle die Rollen passend zu deinen Smartphones. Jedes Zimmertelefon bietet insgesamt 2 kostenlose Stunden für die Überwachung oder Benachrichtigungen. Danach kannst du die Nutzung einmalig dauerhaft freischalten.",
   "compat.androidVersion": "Android 7.0 und neuer",
   "compat.roomParentRole": "Babyzimmer- und Elternrolle",
   "compat.androidService": "Android-Vordergrunddienst in der Babyzimmerrolle",
@@ -209,7 +209,7 @@
   "privacyPage.networkWarningBody": "Die derzeitige lokale Übertragung bietet weder TLS noch Ende-zu-Ende-Verschlüsselung. MiuCam sollte ausschließlich in einem vertrauenswürdigen, durch ein starkes Passwort geschützten WLAN mit kontrolliertem Zugang verwendet werden. Offene oder öffentliche Netzwerke sind nicht geeignet.",
   "privacyPage.thirdPartiesTitle": "4. Internet und Dritte",
   "privacyPage.thirdPartiesP1": "Die Basisüberwachung von MiuCam funktioniert ohne Internetverbindung. Im Standardablauf sind weder Werbung noch ein SDK zur Analyse des Nutzerverhaltens enthalten; Kamera- oder Mikrofonmedien werden nicht an einen von MiuCam betriebenen Cloud-Server gesendet.",
-  "privacyPage.thirdPartiesP2": "Wenn optionale In-App-Käufe aktiviert werden, kann die Zahlungsinfrastruktur des Apple App Store oder von Google Play genutzt werden. Daten zur Kaufprüfung dürfen ausschließlich an einen konfigurierten, vertrauenswürdigen HTTPS-Prüfdienst gesendet werden; Kamera- und Mikrofonmedien werden niemals an diesen Dienst übertragen. Für diese Dienste gelten deren eigene Datenschutzbestimmungen.",
+  "privacyPage.thirdPartiesP2": "Jedes Zimmertelefon bietet insgesamt 2 Stunden kostenlose Nutzung. Wer danach weitermachen möchte, kann die dauerhafte Nutzung einmalig auf dem Zimmertelefon über den Apple App Store oder Google Play kaufen, sobald der Kauf verfügbar ist. Kaufbelege und Angaben zur Kaufprüfung werden ausschließlich an einen konfigurierten, vertrauenswürdigen HTTPS-Prüfdienst gesendet; Kamerabilder und Mikrofonton sind nicht enthalten. Für diese Dienste gelten eigene Datenschutzbestimmungen.",
   "privacyPage.storageTitle": "5. Speicherung und Löschung",
   "privacyPage.storageItem1": "Wenn eine Kopplung in der App entfernt wird, werden auch die zugehörigen sicheren Zugriffsschlüssel gelöscht.",
   "privacyPage.storageItem2": "Der Ereignis- und Benachrichtigungsverlauf kann in der App gelöscht werden.",
@@ -230,5 +230,7 @@
   "privacyPage.contactBefore": "Für technische Rückmeldungen kannst du die",
   "privacyPage.contactLink": "GitHub-Issues-Seite von MiuCam",
   "privacyPage.contactAfter": "nutzen. Dieser Kanal ist öffentlich; teile dort keine persönlichen, sensiblen oder das Kind betreffenden Daten. Ein eigener Supportkanal des Entwicklers wird mit der Store-Veröffentlichung bekannt gegeben.",
-  "privacyPage.changesBody": "Wenn sich die Datenverarbeitung der App ändert, werden diese Erklärung und das Datum der letzten Aktualisierung entsprechend angepasst."
+  "privacyPage.changesBody": "Wenn sich die Datenverarbeitung der App ändert, werden diese Erklärung und das Datum der letzten Aktualisierung entsprechend angepasst.",
+  "faq.pricingQ": "Was kostet MiuCam? Gibt es ein Abo?",
+  "faq.pricingA": "Jedes Zimmertelefon bietet insgesamt 2 kostenlose Stunden für Ton, Bild oder Benachrichtigungen. Die Zeit zählt, solange mindestens eine dieser Funktionen aktiv ist; gleichzeitige Zuschauer vervielfachen den Verbrauch nicht. Beim Warten auf den QR-Scan, bei reiner lokaler Vorschau oder ohne Elternverbindung wird keine Zeit verbraucht. Danach kaufst du die dauerhafte Nutzung einmalig auf dem Zimmertelefon; auf dem Elterntelefon ist kein zusätzlicher Kauf nötig. Der vorgesehene Preis für die Türkei beträgt 350 TRY; Preise für andere Regionen werden im App-Store angezeigt. Es gibt kein Abo. Bis zu 5 Elterngeräte können gleichzeitig zusehen; der Kauf ändert diese Grenze nicht."
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:in_app_purchase/in_app_purchase.dart';
@@ -13,7 +14,10 @@ class BroadcastAccessConfig {
   const BroadcastAccessConfig._();
 
   static const freeLimit = Duration(hours: 2);
-  static const oneTimePriceLabel = '300 TL';
+  static const oneTimePriceTry = 350;
+  static const oneTimePriceLabel = '350 TL';
+  // Keep the original store identity so previous purchases remain restorable.
+  // The current price is configured in the stores, independently of this ID.
   static const productId = 'miucam_lifetime_unlock_try_300';
   static const entitlementAuthority = 'room_server';
   static const checkpointInterval = Duration(seconds: 15);
@@ -42,6 +46,7 @@ class BroadcastAccessSnapshot {
     required this.remainingMs,
     required this.priceLabel,
     required this.productId,
+    this.hasStorePrice = false,
     this.entitlementAuthority = BroadcastAccessConfig.entitlementAuthority,
     this.entitlementId,
     this.purchaseVerifiedAtMs,
@@ -57,6 +62,7 @@ class BroadcastAccessSnapshot {
   final int remainingMs;
   final String priceLabel;
   final String productId;
+  final bool hasStorePrice;
   final String entitlementAuthority;
   final String? entitlementId;
   final int? purchaseVerifiedAtMs;
@@ -93,6 +99,7 @@ class BroadcastAccessSnapshot {
       priceLabel: json['priceLabel']?.toString().trim().isNotEmpty == true
           ? json['priceLabel'].toString().trim()
           : BroadcastAccessConfig.oneTimePriceLabel,
+      hasStorePrice: json['hasStorePrice'] == true,
       productId: json['productId']?.toString().trim().isNotEmpty == true
           ? json['productId'].toString().trim()
           : BroadcastAccessConfig.productId,
@@ -126,6 +133,7 @@ class BroadcastAccessSnapshot {
     int? usedMs,
     int? remainingMs,
     String? priceLabel,
+    bool? hasStorePrice,
   }) =>
       BroadcastAccessSnapshot(
         unlocked: unlocked ?? this.unlocked,
@@ -134,6 +142,7 @@ class BroadcastAccessSnapshot {
         usedMs: usedMs ?? this.usedMs,
         remainingMs: remainingMs ?? this.remainingMs,
         priceLabel: priceLabel ?? this.priceLabel,
+        hasStorePrice: hasStorePrice ?? this.hasStorePrice,
         productId: productId,
         entitlementAuthority: entitlementAuthority,
         entitlementId: entitlementId,
@@ -150,6 +159,7 @@ class BroadcastAccessSnapshot {
         'usedMs': usedMs,
         'remainingMs': remainingMs,
         'priceLabel': priceLabel,
+        'hasStorePrice': hasStorePrice,
         'productId': productId,
         'locked': isLocked,
         'entitlementAuthority': entitlementAuthority,
@@ -319,6 +329,7 @@ class InAppBroadcastPurchaseGateway
   StreamSubscription<List<PurchaseDetails>>? _subscription;
   Completer<BroadcastPurchaseResult>? _active;
   final _events = SerializedAsyncExecutor();
+  final _closed = Completer<void>();
   Future<BroadcastProductOffer?>? _offerLoad;
   bool _disposed = false;
 
@@ -333,6 +344,9 @@ class InAppBroadcastPurchaseGateway
 
   @override
   Future<BroadcastProductOffer?> loadOffer({required String productId}) {
+    if (_disposed || !isPurchaseVerifierConfigured(_verifier)) {
+      return Future.value(null);
+    }
     final cached = _offers[productId];
     if (cached != null) return Future.value(_toOffer(cached));
     final loading = _offerLoad;
@@ -346,11 +360,14 @@ class InAppBroadcastPurchaseGateway
   }
 
   Future<BroadcastProductOffer?> _loadOffer(String productId) async {
-    if (_disposed || !await _store.isAvailable().timeout(catalogTimeout)) {
+    if (_disposed || !await _awaitStore(_store.isAvailable, catalogTimeout)) {
       return null;
     }
-    final response =
-        await _store.queryProductDetails({productId}).timeout(catalogTimeout);
+    final response = await _awaitStore(
+      () => _store.queryProductDetails({productId}),
+      catalogTimeout,
+    );
+    if (_disposed) return null;
     for (final product in response.productDetails) {
       _offers[product.id] = product;
     }
@@ -364,6 +381,13 @@ class InAppBroadcastPurchaseGateway
     required String priceLabel,
   }) async {
     if (_disposed) return _disposedResult;
+    if (!isPurchaseVerifierConfigured(_verifier)) {
+      return const BroadcastPurchaseResult(
+        status: BroadcastPurchaseStatus.unavailable,
+        message:
+            'Purchase verification is not configured; checkout was not opened.',
+      );
+    }
     if (productId != expectedProductId) {
       return const BroadcastPurchaseResult(
         status: BroadcastPurchaseStatus.unavailable,
@@ -373,7 +397,7 @@ class InAppBroadcastPurchaseGateway
     if (_active != null) return _pendingResult;
     final completer = _begin();
     try {
-      final available = await _store.isAvailable().timeout(catalogTimeout);
+      final available = await _awaitStore(_store.isAvailable, catalogTimeout);
       if (!available) {
         _publishAndComplete(const BroadcastPurchaseResult(
           status: BroadcastPurchaseStatus.unavailable,
@@ -388,11 +412,11 @@ class InAppBroadcastPurchaseGateway
             message: 'Purchase product is not configured.',
           ));
         } else {
-          final launched = await _store
-              .buyNonConsumable(
-                purchaseParam: PurchaseParam(productDetails: product),
-              )
-              .timeout(timeout);
+          final launched = await _awaitStore(
+              () => _store.buyNonConsumable(
+                    purchaseParam: PurchaseParam(productDetails: product),
+                  ),
+              timeout);
           if (!launched) {
             _publishAndComplete(const BroadcastPurchaseResult(
               status: BroadcastPurchaseStatus.error,
@@ -416,6 +440,12 @@ class InAppBroadcastPurchaseGateway
   @override
   Future<BroadcastPurchaseResult> restore({required String productId}) async {
     if (_disposed) return _disposedResult;
+    if (!isPurchaseVerifierConfigured(_verifier)) {
+      return const BroadcastPurchaseResult(
+        status: BroadcastPurchaseStatus.unavailable,
+        message: 'Purchase verification is not configured.',
+      );
+    }
     if (productId != expectedProductId) {
       return const BroadcastPurchaseResult(
         status: BroadcastPurchaseStatus.unavailable,
@@ -425,13 +455,13 @@ class InAppBroadcastPurchaseGateway
     if (_active != null) return _pendingResult;
     final completer = _begin();
     try {
-      if (!await _store.isAvailable().timeout(catalogTimeout)) {
+      if (!await _awaitStore(_store.isAvailable, catalogTimeout)) {
         _publishAndComplete(const BroadcastPurchaseResult(
           status: BroadcastPurchaseStatus.unavailable,
           message: 'Store is not available on this device.',
         ));
       } else {
-        await _store.restorePurchases().timeout(timeout);
+        await _awaitStore(_store.restorePurchases, timeout);
       }
     } catch (error) {
       _publishAndComplete(BroadcastPurchaseResult(
@@ -450,6 +480,24 @@ class InAppBroadcastPurchaseGateway
 
   Completer<BroadcastPurchaseResult> _begin() {
     return _active = Completer<BroadcastPurchaseResult>();
+  }
+
+  // Native store calls may never finish when the owner leaves the room screen.
+  // Complete their wrapper on disposal so catalog timers cannot keep running
+  // and a late store response cannot open checkout after the screen is gone.
+  Future<T> _awaitStore<T>(
+    Future<T> Function() operation,
+    Duration limit,
+  ) {
+    if (_disposed) {
+      return Future.error(StateError('Purchase gateway is disposed.'));
+    }
+    return Future.any<T>([
+      operation(),
+      _closed.future.then<T>(
+        (_) => throw StateError('Purchase gateway is disposed.'),
+      ),
+    ]).timeout(limit);
   }
 
   Future<BroadcastPurchaseResult> _awaitActive(
@@ -587,6 +635,7 @@ class InAppBroadcastPurchaseGateway
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _closed.complete();
     final active = _active;
     _active = null;
     if (active != null && !active.isCompleted) active.complete(_disposedResult);
@@ -648,7 +697,7 @@ class BroadcastAccessService {
       _handlePurchaseUpdate,
       onError: (Object _, StackTrace __) {},
     );
-    _offerLoad = _loadOfferBestEffort();
+    unawaited(_loadOfferBestEffort());
   }
 
   static const _prefix = 'broadcast_access.';
@@ -664,6 +713,7 @@ class BroadcastAccessService {
   static const _activeCheckpointWallMsKey =
       '${_prefix}active_checkpoint_wall_ms';
   static const _lastObservedWallMsKey = '${_prefix}last_observed_wall_ms';
+  static const _trialLedgerKey = '${_prefix}trial_ledger_v1';
 
   final SharedPreferences _preferences;
   final BroadcastPurchaseGateway _purchaseGateway;
@@ -678,20 +728,27 @@ class BroadcastAccessService {
   final _changes = StreamController<BroadcastAccessSnapshot>.broadcast();
   late final Future<void> _initialization;
   late final StreamSubscription<BroadcastPurchaseResult> _purchaseUpdates;
-  late final Future<void> _offerLoad;
   final _mutations = SerializedAsyncExecutor();
   Timer? _checkpointTimer;
   int? _activeStartedAtMonoMs;
+  int _storedUsedMs = 0;
+  int _lastObservedWallMs = 0;
+  bool _trialLedgerInitialized = false;
+  bool _trialLedgerDirty = false;
+  bool _entitlementPersistenceFailed = false;
+  Object? _lastPersistenceError;
   String? _localizedPriceLabel;
   BroadcastPurchaseResult? _lastPurchaseResult;
   bool _disposed = false;
 
   Stream<BroadcastAccessSnapshot> get changes => _changes.stream;
   BroadcastPurchaseResult? get lastPurchaseResult => _lastPurchaseResult;
+  Object? get lastPersistenceError => _lastPersistenceError;
 
   Future<BroadcastAccessSnapshot> snapshot() async {
     await _initialization;
-    await _offerLoad;
+    // Local trial enforcement must never wait for store connectivity. Price
+    // availability is published separately through changes when it arrives.
     await _mutations.drain();
     return _snapshot();
   }
@@ -706,7 +763,12 @@ class BroadcastAccessService {
       final monoNow = _monoNowMs();
       if (_activeSessions.isEmpty) {
         _activeStartedAtMonoMs = monoNow;
-        await _writeActiveMarker(active: true);
+        try {
+          await _writeTrialLedger(active: true);
+        } catch (_) {
+          _activeStartedAtMonoMs = null;
+          rethrow;
+        }
         _startCheckpointTimer();
       }
       _activeSessions[normalized] = monoNow;
@@ -718,7 +780,12 @@ class BroadcastAccessService {
     await _initialization;
     return _serialize(() async {
       final removed = _activeSessions.remove(_normalizeSessionId(sessionId));
-      if (removed == null) return _snapshot();
+      if (removed == null) {
+        if (_trialLedgerDirty) {
+          await _writeTrialLedger(active: _activeSessions.isNotEmpty);
+        }
+        return _snapshot();
+      }
       if (_activeSessions.isEmpty) {
         _checkpointTimer?.cancel();
         _checkpointTimer = null;
@@ -760,23 +827,55 @@ class BroadcastAccessService {
 
   Future<void> dispose() async {
     if (_disposed) return;
-    await _initialization;
+    _disposed = true;
     _checkpointTimer?.cancel();
     _checkpointTimer = null;
-    await endAllSessions();
-    _disposed = true;
-    await _purchaseUpdates.cancel();
-    await _purchaseGateway.dispose();
-    await _changes.close();
+    try {
+      await _initialization;
+      await endAllSessions();
+    } finally {
+      // Storage failure must not leave billing listeners or queued writes
+      // alive after the owner has disposed this service.
+      await _purchaseUpdates.cancel();
+      await _purchaseGateway.dispose();
+      await _mutations.close();
+      await _changes.close();
+    }
   }
 
   Future<void> _initializeTrialLedger() async {
     final nowWallMs = _nowMs();
-    final lastObservedWallMs =
-        _preferences.getInt(_lastObservedWallMsKey) ?? nowWallMs;
-    if (_preferences.getBool(_activeMarkerKey) == true) {
-      final checkpointWallMs =
-          _preferences.getInt(_activeCheckpointWallMsKey) ?? lastObservedWallMs;
+    final encoded = _preferences.getString(_trialLedgerKey);
+    late final bool wasActive;
+    late final int checkpointWallMs;
+    if (encoded == null) {
+      // The old keys are read only for migration. After the first successful
+      // write, one atomic record is the sole authority for trial accounting.
+      _storedUsedMs = (_preferences.getInt(_usedMsKey) ?? 0)
+          .clamp(0, _freeLimit.inMilliseconds);
+      _lastObservedWallMs =
+          _preferences.getInt(_lastObservedWallMsKey) ?? nowWallMs;
+      wasActive = _preferences.getBool(_activeMarkerKey) == true;
+      checkpointWallMs = _preferences.getInt(_activeCheckpointWallMsKey) ??
+          _lastObservedWallMs;
+    } else {
+      final ledger = jsonDecode(encoded);
+      if (ledger is! Map ||
+          ledger['version'] != 1 ||
+          ledger['usedMs'] is! int ||
+          ledger['active'] is! bool ||
+          ledger['lastObservedWallMs'] is! int ||
+          (ledger['active'] == true && ledger['checkpointWallMs'] is! int)) {
+        throw const FormatException('Invalid broadcast trial ledger.');
+      }
+      _storedUsedMs =
+          (ledger['usedMs'] as int).clamp(0, _freeLimit.inMilliseconds);
+      _lastObservedWallMs = ledger['lastObservedWallMs'] as int;
+      wasActive = ledger['active'] as bool;
+      checkpointWallMs =
+          ledger['checkpointWallMs'] as int? ?? _lastObservedWallMs;
+    }
+    if (wasActive) {
       final wallDelta = nowWallMs - checkpointWallMs;
       // Charge at most one checkpoint interval after an unclean shutdown. This
       // bounds lost trial time without charging arbitrary offline time. A wall
@@ -784,18 +883,11 @@ class BroadcastAccessService {
       final recoveredMs = wallDelta < 0
           ? _checkpointInterval.inMilliseconds
           : min(wallDelta, _checkpointInterval.inMilliseconds);
-      final stored = _preferences.getInt(_usedMsKey) ?? 0;
-      await _preferences.setInt(
-        _usedMsKey,
-        (stored + recoveredMs).clamp(0, _freeLimit.inMilliseconds),
-      );
+      _storedUsedMs =
+          (_storedUsedMs + recoveredMs).clamp(0, _freeLimit.inMilliseconds);
     }
-    await _preferences.setBool(_activeMarkerKey, false);
-    await _preferences.remove(_activeCheckpointWallMsKey);
-    await _preferences.setInt(
-      _lastObservedWallMsKey,
-      max(lastObservedWallMs, nowWallMs),
-    );
+    await _writeTrialLedger(active: false);
+    _trialLedgerInitialized = true;
   }
 
   Future<void> _loadOfferBestEffort() async {
@@ -807,7 +899,11 @@ class BroadcastAccessService {
       if (offerGateway == null) return;
       final offer = await offerGateway.loadOffer(productId: _productId);
       final price = offer?.localizedPrice.trim();
-      if (price != null && price.isNotEmpty) _localizedPriceLabel = price;
+      if (price != null && price.isNotEmpty) {
+        _localizedPriceLabel = price;
+        await _initialization;
+        _publishSnapshot();
+      }
     } catch (_) {
       // Store catalog availability is reflected by the purchase operation. A
       // cached/fallback label keeps diagnostics usable while the store is down.
@@ -821,9 +917,7 @@ class BroadcastAccessService {
     if (!result.unlocksAccess || _disposed) return;
     unawaited(_initialization
         .then((_) => _serialize(() async {
-              final snapshot = await _persistVerifiedUnlock(result);
-              if (!_changes.isClosed) _changes.add(snapshot);
-              return snapshot;
+              return _persistVerifiedUnlock(result);
             }))
         .then<void>((_) {}, onError: (_) {}));
   }
@@ -849,16 +943,32 @@ class BroadcastAccessService {
         _hasValidPersistedEntitlement()) {
       return _snapshot();
     }
-    await _preferences.setString(_verificationSourceKey, source);
-    await _preferences.setString(_verificationFingerprintKey, fingerprint);
-    await _preferences.setString(
-      _verificationAuthorityKey,
-      result.verificationAuthority,
-    );
-    await _preferences.setString(_entitlementIdKey, entitlementId);
-    await _preferences.setInt(_verifiedAtMsKey, _nowMs());
-    // Write the grant last, after every piece of trusted evidence is durable.
-    await _preferences.setBool(_unlockedKey, true);
+    final previouslyUnlocked = _hasValidPersistedEntitlement();
+    try {
+      await _requireSaved(
+          _preferences.setString(_verificationSourceKey, source));
+      await _requireSaved(
+          _preferences.setString(_verificationFingerprintKey, fingerprint));
+      await _requireSaved(_preferences.setString(
+        _verificationAuthorityKey,
+        result.verificationAuthority,
+      ));
+      await _requireSaved(
+          _preferences.setString(_entitlementIdKey, entitlementId));
+      await _requireSaved(_preferences.setInt(_verifiedAtMsKey, _nowMs()));
+      // Write the grant last, after every piece of trusted evidence is durable.
+      await _requireSaved(_preferences.setBool(_unlockedKey, true));
+      _entitlementPersistenceFailed = false;
+    } catch (_) {
+      _entitlementPersistenceFailed = !previouslyUnlocked;
+      // Legacy SharedPreferences changes its cache before writing the device.
+      // Undo a failed grant in that cache as well, so service recreation cannot
+      // mistake an unsaved true value for a lifetime entitlement.
+      try {
+        await _preferences.setBool(_unlockedKey, previouslyUnlocked);
+      } catch (_) {}
+      rethrow;
+    }
     return _snapshot();
   }
 
@@ -875,6 +985,7 @@ class BroadcastAccessService {
       usedMs: usedMs.clamp(0, freeLimitMs),
       remainingMs: remainingMs,
       priceLabel: _localizedPriceLabel ?? _fallbackPriceLabel,
+      hasStorePrice: _localizedPriceLabel != null,
       productId: _productId,
       entitlementId: _preferences.getString(_entitlementIdKey),
       purchaseVerifiedAtMs: _preferences.getInt(_verifiedAtMsKey),
@@ -888,6 +999,7 @@ class BroadcastAccessService {
   }
 
   bool _hasValidPersistedEntitlement() =>
+      !_entitlementPersistenceFailed &&
       (_preferences.getBool(_unlockedKey) ?? false) &&
       _preferences.getString(_verificationAuthorityKey) ==
           trustedBackendVerificationAuthority &&
@@ -898,14 +1010,13 @@ class BroadcastAccessService {
       (_preferences.getInt(_verifiedAtMsKey) ?? 0) > 0;
 
   int _effectiveUsedMs() {
-    final stored = _preferences.getInt(_usedMsKey) ?? 0;
     final startedAt = _activeStartedAtMonoMs;
-    if (_activeSessions.isEmpty || startedAt == null) return stored;
+    if (_activeSessions.isEmpty || startedAt == null) return _storedUsedMs;
     final elapsed = (_monoNowMs() - startedAt).clamp(
       0,
       _freeLimit.inMilliseconds,
     );
-    return (stored + elapsed).clamp(0, _freeLimit.inMilliseconds);
+    return (_storedUsedMs + elapsed).clamp(0, _freeLimit.inMilliseconds);
   }
 
   Future<void> _checkpointActiveElapsed({required bool keepActive}) async {
@@ -916,32 +1027,62 @@ class BroadcastAccessService {
         0,
         _freeLimit.inMilliseconds,
       );
-      final stored = _preferences.getInt(_usedMsKey) ?? 0;
-      await _preferences.setInt(
-        _usedMsKey,
-        (stored + elapsed).clamp(0, _freeLimit.inMilliseconds),
-      );
+      // Account once in memory before awaiting storage. A failed final stop
+      // must neither lose elapsed usage nor bill offline time on retry.
+      _storedUsedMs =
+          (_storedUsedMs + elapsed).clamp(0, _freeLimit.inMilliseconds);
       _activeStartedAtMonoMs = keepActive ? monoNow : null;
     }
-    await _writeActiveMarker(active: keepActive);
+    await _writeTrialLedger(active: keepActive);
   }
 
-  Future<void> _writeActiveMarker({required bool active}) async {
+  Future<void> _writeTrialLedger({required bool active}) async {
     final nowWallMs = _nowMs();
-    final previousWallMs =
-        _preferences.getInt(_lastObservedWallMsKey) ?? nowWallMs;
-    final safeWallMs = max(previousWallMs, nowWallMs);
-    await _preferences.setInt(_lastObservedWallMsKey, safeWallMs);
-    await _preferences.setBool(_activeMarkerKey, active);
-    if (active) {
-      await _preferences.setInt(_activeCheckpointWallMsKey, safeWallMs);
-    } else {
-      await _preferences.remove(_activeCheckpointWallMsKey);
+    _lastObservedWallMs = max(_lastObservedWallMs, nowWallMs);
+    final previous = _preferences.getString(_trialLedgerKey);
+    _trialLedgerDirty = true;
+    try {
+      await _requireSaved(_preferences.setString(
+        _trialLedgerKey,
+        jsonEncode({
+          'version': 1,
+          'usedMs': _storedUsedMs,
+          'active': active,
+          'lastObservedWallMs': _lastObservedWallMs,
+          if (active) 'checkpointWallMs': _lastObservedWallMs,
+        }),
+      ));
+      _trialLedgerDirty = false;
+    } catch (_) {
+      // setString updates the plugin cache before the platform write. Restore
+      // the previous record there; the in-memory counter retains unsaved usage
+      // for the next checkpoint or start retry.
+      try {
+        if (previous == null) {
+          await _preferences.remove(_trialLedgerKey);
+        } else {
+          await _preferences.setString(_trialLedgerKey, previous);
+        }
+      } catch (_) {}
+      rethrow;
+    }
+  }
+
+  Future<void> _requireSaved(Future<bool> write) async {
+    try {
+      if (!await write) {
+        throw StateError('Broadcast access could not be saved.');
+      }
+      _lastPersistenceError = null;
+    } catch (error) {
+      _lastPersistenceError = error;
+      throw BroadcastAccessPersistenceException(error);
     }
   }
 
   void _startCheckpointTimer() {
     _checkpointTimer?.cancel();
+    if (_disposed) return;
     _checkpointTimer = Timer.periodic(_checkpointInterval, (_) {
       if (_disposed || _activeSessions.isEmpty) return;
       unawaited(_serialize(() async {
@@ -953,7 +1094,19 @@ class BroadcastAccessService {
   }
 
   Future<T> _serialize<T>(Future<T> Function() operation) {
-    return _mutations.run(operation);
+    return _mutations.run(() async {
+      try {
+        return await operation();
+      } finally {
+        _publishSnapshot();
+      }
+    });
+  }
+
+  void _publishSnapshot() {
+    if (!_disposed && _trialLedgerInitialized && !_changes.isClosed) {
+      _changes.add(_snapshot());
+    }
   }
 
   int _nowMs() => _now().millisecondsSinceEpoch;
@@ -964,4 +1117,13 @@ class BroadcastAccessService {
     final trimmed = sessionId.trim();
     return trimmed.isEmpty ? 'broadcast' : trimmed;
   }
+}
+
+class BroadcastAccessPersistenceException implements Exception {
+  const BroadcastAccessPersistenceException(this.cause);
+
+  final Object cause;
+
+  @override
+  String toString() => 'BROADCAST_ACCESS_PERSISTENCE_FAILED: $cause';
 }

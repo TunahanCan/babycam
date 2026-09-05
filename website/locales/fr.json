@@ -129,7 +129,7 @@
   "privacy.localRoute": "Les données restent sur le réseau domestique",
   "compat.kicker": "Compatibilité des plateformes",
   "compat.title": "Faites travailler ensemble les téléphones de la maison.",
-  "compat.subtitle": "Choisissez les rôles selon vos appareils et connaissez dès le départ les différences importantes entre les plateformes.",
+  "compat.subtitle": "Choisissez les rôles selon vos téléphones. Chaque téléphone de chambre inclut 2 heures gratuites au total de suivi ou d’alertes, puis un achat unique permet l’utilisation à vie.",
   "compat.androidVersion": "Android 7.0 et versions ultérieures",
   "compat.roomParentRole": "Rôle Chambre ou Parent",
   "compat.androidService": "Service Android au premier plan pour le rôle Chambre",
@@ -209,7 +209,7 @@
   "privacyPage.networkWarningBody": "Le transfert local actuel n’offre ni TLS ni chiffrement de bout en bout. MiuCam doit être utilisé uniquement sur un réseau Wi-Fi de confiance, protégé par un mot de passe robuste et dont vous contrôlez l’accès. Les réseaux ouverts ou publics ne conviennent pas.",
   "privacyPage.thirdPartiesTitle": "4. Internet et tiers",
   "privacyPage.thirdPartiesP1": "La fonction de surveillance de base de MiuCam fonctionne sans connexion Internet. Par défaut, le produit ne contient aucun SDK publicitaire ou d’analyse du comportement utilisateur, et les médias issus de la caméra ou du microphone ne sont pas envoyés à un serveur cloud appartenant à MiuCam.",
-  "privacyPage.thirdPartiesP2": "Si les achats intégrés facultatifs sont activés, les infrastructures de paiement de l’Apple App Store ou de Google Play peuvent être utilisées. Les données de validation d’achat peuvent être envoyées uniquement à un service de validation HTTPS fiable et configuré ; les médias de la caméra et du microphone ne sont jamais transmis à ce service. Ces services sont soumis à leurs propres politiques de confidentialité.",
+  "privacyPage.thirdPartiesP2": "Chaque téléphone de chambre inclut 2 heures gratuites au total. Les utilisateurs qui choisissent de continuer peuvent acheter l’utilisation à vie en une fois depuis ce téléphone, via l’Apple App Store ou Google Play, lorsque l’achat est disponible. Les reçus d’achat et les données de validation sont envoyés uniquement à un service de validation HTTPS fiable et configuré ; ils n’incluent ni la vidéo de la caméra ni le son du microphone. Ces services ont leurs propres conditions de confidentialité.",
   "privacyPage.storageTitle": "5. Conservation et suppression",
   "privacyPage.storageItem1": "Lorsque des jumelages sont supprimés dans l’application, les clés d’accès sécurisées correspondantes le sont également.",
   "privacyPage.storageItem2": "L’historique des événements et notifications peut être effacé dans l’application.",
@@ -230,5 +230,7 @@
   "privacyPage.contactBefore": "Pour transmettre un commentaire technique, vous pouvez utiliser la",
   "privacyPage.contactLink": "page GitHub Issues de MiuCam",
   "privacyPage.contactAfter": ". Ce canal est public : ne partagez aucune donnée personnelle, sensible ou concernant un enfant. Un canal d’assistance privé destiné aux développeurs sera annoncé lors de la publication sur les boutiques.",
-  "privacyPage.changesBody": "Si la manière dont l’application traite les données évolue, cette politique et sa date de mise à jour seront révisées."
+  "privacyPage.changesBody": "Si la manière dont l’application traite les données évolue, cette politique et sa date de mise à jour seront révisées.",
+  "faq.pricingQ": "Combien coûte MiuCam ? Y a-t-il un abonnement ?",
+  "faq.pricingA": "Chaque téléphone de chambre inclut 2 heures gratuites au total d’audio, de vidéo ou de suivi des alertes. Le temps est décompté tant qu’au moins une de ces fonctions est active ; plusieurs spectateurs simultanés ne multiplient pas le temps utilisé. L’attente du scan QR, l’aperçu local seul ou l’absence de connexion parent ne consomment pas de temps. Ensuite, l’utilisation à vie s’achète en une fois sur le téléphone de la chambre ; aucun achat supplémentaire n’est nécessaire sur le téléphone parent. Le prix prévu pour la Turquie est de 350 TRY ; les prix des autres régions sont affichés dans la boutique d’applications. Il n’y a pas d’abonnement. Jusqu’à 5 appareils parents peuvent regarder en même temps ; l’achat ne modifie pas cette limite."
 }

@@ -1,11 +1,10 @@
 class MiuCamFeatureFlags {
   const MiuCamFeatureFlags._();
 
-  /// Paid broadcast/watch access is intentionally hidden in normal test builds.
-  /// Enable only for explicit store/paywall verification builds with:
-  /// `--dart-define=MIUCAM_BROADCAST_PAYWALL_ENABLED=true`.
+  /// Room devices include two cumulative free hours, then require a lifetime
+  /// unlock. Only diagnostic builds should explicitly disable this policy.
   static const broadcastPaywallEnabled = bool.fromEnvironment(
     'MIUCAM_BROADCAST_PAYWALL_ENABLED',
-    defaultValue: false,
+    defaultValue: true,
   );
 }

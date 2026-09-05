@@ -106,6 +106,7 @@ class ServerRuntime implements AppRuntime {
     Object? Function()? previewSource,
     MediaQualityProfile Function()? mediaProfile,
     BroadcastAccessService? broadcastAccess,
+    Stream<BroadcastAccessSnapshot>? broadcastAccessChanges,
     PlatformMediaLifecycleCoordinator? platformLifecycle,
     Future<void> Function(MediaResourceDemand demand)? onMediaDemandChanged,
     Future<void> Function(bool enabled)? onVideoEncodingDemandChanged,
@@ -150,6 +151,11 @@ class ServerRuntime implements AppRuntime {
         'must be positive',
       );
     }
+    _broadcastAccessChanges = broadcastAccessChanges?.listen((snapshot) {
+      if (_disposed) return;
+      _scheduleBroadcastAccessTimer(snapshot);
+      _emit(_stateForPhase(_state.phase, broadcastAccess: snapshot));
+    });
     _platformLifecycle?.start();
   }
 
@@ -187,6 +193,7 @@ class ServerRuntime implements AppRuntime {
   final _resources = MediaResourceCounter();
   ServerRuntimeState _state =
       const ServerRuntimeState(phase: ServerRuntimePhase.stopped);
+  StreamSubscription<BroadcastAccessSnapshot>? _broadcastAccessChanges;
   Timer? _broadcastAccessTimer;
   int _broadcastAccessTimerGeneration = 0;
   final _mutations = SerializedAsyncExecutor();
@@ -322,26 +329,9 @@ class ServerRuntime implements AppRuntime {
     if (_externalCaptureOwners.isNotEmpty) {
       throw const WebRtcPilotCapacityException();
     }
-    final access = _broadcastAccess;
-    BroadcastAccessSnapshot? accessSnapshot;
-    const accessSessionId = 'server.localPreview';
-    if (access != null) {
-      try {
-        accessSnapshot = await access.beginSession(accessSessionId);
-        _scheduleBroadcastAccessTimer(accessSnapshot);
-      } on BroadcastAccessLockedException catch (error) {
-        _emit(_errorState(
-          error,
-          broadcastAccess: error.snapshot,
-          kind: ServerRuntimeErrorKind.broadcastAccess,
-        ));
-        rethrow;
-      }
-    }
     _resources.localPreviewActive = true;
     _emit(_stateForPhase(
       ServerRuntimePhase.mediaStarting,
-      broadcastAccess: accessSnapshot,
     ));
     try {
       final demand = _resourceDemand();
@@ -350,29 +340,20 @@ class ServerRuntime implements AppRuntime {
       await _publishMediaDemand();
       if (_disposed) {
         _resources.localPreviewActive = false;
-        await access?.endSession(accessSessionId);
         await _mediaRuntime.reconcile(MediaResourceDemand.none);
         await _publishMediaDemand();
         return;
       }
       _emit(_stateForPhase(
         ServerRuntimePhase.mediaActive,
-        broadcastAccess: accessSnapshot,
       ));
     } catch (error, stackTrace) {
       _resources.localPreviewActive = false;
-      _cancelBroadcastAccessTimer();
-      try {
-        accessSnapshot = await access?.endSession(accessSessionId);
-        _scheduleBroadcastAccessTimer(accessSnapshot);
-      } catch (_) {
-        if (access != null) await _restoreBroadcastAccessTimer(access);
-      }
       try {
         await _mediaRuntime.reconcile(_resourceDemand());
       } catch (_) {}
       await _publishMediaDemand();
-      _emit(_errorState(error, broadcastAccess: accessSnapshot));
+      _emit(_errorState(error));
       Error.throwWithStackTrace(error, stackTrace);
     }
   }
@@ -381,29 +362,8 @@ class ServerRuntime implements AppRuntime {
       _serializeMutation(_stopLocalPreviewLocked);
 
   Future<void> _stopLocalPreviewLocked() async {
-    final access = _broadcastAccess;
-    if (!_resources.localPreviewActive) {
-      if (access != null && !_disposed) {
-        _cancelBroadcastAccessTimer();
-        await _restoreBroadcastAccessTimer(access);
-      }
-      return;
-    }
-    _cancelBroadcastAccessTimer();
+    if (!_resources.localPreviewActive) return;
     _resources.localPreviewActive = false;
-    BroadcastAccessSnapshot? accessSnapshot;
-    Object? accessError;
-    StackTrace? accessStackTrace;
-    try {
-      accessSnapshot = await access?.endSession('server.localPreview');
-      _scheduleBroadcastAccessTimer(accessSnapshot);
-    } catch (error, stackTrace) {
-      accessError = error;
-      accessStackTrace = stackTrace;
-      if (access != null) {
-        accessSnapshot = await _restoreBroadcastAccessTimer(access);
-      }
-    }
     await _recomputeResources(
       startMediaIfNeeded: false,
       phase: ServerRuntimePhase.mediaIdle,
@@ -413,11 +373,7 @@ class ServerRuntime implements AppRuntime {
       demand.isEmpty
           ? ServerRuntimePhase.mediaIdle
           : ServerRuntimePhase.mediaActive,
-      broadcastAccess: accessSnapshot,
     ));
-    if (accessError != null) {
-      Error.throwWithStackTrace(accessError, accessStackTrace!);
-    }
   }
 
   Future<void> markClientPaired() async {
@@ -989,7 +945,6 @@ class ServerRuntime implements AppRuntime {
     // or local-preview transition that started while the snapshot was being
     // read has already advanced the generation and returns above.
     _cancelBroadcastAccessTimer();
-    await _mediaRuntime.reconcile(MediaResourceDemand.none);
     _activeSessions.clear();
     _appliedSessions.clear();
     _sessionIntentGenerations.clear();
@@ -997,15 +952,17 @@ class ServerRuntime implements AppRuntime {
     _appliedExternalCaptureOwners.clear();
     _notificationClients.clear();
     _platformAudioOnly = false;
-    _resources.localPreviewActive = false;
     _refreshResourceCounts();
+    await _mediaRuntime.reconcile(_resourceDemand());
     await _publishMediaDemand();
     final snapshot = await access.endAllSessions();
     if (_disposed || !snapshot.isLocked) return;
-    _emit(_errorState(
-      BroadcastAccessLockedException(snapshot),
+    _emit(_stateForPhase(
+      ServerRuntimePhase.error,
+      errorMessage: BroadcastAccessLockedException(snapshot).toString(),
+      errorKind: ServerRuntimeErrorKind.broadcastAccess,
+      preserveErrorMessage: false,
       broadcastAccess: snapshot,
-      kind: ServerRuntimeErrorKind.broadcastAccess,
     ));
   }
 
@@ -1021,10 +978,21 @@ class ServerRuntime implements AppRuntime {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
-    await _platformLifecycle?.dispose();
-    await stop();
-    await _broadcastAccess?.dispose();
-    await _states.close();
+    await _broadcastAccessChanges?.cancel();
+    _broadcastAccessChanges = null;
+    try {
+      try {
+        await _platformLifecycle?.dispose();
+      } finally {
+        await stop();
+      }
+    } finally {
+      try {
+        await _broadcastAccess?.dispose();
+      } finally {
+        await _states.close();
+      }
+    }
   }
 
   Future<void> _publishMediaDemand({

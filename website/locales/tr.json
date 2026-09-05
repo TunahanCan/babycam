@@ -129,7 +129,7 @@
   "privacy.localRoute": "Veri yolu ev ağının içinde",
   "compat.kicker": "Platform desteği",
   "compat.title": "Evdeki telefonları birlikte değerlendir.",
-  "compat.subtitle": "Rolleri cihazlarına göre seç; önemli platform farklarını baştan bil.",
+  "compat.subtitle": "Rolleri cihazlarına göre seç. Her oda telefonunda izleme veya bildirim takibi için toplam 2 saat ücretsiz kullanım; sonrasında tek seferlik satın almayla ömür boyu kullanım.",
   "compat.androidVersion": "Android 7.0 ve üzeri",
   "compat.roomParentRole": "Oda ve ebeveyn rolü",
   "compat.androidService": "Oda rolünde Android ön plan servisi",
@@ -209,7 +209,7 @@
   "privacyPage.networkWarningBody": "Mevcut yerel aktarım TLS veya uçtan uca şifreleme sunmaz. MiuCam yalnızca güvendiğin, güçlü parola kullanan ve erişimini kontrol ettiğin bir Wi-Fi ağında kullanılmalıdır. Açık veya ortak ağlar uygun değildir.",
   "privacyPage.thirdPartiesTitle": "4. İnternet ve üçüncü taraflar",
   "privacyPage.thirdPartiesP1": "MiuCam’in temel izleme işlevi internet bağlantısı olmadan çalışır. Varsayılan ürün akışında reklam veya kullanıcı davranışı analiz SDK’sı bulunmaz ve kamera ya da mikrofon medyası MiuCam’e ait bir bulut sunucusuna gönderilmez.",
-  "privacyPage.thirdPartiesP2": "İsteğe bağlı uygulama içi satın alma etkinleştirilirse Apple App Store veya Google Play ödeme altyapısı kullanılabilir. Satın alma doğrulama verisi yalnızca yapılandırılmış güvenilir HTTPS doğrulama servisine gönderilebilir; kamera ve mikrofon medyası bu servise gönderilmez. Bu servisler kendi gizlilik koşullarına tabidir.",
+  "privacyPage.thirdPartiesP2": "Her oda telefonunda toplam 2 saat ücretsiz kullanım sunulur. Devam etmek isteyen kullanıcılar, satın alma kullanılabilir olduğunda oda telefonundan Apple App Store veya Google Play üzerinden tek seferlik ömür boyu kullanım satın alabilir. Satın alma makbuzu ve doğrulama bilgileri yalnızca yapılandırılmış güvenilir HTTPS doğrulama servisine gönderilir; kamera görüntüsü ve mikrofon sesi bu verilere dahil edilmez. Bu hizmetler kendi gizlilik koşullarına tabidir.",
   "privacyPage.storageTitle": "5. Saklama ve silme",
   "privacyPage.storageItem1": "Eşleşmeler uygulama içinden kaldırıldığında ilgili güvenli erişim anahtarları da silinir.",
   "privacyPage.storageItem2": "Olay ve bildirim geçmişi uygulama içinden temizlenebilir.",
@@ -230,5 +230,7 @@
   "privacyPage.contactBefore": "Teknik geri bildirim için MiuCam’in",
   "privacyPage.contactLink": "GitHub Issues sayfası",
   "privacyPage.contactAfter": "kullanılabilir. Bu kanal herkese açıktır; kişisel, hassas veya çocuğa ait veri paylaşılmamalıdır. Mağaza yayınıyla birlikte özel geliştirici destek kanalı ayrıca duyurulacaktır.",
-  "privacyPage.changesBody": "Uygulamanın veri işleme biçimi değişirse bu bildirim ve güncelleme tarihi yenilenir."
+  "privacyPage.changesBody": "Uygulamanın veri işleme biçimi değişirse bu bildirim ve güncelleme tarihi yenilenir.",
+  "faq.pricingQ": "Ücreti ne kadar, abonelik var mı?",
+  "faq.pricingA": "Her oda telefonunda ses, görüntü veya bildirim takibi için toplam 2 saat ücretsiz kullanım sunulur. Süre, bu işlevlerden en az biri aktifken ilerler; eşzamanlı izleyici sayısıyla katlanmaz. QR beklerken, yalnızca yerel önizleme açıkken veya ebeveyn bağlantısı yokken süre işlemez. Sonrasında ömür boyu kullanım oda telefonundan tek seferlik satın alınır; ebeveyn telefonundan ayrıca ödeme gerekmez. Türkiye için belirlenen fiyat 350 TL’dir; diğer bölgelerin fiyatı uygulama mağazasında gösterilir. Abonelik yoktur. Aynı anda en fazla 5 ebeveyn cihazı izleyebilir; satın alma bu sınırı değiştirmez."
 }

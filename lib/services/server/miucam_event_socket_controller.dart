@@ -14,6 +14,8 @@ class MiuCamEventSocketController {
     required this.writeConnectionLimitError,
     required this.onClientConnected,
     required this.onClientDisconnected,
+    this.onTransportConnected,
+    this.onTransportDisconnected,
     required this.isDisposed,
     required this.connectedLog,
     required this.onLog,
@@ -40,6 +42,8 @@ class MiuCamEventSocketController {
   ) writeConnectionLimitError;
   final FutureOr<void> Function(String clientId)? onClientConnected;
   final FutureOr<void> Function(String clientId)? onClientDisconnected;
+  final FutureOr<void> Function(String clientId)? onTransportConnected;
+  final FutureOr<void> Function(String clientId)? onTransportDisconnected;
   final bool Function() isDisposed;
   final String Function(String remoteAddress) connectedLog;
   final void Function(String message) onLog;
@@ -58,6 +62,7 @@ class MiuCamEventSocketController {
   final _clientSocketCounts = <String, int>{};
   final _armedClientIds = <String>{};
   final _armOperations = <String, Future<void>>{};
+  final _transportStarts = <String, Future<void>>{};
   final _disconnectTimers = <String, Timer>{};
   final _replayAlerts = <_ReplayAlert>[];
   final _deliveryCursors = <String, int>{};
@@ -106,6 +111,18 @@ class MiuCamEventSocketController {
 
     _cancelDisconnectTimer(clientId);
     try {
+      if (previousCount == 0) {
+        late final Future<void> transportStart;
+        transportStart = Future<void>.sync(
+          () => onTransportConnected?.call(clientId),
+        ).whenComplete(() {
+          if (identical(_transportStarts[clientId], transportStart)) {
+            _transportStarts.remove(clientId);
+          }
+        });
+        _transportStarts[clientId] = transportStart;
+      }
+      await _transportStarts[clientId];
       await _ensureClientArmed(clientId);
     } catch (error) {
       await _detachSocket(socket, scheduleDisconnect: false);
@@ -178,6 +195,11 @@ class MiuCamEventSocketController {
       return;
     }
     _clientSocketCounts.remove(clientId);
+    try {
+      await onTransportDisconnected?.call(clientId);
+    } catch (error) {
+      onLog('Alert transport cleanup failed: $error');
+    }
     if (isDisposed()) return;
     if (scheduleDisconnect) _scheduleDisconnect(clientId);
   }
@@ -263,6 +285,7 @@ class MiuCamEventSocketController {
     _clientSocketCounts.clear();
     _armedClientIds.clear();
     _armOperations.clear();
+    _transportStarts.clear();
     _deliveryCursors.clear();
     _replayAlerts.clear();
   }

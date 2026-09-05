@@ -62,11 +62,21 @@ void main() {
     final snapshot = await service.snapshot();
 
     expect(snapshot.usedMs, 12000);
-    expect(prefs.getBool('broadcast_access.active_marker'), isFalse);
-    expect(
-      prefs.containsKey('broadcast_access.active_checkpoint_wall_ms'),
-      isFalse,
+    final migrated =
+        jsonDecode(prefs.getString('broadcast_access.trial_ledger_v1')!) as Map;
+    expect(migrated['active'], isFalse);
+    expect(migrated.containsKey('checkpointWallMs'), isFalse);
+    final restartedAgain = BroadcastAccessService(
+      prefs,
+      purchaseGateway: _FakePurchaseGateway(),
+      now: clock.now,
+      monotonicNowMs: clock.monotonicNowMs,
+      freeLimit: const Duration(minutes: 5),
     );
+    addTearDown(restartedAgain.dispose);
+    // The legacy active flag stays available for migration diagnostics but
+    // cannot be applied a second time once the atomic ledger exists.
+    expect((await restartedAgain.snapshot()).usedMs, 12000);
   });
 
   test('wall-clock rollback charges one bounded checkpoint interval', () async {
@@ -89,6 +99,255 @@ void main() {
     addTearDown(service.dispose);
 
     expect((await service.snapshot()).usedMs, 15000);
+  });
+
+  test(
+      'the default two hours are shared by five viewers and survive idle restart',
+      () async {
+    final preferences = _FaultInjectingPreferences();
+    final clock = _Clock();
+    final service = BroadcastAccessService(
+      preferences,
+      purchaseGateway: _FakePurchaseGateway(),
+      now: clock.now,
+      monotonicNowMs: clock.monotonicNowMs,
+    );
+    addTearDown(service.dispose);
+    for (var index = 0; index < 5; index++) {
+      await service.beginSession('viewer-$index');
+    }
+    await service.beginSession('viewer-0');
+    clock.advance(const Duration(hours: 1));
+    final midway = await service.endSession('viewer-0');
+    expect(midway.usedMs, const Duration(hours: 1).inMilliseconds);
+    expect(midway.remaining, const Duration(hours: 1));
+    expect(midway.active, isTrue);
+    clock.advance(const Duration(hours: 1));
+    final exhausted = await service.endAllSessions();
+    expect(exhausted.isLocked, isTrue);
+    expect(exhausted.usedMs, const Duration(hours: 2).inMilliseconds);
+
+    clock.advance(const Duration(days: 7));
+    final restarted = BroadcastAccessService(
+      _FaultInjectingPreferences(preferences.durable),
+      purchaseGateway: _FakePurchaseGateway(),
+      now: clock.now,
+      monotonicNowMs: clock.monotonicNowMs,
+    );
+    addTearDown(restarted.dispose);
+    await expectLater(restarted.beginSession('after-restart'),
+        throwsA(isA<BroadcastAccessLockedException>()));
+    expect((await restarted.snapshot()).usedMs, exhausted.usedMs);
+  });
+
+  test('changing the phone wall clock cannot reset active trial usage',
+      () async {
+    final clock = _Clock();
+    final service = BroadcastAccessService(
+      _FaultInjectingPreferences(),
+      purchaseGateway: _FakePurchaseGateway(),
+      now: clock.now,
+      monotonicNowMs: clock.monotonicNowMs,
+    );
+    addTearDown(service.dispose);
+    await service.beginSession('viewer');
+    clock.advance(const Duration(minutes: 45));
+    clock.shiftWall(const Duration(days: -30));
+    expect((await service.snapshot()).usedMs,
+        const Duration(minutes: 45).inMilliseconds);
+    clock.advance(const Duration(minutes: 75));
+    expect((await service.snapshot()).isLocked, isTrue);
+  });
+
+  test(
+      'an unclean restart charges at most one interval, not days of offline time',
+      () async {
+    final clock = _Clock();
+    final preferences = _FaultInjectingPreferences();
+    final first = BroadcastAccessService(
+      preferences,
+      purchaseGateway: _FakePurchaseGateway(),
+      now: clock.now,
+      monotonicNowMs: clock.monotonicNowMs,
+    );
+    await first.beginSession('viewer');
+    clock.advance(const Duration(seconds: 10));
+    // Keep the durable state at the point the process disappears. Disposing
+    // the test instance only releases its real periodic timer.
+    final crashedDisk = Map<String, Object>.of(preferences.durable);
+    await first.dispose();
+    clock.advance(const Duration(days: 7));
+    final recoveredPreferences = _FaultInjectingPreferences(crashedDisk);
+    final restarted = BroadcastAccessService(
+      recoveredPreferences,
+      purchaseGateway: _FakePurchaseGateway(),
+      now: clock.now,
+      monotonicNowMs: clock.monotonicNowMs,
+    );
+    addTearDown(restarted.dispose);
+    final recovered = await restarted.snapshot();
+    expect(recovered.usedMs, const Duration(seconds: 15).inMilliseconds);
+    expect(recovered.active, isFalse);
+
+    final secondRestart = BroadcastAccessService(
+      _FaultInjectingPreferences(recoveredPreferences.durable),
+      purchaseGateway: _FakePurchaseGateway(),
+      now: clock.now,
+      monotonicNowMs: clock.monotonicNowMs,
+    );
+    addTearDown(secondRestart.dispose);
+    expect((await secondRestart.snapshot()).usedMs, recovered.usedMs);
+  });
+
+  test('a false trial-start write cannot report a started broadcast', () async {
+    final preferences = _FaultInjectingPreferences();
+    final service = BroadcastAccessService(
+      preferences,
+      purchaseGateway: _FakePurchaseGateway(),
+    );
+    addTearDown(service.dispose);
+    await service.snapshot();
+    preferences.rejectWrites = true;
+
+    await expectLater(service.beginSession('viewer'),
+        throwsA(isA<BroadcastAccessPersistenceException>()));
+
+    expect((await service.snapshot()).active, isFalse);
+    expect(service.lastPersistenceError, isNotNull);
+    final cached =
+        jsonDecode(preferences.getString('broadcast_access.trial_ledger_v1')!)
+            as Map;
+    expect(cached['active'], isFalse);
+    preferences.rejectWrites = false;
+    expect((await service.beginSession('retry')).active, isTrue);
+  });
+
+  test('a failed final stop retains usage without charging idle time on retry',
+      () async {
+    final preferences = _FaultInjectingPreferences();
+    final clock = _Clock();
+    final service = BroadcastAccessService(
+      preferences,
+      purchaseGateway: _FakePurchaseGateway(),
+      now: clock.now,
+      monotonicNowMs: clock.monotonicNowMs,
+    );
+    addTearDown(service.dispose);
+    await service.beginSession('viewer');
+    clock.advance(const Duration(seconds: 90));
+    preferences.rejectWrites = true;
+    await expectLater(service.endSession('viewer'),
+        throwsA(isA<BroadcastAccessPersistenceException>()));
+    expect((await service.snapshot()).usedMs, 90000);
+    expect((await service.snapshot()).active, isFalse);
+    clock.advance(const Duration(minutes: 5));
+    expect((await service.snapshot()).usedMs, 90000);
+
+    preferences.rejectWrites = false;
+    await service.endSession('viewer');
+    final retriedStop = jsonDecode(
+            preferences.durable['broadcast_access.trial_ledger_v1']! as String)
+        as Map;
+    expect(retriedStop['usedMs'], 90000);
+    expect(retriedStop['active'], isFalse);
+    await service.beginSession('retry');
+    clock.advance(const Duration(seconds: 10));
+    expect((await service.endSession('retry')).usedMs, 100000);
+    final restarted = BroadcastAccessService(
+      _FaultInjectingPreferences(preferences.durable),
+      purchaseGateway: _FakePurchaseGateway(),
+      now: clock.now,
+      monotonicNowMs: clock.monotonicNowMs,
+    );
+    addTearDown(restarted.dispose);
+    expect((await restarted.snapshot()).usedMs, 100000);
+  });
+
+  test('a failed lifetime grant is not exposed through the preferences cache',
+      () async {
+    final preferences = _FaultInjectingPreferences();
+    final service = BroadcastAccessService(
+      preferences,
+      purchaseGateway: _FakePurchaseGateway(),
+    );
+    addTearDown(service.dispose);
+    await service.snapshot();
+    preferences.rejectValue =
+        (key, value) => key == 'broadcast_access.unlocked' && value == true;
+
+    await expectLater(service.unlockWithOneTimePurchase(),
+        throwsA(isA<BroadcastAccessPersistenceException>()));
+
+    expect((await service.snapshot()).unlocked, isFalse);
+    expect(preferences.getBool('broadcast_access.unlocked'), isFalse);
+    final recreated = BroadcastAccessService(
+      preferences,
+      purchaseGateway: _FakePurchaseGateway(),
+    );
+    addTearDown(recreated.dispose);
+    expect((await recreated.snapshot()).unlocked, isFalse);
+    preferences.rejectValue = null;
+    expect((await service.unlockWithOneTimePurchase()).unlocked, isTrue);
+    final restarted = BroadcastAccessService(
+      _FaultInjectingPreferences(preferences.durable),
+      purchaseGateway: _FakePurchaseGateway(),
+    );
+    addTearDown(restarted.dispose);
+    expect((await restarted.snapshot()).unlocked, isTrue);
+  });
+
+  test(
+      'an initialization storage failure denies trial and still disposes billing',
+      () async {
+    final preferences = _FaultInjectingPreferences()..rejectWrites = true;
+    final gateway = _FakePurchaseGateway();
+    final service =
+        BroadcastAccessService(preferences, purchaseGateway: gateway);
+
+    await expectLater(service.beginSession('viewer'),
+        throwsA(isA<BroadcastAccessPersistenceException>()));
+    await expectLater(
+        service.dispose(), throwsA(isA<BroadcastAccessPersistenceException>()));
+    expect(gateway.disposed, isTrue);
+    expect(preferences.getString('broadcast_access.trial_ledger_v1'), isNull);
+  });
+
+  test(
+      'start, periodic checkpoint and stop publish changes without snapshot loops',
+      () async {
+    final clock = _Clock();
+    final service = BroadcastAccessService(
+      _FaultInjectingPreferences(),
+      purchaseGateway: _FakePurchaseGateway(),
+      now: clock.now,
+      monotonicNowMs: clock.monotonicNowMs,
+      checkpointInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(service.dispose);
+    final events = <BroadcastAccessSnapshot>[];
+    final checkpoint = Completer<void>();
+    final subscription = service.changes.listen((snapshot) {
+      events.add(snapshot);
+      if (snapshot.active &&
+          snapshot.usedMs == 10000 &&
+          !checkpoint.isCompleted) {
+        checkpoint.complete();
+      }
+    });
+    addTearDown(subscription.cancel);
+    await service.beginSession('viewer');
+    await Future<void>.delayed(Duration.zero);
+    expect(events.last.active, isTrue);
+    clock.advance(const Duration(seconds: 10));
+    await checkpoint.future.timeout(const Duration(seconds: 1));
+    await service.endAllSessions();
+    await Future<void>.delayed(Duration.zero);
+    expect(events.last.active, isFalse);
+    final count = events.length;
+    await service.snapshot();
+    await service.snapshot();
+    await Future<void>.delayed(Duration.zero);
+    expect(events, hasLength(count));
   });
 
   test('one-time purchase persists complete trusted entitlement evidence',
@@ -190,7 +449,9 @@ void main() {
     final service = BroadcastAccessService(prefs, purchaseGateway: gateway);
     addTearDown(service.dispose);
 
-    expect((await service.snapshot()).priceLabel, '€4,99');
+    final snapshot = await service.snapshot();
+    expect(snapshot.priceLabel, '€4,99');
+    expect(snapshot.hasStorePrice, isTrue);
   });
 
   test('local store envelope preflight never claims authenticity', () async {
@@ -421,6 +682,8 @@ class _Clock {
   DateTime now() => _now;
   int monotonicNowMs() => _monotonicMs;
 
+  void shiftWall(Duration duration) => _now = _now.add(duration);
+
   void advance(Duration duration) {
     _now = _now.add(duration);
     _monotonicMs += duration.inMilliseconds;
@@ -439,6 +702,7 @@ class _FakePurchaseGateway
 
   final BroadcastPurchaseResult result;
   final BroadcastProductOffer? offer;
+  bool disposed = false;
   final _updates = StreamController<BroadcastPurchaseResult>.broadcast();
 
   void emit(BroadcastPurchaseResult result) => _updates.add(result);
@@ -465,7 +729,56 @@ class _FakePurchaseGateway
       result;
 
   @override
-  Future<void> dispose() => _updates.close();
+  Future<void> dispose() async {
+    disposed = true;
+    await _updates.close();
+  }
+}
+
+/// Matches legacy SharedPreferences: the cache changes even when the device
+/// write returns false. [durable] is copied to simulate a new process.
+class _FaultInjectingPreferences implements SharedPreferences {
+  _FaultInjectingPreferences([Map<String, Object> initial = const {}])
+      : _cache = Map.of(initial),
+        durable = Map.of(initial);
+
+  final Map<String, Object> _cache;
+  final Map<String, Object> durable;
+  bool rejectWrites = false;
+  bool Function(String key, Object? value)? rejectValue;
+
+  @override
+  String? getString(String key) => _cache[key] as String?;
+  @override
+  int? getInt(String key) => _cache[key] as int?;
+  @override
+  bool? getBool(String key) => _cache[key] as bool?;
+  @override
+  bool containsKey(String key) => _cache.containsKey(key);
+
+  Future<bool> _set(String key, Object value) async {
+    _cache[key] = value;
+    if (rejectWrites || (rejectValue?.call(key, value) ?? false)) return false;
+    durable[key] = value;
+    return true;
+  }
+
+  @override
+  Future<bool> setString(String key, String value) => _set(key, value);
+  @override
+  Future<bool> setInt(String key, int value) => _set(key, value);
+  @override
+  Future<bool> setBool(String key, bool value) => _set(key, value);
+  @override
+  Future<bool> remove(String key) async {
+    _cache.remove(key);
+    if (rejectWrites || (rejectValue?.call(key, null) ?? false)) return false;
+    durable.remove(key);
+    return true;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _FakeInAppPurchaseStore implements InAppPurchaseStore {

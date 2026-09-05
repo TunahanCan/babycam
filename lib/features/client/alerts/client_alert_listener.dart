@@ -8,7 +8,17 @@ import '../../../core/protocol/alert_event_dto.dart';
 import '../../../core/protocol/miucam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
+import '../../../services/monetization/broadcast_access_service.dart';
 import '../media/client_stream_health_state.dart';
+
+class ClientAlertAccessLockedException extends BroadcastAccessLockedException {
+  const ClientAlertAccessLockedException({
+    required this.session,
+    required BroadcastAccessSnapshot snapshot,
+  }) : super(snapshot);
+
+  final PairingSession session;
+}
 
 class ClientAlertListener {
   ClientAlertListener({
@@ -17,6 +27,7 @@ class ClientAlertListener {
     this.maxReconnectDelay = const Duration(seconds: 8),
     this.pingInterval = const Duration(seconds: 15),
     this.onAlert,
+    this.readBroadcastAccess,
     HttpClient Function(PairingSession session)? clientFactory,
     RetryPolicy? retryPolicy,
   })  : assert(pingInterval > Duration.zero),
@@ -32,6 +43,8 @@ class ClientAlertListener {
   final Duration maxReconnectDelay;
   final Duration pingInterval;
   final FutureOr<void> Function(AlertEventDto alert)? onAlert;
+  final Future<BroadcastAccessSnapshot?> Function(PairingSession session)?
+      readBroadcastAccess;
   final HttpClient Function(PairingSession session)? _clientFactory;
   final RetryPolicy _retryPolicy;
 
@@ -118,22 +131,53 @@ class ClientAlertListener {
   Future<void> _listenLoop(int generation, PairingSession session) async {
     var retryAttempt = 0;
     while (_isCurrent(generation)) {
+      Object? connectionError;
       try {
         await _connectAndRead(generation, session);
         retryAttempt = 0;
       } catch (error) {
-        if (!_isCurrent(generation)) return;
-        final first = _firstConnection;
-        if (first != null && !first.isCompleted) {
-          first.completeError(error);
-        }
+        connectionError = error;
       }
       if (!_isCurrent(generation)) return;
       _markDisconnected();
+      if (await _stopForConfirmedAccessLock(generation, session)) return;
+      if (!_isCurrent(generation)) return;
+      final first = _firstConnection;
+      if (connectionError != null && first != null && !first.isCompleted) {
+        first.completeError(connectionError);
+      }
       healthState?.markReconnectAttempt();
       await _waitBeforeReconnect(_retryPolicy.delayForAttempt(retryAttempt));
       retryAttempt++;
     }
+  }
+
+  Future<bool> _stopForConfirmedAccessLock(
+    int generation,
+    PairingSession session,
+  ) async {
+    final read = readBroadcastAccess;
+    if (read == null) return false;
+    BroadcastAccessSnapshot? snapshot;
+    try {
+      // WebSocket.connect does not expose the failed upgrade's JSON body.
+      // Check the authenticated room status instead of interpreting exception
+      // messages or mistaking ordinary network loss for a finished trial.
+      snapshot = await read(session);
+    } catch (_) {
+      return false;
+    }
+    if (!_isCurrent(generation) || snapshot?.isLocked != true) return false;
+    isListening = false;
+    _sessionKey = null;
+    final error = ClientAlertAccessLockedException(
+      session: session,
+      snapshot: snapshot!,
+    );
+    final first = _firstConnection;
+    if (first != null && !first.isCompleted) first.completeError(error);
+    if (!_connectionStates.isClosed) _connectionStates.addError(error);
+    return true;
   }
 
   Future<void> _connectAndRead(int generation, PairingSession session) async {

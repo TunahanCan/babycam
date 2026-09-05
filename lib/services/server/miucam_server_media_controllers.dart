@@ -758,11 +758,72 @@ extension _MiuCamServerMediaPolicyController on MiuCamServer {
   String _broadcastAccessSessionId(String clientId) =>
       'server.stream.${clientId.trim().isEmpty ? 'unknown_client' : clientId.trim()}';
 
+  String _alertBroadcastSessionId(String clientId) => 'server.events.$clientId';
+
+  Future<void> _beginStreamBroadcast(String clientId) async {
+    final snapshot = await _broadcastAccess?.beginSession(
+      _broadcastAccessSessionId(clientId),
+    );
+    _notifyBroadcastAccessChanged(snapshot);
+    _scheduleBroadcastAccessTimer(snapshot);
+  }
+
+  Future<void> _pauseStreamBroadcastIfNoMedia(String clientId) async {
+    if (_activeClientRegistry.mediaConnectionCountFor(clientId) != 0) return;
+    final snapshot = await _broadcastAccess?.endSession(
+      _broadcastAccessSessionId(clientId),
+    );
+    _notifyBroadcastAccessChanged(snapshot);
+    _scheduleBroadcastAccessTimer(snapshot);
+  }
+
+  Future<bool> _rejectLockedBroadcast(HttpRequest request) async {
+    final access = _broadcastAccess;
+    if (access == null) return false;
+    final snapshot = await access.snapshot();
+    if (!snapshot.isLocked) return false;
+    request.response.statusCode = HttpStatus.paymentRequired;
+    await _writeBroadcastAccessLocked(request.response, snapshot);
+    return true;
+  }
+
+  Future<bool> _handleMeteredEventUpgrade(HttpRequest request) async {
+    if (!WebSocketTransformer.isUpgradeRequest(request)) return false;
+    if (_webSocketClientId(request) != null &&
+        await _rejectLockedBroadcast(request)) {
+      return true;
+    }
+    return _eventSockets.handleUpgrade(request);
+  }
+
+  Future<void> _beginAlertBroadcast(String clientId) async {
+    _broadcastEventClientIds.add(clientId);
+    try {
+      final snapshot = await _broadcastAccess?.beginSession(
+        _alertBroadcastSessionId(clientId),
+      );
+      _notifyBroadcastAccessChanged(snapshot);
+      _scheduleBroadcastAccessTimer(snapshot);
+    } catch (_) {
+      await _endAlertBroadcast(clientId);
+      rethrow;
+    }
+  }
+
+  Future<void> _endAlertBroadcast(String clientId) async {
+    _broadcastEventClientIds.remove(clientId);
+    final snapshot = await _broadcastAccess?.endSession(
+      _alertBroadcastSessionId(clientId),
+    );
+    _notifyBroadcastAccessChanged(snapshot);
+    _scheduleBroadcastAccessTimer(snapshot);
+  }
+
   Future<void> _writeBroadcastAccessLocked(
-    HttpRequest request,
+    HttpResponse response,
     BroadcastAccessSnapshot snapshot,
   ) =>
-      _writeJson(request.response, {
+      _writeJson(response, {
         'ok': false,
         'code': 'BROADCAST_ACCESS_LOCKED',
         'message':
@@ -782,6 +843,7 @@ extension _MiuCamServerMediaPolicyController on MiuCamServer {
   }
 
   void _scheduleBroadcastAccessTimer(BroadcastAccessSnapshot? snapshot) {
+    if (_broadcastAccessExpiryRunning) return;
     _cancelBroadcastAccessTimer();
     if (snapshot == null || snapshot.unlocked || !snapshot.active) {
       return;
@@ -798,12 +860,79 @@ extension _MiuCamServerMediaPolicyController on MiuCamServer {
     });
   }
 
-  Future<void> _expireBroadcastAccessIfNeeded(int generation) =>
-      _sessionOperations.run(
-        () => _expireBroadcastAccessIfNeededLocked(generation),
+  Future<void> _expireBroadcastAccessIfNeeded(int generation) async {
+    if (_disposed || generation != _broadcastAccessTimerGeneration) return;
+    final snapshot = await _broadcastAccess?.snapshot();
+    if (_disposed || generation != _broadcastAccessTimerGeneration) return;
+    if (snapshot == null) return;
+    if (!snapshot.isLocked) {
+      _scheduleBroadcastAccessTimer(snapshot);
+      _notifyBroadcastAccessChanged(snapshot);
+      return;
+    }
+    final expiredClientIds = <String>{};
+    Future<void>? transportStop;
+    if (snapshot.isLocked) {
+      _broadcastAccessExpiryRunning = true;
+      expiredClientIds.addAll({
+        ..._activeClientRegistry.activeClientIds,
+        ..._broadcastEventClientIds,
+      });
+      // Transport denial cannot wait behind a native session-start/offer
+      // operation in the lifecycle queue. Metadata cleanup stays serialized.
+      final cleanup = BestEffortOperationCollector();
+      for (final clientId in expiredClientIds) {
+        _invalidateWebRtcOffer(clientId);
+        _sessionController.stopActiveSession(clientId);
+        if (webRtcGateway case final gateway?) {
+          _cancelPendingWebRtcOffer(gateway, clientId);
+        }
+      }
+      transportStop = Future.wait([
+        for (final clientId in expiredClientIds) ...[
+          cleanup.attempt(
+              'video delivery',
+              () => _videoStreamService
+                  .closeClient(clientId)
+                  .timeout(webRtcCleanupTimeout)),
+          cleanup.attempt(
+              'audio delivery',
+              () => _audioStreamService
+                  .closeClient(clientId)
+                  .timeout(webRtcCleanupTimeout)),
+          cleanup.attempt(
+              'event delivery',
+              () => _eventSockets
+                  .closeClient(clientId)
+                  .timeout(streamSessionLifecycleTimeout)),
+          if (webRtcGateway case final gateway?)
+            cleanup.attempt(
+                'WebRTC delivery',
+                () => gateway
+                    .closeClient(clientId)
+                    .timeout(webRtcCleanupTimeout)),
+        ],
+      ]).then((_) {
+        if (cleanup.errors.isNotEmpty) {
+          onLog('Expired transport cleanup: ${cleanup.errors.join(' | ')}');
+        }
+      });
+    }
+    try {
+      await _sessionOperations.run(
+        () =>
+            _expireBroadcastAccessIfNeededLocked(generation, expiredClientIds),
       );
+      await transportStop;
+    } finally {
+      _broadcastAccessExpiryRunning = false;
+    }
+  }
 
-  Future<void> _expireBroadcastAccessIfNeededLocked(int generation) async {
+  Future<void> _expireBroadcastAccessIfNeededLocked(
+    int generation,
+    Set<String> deniedClientIds,
+  ) async {
     final access = _broadcastAccess;
     if (access == null ||
         _disposed ||
@@ -812,34 +941,65 @@ extension _MiuCamServerMediaPolicyController on MiuCamServer {
     }
     final snapshot = await access.snapshot();
     if (_disposed || generation != _broadcastAccessTimerGeneration) return;
-    if (!snapshot.active || snapshot.unlocked) {
+    if (deniedClientIds.isEmpty &&
+        ((!snapshot.active && !snapshot.isLocked) || snapshot.unlocked)) {
       _cancelBroadcastAccessTimer();
       _notifyBroadcastAccessChanged(snapshot);
       return;
     }
-    if (!snapshot.isLocked) {
+    if (!snapshot.isLocked && deniedClientIds.isEmpty) {
       _scheduleBroadcastAccessTimer(snapshot);
       _notifyBroadcastAccessChanged(snapshot);
       return;
     }
     _cancelBroadcastAccessTimer();
-    final expiredClientIds = _activeClientRegistry.activeClientIds;
-    for (final clientId in expiredClientIds) {
-      final errors = await _cleanupClientSession(
-        clientId,
-        closeWebRtc: true,
-      );
-      if (errors.isNotEmpty) {
-        onLog(
-          'Expired session $clientId released with errors: '
-          '${errors.join(' | ')}',
-        );
+    _broadcastAccessExpiryRunning = true;
+    final expiredClientIds = {
+      ...deniedClientIds,
+      ..._activeClientRegistry.activeClientIds,
+      ..._broadcastEventClientIds,
+    };
+    try {
+      // Invalidate every stream token before any native close operation is
+      // awaited. A slow peer must not keep the other four phones streaming.
+      for (final clientId in expiredClientIds) {
+        _sessionController.stopActiveSession(clientId);
       }
+      await Future.wait(expiredClientIds.map((clientId) async {
+        final cleanup = BestEffortOperationCollector();
+        await Future.wait([
+          cleanup.attempt(
+              'event delivery',
+              () => _eventSockets
+                  .closeClient(clientId)
+                  .timeout(streamSessionLifecycleTimeout)),
+          cleanup.attempt(
+              'talk session',
+              () => _features
+                  .stopTalk(clientId: clientId)
+                  .timeout(streamSessionLifecycleTimeout)),
+          cleanup.attempt('media session', () async {
+            final errors = await _cleanupClientSession(
+              clientId,
+              closeWebRtc: true,
+              force: true,
+            );
+            if (errors.isNotEmpty) {
+              onLog('Expired media session $clientId: ${errors.join(' | ')}');
+            }
+          }),
+        ]);
+        if (cleanup.errors.isNotEmpty) {
+          onLog('Expired session $clientId: ${cleanup.errors.join(' | ')}');
+        }
+      }));
+      _activeClientRegistry.clear();
+      await access.endAllSessions();
+      onLog('Ücretsiz yayın süresi doldu; canlı stream kilitlendi.');
+      _notifyBroadcastAccessChanged(await access.snapshot());
+    } finally {
+      _broadcastAccessExpiryRunning = false;
     }
-    _activeClientRegistry.clear();
-    await access.endAllSessions();
-    onLog('Ücretsiz yayın süresi doldu; canlı stream kilitlendi.');
-    _notifyBroadcastAccessChanged(await access.snapshot());
   }
 
   StreamBackpressureMetrics _combinedBackpressureMetrics() =>

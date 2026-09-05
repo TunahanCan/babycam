@@ -48,17 +48,20 @@ extension MiuCamServerSessionHttpController on MiuCamServer {
         mediaTransport == 'webrtc' ? (video: false, audio: false) : demand;
     BroadcastAccessSnapshot? accessSnapshot;
     try {
-      accessSnapshot = await _broadcastAccess?.beginSession(
-        _broadcastAccessSessionId(clientId),
-      );
+      // Reserving a bootstrap token does not mean media is being transferred.
+      // Metering begins with an HTTP media lease or WebRTC negotiation.
+      accessSnapshot = await _broadcastAccess?.snapshot();
+      if (accessSnapshot?.isLocked == true) {
+        throw BroadcastAccessLockedException(accessSnapshot!);
+      }
       _notifyBroadcastAccessChanged(accessSnapshot);
       _scheduleBroadcastAccessTimer(accessSnapshot);
     } on BroadcastAccessLockedException catch (error) {
       request.response.statusCode = HttpStatus.paymentRequired;
-      await _writeBroadcastAccessLocked(request, error.snapshot);
+      await _writeBroadcastAccessLocked(request.response, error.snapshot);
       return;
     }
-    // beginSession can await storage. Never allocate a slot using credentials
+    // The access snapshot can await storage. Never allocate a slot using credentials
     // that were removed during that await.
     if (_authGuard.trusted(request) == null) {
       accessSnapshot = await _broadcastAccess?.endSession(
@@ -367,6 +370,7 @@ extension MiuCamServerSessionHttpController on MiuCamServer {
     HttpRequest request,
     String? authenticatedClientId,
   ) async {
+    if (await _rejectLockedBroadcast(request)) return;
     final gateway = await _authorizedWebRtcGateway(
       request,
       authenticatedClientId,
@@ -406,12 +410,14 @@ extension MiuCamServerSessionHttpController on MiuCamServer {
       if (captureStartAttempted && shouldEndExternalOnFailure) {
         await _endWebRtcCaptureBestEffort(clientId);
       }
+      await _pauseStreamBroadcastIfNoMedia(clientId);
       _updateResourceWatchdog();
     }
 
     try {
       final body = await _readJsonObjectBody(request);
       final offer = WebRtcOfferRequest.fromJson(body);
+      await _beginStreamBroadcast(clientId);
       captureStartAttempted = true;
       final captureStart = Future<void>.sync(() async {
         await onWebRtcCaptureStarting?.call(clientId);
@@ -453,6 +459,14 @@ extension MiuCamServerSessionHttpController on MiuCamServer {
         _updateResourceWatchdog();
       }
 
+      // Own the negotiating transport before native tracks can start sending.
+      // Retiring an old peer may have paused its billing entry; establish this
+      // replacement before awaiting the new answer.
+      peerTransportLease = _activeClientRegistry.attachStream(clientId);
+      await _beginStreamBroadcast(clientId);
+      if (!_isCurrentWebRtcOffer(clientId, offerGeneration)) {
+        throw const _StaleWebRtcOffer();
+      }
       final answerOperation = Future<WebRtcOfferResponse>.sync(
         () => gateway.acceptOffer(
           clientId: clientId,
@@ -479,7 +493,10 @@ extension MiuCamServerSessionHttpController on MiuCamServer {
       // WebRTC has no MJPEG/WAV socket to call attachStream. Keep an explicit
       // transport lease so the 90-second bootstrap token expiry cannot prune
       // a healthy peer from capacity and paywall cleanup accounting.
-      peerTransportLease = _activeClientRegistry.attachStream(clientId);
+      await _beginStreamBroadcast(clientId);
+      if (!_isCurrentWebRtcOffer(clientId, offerGeneration)) {
+        throw const _StaleWebRtcOffer();
+      }
       _sessions.bindWebRtcPeer(
         clientId,
         peerId: answer.peerId,
@@ -490,6 +507,10 @@ extension MiuCamServerSessionHttpController on MiuCamServer {
       peerTransportLease = null;
       _updateResourceWatchdog();
       await _writeJson(request.response, answer.toJson());
+    } on BroadcastAccessLockedException catch (error) {
+      await cleanupFailedOffer();
+      request.response.statusCode = HttpStatus.paymentRequired;
+      await _writeBroadcastAccessLocked(request.response, error.snapshot);
     } on RequestBodyTooLargeException catch (error) {
       await cleanupFailedOffer();
       await _rejectInvalidJsonBody(request, error);
@@ -823,6 +844,7 @@ extension MiuCamServerSessionHttpController on MiuCamServer {
   Future<List<Object>> _cleanupClientSession(
     String clientId, {
     required bool closeWebRtc,
+    bool force = false,
   }) async {
     _invalidateWebRtcOffer(clientId);
     final gateway = webRtcGateway;
@@ -831,24 +853,32 @@ extension MiuCamServerSessionHttpController on MiuCamServer {
     }
     final session = _sessions.snapshot(clientId);
     final currentPeer = session?.webRtcPeer;
+    final closeErrors = <Object>[];
     if (closeWebRtc && currentPeer != null) {
       if (gateway == null) {
-        return <Object>[
-          StateError(
-            'The current WebRTC peer cannot be closed without its gateway.',
-          ),
-        ];
-      }
-      try {
-        await _closeWebRtcPeerStrict(
-          gateway,
-          clientId: clientId,
-          peerId: currentPeer.peerId,
+        final error = StateError(
+          'The current WebRTC peer cannot be closed without its gateway.',
         );
-      } catch (error) {
-        // Keep the session and its exact lease authoritative. A retry or the
-        // peer lifecycle event can finish cleanup without risking a successor.
-        return <Object>[error];
+        if (!force) return <Object>[error];
+        closeErrors.add(error);
+      } else {
+        try {
+          await _closeWebRtcPeerStrict(
+            gateway,
+            clientId: clientId,
+            peerId: currentPeer.peerId,
+          );
+        } catch (error) {
+          // Normal replacement retains exact ownership for a safe retry.
+          // Trial expiry must retire capture and authorization regardless.
+          if (!force) return <Object>[error];
+          closeErrors.add(error);
+          try {
+            await gateway.closeClient(clientId).timeout(webRtcCleanupTimeout);
+          } catch (fallbackError) {
+            closeErrors.add(fallbackError);
+          }
+        }
       }
     }
     if (currentPeer != null) {
@@ -876,6 +906,9 @@ extension MiuCamServerSessionHttpController on MiuCamServer {
         );
 
     await Future.wait([
+      if (force && currentPeer != null)
+        boundedAttempt(
+            'external capture', () => _endWebRtcCaptureBestEffort(clientId)),
       boundedAttempt(
         'video stream client',
         () => _videoStreamService.closeClient(clientId),
@@ -909,7 +942,7 @@ extension MiuCamServerSessionHttpController on MiuCamServer {
         _applyMediaProfileForCurrentDemand,
       );
     }
-    return cleanup.errors;
+    return [...closeErrors, ...cleanup.errors];
   }
 
   Future<WebRtcServerGateway?> _authorizedWebRtcGateway(

@@ -3,15 +3,9 @@ part of '../media/watch_screen.dart';
 class _BroadcastAccessCard extends StatelessWidget {
   const _BroadcastAccessCard({
     required this.snapshot,
-    required this.busy,
-    required this.onUnlock,
-    required this.onRestore,
   });
 
   final BroadcastAccessSnapshot snapshot;
-  final bool busy;
-  final VoidCallback? onUnlock;
-  final VoidCallback? onRestore;
 
   @override
   Widget build(BuildContext context) {
@@ -24,12 +18,11 @@ class _BroadcastAccessCard extends StatelessWidget {
             ? strings.ui('broadcastAccessLockedTitle')
             : strings.ui('broadcastAccessTrialTitle');
     final body = unlocked
-        ? strings.ui('broadcastAccessUnlockedBody')
+        ? strings.ui('broadcastAccessRemoteUnlockedBody')
         : locked
-            ? strings.ui('broadcastAccessLockedBody')
-            : strings.uiFormat('broadcastAccessTrialBody', {
+            ? strings.ui('broadcastAccessRemoteLockedBody')
+            : strings.uiFormat('broadcastAccessRemoteTrialBody', {
                 'remaining': _remainingText(strings, snapshot.remaining),
-                'price': snapshot.priceLabel,
               });
     return Container(
       padding: const EdgeInsets.all(16),
@@ -92,33 +85,6 @@ class _BroadcastAccessCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            if (onUnlock != null && onRestore != null)
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  FilledButton.icon(
-                    onPressed: busy ? null : onUnlock,
-                    icon: busy
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.lock_open_rounded),
-                    label: Text(
-                      strings.uiFormat('unlockLifetimePrice', {
-                        'price': snapshot.priceLabel,
-                      }),
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: busy ? null : onRestore,
-                    icon: const Icon(Icons.restore_rounded),
-                    label: Text(strings.ui('restorePurchase')),
-                  ),
-                ],
-              ),
           ],
         ],
       ),
@@ -126,7 +92,10 @@ class _BroadcastAccessCard extends StatelessWidget {
   }
 
   static String _remainingText(AppStrings strings, Duration duration) {
-    final totalMinutes = duration.inMinutes.clamp(0, 24 * 60);
+    final totalMinutes =
+        (duration.inMilliseconds / Duration.millisecondsPerMinute)
+            .ceil()
+            .clamp(0, 24 * 60);
     final hours = totalMinutes ~/ 60;
     final minutes = totalMinutes % 60;
     if (hours == 0) {

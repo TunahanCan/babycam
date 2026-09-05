@@ -129,7 +129,7 @@
   "privacy.wifiAria": "Same Wi-Fi connection",
   "compat.kicker": "Platform support",
   "compat.title": "Make the most of the phones you already have.",
-  "compat.subtitle": "Choose roles to suit your devices and know the important platform differences from the start.",
+  "compat.subtitle": "Choose roles to suit your phones. Each room phone includes a total of 2 free hours of monitoring or alerts, followed by a one-time purchase for lifetime use.",
   "compat.androidVersion": "Android 7.0 and later",
   "compat.roomParentRole": "Nursery and parent roles",
   "compat.androidService": "Android foreground service for the nursery role",
@@ -209,7 +209,7 @@
   "privacyPage.networkWarningBody": "The current local transfer does not provide TLS or end-to-end encryption. MiuCam should be used only on a trusted, access-controlled Wi-Fi network protected by a strong password. Open or public networks are not suitable.",
   "privacyPage.thirdPartiesTitle": "4. Internet and third parties",
   "privacyPage.thirdPartiesP1": "MiuCam’s core monitoring feature works without an internet connection. The default product flow contains no advertising or user-behavior analytics SDK, and no camera or microphone media is sent to a cloud server operated by MiuCam.",
-  "privacyPage.thirdPartiesP2": "If optional in-app purchases are enabled, Apple App Store or Google Play payment infrastructure may be used. Purchase-verification data may be sent only to a configured, trusted HTTPS verification service; camera and microphone media is never sent to that service. Those services are governed by their own privacy terms.",
+  "privacyPage.thirdPartiesP2": "Each room phone includes a total of 2 free hours. Users who choose to continue can make a one-time lifetime purchase on the room phone through Apple App Store or Google Play when purchasing is available. Purchase receipts and verification metadata are sent only to a configured, trusted HTTPS verification service; camera video and microphone audio are not included. These services have their own privacy terms.",
   "privacyPage.storageTitle": "5. Storage and deletion",
   "privacyPage.storageItem1": "When pairings are removed in the app, the associated secure access keys are also deleted.",
   "privacyPage.storageItem2": "Event and notification history can be cleared in the app.",
@@ -230,5 +230,7 @@
   "privacyPage.contactBefore": "For technical feedback, you can use MiuCam’s",
   "privacyPage.contactLink": "GitHub Issues page",
   "privacyPage.contactAfter": ". This channel is public; do not share personal, sensitive, or child-related data. A dedicated developer support channel will be announced when the app is released through the stores.",
-  "privacyPage.changesBody": "If the app’s data-processing practices change, this notice and its last-updated date will be revised."
+  "privacyPage.changesBody": "If the app’s data-processing practices change, this notice and its last-updated date will be revised.",
+  "faq.pricingQ": "How much does it cost? Is there a subscription?",
+  "faq.pricingA": "Each room phone includes a total of 2 free hours of audio, video, or alert monitoring. Time counts while at least one of these is active; simultaneous viewers do not multiply the time used. Waiting to scan a QR code, local preview alone, or having no parent connection uses no time. After the trial, buy lifetime use once on the room phone; no separate purchase is needed on the parent phone. The planned price for Türkiye is TRY 350; prices in other regions are shown in the app store. There is no subscription. Up to 5 parent devices can watch at once; purchasing does not change this limit."
 }
