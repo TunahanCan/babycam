@@ -82,6 +82,19 @@ class PairingSessionStore {
 
   Future<PairingSession?> load() => loadSelected();
 
+  /// Look up this room without changing the currently selected child.
+  Future<PairingSession?> loadForPayload(PairingPayload payload) async {
+    final id = _childIdForPayload(payload);
+    final profiles = await _readProfiles(migrateLegacy: true);
+    for (final profile in profiles) {
+      if (profile.id != id) continue;
+      final token = await _secureTokens.read(key: _childTokenKey(id));
+      if (token == null || token.isEmpty) return null;
+      return profile.toSession(sessionToken: token);
+    }
+    return null;
+  }
+
   Future<PairingSession?> loadSelected() async {
     final profiles = await _readProfiles(migrateLegacy: true);
     if (profiles.isEmpty) return _loadLegacySession();

@@ -11,6 +11,7 @@ import '../../shared/presentation/miucam_design_tokens.dart';
 import '../../shared/presentation/miucam_shells.dart';
 import '../server_runtime.dart';
 import 'server_home_components.dart';
+import 'server_trusted_devices_card.dart';
 
 class ServerPairingSection extends StatefulWidget {
   const ServerPairingSection({
@@ -29,17 +30,32 @@ class ServerPairingSection extends StatefulWidget {
 class _ServerPairingSectionState extends State<ServerPairingSection> {
   bool _refreshing = false;
   Timer? _ticketExpiryTimer;
+  StreamSubscription<void>? _trustedDevicesSubscription;
   String? _autoRefreshAttemptedPayload;
 
   @override
   void initState() {
     super.initState();
+    _listenForPairingChanges();
     _scheduleTicketRefresh();
+  }
+
+  void _listenForPairingChanges() {
+    _trustedDevicesSubscription =
+        widget.runtime.trustedClientsChanged.listen((_) {
+      if (!mounted) return;
+      _scheduleTicketRefresh();
+      setState(() {});
+    });
   }
 
   @override
   void didUpdateWidget(covariant ServerPairingSection oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.runtime != widget.runtime) {
+      unawaited(_trustedDevicesSubscription?.cancel());
+      _listenForPairingChanges();
+    }
     if (oldWidget.state.qrPayload != widget.state.qrPayload) {
       _scheduleTicketRefresh();
     }
@@ -48,6 +64,7 @@ class _ServerPairingSectionState extends State<ServerPairingSection> {
   @override
   void dispose() {
     _ticketExpiryTimer?.cancel();
+    unawaited(_trustedDevicesSubscription?.cancel());
     super.dispose();
   }
 
@@ -60,7 +77,8 @@ class _ServerPairingSectionState extends State<ServerPairingSection> {
     if (rawPayload == null || ticket == null) return;
     final remaining = DateTime.fromMillisecondsSinceEpoch(ticket.expiresAtMs)
         .difference(DateTime.now());
-    if (remaining <= Duration.zero) {
+    if (remaining <= Duration.zero ||
+        !widget.runtime.isPairingNonceActive(ticket.pairingNonce)) {
       if (_autoRefreshAttemptedPayload == rawPayload) return;
       _autoRefreshAttemptedPayload = rawPayload;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -98,7 +116,9 @@ class _ServerPairingSectionState extends State<ServerPairingSection> {
         ? null
         : PairingPayload.parseUri(payload, allowExpired: true);
     final invalidTicket = payload != null && ticket == null;
-    final ticketExpired = ticket?.isExpired ?? false;
+    final ticketExpired = ticket != null &&
+        (ticket.isExpired ||
+            !widget.runtime.isPairingNonceActive(ticket.pairingNonce));
     final visiblePayload = ticket != null && !ticketExpired ? payload : null;
     final address = ticket == null || ticketExpired
         ? null
@@ -125,6 +145,10 @@ class _ServerPairingSectionState extends State<ServerPairingSection> {
           refreshing: _refreshing,
           onRefresh: _refreshPairingTicket,
         ),
+        if (widget.runtime.canManageTrustedClients) ...[
+          const SizedBox(height: 14),
+          ServerTrustedDevicesCard(runtime: widget.runtime),
+        ],
       ],
     );
   }

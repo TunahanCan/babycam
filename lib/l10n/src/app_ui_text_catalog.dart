@@ -2,6 +2,128 @@
 // Kept separate so AppStrings stays a small localization facade.
 
 const appUiTextCatalog = <String, Map<String, String>>{
+  'parentDeviceName': {
+    'tr': 'Ebeveyn telefonu',
+    'en': 'Parent phone',
+    'zh': '家长手机',
+    'hi': 'अभिभावक का फ़ोन',
+    'es': 'Teléfono del cuidador',
+    'fr': 'Téléphone du parent',
+  },
+  'rememberedDeviceCount': {
+    'tr': 'Kayıtlı: {count}/{max}',
+    'en': 'Remembered: {count}/{max}',
+    'zh': '已记住：{count}/{max}',
+    'hi': 'याद रखे गए: {count}/{max}',
+    'es': 'Guardados: {count}/{max}',
+    'fr': 'Mémorisés : {count}/{max}',
+  },
+  'watchingDeviceCount': {
+    'tr': 'Yayın: {count}/{max}',
+    'en': 'Streaming: {count}/{max}',
+    'zh': '正在接收：{count}/{max}',
+    'hi': 'स्ट्रीम प्राप्त कर रहे हैं: {count}/{max}',
+    'es': 'Recibiendo: {count}/{max}',
+    'fr': 'En réception : {count}/{max}',
+  },
+  'trustedDeviceCapacityFull': {
+    'tr':
+        'Cihaz listesi dolu. Yeni telefon eklemek için bir cihazın erişimini kaldırın. Kayıtlı telefonlar yeniden bağlanabilir.',
+    'en':
+        'The device list is full. Remove a device to add a new phone. Remembered phones can still reconnect.',
+    'zh': '设备列表已满。请移除一台设备的访问权限后再添加新手机。已记住的手机仍可重新连接。',
+    'hi':
+        'डिवाइस सूची भर गई है। नया फ़ोन जोड़ने के लिए किसी डिवाइस की पहुँच हटाएँ। याद रखे गए फ़ोन फिर से जुड़ सकते हैं।',
+    'es':
+        'La lista está llena. Revoca el acceso de un dispositivo para añadir otro teléfono. Los teléfonos guardados pueden volver a conectarse.',
+    'fr':
+        'La liste est pleine. Révoquez l’accès d’un appareil pour ajouter un téléphone. Les téléphones mémorisés peuvent se reconnecter.',
+  },
+  'deviceRemovalSaveFailed': {
+    'tr':
+        'Erişim bu oturumda engellendi, ancak silme kaydı tamamlanamadı. Tekrar deneyin.',
+    'en':
+        'Access is blocked for this session, but removal could not be saved. Please retry.',
+    'zh': '本次运行期间已阻止访问，但移除操作未能保存。请重试。',
+    'hi':
+        'इस सत्र में पहुँच रोक दी गई है, लेकिन हटाने का बदलाव सहेजा नहीं जा सका। फिर कोशिश करें।',
+    'es':
+        'El acceso está bloqueado en esta sesión, pero no se pudo guardar la eliminación. Vuelve a intentarlo.',
+    'fr':
+        'L’accès est bloqué pour cette session, mais la suppression n’a pas pu être enregistrée. Réessayez.',
+  },
+  'deviceNameSaveFailed': {
+    'tr': 'Cihaz adı kaydedilemedi. Tekrar deneyin.',
+    'en': 'The device name could not be saved. Please retry.',
+    'zh': '无法保存设备名称。请重试。',
+    'hi': 'डिवाइस का नाम सहेजा नहीं जा सका। फिर कोशिश करें।',
+    'es': 'No se pudo guardar el nombre. Vuelve a intentarlo.',
+    'fr': 'Le nom de l’appareil n’a pas pu être enregistré. Réessayez.',
+  },
+  'renameDevice': {
+    'tr': 'Cihaz adını değiştir',
+    'en': 'Rename device',
+    'zh': '重命名设备',
+    'hi': 'डिवाइस का नाम बदलें',
+    'es': 'Cambiar nombre',
+    'fr': 'Renommer l’appareil',
+  },
+  'deviceNameLabel': {
+    'tr': 'Cihaz adı',
+    'en': 'Device name',
+    'zh': '设备名称',
+    'hi': 'डिवाइस का नाम',
+    'es': 'Nombre del dispositivo',
+    'fr': 'Nom de l’appareil',
+  },
+  'saveDeviceName': {
+    'tr': 'Kaydet',
+    'en': 'Save',
+    'zh': '保存',
+    'hi': 'सहेजें',
+    'es': 'Guardar',
+    'fr': 'Enregistrer',
+  },
+  'deviceRemovalPending': {
+    'tr': 'Erişim engellendi · silme kaydı bekliyor',
+    'en': 'Access blocked · removal pending save',
+    'zh': '访问已阻止 · 移除待保存',
+    'hi': 'पहुँच रोकी गई · हटाना सहेजना बाकी है',
+    'es': 'Acceso bloqueado · eliminación pendiente',
+    'fr': 'Accès bloqué · suppression à enregistrer',
+  },
+  'deviceWatching': {
+    'tr': 'Yayın alıyor',
+    'en': 'Receiving stream',
+    'zh': '正在接收直播',
+    'hi': 'स्ट्रीम प्राप्त कर रहा है',
+    'es': 'Recibiendo transmisión',
+    'fr': 'Reçoit le flux',
+  },
+  'deviceNotificationsOnly': {
+    'tr': 'Bildirim bağlantısı açık',
+    'en': 'Alert connection active',
+    'zh': '提醒连接已开启',
+    'hi': 'अलर्ट कनेक्शन सक्रिय',
+    'es': 'Conexión de avisos activa',
+    'fr': 'Connexion aux alertes active',
+  },
+  'deviceRemembered': {
+    'tr': 'Kayıtlı · yayın almıyor',
+    'en': 'Remembered · no active stream',
+    'zh': '已记住 · 未接收直播',
+    'hi': 'याद रखा गया · कोई सक्रिय स्ट्रीम नहीं',
+    'es': 'Guardado · sin transmisión activa',
+    'fr': 'Mémorisé · aucun flux actif',
+  },
+  'deviceLastSeen': {
+    'tr': 'Son bağlantı: {time}',
+    'en': 'Last seen: {time}',
+    'zh': '上次连接：{time}',
+    'hi': 'पिछला कनेक्शन: {time}',
+    'es': 'Última conexión: {time}',
+    'fr': 'Dernière connexion : {time}',
+  },
   'notificationChannelDescription': {
     'tr':
         'Bebek odasındaki ağlama benzeri ses, yüksek ses, hareket ve ışık değişimi bildirimleri.',

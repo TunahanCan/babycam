@@ -25,7 +25,7 @@ class TrustedClientRecord {
         clientId.isEmpty ||
         clientName is! String ||
         tokenHash is! String ||
-        tokenHash.length != 64 ||
+        !RegExp(r'^[a-f0-9]{64}$').hasMatch(tokenHash) ||
         createdAtMs is! int ||
         lastSeenAtMs is! int ||
         expiresAtMs is! int ||
@@ -56,6 +56,7 @@ class TrustedClientRecord {
   DateTime get lastSeenAt => DateTime.fromMillisecondsSinceEpoch(lastSeenAtMs);
 
   TrustedClientRecord copyWith({
+    String? clientName,
     String? tokenHash,
     int? lastSeenAtMs,
     int? expiresAtMs,
@@ -63,7 +64,7 @@ class TrustedClientRecord {
   }) =>
       TrustedClientRecord(
         clientId: clientId,
-        clientName: clientName,
+        clientName: clientName ?? this.clientName,
         tokenHash: tokenHash ?? this.tokenHash,
         createdAtMs: createdAtMs,
         lastSeenAtMs: lastSeenAtMs ?? this.lastSeenAtMs,
@@ -123,24 +124,32 @@ class SharedPreferencesTrustedClientRepository
 
   @override
   List<TrustedClientRecord> readAll() {
-    final encoded = _preferences.getString(storageKey);
-    if (encoded == null || encoded.isEmpty) return const [];
     try {
+      final encoded = _preferences.getString(storageKey);
+      if (encoded == null || encoded.isEmpty) return const [];
       final decoded = jsonDecode(encoded);
       if (decoded is! Map || decoded['version'] != 1) return const [];
       final clients = decoded['clients'];
       if (clients is! List) return const [];
-      return clients
-          .take(maxStoredRecords)
-          .whereType<Map>()
-          .map(
-            (value) => TrustedClientRecord.fromJson(
-              value.map(
-                (key, item) => MapEntry(key.toString(), item),
-              ),
-            ),
-          )
-          .toList(growable: false);
+      final records = <String, TrustedClientRecord>{};
+      final ambiguousIds = <String>{};
+      for (final value in clients.take(maxStoredRecords).whereType<Map>()) {
+        try {
+          final record = TrustedClientRecord.fromJson(
+            value.map((key, item) => MapEntry(key.toString(), item)),
+          );
+          if (records.containsKey(record.clientId)) {
+            // Conflicting authority must not depend on JSON entry order.
+            records.remove(record.clientId);
+            ambiguousIds.add(record.clientId);
+          } else if (!ambiguousIds.contains(record.clientId)) {
+            records[record.clientId] = record;
+          }
+        } on FormatException {
+          // One damaged record must not forget every other paired device.
+        }
+      }
+      return records.values.toList(growable: false);
     } catch (_) {
       return const [];
     }
@@ -151,15 +160,19 @@ class SharedPreferencesTrustedClientRepository
     final bounded = clients.length <= maxStoredRecords
         ? clients
         : (clients.toList()
-              ..sort((a, b) => b.lastSeenAtMs.compareTo(a.lastSeenAtMs)))
+              ..sort((a, b) {
+                if (a.revoked != b.revoked) return a.revoked ? 1 : -1;
+                return b.lastSeenAtMs.compareTo(a.lastSeenAtMs);
+              }))
             .take(maxStoredRecords)
             .toList(growable: false);
-    await _preferences.setString(
+    final saved = await _preferences.setString(
       storageKey,
       jsonEncode({
         'version': 1,
         'clients': bounded.map((client) => client.toJson()).toList(),
       }),
     );
+    if (!saved) throw StateError('Trusted clients could not be saved.');
   }
 }

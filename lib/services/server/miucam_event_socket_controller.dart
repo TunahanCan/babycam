@@ -19,12 +19,14 @@ class MiuCamEventSocketController {
     required this.onLog,
     this.reconnectGracePeriod = const Duration(seconds: 10),
     this.pingInterval = const Duration(seconds: 15),
+    this.closeTimeout = const Duration(seconds: 3),
     this.maxReplayAlerts = 128,
     this.maxReplayClientCursors = 64,
     this.maxReplayAge = const Duration(minutes: 2),
     int Function()? replayNowMs,
   })  : assert(!reconnectGracePeriod.isNegative),
         assert(pingInterval > Duration.zero),
+        assert(closeTimeout > Duration.zero),
         assert(maxReplayAlerts > 0),
         assert(maxReplayClientCursors > 0),
         assert(maxReplayAge > Duration.zero),
@@ -43,6 +45,7 @@ class MiuCamEventSocketController {
   final void Function(String message) onLog;
   final Duration reconnectGracePeriod;
   final Duration pingInterval;
+  final Duration closeTimeout;
   final int maxReplayAlerts;
   final int maxReplayClientCursors;
   final Duration maxReplayAge;
@@ -91,6 +94,11 @@ class MiuCamEventSocketController {
       connectionLease.release();
       rethrow;
     }
+    if (isDisposed() || resolveClientId(request) != clientId) {
+      connectionLease.release();
+      await _closeRevokedSocket(socket);
+      return true;
+    }
     _clientIds[socket] = clientId;
     _connectionLeases[socket] = connectionLease;
     final previousCount = _clientSocketCounts[clientId] ?? 0;
@@ -103,6 +111,19 @@ class MiuCamEventSocketController {
       await _detachSocket(socket, scheduleDisconnect: false);
       await socket.close();
       onLog('Alert media demand could not start: $error');
+      return true;
+    }
+
+    // Removal may happen while capture/analysis is being armed. A detached or
+    // no-longer-authorized handshake must never join the broadcast set later.
+    if (isDisposed() ||
+        _clientIds[socket] != clientId ||
+        resolveClientId(request) != clientId) {
+      await _detachSocket(socket, scheduleDisconnect: false);
+      await Future.wait<void>([
+        _disconnectClientNow(clientId),
+        _closeRevokedSocket(socket),
+      ]);
       return true;
     }
 
@@ -176,16 +197,26 @@ class MiuCamEventSocketController {
         .where((entry) => entry.value == clientId)
         .map((entry) => entry.key)
         .toList(growable: false);
-    for (final socket in sockets) {
-      try {
-        await socket.close();
-      } catch (_) {}
-      // The socket callback and this explicit path may race. Both [release]
-      // and its connection lease are idempotent.
-      await release(socket);
-    }
-    await _disconnectClientNow(clientId);
+    // Remove every delivery target and lease before waiting for peer close
+    // handshakes. One unresponsive phone cannot delay access removal.
+    await Future.wait<void>([
+      for (final socket in sockets)
+        _detachSocket(socket, scheduleDisconnect: false),
+    ]);
     _deliveryCursors.remove(clientId);
+    await Future.wait<void>([
+      _disconnectClientNow(clientId),
+      for (final socket in sockets) _closeRevokedSocket(socket),
+    ]);
+  }
+
+  Future<void> _closeRevokedSocket(WebSocket socket) async {
+    try {
+      await socket.close(WebSocketStatus.policyViolation).timeout(closeTimeout);
+    } catch (_) {
+      // Delivery ownership has already been removed, including when the peer
+      // never acknowledges closure. The WebSocket finishes its own teardown.
+    }
   }
 
   int _broadcast(Object data) {

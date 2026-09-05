@@ -112,6 +112,13 @@ class ServerRuntime implements AppRuntime {
     Future<void> Function(String reason)? onPauseExternalMedia,
     Future<void> Function(String reason)? onRecoverExternalMedia,
     List<TrustedClientRecord> Function()? trustedClients,
+    Stream<void>? trustedClientsChanged,
+    Set<String> Function()? activeWatchClientIds,
+    bool Function(String nonce)? isPairingNonceActive,
+    Future<void> Function(String clientId, String clientName)?
+        onRenameTrustedClient,
+    this.maxTrustedClients = 5,
+    this.maxActiveWatchClients = 5,
     Future<void> Function(String clientId)? onRevokeTrustedClient,
     Future<void> Function()? onRevokeAllTrustedClients,
     this.mediaOperationTimeout = const Duration(seconds: 8),
@@ -129,6 +136,11 @@ class ServerRuntime implements AppRuntime {
         _onPauseExternalMedia = onPauseExternalMedia,
         _onRecoverExternalMedia = onRecoverExternalMedia,
         _trustedClients = trustedClients,
+        trustedClientsChanged =
+            trustedClientsChanged ?? const Stream<void>.empty(),
+        _activeWatchClientIds = activeWatchClientIds,
+        _isPairingNonceActive = isPairingNonceActive,
+        _onRenameTrustedClient = onRenameTrustedClient,
         _onRevokeTrustedClient = onRevokeTrustedClient,
         _onRevokeAllTrustedClients = onRevokeAllTrustedClients {
     if (mediaOperationTimeout <= Duration.zero) {
@@ -156,6 +168,13 @@ class ServerRuntime implements AppRuntime {
   final Future<void> Function(String reason)? _onPauseExternalMedia;
   final Future<void> Function(String reason)? _onRecoverExternalMedia;
   final List<TrustedClientRecord> Function()? _trustedClients;
+  final Stream<void> trustedClientsChanged;
+  final Set<String> Function()? _activeWatchClientIds;
+  final bool Function(String nonce)? _isPairingNonceActive;
+  final Future<void> Function(String clientId, String clientName)?
+      _onRenameTrustedClient;
+  final int maxTrustedClients;
+  final int maxActiveWatchClients;
   final Future<void> Function(String clientId)? _onRevokeTrustedClient;
   final Future<void> Function()? _onRevokeAllTrustedClients;
   final Duration mediaOperationTimeout;
@@ -187,6 +206,19 @@ class ServerRuntime implements AppRuntime {
       _onRevokeAllTrustedClients != null;
   List<TrustedClientRecord> get trustedClients =>
       List.unmodifiable(_trustedClients?.call() ?? const []);
+
+  Set<String> get activeWatchClientIds => Set.unmodifiable(
+      _activeWatchClientIds?.call() ?? _activeSessions.keys.toSet());
+  Set<String> get notificationClientIds =>
+      Set.unmodifiable(_notificationClients.keys);
+  bool isPairingNonceActive(String nonce) =>
+      _isPairingNonceActive?.call(nonce) ?? true;
+  bool get canRenameTrustedClients => _onRenameTrustedClient != null;
+
+  Future<void> renameTrustedClient(String clientId, String clientName) async {
+    if (_disposed) return;
+    await _onRenameTrustedClient?.call(clientId, clientName);
+  }
 
   Future<void> revokeTrustedClient(String clientId) async {
     if (_disposed) return;

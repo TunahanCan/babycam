@@ -8,7 +8,7 @@ import '../../../services/configuration_service.dart';
 import '../../shared/presentation/localized_measurement_text.dart';
 import '../../shared/presentation/miucam_design_tokens.dart';
 import '../../shared/presentation/miucam_shells.dart';
-import '../pairing/trusted_client_repository.dart';
+import 'server_trusted_devices_card.dart';
 import '../server_runtime.dart';
 import 'server_home_components.dart';
 
@@ -37,8 +37,6 @@ class _ServerSettingsSectionState extends State<ServerSettingsSection> {
   late double _motionDurationSeconds;
   late double _cryDurationSeconds;
   int _pendingMutations = 0;
-  String? _revokingClientId;
-  bool _revokingAllClients = false;
 
   bool get _saving => _pendingMutations > 0;
 
@@ -151,87 +149,6 @@ class _ServerSettingsSectionState extends State<ServerSettingsSection> {
     if (mounted) setState(_loadSettings);
   }
 
-  Future<void> _confirmRevokeClient(TrustedClientRecord client) async {
-    if (_revokingClientId != null || _revokingAllClients) return;
-    final strings = AppStrings.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(strings.ui('revokeDeviceConfirmTitle')),
-        content: Text(
-          strings.uiFormat(
-            'revokeDeviceConfirmBody',
-            {'name': client.clientName},
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(strings.ui('cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(strings.ui('revokeDevice')),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    setState(() => _revokingClientId = client.clientId);
-    await _revokeTrustedDevices(
-      () => widget.runtime.revokeTrustedClient(client.clientId),
-    );
-    if (mounted) setState(() => _revokingClientId = null);
-  }
-
-  Future<void> _confirmRevokeAllClients() async {
-    if (_revokingClientId != null || _revokingAllClients) return;
-    final strings = AppStrings.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(strings.ui('revokeAllDevices')),
-        content: Text(strings.ui('revokeAllDevicesConfirmBody')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(strings.ui('cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(strings.ui('revokeAllDevices')),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    setState(() => _revokingAllClients = true);
-    await _revokeTrustedDevices(widget.runtime.revokeAllTrustedClients);
-    if (mounted) setState(() => _revokingAllClients = false);
-  }
-
-  Future<void> _revokeTrustedDevices(
-    Future<void> Function() revoke,
-  ) async {
-    final strings = AppStrings.of(context);
-    try {
-      await revoke();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(
-          SnackBar(content: Text(strings.ui('trustedDeviceRevoked'))),
-        );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(
-          SnackBar(content: Text(strings.ui('trustedDeviceRevokeFailed'))),
-        );
-    }
-  }
-
   _DetectionPreset? get _activeDetectionPreset {
     for (final preset in _DetectionPreset.values) {
       final values = preset.settings;
@@ -308,177 +225,9 @@ class _ServerSettingsSectionState extends State<ServerSettingsSection> {
         ),
         if (widget.runtime.canManageTrustedClients) ...[
           const SizedBox(height: 14),
-          _TrustedDevicesCard(
-            clients: widget.runtime.trustedClients,
-            revokingClientId: _revokingClientId,
-            revokingAll: _revokingAllClients,
-            onRevokeClient: _confirmRevokeClient,
-            onRevokeAll: _confirmRevokeAllClients,
-          ),
+          ServerTrustedDevicesCard(runtime: widget.runtime),
         ],
       ],
-    );
-  }
-}
-
-class _TrustedDevicesCard extends StatelessWidget {
-  const _TrustedDevicesCard({
-    required this.clients,
-    required this.revokingClientId,
-    required this.revokingAll,
-    required this.onRevokeClient,
-    required this.onRevokeAll,
-  });
-
-  final List<TrustedClientRecord> clients;
-  final String? revokingClientId;
-  final bool revokingAll;
-  final ValueChanged<TrustedClientRecord> onRevokeClient;
-  final VoidCallback onRevokeAll;
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = AppStrings.of(context);
-    final busy = revokingAll || revokingClientId != null;
-    return MiuCamCard(
-      dark: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(
-                Icons.phonelink_lock_rounded,
-                color: MiuCamDesignTokens.serverCyan,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  strings.ui('trustedDevicesTitle'),
-                  style: const TextStyle(
-                    color: MiuCamDesignTokens.serverText,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (clients.isNotEmpty)
-            Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: TextButton(
-                onPressed: busy ? null : onRevokeAll,
-                child: Text(strings.ui('revokeAllDevices')),
-              ),
-            ),
-          const SizedBox(height: 8),
-          Text(
-            strings.ui('trustedDevicesDescription'),
-            style: const TextStyle(
-              color: MiuCamDesignTokens.serverTextMuted,
-              fontSize: 14,
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: 14),
-          if (clients.isEmpty)
-            Text(
-              strings.ui('noTrustedDevices'),
-              style: const TextStyle(
-                color: MiuCamDesignTokens.serverTextMuted,
-                fontWeight: FontWeight.w700,
-              ),
-            )
-          else
-            for (var index = 0; index < clients.length; index++) ...[
-              _TrustedDeviceRow(
-                client: clients[index],
-                busy:
-                    revokingAll || revokingClientId == clients[index].clientId,
-                enabled: !busy,
-                onRevoke: () => onRevokeClient(clients[index]),
-              ),
-              if (index != clients.length - 1)
-                const Divider(color: MiuCamDesignTokens.serverOutline),
-            ],
-        ],
-      ),
-    );
-  }
-}
-
-class _TrustedDeviceRow extends StatelessWidget {
-  const _TrustedDeviceRow({
-    required this.client,
-    required this.busy,
-    required this.enabled,
-    required this.onRevoke,
-  });
-
-  final TrustedClientRecord client;
-  final bool busy;
-  final bool enabled;
-  final VoidCallback onRevoke;
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = AppStrings.of(context);
-    final name =
-        client.clientName.trim().isEmpty ? client.clientId : client.clientName;
-    return Semantics(
-      label: name,
-      child: Row(
-        children: [
-          const CircleAvatar(
-            backgroundColor: MiuCamDesignTokens.serverSurfaceRaised,
-            foregroundColor: MiuCamDesignTokens.serverCyan,
-            child: Icon(Icons.phone_android_rounded),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: MiuCamDesignTokens.serverText,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                if (client.clientId != name) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    client.clientId,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: MiuCamDesignTokens.serverTextMuted,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          if (busy)
-            const SizedBox.square(
-              dimension: 24,
-              child: CircularProgressIndicator(strokeWidth: 2.5),
-            )
-          else
-            IconButton(
-              onPressed: enabled ? onRevoke : null,
-              tooltip: strings.ui('revokeDevice'),
-              icon: const Icon(Icons.link_off_rounded),
-            ),
-        ],
-      ),
     );
   }
 }

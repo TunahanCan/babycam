@@ -8,6 +8,29 @@ import 'package:miucam/features/client/pairing/pairing_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test(
+      'remembered room lookup preserves selected child and never borrows its token',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final secure = _FakeSecureTokenStore();
+    final store = PairingSessionStore(preferences, secureTokens: secure);
+    final a = _session('token-a', serverId: 'room-a');
+    final b = _session('token-b', serverId: 'room-b');
+    await store.save(a);
+    await store.save(b);
+    final remembered = await store.loadForPayload(a.payload);
+    expect(remembered?.sessionToken, 'token-a');
+    expect((await store.loadSelected())?.deviceId, 'room-b');
+    secure.values.remove('pairing_child_token.room-a');
+    expect(await store.loadForPayload(a.payload), isNull);
+    expect(
+        await store
+            .loadForPayload(_session('unknown', serverId: 'unknown').payload),
+        isNull);
+    expect((await store.loadSelected())?.sessionToken, 'token-b');
+  });
+
   test('session token secure storage icinde tutulur', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();

@@ -4,10 +4,63 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miucam/core/protocol/miucam_protocol.dart';
 import 'package:miucam/core/protocol/pairing_payload.dart';
+import 'package:miucam/core/protocol/pairing_session.dart';
 import 'package:miucam/features/client/pairing/pairing_failure.dart';
 import 'package:miucam/features/client/pairing/qr_pairing_client.dart';
 
 void main() {
+  test(
+      're-pair proves remembered server-assigned identity only to its endpoint',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final bodies = <Map<String, dynamic>>[];
+    server.listen((request) async {
+      bodies.add(jsonDecode(await utf8.decoder.bind(request).join())
+          as Map<String, dynamic>);
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'clientId': bodies.last['deviceId'],
+        'trustedClientToken': 'replacement-token',
+      }));
+      await request.response.close();
+    });
+    PairingPayload payload({String serverId = 'room', int? port}) =>
+        PairingPayload(
+          schemaVersion: MiuCamProtocolV2.schemaVersion,
+          host: InternetAddress.loopbackIPv4.address,
+          port: port ?? server.port,
+          deviceId: serverId,
+          deviceName: 'Room',
+          pairingNonce: 'new-nonce',
+          expiresAtMs: DateTime.now()
+              .add(const Duration(minutes: 1))
+              .millisecondsSinceEpoch,
+          capabilities: const {'transport': 'http'},
+        );
+    final remembered = PairingSession(
+        payload: payload(),
+        sessionToken: 'remembered-secret',
+        clientId: 'server-assigned-id');
+    final client =
+        QRPairingClient(clientIdProvider: () async => 'installation-id');
+    await client.pair(payload(), rememberedSession: remembered);
+    expect(bodies.last['deviceId'], 'server-assigned-id');
+    expect(bodies.last['existingTrustedClientToken'], 'remembered-secret');
+
+    await client.pair(payload(),
+        rememberedSession:
+            remembered.copyWith(payload: payload(serverId: 'other-room')));
+    expect(bodies.last['deviceId'], 'installation-id');
+    expect(bodies.last, isNot(contains('existingTrustedClientToken')));
+
+    await client.pair(payload(),
+        rememberedSession:
+            remembered.copyWith(payload: payload(port: server.port + 1)));
+    expect(bodies.last['deviceId'], 'installation-id');
+    expect(bodies.last, isNot(contains('existingTrustedClientToken')));
+  });
+
   test('QRPairingClient HTTP QR payload ile pair confirm gönderir', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));

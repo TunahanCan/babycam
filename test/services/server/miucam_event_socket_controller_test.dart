@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -10,6 +11,99 @@ import 'package:miucam/services/server/miucam_event_socket_controller.dart';
 import '../../support/blackhole_tcp_proxy.dart';
 
 void main() {
+  test('revocation during analysis startup cannot restore alert delivery',
+      () async {
+    final startupEntered = Completer<void>();
+    final finishStartup = Completer<void>();
+    final upgradeHandled = Completer<void>();
+    var authorized = true;
+    var disconnectedCalls = 0;
+    final harness = await _ControllerHarness.start(
+      reconnectGracePeriod: Duration.zero,
+      closeTimeout: const Duration(milliseconds: 50),
+      isClientAuthorized: () => authorized,
+      onClientConnected: (_) {
+        startupEntered.complete();
+        return finishStartup.future;
+      },
+      onClientDisconnected: (_) => disconnectedCalls++,
+      onUpgradeHandled: upgradeHandled.complete,
+    );
+    final registry = harness.controller.activeClients;
+    registry.startSession('parent-1');
+    addTearDown(() async {
+      if (!finishStartup.isCompleted) finishStartup.complete();
+      await harness.close();
+    });
+    final client = await _connect(harness.port);
+    addTearDown(client.close);
+    final received = <Object?>[];
+    client.listen(received.add);
+    await startupEntered.future.timeout(const Duration(seconds: 2));
+    expect(registry.eventSocketCount, 1);
+    expect(harness.controller.clientCount, 0);
+
+    authorized = false;
+    registry.cleanupClient('parent-1');
+    await harness.controller.closeClient('parent-1');
+    expect(registry.eventSocketCount, 0);
+    expect(registry.activeClientCount, 0);
+    harness.controller.broadcastText(_alertJson('while-starting'));
+
+    finishStartup.complete();
+    await upgradeHandled.future.timeout(const Duration(seconds: 2));
+
+    expect(harness.controller.clientCount, 0);
+    expect(registry.eventSocketCount, 0);
+    expect(registry.activeClientCount, 0);
+    expect(disconnectedCalls, 1,
+        reason: 'The late analysis startup must release its media demand.');
+    expect(harness.controller.broadcastText(_alertJson('after-revocation')), 0);
+    expect(harness.controller.broadcastBinary([1, 2, 3]), 0);
+    expect(received, isEmpty,
+        reason:
+            'Neither gap replay nor live alerts may reach a removed phone.');
+  });
+
+  test('revocation removes delivery before an unresponsive peer closes',
+      () async {
+    final harness = await _ControllerHarness.start(
+      reconnectGracePeriod: Duration.zero,
+      closeTimeout: const Duration(milliseconds: 100),
+    );
+    final proxy = await BlackholeTcpProxy.start(harness.port);
+    final client = await _connect(proxy.port);
+    final peerClosed = Completer<void>();
+    client.listen((_) {}, onDone: peerClosed.complete);
+    addTearDown(() async {
+      await proxy.close();
+      await client.close();
+      await harness.close();
+    });
+    await _waitUntil(() => harness.controller.clientCount == 1);
+    expect(harness.controller.activeClients.eventSocketCount, 1);
+    proxy.blackholeExistingConnections();
+
+    var closeFinished = false;
+    final closing = harness.controller.closeClient('parent-1').then((_) {
+      closeFinished = true;
+    });
+
+    expect(harness.controller.clientCount, 0,
+        reason: 'Access removal must precede the awaited close handshake.');
+    expect(harness.controller.activeClients.eventSocketCount, 0);
+    expect(harness.controller.broadcastText(_alertJson('revoked')), 0);
+    expect(harness.controller.broadcastBinary([1, 2, 3]), 0);
+    expect(closeFinished, isFalse);
+    expect(peerClosed.isCompleted, isFalse);
+
+    await closing.timeout(const Duration(seconds: 1));
+    expect(closeFinished, isTrue);
+    expect(peerClosed.isCompleted, isFalse,
+        reason: 'Revocation must finish even without the peer acknowledging.');
+    expect(harness.controller.clientCount, 0);
+  });
+
   test('silent network loss releases the dead event socket lease', () async {
     final harness = await _ControllerHarness.start(
       reconnectGracePeriod: Duration.zero,
@@ -193,26 +287,33 @@ class _ControllerHarness {
   static Future<_ControllerHarness> start({
     required Duration reconnectGracePeriod,
     Duration pingInterval = const Duration(seconds: 15),
+    Duration closeTimeout = const Duration(seconds: 3),
     Duration maxReplayAge = const Duration(minutes: 2),
     int Function()? replayNowMs,
+    bool Function()? isClientAuthorized,
+    FutureOr<void> Function(String clientId)? onClientConnected,
+    FutureOr<void> Function(String clientId)? onClientDisconnected,
+    void Function()? onUpgradeHandled,
   }) async {
     final controller = MiuCamEventSocketController(
       activeClients: ActiveClientRegistry(
         tokenService: PairingTokenService(),
         maxActiveClients: 5,
       ),
-      resolveClientId: (_) => 'parent-1',
+      resolveClientId: (_) =>
+          (isClientAuthorized?.call() ?? true) ? 'parent-1' : null,
       writeConnectionLimitError: (response, _) async {
         response.statusCode = HttpStatus.tooManyRequests;
         await response.close();
       },
-      onClientConnected: (_) {},
-      onClientDisconnected: (_) {},
+      onClientConnected: onClientConnected ?? (_) {},
+      onClientDisconnected: onClientDisconnected ?? (_) {},
       isDisposed: () => false,
       connectedLog: (_) => 'connected',
       onLog: (_) {},
       reconnectGracePeriod: reconnectGracePeriod,
       pingInterval: pingInterval,
+      closeTimeout: closeTimeout,
       maxReplayAge: maxReplayAge,
       replayNowMs: replayNowMs,
     );
@@ -222,6 +323,7 @@ class _ControllerHarness {
         request.response.statusCode = HttpStatus.notFound;
         await request.response.close();
       }
+      onUpgradeHandled?.call();
     });
     return _ControllerHarness(controller, server);
   }

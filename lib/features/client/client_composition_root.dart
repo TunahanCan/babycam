@@ -36,6 +36,7 @@ class ClientCompositionRoot {
     final identity = ClientIdentityStore(secureTokens: secureTokens);
     final pairingClient = QRPairingClient(
       clientIdProvider: identity.clientId,
+      clientName: strings.ui('parentDeviceName'),
       // When this phone has previously acted as Server, its discovery id is
       // retained locally. Send it only to prevent the phone from pairing with
       // its own QR code after a role switch.
@@ -91,7 +92,11 @@ class ClientCompositionRoot {
           // A new room would otherwise consume a trusted-client slot on the
           // Server and only then discover that this phone cannot retain it.
           await store.ensureCanSavePayload(payload);
-          final session = await pairingClient.pair(payload);
+          final rememberedSession = await store.loadForPayload(payload);
+          final session = await pairingClient.pair(
+            payload,
+            rememberedSession: rememberedSession,
+          );
           await store.save(session);
           return session;
         } on ChildProfileLimitException {

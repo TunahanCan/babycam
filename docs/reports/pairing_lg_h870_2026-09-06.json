@@ -1,0 +1,108 @@
+{
+  "device": "LG H870 / Android 9",
+  "transport": "USB forwarded local HTTP",
+  "physicalParentPhones": 0,
+  "hostClients": 5,
+  "sixthPairing": {
+    "status": 409,
+    "code": "MAX_TRUSTED_CLIENTS_REACHED"
+  },
+  "startStatuses": [
+    200,
+    200,
+    200,
+    200,
+    200
+  ],
+  "concurrent": {
+    "activeStreamClients": 5,
+    "videoClients": 5,
+    "audioClients": 5,
+    "mediaConnections": 10
+  },
+  "streams": [
+    {
+      "client": 1,
+      "kind": "video",
+      "bytes": 314368
+    },
+    {
+      "client": 1,
+      "kind": "audio",
+      "bytes": 477184
+    },
+    {
+      "client": 2,
+      "kind": "video",
+      "bytes": 314368
+    },
+    {
+      "client": 2,
+      "kind": "audio",
+      "bytes": 475136
+    },
+    {
+      "client": 3,
+      "kind": "video",
+      "bytes": 314368
+    },
+    {
+      "client": 3,
+      "kind": "audio",
+      "bytes": 473088
+    },
+    {
+      "client": 4,
+      "kind": "video",
+      "bytes": 309248
+    },
+    {
+      "client": 4,
+      "kind": "audio",
+      "bytes": 474112
+    },
+    {
+      "client": 5,
+      "kind": "video",
+      "bytes": 309248
+    },
+    {
+      "client": 5,
+      "kind": "audio",
+      "bytes": 473088
+    }
+  ],
+  "afterForceStopRestart": [
+    200,
+    200,
+    200,
+    200,
+    200
+  ],
+  "ownerRemovalClosedStreams": [
+    {
+      "kind": "video",
+      "closedByServer": true,
+      "bytes": 1693439
+    },
+    {
+      "kind": "audio",
+      "closedByServer": true,
+      "bytes": 1756204
+    }
+  ],
+  "afterOwnerRemoval": [
+    401,
+    401,
+    401,
+    401,
+    401
+  ],
+  "afterRemovalAndRestart": [
+    401,
+    401,
+    401,
+    401,
+    401
+  ]
+}

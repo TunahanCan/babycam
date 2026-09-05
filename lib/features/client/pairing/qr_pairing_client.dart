@@ -15,20 +15,33 @@ class QRPairingClient {
     String? clientName,
   })  : _clientIdProvider = clientIdProvider,
         _localServerDeviceIdProvider = localServerDeviceIdProvider,
-        _clientName = clientName ?? 'Ebeveyn Cihazı';
+        _clientName = clientName ?? 'MiuCam';
 
   final Duration timeout;
   final Future<String> Function()? _clientIdProvider;
   final Future<String?> Function()? _localServerDeviceIdProvider;
   final String _clientName;
 
-  Future<PairingSession> pair(PairingPayload payload) async {
+  Future<PairingSession> pair(
+    PairingPayload payload, {
+    PairingSession? rememberedSession,
+  }) async {
     if (payload.isExpired) {
       throw const PairingFailure(PairingFailureCode.payloadExpired);
     }
     final client = HttpClient()..connectionTimeout = timeout;
     try {
-      final deviceId = await _clientId();
+      // A QR code alone must not redirect a remembered bearer secret to a new
+      // endpoint. Discovery handles authenticated endpoint changes separately.
+      final remembered = rememberedSession;
+      final canProveIdentity = remembered != null &&
+          remembered.payload.deviceId == payload.deviceId &&
+          remembered.payload.host == payload.host &&
+          remembered.payload.port == payload.port &&
+          remembered.payload.httpScheme == payload.httpScheme &&
+          remembered.sessionToken.isNotEmpty;
+      final deviceId =
+          canProveIdentity ? remembered.clientId : await _clientId();
       final localServerDeviceId =
           (await _localServerDeviceIdProvider?.call())?.trim();
       final request = await client.postUrl(
@@ -44,6 +57,8 @@ class QRPairingClient {
         'pairingNonce': payload.pairingNonce,
         'clientName': _clientName,
         'deviceId': deviceId,
+        if (canProveIdentity)
+          'existingTrustedClientToken': remembered.sessionToken,
         if (localServerDeviceId?.isNotEmpty == true)
           'originServerDeviceId': localServerDeviceId,
       }));

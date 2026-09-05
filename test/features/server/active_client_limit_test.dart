@@ -47,6 +47,7 @@ void main() {
     final repaired = tokenService.issueTrustedClientToken(
       clientName: 'Anne',
       deviceId: 'anne',
+      existingTrustedClientToken: trusted.token,
     );
     final second = await _postJson(
       client,
@@ -447,11 +448,13 @@ void main() {
     final client = HttpClient();
     addTearDown(() => client.close(force: true));
 
+    String? firstToken;
     for (var index = 0; index < 5; index++) {
       final token = tokenService.issueTrustedClientToken(
         clientName: 'Client $index',
         deviceId: 'client_$index',
       );
+      firstToken ??= token.token;
       final response = await _postJson(
         client,
         base.port,
@@ -482,14 +485,7 @@ void main() {
       client,
       base.port,
       MiuCamProtocolV2.sessionStop,
-      tokenService.recordForClient('client_0') == null
-          ? ''
-          : tokenService
-              .issueTrustedClientToken(
-                clientName: 'Client 0',
-                deviceId: 'client_0',
-              )
-              .token,
+      firstToken!,
       {'clientId': 'client_0'},
     );
     expect(stop.statusCode, HttpStatus.ok);
@@ -503,6 +499,290 @@ void main() {
     );
     expect(acceptedAfterStop.statusCode, HttpStatus.ok);
   });
+
+  test(
+      'six simultaneous HTTP starts admit five and a removed viewer frees a slot',
+      () async {
+    final tokenService = PairingTokenService(maxTrustedClients: 10);
+    final server = await _testServer(tokenService);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final client = HttpClient()..maxConnectionsPerHost = 10;
+    addTearDown(() => client.close(force: true));
+    final tokens = [
+      for (var index = 0; index < 6; index++)
+        await tokenService.issueTrustedClientTokenPersisted(
+          clientName: 'Phone $index',
+          deviceId: 'parent-$index',
+        ),
+    ];
+    final responses = await Future.wait([
+      for (final token in tokens)
+        _postJson(client, base.port, MiuCamProtocolV2.sessionStart, token.token,
+            {'clientId': token.clientId}),
+    ]);
+    expect(responses.where((response) => response.statusCode == HttpStatus.ok),
+        hasLength(5));
+    final rejectedIndex = responses.indexWhere(
+        (response) => response.statusCode == HttpStatus.tooManyRequests);
+    expect(rejectedIndex, isNonNegative);
+    expect(responses[rejectedIndex].body['code'], 'MAX_ACTIVE_CLIENTS_REACHED');
+    expect(server.activeWatchClientIds, hasLength(5));
+
+    final removedIndex = responses
+        .indexWhere((response) => response.statusCode == HttpStatus.ok);
+    final removed = tokens[removedIndex];
+    final oldStreamToken =
+        responses[removedIndex].body['streamToken']! as String;
+    await server.revokeTrustedClient(removed.clientId);
+
+    expect(server.activeWatchClientIds, hasLength(4));
+    expect(server.activeWatchClientIds, isNot(contains(removed.clientId)));
+    final oldBearer = await _postJson(
+        client,
+        base.port,
+        MiuCamProtocolV2.sessionStart,
+        removed.token,
+        {'clientId': removed.clientId});
+    expect(oldBearer.statusCode, HttpStatus.unauthorized);
+    await _expectMediaDenied(client, base.port, oldStreamToken);
+
+    final waiting = tokens[rejectedIndex];
+    final accepted = await _postJson(
+        client,
+        base.port,
+        MiuCamProtocolV2.sessionStart,
+        waiting.token,
+        {'clientId': waiting.clientId});
+    expect(accepted.statusCode, HttpStatus.ok);
+    expect(server.activeWatchClientIds, hasLength(5));
+    expect(server.activeWatchClientIds, contains(waiting.clientId));
+  });
+
+  test('a failed deletion write still disconnects and rejects both old tokens',
+      () async {
+    final repository = _ControlledTrustedRepository();
+    final tokenService =
+        PairingTokenService(trustedClientRepository: repository);
+    final stopped = Completer<String>();
+    final server = await _testServer(
+      tokenService,
+      onStreamSessionStarted: (_,
+          {required video, required audio, required mediaTransport}) {},
+      onStreamSessionStopped: (clientId) {
+        if (!stopped.isCompleted) stopped.complete(clientId);
+      },
+    );
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+    final token = await tokenService.issueTrustedClientTokenPersisted(
+        clientName: 'Anne', deviceId: 'parent-1');
+    final started = await _postJson(
+        client,
+        base.port,
+        MiuCamProtocolV2.sessionStart,
+        token.token,
+        {'clientId': token.clientId});
+    expect(started.statusCode, HttpStatus.ok);
+    repository.rejectWrites = true;
+
+    await expectLater(server.revokeTrustedClient(token.clientId),
+        throwsA(isA<TrustedClientPersistenceException>()));
+    expect(await stopped.future.timeout(const Duration(seconds: 2)),
+        token.clientId);
+    expect(server.activeWatchClientIds, isEmpty);
+    expect(tokenService.pendingRevocationClientIds, {token.clientId});
+    final refused = await _postJson(
+        client,
+        base.port,
+        MiuCamProtocolV2.sessionStart,
+        token.token,
+        {'clientId': token.clientId});
+    expect(refused.statusCode, HttpStatus.unauthorized);
+    await _expectMediaDenied(
+        client, base.port, started.body['streamToken']! as String);
+
+    repository.rejectWrites = false;
+    await server.revokeTrustedClient(token.clientId);
+    expect(server.trustedClients, isEmpty);
+    final restarted = PairingTokenService(trustedClientRepository: repository);
+    expect(restarted.validateSessionToken(token.token), isFalse);
+  });
+
+  test('slow deletion storage cannot keep a removed viewer streaming',
+      () async {
+    final repository = _ControlledTrustedRepository();
+    final tokenService =
+        PairingTokenService(trustedClientRepository: repository);
+    final stopped = Completer<void>();
+    final server = await _testServer(
+      tokenService,
+      onStreamSessionStarted: (_,
+          {required video, required audio, required mediaTransport}) {},
+      onStreamSessionStopped: (_) {
+        if (!stopped.isCompleted) stopped.complete();
+      },
+    );
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+    final token = await tokenService.issueTrustedClientTokenPersisted(
+        clientName: 'Anne', deviceId: 'parent-1');
+    final started = await _postJson(
+        client,
+        base.port,
+        MiuCamProtocolV2.sessionStart,
+        token.token,
+        {'clientId': token.clientId});
+    expect(started.statusCode, HttpStatus.ok);
+    repository.blockNextWrite();
+    var removalCompleted = false;
+    final removal = server.revokeTrustedClient(token.clientId).then((_) {
+      removalCompleted = true;
+    });
+    addTearDown(repository.releaseBlockedWrite);
+    await repository.writeStarted;
+    await stopped.future.timeout(const Duration(seconds: 2));
+
+    expect(removalCompleted, isFalse);
+    expect(server.activeWatchClientIds, isEmpty);
+    expect(tokenService.validateSessionToken(token.token), isFalse);
+    await _expectMediaDenied(
+        client, base.port, started.body['streamToken']! as String);
+    repository.releaseBlockedWrite();
+    await removal;
+    expect(server.trustedClients, isEmpty);
+  });
+
+  for (final queuedPath in [
+    MiuCamProtocolV2.sessionStart,
+    MiuCamProtocolV2.sessionStop,
+  ]) {
+    test(
+        'a queued $queuedPath rechecks revocation and cannot affect another device',
+        () async {
+      final tokenService = _ObservedPairingTokenService();
+      final firstRuntimeEntered = Completer<void>();
+      final releaseFirstRuntime = Completer<void>();
+      final runtimeClientIds = <String>[];
+      final server = await _testServer(
+        tokenService,
+        onStreamSessionStarted: (clientId,
+            {required video, required audio, required mediaTransport}) async {
+          runtimeClientIds.add(clientId);
+          if (!firstRuntimeEntered.isCompleted) {
+            firstRuntimeEntered.complete();
+            await releaseFirstRuntime.future;
+          }
+        },
+      );
+      addTearDown(server.dispose);
+      addTearDown(() {
+        if (!releaseFirstRuntime.isCompleted) releaseFirstRuntime.complete();
+      });
+      final base = Uri.parse(await server.startPairingMode());
+      final client = HttpClient()..maxConnectionsPerHost = 10;
+      addTearDown(() => client.close(force: true));
+      final first = await tokenService.issueTrustedClientTokenPersisted(
+          clientName: 'Anne', deviceId: 'first');
+      final removed = await tokenService.issueTrustedClientTokenPersisted(
+          clientName: 'Baba', deviceId: 'removed');
+      final firstStart = _postJson(
+          client,
+          base.port,
+          MiuCamProtocolV2.sessionStart,
+          first.token,
+          {'clientId': first.clientId});
+      await firstRuntimeEntered.future.timeout(const Duration(seconds: 2));
+      final queuedWasAuthorized = Completer<void>();
+      tokenService.onValidated = (token) {
+        if (token == removed.token && !queuedWasAuthorized.isCompleted) {
+          queuedWasAuthorized.complete();
+        }
+      };
+      final queuedRequest = _postJson(client, base.port, queuedPath,
+          removed.token, {'clientId': first.clientId});
+      await queuedWasAuthorized.future.timeout(const Duration(seconds: 2));
+
+      final removal = server.revokeTrustedClient(removed.clientId);
+      expect(tokenService.validateSessionToken(removed.token), isFalse);
+      releaseFirstRuntime.complete();
+      final firstResponse = await firstStart;
+      final removedResponse = await queuedRequest;
+      await removal;
+
+      expect(firstResponse.statusCode, HttpStatus.ok);
+      expect(removedResponse.statusCode, HttpStatus.unauthorized);
+      expect(runtimeClientIds, [first.clientId]);
+      expect(server.activeWatchClientIds, {first.clientId});
+      expect(
+          tokenService.hasValidStreamTokenForClient(removed.clientId), isFalse);
+    });
+  }
+}
+
+class _ObservedPairingTokenService extends PairingTokenService {
+  void Function(String token)? onValidated;
+
+  @override
+  TrustedClientRecord? validateTrustedClientToken(String token) {
+    final result = super.validateTrustedClientToken(token);
+    if (result != null) onValidated?.call(token);
+    return result;
+  }
+}
+
+class _ControlledTrustedRepository implements TrustedClientRepository {
+  List<TrustedClientRecord> records = [];
+  bool rejectWrites = false;
+  Completer<void>? _writeStarted;
+  Completer<void>? _writeGate;
+
+  Future<void> get writeStarted => _writeStarted!.future;
+
+  void blockNextWrite() {
+    _writeStarted = Completer<void>();
+    _writeGate = Completer<void>();
+  }
+
+  void releaseBlockedWrite() {
+    final gate = _writeGate;
+    if (gate != null && !gate.isCompleted) gate.complete();
+  }
+
+  @override
+  List<TrustedClientRecord> readAll() => List.of(records);
+
+  @override
+  Future<void> replaceAll(List<TrustedClientRecord> clients) async {
+    final gate = _writeGate;
+    if (gate != null) {
+      if (!_writeStarted!.isCompleted) _writeStarted!.complete();
+      await gate.future;
+      _writeGate = null;
+    }
+    if (rejectWrites) throw StateError('disk unavailable');
+    records = List.of(clients);
+  }
+}
+
+Future<void> _expectMediaDenied(
+    HttpClient client, int port, String token) async {
+  for (final path in [MiuCamProtocolV2.audio, MiuCamProtocolV2.video]) {
+    final request = await client.getUrl(Uri(
+      scheme: 'http',
+      host: InternetAddress.loopbackIPv4.address,
+      port: port,
+      path: path,
+      queryParameters: {'streamToken': token},
+    ));
+    final response = await request.close();
+    await response.drain<void>();
+    expect(response.statusCode, HttpStatus.unauthorized);
+  }
 }
 
 Future<MiuCamServer> _testServer(

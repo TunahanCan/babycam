@@ -24,8 +24,12 @@ extension MiuCamServerSessionHttpController on MiuCamServer {
       return;
     }
 
-    final clientId = _clientIdForRequest(request, json);
     await _drainExpiredClientSessionsLocked();
+    // Authorization may have been revoked while this request waited for the
+    // session queue or while its body was being read.
+    final auth = await _requireTrustedAuth(request);
+    if (auth == null) return;
+    final clientId = auth.clientId;
     if (_sessionController.isStreamAttemptCancelled(
       clientId,
       streamAttemptId,
@@ -52,6 +56,18 @@ extension MiuCamServerSessionHttpController on MiuCamServer {
     } on BroadcastAccessLockedException catch (error) {
       request.response.statusCode = HttpStatus.paymentRequired;
       await _writeBroadcastAccessLocked(request, error.snapshot);
+      return;
+    }
+    // beginSession can await storage. Never allocate a slot using credentials
+    // that were removed during that await.
+    if (_authGuard.trusted(request) == null) {
+      accessSnapshot = await _broadcastAccess?.endSession(
+        _broadcastAccessSessionId(clientId),
+      );
+      _notifyBroadcastAccessChanged(accessSnapshot);
+      _scheduleBroadcastAccessTimer(accessSnapshot);
+      request.response.statusCode = HttpStatus.unauthorized;
+      await request.response.close();
       return;
     }
     late final ActiveSessionStartResult startResult;
@@ -307,7 +323,9 @@ extension MiuCamServerSessionHttpController on MiuCamServer {
       return;
     }
 
-    final clientId = _clientIdForRequest(request, json);
+    final auth = await _requireTrustedAuth(request);
+    if (auth == null) return;
+    final clientId = auth.clientId;
     _sessionController.cancelStreamAttempt(clientId, streamAttemptId);
     if (_sessions.snapshot(clientId)?.streamAttemptId != streamAttemptId) {
       await _writeSessionStopSuccess(request);

@@ -87,6 +87,7 @@ class ServerCompositionRoot {
       try {
         await server.dispose();
       } finally {
+        tokenService.dispose();
         // Media demand may already be empty. Release the independent HTTP/WS
         // host lease only after the Dart server has closed its sockets.
         await platformContract.setServerDemand(active: false);
@@ -194,6 +195,12 @@ class ServerCompositionRoot {
       onPauseExternalMedia: server.pauseExternalMediaForPlatform,
       onRecoverExternalMedia: server.recoverExternalMediaForPlatform,
       trustedClients: () => server.trustedClients,
+      trustedClientsChanged: server.trustedClientsChanged,
+      activeWatchClientIds: () => server.activeWatchClientIds,
+      isPairingNonceActive: tokenService.isPairingNonceActive,
+      onRenameTrustedClient: server.renameTrustedClient,
+      maxTrustedClients: tokenService.maxTrustedClients,
+      maxActiveWatchClients: server.maxActiveWatchClients,
       onRevokeTrustedClient: server.revokeTrustedClient,
       onRevokeAllTrustedClients: server.revokeAllTrustedClients,
       onStartPairing: startPairingOverride ??

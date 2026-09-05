@@ -416,7 +416,11 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
       }
       final token = await tokenService.issueTrustedClientTokenPersisted(
           clientName: json['clientName']?.toString() ?? 'Client',
-          deviceId: json['deviceId']?.toString() ?? 'client');
+          deviceId: json['deviceId']?.toString() ?? '',
+          existingTrustedClientToken:
+              json['existingTrustedClientToken'] is String
+                  ? json['existingTrustedClientToken'] as String
+                  : null);
       await _writeJson(request.response, {
         'serverDeviceId': serverDeviceId,
         'serverName': 'Bebek Odası',

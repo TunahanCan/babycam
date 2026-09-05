@@ -27,6 +27,23 @@ String _localizedFallback(
 }
 
 const _deUiText = <String, String>{
+  'parentDeviceName': 'Elterntelefon',
+  'rememberedDeviceCount': 'Gespeichert: {count}/{max}',
+  'watchingDeviceCount': 'Empfangen: {count}/{max}',
+  'trustedDeviceCapacityFull':
+      'Die Geräteliste ist voll. Entferne ein Gerät, um ein neues Telefon hinzuzufügen. Gespeicherte Telefone können sich weiterhin verbinden.',
+  'deviceRemovalSaveFailed':
+      'Der Zugriff ist für diese Sitzung gesperrt, aber das Entfernen konnte nicht gespeichert werden. Versuche es erneut.',
+  'deviceNameSaveFailed':
+      'Der Gerätename konnte nicht gespeichert werden. Versuche es erneut.',
+  'renameDevice': 'Gerät umbenennen',
+  'deviceNameLabel': 'Gerätename',
+  'saveDeviceName': 'Speichern',
+  'deviceRemovalPending': 'Zugriff gesperrt · Entfernen noch nicht gespeichert',
+  'deviceWatching': 'Empfängt den Stream',
+  'deviceNotificationsOnly': 'Benachrichtigungsverbindung aktiv',
+  'deviceRemembered': 'Gespeichert · kein aktiver Stream',
+  'deviceLastSeen': 'Zuletzt verbunden: {time}',
   'notificationChannelDescription':
       'Hinweise zu weinähnlichen und lauten Geräuschen, Bewegung und Lichtänderungen im Babyzimmer.',
   'bootstrapPreparing': 'MiuCam wird vorbereitet...',
@@ -523,6 +540,22 @@ const _deUiText = <String, String>{
 };
 
 const _arUiText = <String, String>{
+  'parentDeviceName': 'هاتف الوالدين',
+  'rememberedDeviceCount': 'الأجهزة المحفوظة: {count}/{max}',
+  'watchingDeviceCount': 'تستقبل البث: {count}/{max}',
+  'trustedDeviceCapacityFull':
+      'قائمة الأجهزة ممتلئة. أزل صلاحية جهاز لإضافة هاتف جديد. يمكن للهواتف المحفوظة إعادة الاتصال.',
+  'deviceRemovalSaveFailed':
+      'تم حظر الوصول في هذه الجلسة، لكن تعذّر حفظ الإزالة. أعد المحاولة.',
+  'deviceNameSaveFailed': 'تعذّر حفظ اسم الجهاز. أعد المحاولة.',
+  'renameDevice': 'تغيير اسم الجهاز',
+  'deviceNameLabel': 'اسم الجهاز',
+  'saveDeviceName': 'حفظ',
+  'deviceRemovalPending': 'الوصول محظور · الإزالة بانتظار الحفظ',
+  'deviceWatching': 'يستقبل البث',
+  'deviceNotificationsOnly': 'اتصال التنبيهات نشط',
+  'deviceRemembered': 'محفوظ · لا يستقبل بثًا حاليًا',
+  'deviceLastSeen': 'آخر اتصال: {time}',
   'notificationChannelDescription':
       'تنبيهات الأصوات الشبيهة بالبكاء والأصوات العالية والحركة وتغيّر الإضاءة في غرفة الطفل.',
   'bootstrapPreparing': 'يتم تجهيز MiuCam...',

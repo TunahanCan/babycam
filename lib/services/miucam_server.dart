@@ -579,10 +579,24 @@ class MiuCamServer {
 
   List<TrustedClientRecord> get trustedClients => tokenService.trustedClients;
 
+  Stream<void> get trustedClientsChanged => tokenService.trustedClientsChanged;
+  Set<String> get activeWatchClientIds =>
+      _activeClientRegistry.activeClientIds.toSet();
+
+  Future<void> renameTrustedClient(String clientId, String clientName) async {
+    if (_disposed) return;
+    await tokenService.renameTrustedClientPersisted(clientId, clientName);
+  }
+
   Future<void> revokeTrustedClient(String clientId) async {
     if (_disposed) return;
-    await tokenService.revokeClientPersisted(clientId);
-    await _disconnectRevokedClient(clientId);
+    // Remove authorization immediately, and close existing transports even if
+    // durable storage fails. The pending device remains visible for retry.
+    final persistence = tokenService.revokeClientPersisted(clientId);
+    await Future.wait<void>([
+      persistence,
+      _disconnectRevokedClient(clientId),
+    ]);
   }
 
   Future<void> revokeAllTrustedClients() async {
@@ -590,28 +604,45 @@ class MiuCamServer {
     final clientIds = tokenService.trustedClients
         .map((client) => client.clientId)
         .toList(growable: false);
-    await tokenService.revokeAllPersisted();
-    for (final clientId in clientIds) {
-      await _disconnectRevokedClient(clientId);
-    }
+    final persistence = tokenService.revokeAllPersisted();
+    await Future.wait<void>([
+      persistence,
+      for (final clientId in clientIds) _disconnectRevokedClient(clientId),
+    ]);
   }
 
   Future<void> _disconnectRevokedClient(String clientId) async {
-    await _eventSockets.closeClient(clientId);
-    try {
-      await _features.stopTalk(clientId: clientId);
-    } catch (error) {
-      onLog('Revoked client talk cleanup failed ($clientId): $error');
+    Future<void> stopEvents() async {
+      try {
+        await _eventSockets.closeClient(clientId);
+      } catch (error) {
+        onLog('Revoked client event cleanup failed ($clientId): $error');
+      }
     }
-    final errors = await _sessionOperations.run(
-      () => _cleanupClientSession(clientId, closeWebRtc: true),
-    );
-    if (errors.isNotEmpty) {
-      onLog(
-        'Revoked client cleanup completed with errors ($clientId): '
-        '${errors.join(' | ')}',
+
+    Future<void> stopTalk() async {
+      try {
+        await _features
+            .stopTalk(clientId: clientId)
+            .timeout(streamSessionLifecycleTimeout);
+      } catch (error) {
+        onLog('Revoked client talk cleanup failed ($clientId): $error');
+      }
+    }
+
+    Future<void> stopMedia() async {
+      final errors = await _sessionOperations.run(
+        () => _cleanupClientSession(clientId, closeWebRtc: true),
       );
+      if (errors.isNotEmpty) {
+        onLog(
+          'Revoked client cleanup completed with errors ($clientId): '
+          '${errors.join(' | ')}',
+        );
+      }
     }
+
+    await Future.wait<void>([stopEvents(), stopTalk(), stopMedia()]);
   }
 
   Future<void> startMediaRuntime() async {
@@ -763,16 +794,6 @@ class MiuCamServer {
     if (controller == null || !controller.value.isInitialized) return false;
     await controller.setFlashMode(enabled ? FlashMode.torch : FlashMode.off);
     return true;
-  }
-
-  String _clientIdForRequest(HttpRequest request, Object? json) {
-    final auth = _authGuard.trusted(request);
-    if (auth != null) return auth.clientId;
-    if (json is Map) {
-      final clientId = json['clientId']?.toString().trim();
-      if (clientId != null && clientId.isNotEmpty) return clientId;
-    }
-    return request.connectionInfo?.remoteAddress.address ?? 'unknown_client';
   }
 
   ({bool video, bool audio}) _streamDemandForRequest(Object? json) {
