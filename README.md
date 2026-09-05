@@ -129,7 +129,7 @@ MiuCam, Android ve iOS'un farklı arka plan kurallarını kullanıcıdan saklama
 
 | Platform | Server davranışı |
 | --- | --- |
-| **Android 23+** | Foreground service ile yayın, ses ve analiz OS kuralları içinde sürdürülebilir. |
+| **Android 7.0+ (API 24)** | Foreground service ile yayın, ses ve analiz OS kuralları içinde sürdürülebilir. |
 | **iOS 13+** | Kamera yayını yalnız uygulama ön plandayken devam eder. Oda sesi aktifken arka plan ses yolu, iOS izin verdiği sürece korunabilir; force-quit veya process kill sonrasında devam garantisi yoktur. |
 
 Client bildirimleri APNs/FCM push değildir. Alert WebSocket'inin ulaşılabilir,
@@ -141,7 +141,7 @@ uygulama sürecinin çalışır ve işletim sistemi izinlerinin uygun olması ge
 
 - Flutter `3.44.4`
 - Dart `>=3.4.0 <4.0.0`
-- Android için Java 17 ve Android 23+
+- Android için Java 17 ve Android 7.0+ (API 24)
 - iOS için macOS, Xcode ve iOS 13+
 - Aynı Wi-Fi üzerinde iki fiziksel telefon
 

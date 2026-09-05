@@ -26,12 +26,20 @@ class BabyMonitorFeatureController {
   })  : comfortAudio = comfortAudio ?? ComfortAudioService(),
         nightLight = nightLight ?? NightLightController(),
         talkSessions = talkSessions ?? TalkSessionRegistry(),
-        roomAudio = roomAudio ?? RoomAudioCoordinator();
+        roomAudio = roomAudio ?? RoomAudioCoordinator() {
+    _comfortFailureSubscription =
+        this.roomAudio.comfortPlaybackFailures.listen((error) {
+      if (!_disposed && this.comfortAudio.state.playing) {
+        this.comfortAudio.markPlaybackFailed(error);
+      }
+    });
+  }
 
   final ComfortAudioService comfortAudio;
   final NightLightController nightLight;
   final TalkSessionRegistry talkSessions;
   final RoomAudioCoordinator roomAudio;
+  late final StreamSubscription<Object> _comfortFailureSubscription;
   Timer? _talkExpiryTimer;
   bool _disposed = false;
 
@@ -164,6 +172,7 @@ class BabyMonitorFeatureController {
     _disposed = true;
     _talkExpiryTimer?.cancel();
     _talkExpiryTimer = null;
+    await _comfortFailureSubscription.cancel();
     await roomAudio.dispose();
   }
 

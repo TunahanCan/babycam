@@ -8,8 +8,43 @@ import 'package:miucam/features/client/alerts/client_notification_service.dart';
 import 'package:miucam/services/notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../support/failing_alert_preferences.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('denied notifications require a saved fallback before acknowledging',
+      () async {
+    final preferences = FailingAlertPreferences()..failWrites = true;
+    final history = ClientAlertHistory(preferences: preferences);
+    final notifications = _PermanentFailureNotificationService();
+    final delivery = ClientAlertDeliveryCoordinator(
+      history: history,
+      notifications: notifications,
+    );
+    addTearDown(history.dispose);
+    final alert = _alert(id: 'permission-and-storage-failure');
+
+    await expectLater(delivery.deliver(alert), throwsStateError);
+    expect(history.alerts.single.id, alert.id);
+    expect(history.isNotificationPending(alert.id), isTrue);
+    expect(preferences.saved, isEmpty);
+
+    preferences.failWrites = false;
+    await delivery.deliver(alert);
+    expect(preferences.writeAttempts, greaterThanOrEqualTo(2));
+    final restored = ClientAlertHistory(preferences: preferences);
+    addTearDown(restored.dispose);
+    await restored.load();
+    expect(restored.alerts.single.id, alert.id);
+    expect(restored.isNotificationPending(alert.id), isFalse);
+
+    await ClientAlertDeliveryCoordinator(
+      history: restored,
+      notifications: notifications,
+    ).deliver(alert);
+    expect(notifications.calls, 2);
+  });
 
   test('failed native notification remains retryable after process restart',
       () async {

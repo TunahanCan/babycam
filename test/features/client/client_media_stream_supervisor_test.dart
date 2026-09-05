@@ -15,6 +15,73 @@ import 'package:miucam/features/client/media/client_stream_health_state.dart';
 import 'package:miucam/features/client/media/pcm_audio_output.dart';
 
 void main() {
+  test('video reports unauthorized before an unfinished error body ends',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      request.response
+        ..statusCode = HttpStatus.unauthorized
+        ..bufferOutput = false
+        ..write('This error body stays open.');
+      await request.response.flush();
+    });
+    final refreshed = Completer<ClientMediaStreamFailure>();
+    final supervisor = ClientMediaStreamSupervisor(
+      session: _session(server.port),
+      activeStream: const ActiveStreamSession(streamToken: 'expired'),
+      audioEnabled: false,
+      onVideoFrame: (_) {},
+      onSessionRefreshRequired: (failure) async => refreshed.complete(failure),
+    );
+    addTearDown(supervisor.stop);
+    await supervisor.start();
+    expect(
+        (await refreshed.future.timeout(const Duration(milliseconds: 500)))
+            .kind,
+        ClientMediaStreamFailureKind.unauthorized);
+  });
+
+  test('video never sends room credentials to a redirect target', () async {
+    final redirected = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final paired = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => redirected.close(force: true));
+    addTearDown(() => paired.close(force: true));
+    var redirectedRequests = 0;
+    redirected.listen((request) async {
+      redirectedRequests++;
+      request.response.statusCode = HttpStatus.unauthorized;
+      await request.response.close();
+    });
+    paired.listen((request) async {
+      request.response
+        ..statusCode = HttpStatus.temporaryRedirect
+        ..headers.set(HttpHeaders.locationHeader,
+            'http://127.0.0.1:${redirected.port}/video');
+      await request.response.close();
+    });
+    final rejected = Completer<ClientMediaStreamFailure>();
+    final supervisor = ClientMediaStreamSupervisor(
+      session: _session(paired.port),
+      activeStream: const ActiveStreamSession(streamToken: 'stream'),
+      audioEnabled: false,
+      retryDelay: const Duration(seconds: 5),
+      onVideoFrame: (_) {},
+      onStatus: (update) {
+        final failure = update.failure;
+        if (failure != null && !rejected.isCompleted) {
+          rejected.complete(failure);
+        }
+      },
+    );
+    addTearDown(supervisor.stop);
+    await supervisor.start();
+    expect(
+        (await rejected.future.timeout(const Duration(seconds: 1))).statusCode,
+        HttpStatus.temporaryRedirect);
+    expect(redirectedRequests, 0);
+  });
+
   test('401 media response session refresh ister ve retry loop yapmaz',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

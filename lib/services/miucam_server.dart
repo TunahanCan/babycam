@@ -95,6 +95,8 @@ class MiuCamServer {
     this.onWebRtcCaptureEnded,
     this.onAlertClientConnected,
     this.onAlertClientDisconnected,
+    this.audioAnalysisDemand,
+    this.videoAnalysisDemand,
     this.onPlaybackDemandChanged,
     DeviceCapabilityTier? deviceTier,
     PairingTokenService? tokenService,
@@ -281,6 +283,11 @@ class MiuCamServer {
   final FutureOr<void> Function(String clientId)? onWebRtcCaptureEnded;
   final FutureOr<void> Function(String clientId)? onAlertClientConnected;
   final FutureOr<void> Function(String clientId)? onAlertClientDisconnected;
+
+  /// Notification demand is independent of live media/preview capture.
+  /// Pull the current demand so subscription changes take effect immediately.
+  final bool Function()? audioAnalysisDemand;
+  final bool Function()? videoAnalysisDemand;
   final FutureOr<void> Function(bool active)? onPlaybackDemandChanged;
   final PairingTokenService tokenService;
   final MediaPermissionGateway mediaPermissions;
@@ -580,6 +587,7 @@ class MiuCamServer {
       }
     }
     _pairingModeActive = false;
+    tokenService.clearPairingNonces();
     try {
       await _serviceAdvertiser?.stop();
     } catch (error) {

@@ -158,10 +158,12 @@ class TrustedBackendPurchaseVerifier implements BroadcastPurchaseVerifier {
     final client = _clientFactory()..connectionTimeout = timeout;
     try {
       final request = await client.postUrl(endpoint).timeout(timeout);
+      request.followRedirects = false;
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.acceptHeader, ContentType.json.mimeType);
-      final headers = await headersProvider?.call() ?? const <String, String>{};
+      final headers = await headersProvider?.call().timeout(timeout) ??
+          const <String, String>{};
       for (final entry in headers.entries) {
         request.headers.set(entry.key, entry.value);
       }

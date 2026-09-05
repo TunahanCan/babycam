@@ -213,6 +213,7 @@ class MiuCamServiceBrowser {
     NsdStopDiscovery? stopDiscovery,
     RetryPolicy? retryPolicy,
     this.maxAttempts = 3,
+    this.stopTimeout = const Duration(seconds: 3),
   })  : _startDiscovery = startDiscovery ?? _startNsdDiscovery,
         _stopDiscovery = stopDiscovery ?? nsd.stopDiscovery,
         _retryPolicy = retryPolicy ??
@@ -224,12 +225,16 @@ class MiuCamServiceBrowser {
     if (maxAttempts <= 0) {
       throw ArgumentError.value(maxAttempts, 'maxAttempts', 'must be positive');
     }
+    if (stopTimeout <= Duration.zero) {
+      throw ArgumentError.value(stopTimeout, 'stopTimeout', 'must be positive');
+    }
   }
 
   final NsdStartDiscovery _startDiscovery;
   final NsdStopDiscovery _stopDiscovery;
   final RetryPolicy _retryPolicy;
   final int maxAttempts;
+  final Duration stopTimeout;
   final _services = <String, MiuCamDiscoveredService>{};
   final _servicesByInstance = <String, MiuCamDiscoveredService>{};
   final _canonicalKeysByInstance = <String, String>{};
@@ -282,29 +287,42 @@ class MiuCamServiceBrowser {
 
   Future<void> _stopLocked() async {
     final discovery = _discovery;
+    _discovery = null;
     _generation++;
     final listener = _listener;
     _listener = null;
-    if (discovery != null) {
-      if (listener != null) discovery.removeServiceListener(listener);
-      await _retry(
-        action: () => _stopDiscovery(discovery),
-        retryPolicy: _retryPolicy,
-        maxAttempts: maxAttempts,
-      );
+    if (discovery != null && listener != null) {
+      discovery.removeServiceListener(listener);
     }
-    _discovery = null;
     _services.clear();
     _servicesByInstance.clear();
     _canonicalKeysByInstance.clear();
     _emit();
+    if (discovery != null) {
+      try {
+        await _retry(
+          action: () => _stopDiscovery(discovery),
+          retryPolicy: _retryPolicy,
+          maxAttempts: maxAttempts,
+        ).timeout(stopTimeout);
+      } catch (error) {
+        // NSD discards discovery callbacks after a native stop failure. Its
+        // old handle must not make a later start look already operational.
+        _lastError = error;
+        _emit();
+        rethrow;
+      }
+    }
   }
 
   Future<void> dispose() => _serialize(() async {
         if (_disposed) return;
-        await _stopLocked();
         _disposed = true;
-        await _updates.close();
+        try {
+          await _stopLocked();
+        } finally {
+          await _updates.close();
+        }
       });
 
   Future<void> _onService(

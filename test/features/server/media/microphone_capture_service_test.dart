@@ -8,6 +8,35 @@ import 'package:miucam/services/server/audio_stream_leveler.dart';
 import 'package:record/record.dart';
 
 void main() {
+  test('stop during automatic restart cannot revive microphone capture',
+      () async {
+    final recorder = _FakeRecorder();
+    final replacement = _FakeRecorder();
+    final service = MicrophoneCaptureService(
+      sampleRate: 16000,
+      channels: 1,
+      recorder: recorder,
+      recorderFactory: () => replacement,
+      restartBaseDelay: const Duration(milliseconds: 1),
+      restartMaxDelay: const Duration(milliseconds: 2),
+      cleanupTimeout: const Duration(milliseconds: 20),
+    );
+    addTearDown(service.dispose);
+    final lateStream = Completer<Stream<Uint8List>>();
+    addTearDown(() {
+      if (!lateStream.isCompleted) lateStream.complete(const Stream.empty());
+    });
+    expect(await service.start(onChunk: (_) {}), isTrue);
+    recorder.nextStreamResult = lateStream.future;
+    recorder.addError(StateError('lost microphone capture'));
+    await _waitUntil(() => recorder.startCalls == 2);
+    await service.stop();
+    lateStream.complete(const Stream.empty());
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(replacement.startCalls, 0);
+    expect(service.isActive, isFalse);
+  });
+
   test('parcali PCM orneklerini gain ve analizden once kayipsiz birlestirir',
       () async {
     final recorder = _FakeRecorder();
@@ -376,6 +405,7 @@ class _FakeRecorder implements MicrophoneRecorderPort {
   final Future<bool>? permissionResult;
   final Future<Stream<Uint8List>>? streamResult;
   final Future<void>? stopResult;
+  Future<Stream<Uint8List>>? nextStreamResult;
   final StreamController<Uint8List> _controller;
   int permissionCalls = 0;
   int startCalls = 0;
@@ -394,7 +424,11 @@ class _FakeRecorder implements MicrophoneRecorderPort {
   Future<Stream<Uint8List>> startStream(RecordConfig config) async {
     startCalls++;
     lastConfig = config;
-    return streamResult ?? Future<Stream<Uint8List>>.value(_controller.stream);
+    final pending = nextStreamResult;
+    nextStreamResult = null;
+    return pending ??
+        streamResult ??
+        Future<Stream<Uint8List>>.value(_controller.stream);
   }
 
   Stream<Uint8List> get stream => _controller.stream;

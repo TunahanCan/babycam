@@ -106,6 +106,63 @@ void main() {
     expect(service.consumePairConfirmAttempt('192.168.1.5'), isTrue);
   });
 
+  test('public status nonce churn cannot evict the room display QR', () {
+    final service = PairingTokenService(maxActiveNonces: 1);
+    addTearDown(service.dispose);
+    final displayNonce = service.createPairingNonce();
+    final publicNonce = service.createPublicPairingNonce();
+    for (var index = 0; index < 100; index++) {
+      expect(service.createPublicPairingNonce(), publicNonce);
+    }
+    for (var index = 0; index < 100; index++) {
+      expect(
+          service.validateAndConsumeNonce(service.createPublicPairingNonce()),
+          isTrue);
+    }
+
+    expect(service.isPairingNonceActive(displayNonce), isTrue);
+    expect(service.validateAndConsumeNonce(displayNonce), isTrue);
+    expect(service.activeNonceCount, 0);
+  });
+
+  test('closing pairing invalidates public and QR nonces across reopen', () {
+    final service = PairingTokenService();
+    addTearDown(service.dispose);
+    final displayNonce = service.createPairingNonce();
+    final publicNonce = service.createPublicPairingNonce();
+    final generation = service.pairingGeneration;
+
+    service.clearPairingNonces();
+
+    expect(service.pairingGeneration, greaterThan(generation));
+    expect(service.validateAndConsumeNonce(displayNonce), isFalse);
+    expect(service.validateAndConsumeNonce(publicNonce), isFalse);
+    expect(service.createPublicPairingNonce(), isNot(publicNonce));
+  });
+
+  test('source flood stays bounded without evicting a live rate limit', () {
+    var now = DateTime(2026);
+    final service = PairingTokenService(
+      now: () => now,
+      maxPairConfirmSources: 2,
+      maxPairConfirmAttemptsPerWindow: 1,
+      pairConfirmRateLimitWindow: const Duration(seconds: 10),
+    );
+    addTearDown(service.dispose);
+    expect(service.consumePairConfirmAttempt('fd00::1'), isTrue);
+    expect(service.consumePairConfirmAttempt('fd00::2'), isTrue);
+    for (var index = 3; index < 100; index++) {
+      expect(service.consumePairConfirmAttempt('fd00::$index'), isFalse);
+    }
+    expect(service.consumePairConfirmAttempt('fd00::1'), isFalse);
+
+    // Cleanup must reclaim buckets for addresses that never return, too.
+    now = now.add(const Duration(seconds: 10));
+    expect(service.consumePairConfirmAttempt('fd00::3'), isTrue);
+    expect(service.consumePairConfirmAttempt('fd00::4'), isTrue);
+    expect(service.consumePairConfirmAttempt('fd00::5'), isFalse);
+  });
+
   test('pairing başarılı olunca session token üretilir', () {
     final service = PairingTokenService();
     final token =

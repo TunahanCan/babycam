@@ -8,6 +8,46 @@ import 'package:miucam/services/monetization/broadcast_access_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test(
+      'verified lifetime broadcasting does not depend on writable trial storage',
+      () async {
+    final preferences = _FaultInjectingPreferences();
+    final clock = _Clock();
+    final service = BroadcastAccessService(preferences,
+        purchaseGateway: _FakePurchaseGateway(),
+        now: clock.now,
+        monotonicNowMs: clock.monotonicNowMs);
+    await service.unlockWithOneTimePurchase();
+    preferences.rejectWrites = true;
+    for (var index = 0; index < 5; index++) {
+      expect((await service.beginSession('parent-$index')).unlocked, isTrue);
+    }
+    clock.advance(const Duration(hours: 5));
+    expect((await service.snapshot()).isLocked, isFalse);
+    await service.endAllSessions();
+    await service.dispose();
+  });
+
+  test('a damaged trial record cannot lock an already verified lifetime owner',
+      () async {
+    final preferences = _FaultInjectingPreferences();
+    final original = BroadcastAccessService(preferences,
+        purchaseGateway: _FakePurchaseGateway());
+    await original.unlockWithOneTimePurchase();
+    await original.dispose();
+    final restartedPreferences = _FaultInjectingPreferences({
+      ...preferences.durable,
+      'broadcast_access.trial_ledger_v1': '{damaged',
+    })
+      ..rejectWrites = true;
+    final restarted = BroadcastAccessService(restartedPreferences,
+        purchaseGateway: _FakePurchaseGateway());
+    expect((await restarted.snapshot()).unlocked, isTrue);
+    expect((await restarted.beginSession('parent')).isLocked, isFalse);
+    await restarted.endSession('parent');
+    await restarted.dispose();
+  });
+
   test('free broadcast time uses monotonic active wall time', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();

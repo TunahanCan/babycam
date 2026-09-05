@@ -1,0 +1,386 @@
+{
+  "reviewDate": "2026-09-06",
+  "baselineCommit": "f7a073e",
+  "productionReady": false,
+  "automated": {
+    "flutterTestsPassed": 1023,
+    "addedFlutterTests": 49,
+    "nativeJvmTestsPassed": 7,
+    "analyzerIssues": 0,
+    "dartFormatFiles": 340,
+    "dartFormatChangedFiles": 0,
+    "websiteLanguages": 8,
+    "websiteTranslationKeys": 234,
+    "websiteBuiltPages": 16,
+    "browserScenariosPassed": 7
+  },
+  "device": {
+    "model": "LG H870",
+    "androidVersion": "9",
+    "api": 28,
+    "physicalParentPhones": 0,
+    "transport": "USB forwarded local HTTP",
+    "audioPlaybackRuns": [
+      {
+        "run": 1,
+        "passed": true,
+        "observedDurationMs": 3182,
+        "nativeBytesWrittenDelta": 101760,
+        "playbackHeadFramesDelta": 50880,
+        "steadyStateUnderrunDelta": 0,
+        "errors": []
+      },
+      {
+        "run": 2,
+        "passed": true,
+        "observedDurationMs": 3097,
+        "nativeBytesWrittenDelta": 98560,
+        "playbackHeadFramesDelta": 49600,
+        "steadyStateUnderrunDelta": 0,
+        "errors": []
+      },
+      {
+        "run": 3,
+        "passed": true,
+        "observedDurationMs": 3108,
+        "nativeBytesWrittenDelta": 99200,
+        "playbackHeadFramesDelta": 49600,
+        "steadyStateUnderrunDelta": 0,
+        "errors": []
+      }
+    ],
+    "notification": {
+      "passed": true,
+      "cleanedUp": true,
+      "activeNotification": {
+        "id": 1302744040,
+        "title": "MiuCam cihaz testi",
+        "body": "Bu bir cihaz doğrulama testidir; gerçek bebek uyarısı değildir.",
+        "channelId": "miucam_alerts"
+      }
+    },
+    "media": [
+      {
+        "kind": "video",
+        "result": "pass",
+        "failures": [],
+        "requestedDurationMs": 30000,
+        "durationMs": 30011,
+        "deadlineReached": true,
+        "earlyEof": false,
+        "bytes": 884116,
+        "firstPayloadMs": 618,
+        "lastPayloadMs": 29805,
+        "receiveGapP95Ms": 306,
+        "receiveGapMaxMs": 452,
+        "receiveGapP95Method": "bounded 1 ms histogram; overflow uses maximum",
+        "tailGapMs": 195,
+        "maxAllowedReceiveGapMs": 5000,
+        "gapsOver500Ms": 0,
+        "frames": 159,
+        "dimensions": [
+          480,
+          640
+        ],
+        "invalidJpegs": 0,
+        "parserInvalidParts": 0
+      },
+      {
+        "kind": "audio",
+        "result": "pass",
+        "failures": [],
+        "requestedDurationMs": 30000,
+        "durationMs": 30010,
+        "deadlineReached": true,
+        "earlyEof": false,
+        "bytes": 941440,
+        "firstPayloadMs": 201,
+        "lastPayloadMs": 29991,
+        "receiveGapP95Ms": 41,
+        "receiveGapMaxMs": 401,
+        "receiveGapP95Method": "bounded 1 ms histogram; overflow uses maximum",
+        "tailGapMs": 9,
+        "maxAllowedReceiveGapMs": 1000,
+        "gapsOver500Ms": 0,
+        "sampleRate": 16000,
+        "channels": 1,
+        "samples": 470720,
+        "audioDurationMs": 29420.0,
+        "audioCoverageRatio": 0.9872814523977315,
+        "peak": 81,
+        "rms": 14.939713359536915,
+        "clippedSamples": 0
+      },
+      {
+        "kind": "status",
+        "result": "pass",
+        "samples": 6,
+        "jsonlBytes": 30428,
+        "maxStatusBytesPerSample": 16384,
+        "maxSamples": 512,
+        "pollIntervalMs": 5000
+      }
+    ],
+    "eventSocket": {
+      "messages": 0,
+      "error": null,
+      "pingIntervalMs": 5000,
+      "remainedOpenUntilDeadline": true,
+      "alertStimulus": "not_generated_by_probe",
+      "coverage": "no alert stimulated or observed; socket continuity only",
+      "measurement": "socket continuity and ACK sending; no notification UI claim"
+    },
+    "controls": [
+      {
+        "track": "white_noise",
+        "result": "pass"
+      },
+      {
+        "track": "pink_noise",
+        "result": "pass"
+      },
+      {
+        "track": "rain",
+        "result": "pass"
+      },
+      {
+        "track": "soft_lullaby",
+        "result": "pass"
+      },
+      {
+        "track": "shushing",
+        "result": "pass"
+      },
+      {
+        "action": "pause",
+        "result": "pass"
+      },
+      {
+        "action": "setVolume",
+        "result": "pass"
+      },
+      {
+        "nightLight": "screenGlow",
+        "result": "pass"
+      },
+      {
+        "nightLight": "torch",
+        "result": "pass"
+      },
+      {
+        "talkAudioBytes": 16000,
+        "talkChunksPlayed": 25
+      }
+    ],
+    "trialUsedMsBefore": 30178,
+    "trialUsedMsAfter": 71644,
+    "cleanup": {
+      "revokedTokenStatus": 401,
+      "ledger": {
+        "version": 1,
+        "usedMs": 71644,
+        "active": false,
+        "lastObservedWallMs": 1788647245425
+      },
+      "revokedTokenStatusAfterRestart": 401,
+      "usedMsAfterRestart": 71644,
+      "trialActiveAfterRestart": false
+    },
+    "testExecutionIncident": {
+      "description": "flutter drive without --keep-app-running uninstalled the app and deleted local app data after native tests. This was an agent execution mistake.",
+      "normalAppReinstalled": true,
+      "restoredFromPretestSnapshot": [
+        "server role",
+        "installation marker",
+        "exact 30178 ms trial ledger"
+      ],
+      "otherPreferencesRecovered": false,
+      "permissionsRegranted": [
+        "camera",
+        "microphone"
+      ],
+      "deviceTestCommandsCorrected": true
+    }
+  },
+  "artifactChecks": {
+    "profileApkSha256": "4c1d8d020e144377175a0c425f5b66114d76b3fe41638bc1286db4243b4bed45",
+    "releaseAabSha256": "b54cc47558948ddaeca1b555342a035611df1b7ffcdabafc68357e041f146874",
+    "apkMetadata": [
+      "sdkVersion:'24'",
+      "targetSdkVersion:'36'",
+      "native-code: 'arm64-v8a' 'armeabi-v7a' 'x86_64'"
+    ],
+    "zip16KbAlignmentPass": true,
+    "elfLoadAlignment": [
+      {
+        "library": "lib/arm64-v8a/libbarhopper_v3.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/arm64-v8a/libdartjni.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/arm64-v8a/libdatastore_shared_counter.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/arm64-v8a/libflutter.so",
+        "loadAlignments": [
+          65536,
+          65536,
+          65536
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/arm64-v8a/libimage_processing_util_jni.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/arm64-v8a/libjingle_peerconnection_so.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/arm64-v8a/libsurface_util_jni.so",
+        "loadAlignments": [
+          16384,
+          16384
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/arm64-v8a/libvmservice_snapshot.so",
+        "loadAlignments": [
+          65536,
+          65536,
+          65536
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/arm64-v8a/libapp.so",
+        "loadAlignments": [
+          65536,
+          65536,
+          65536
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/x86_64/libapp.so",
+        "loadAlignments": [
+          65536,
+          65536,
+          65536
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/x86_64/libbarhopper_v3.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/x86_64/libdartjni.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/x86_64/libdatastore_shared_counter.so",
+        "loadAlignments": [
+          16384,
+          16384
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/x86_64/libflutter.so",
+        "loadAlignments": [
+          65536,
+          65536,
+          65536
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/x86_64/libimage_processing_util_jni.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/x86_64/libjingle_peerconnection_so.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/x86_64/libsurface_util_jni.so",
+        "loadAlignments": [
+          16384,
+          16384
+        ],
+        "pass": true
+      },
+      {
+        "library": "lib/x86_64/libvmservice_snapshot.so",
+        "loadAlignments": [
+          65536,
+          65536,
+          65536
+        ],
+        "pass": true
+      }
+    ],
+    "elfLoadAlignmentPass": true
+  },
+  "physical16KbDeviceTest": false,
+  "limitations": [
+    "No physical iOS test",
+    "No second physical parent phone or acoustic fidelity measurement",
+    "No real cry stimulus during LG media probe",
+    "No Apple/Google sandbox purchase or real charge",
+    "Unsigned release AAB",
+    "Open plaintext transport and missing physical pairing approval"
+  ]
+}

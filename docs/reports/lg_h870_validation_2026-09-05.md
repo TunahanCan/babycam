@@ -176,10 +176,10 @@ bu raporla birlikte saklanır.
 ```sh
 flutter test
 flutter analyze
-flutter drive --profile -d DEVICE_ID \
+flutter drive --profile --keep-app-running -d DEVICE_ID \
   --target integration_test/device_audio_notification_smoke_test.dart \
   --driver test_driver/device_audio_notification_smoke_driver.dart
-flutter drive --profile -d DEVICE_ID \
+flutter drive --profile --keep-app-running -d DEVICE_ID \
   --target integration_test/ui_frame_time_benchmark_test.dart \
   --driver test_driver/ui_frame_time_benchmark_driver.dart
 

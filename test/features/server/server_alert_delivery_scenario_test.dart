@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:miucam/analysis/video/luma_frame.dart';
 import 'package:miucam/core/protocol/alert_event_dto.dart';
 import 'package:miucam/core/protocol/miucam_protocol.dart';
 import 'package:miucam/core/protocol/pairing_payload.dart';
@@ -29,6 +30,103 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../analysis/audio/test_audio_generators.dart';
 
 void main() {
+  test(
+      'production pipeline gates sound/light by live analysis demand and cooldown',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'config.notify_cooldown_ms': 60000,
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final tokenService = PairingTokenService();
+    final source = _ManualAnalysisMediaSource();
+    var audioAnalysisDemand = false;
+    var videoAnalysisDemand = false;
+    final server = MiuCamServer(
+      config: ConfigurationService(preferences),
+      strings: AppStrings(const Locale('tr')),
+      onLog: (_) {},
+      onAlert: (_) {},
+      tokenService: tokenService,
+      mediaSource: source,
+      audioAnalysisDemand: () => audioAnalysisDemand,
+      videoAnalysisDemand: () => videoAnalysisDemand,
+      httpPort: 0,
+      startMediaOnSessionStart: false,
+    );
+    addTearDown(source.dispose);
+    addTearDown(server.dispose);
+    final base = Uri.parse(await server.startPairingMode());
+    final trusted = tokenService.issueTrustedClientToken(
+      clientName: 'Anne',
+      deviceId: 'analysis-demand-parent',
+    );
+    final received = <AlertEventDto>[];
+    final listener = ClientAlertListener(onAlert: received.add);
+    addTearDown(listener.stop);
+    await listener.start(_session(base.port, trusted));
+    await server.startAudioRuntime();
+    await server.startVideoRuntime();
+
+    // Capture alone (a live watch or local preview) must not arm alerts.
+    source.emitAudio(_quietRoomCalibration());
+    source.emitLoudSound();
+    source.emitLightChange();
+    await _settleEvents();
+    expect(received, isEmpty);
+
+    // Audio and video demand are independent and change without rebuilding
+    // the pipeline. The production default AlertConfig is exercised here.
+    audioAnalysisDemand = true;
+    source.emitLoudSound();
+    source.emitLightChange();
+    await _settleEvents();
+    expect(received.map((event) => event.type), ['loudSound']);
+    expect(received.single.messageKey, 'parentLoudSoundAlert');
+    expect(received.single.severity, 'info');
+
+    audioAnalysisDemand = false;
+    videoAnalysisDemand = true;
+    source.emitLoudSound();
+    source.emitLightChange();
+    await _settleEvents();
+    expect(received.map((event) => event.type),
+        ['loudSound', 'globalLightChange']);
+    expect(received.last.messageKey, 'parentLightChangeAlert');
+    expect(received.last.severity, 'info',
+        reason: 'A room light change must use the quiet updates channel.');
+
+    audioAnalysisDemand = true;
+    source.emitLoudSound();
+    source.emitLightChange();
+    await _settleEvents();
+    expect(received, hasLength(2),
+        reason: 'Configured cooldown prevents spam.');
+
+    await server.reloadAnalysisConfig();
+    source.emitLoudSound();
+    source.emitLightChange();
+    await _settleEvents();
+    expect(received, hasLength(2),
+        reason: 'Settings reload must preserve each alert type cooldown.');
+
+    // Move beyond the default engine cooldowns (15/30 s), but remain within
+    // the parent's configured 60 s interval for both event categories.
+    source.advanceTime(const Duration(seconds: 35));
+    source.emitLoudSound();
+    source.emitLightChange();
+    await _settleEvents();
+    expect(received, hasLength(2));
+
+    audioAnalysisDemand = false;
+    videoAnalysisDemand = false;
+    source.advanceTime(const Duration(seconds: 65));
+    source.emitLoudSound();
+    source.emitLightChange();
+    await _settleEvents();
+    expect(received, hasLength(2),
+        reason: 'Clearing notification demand suppresses later events.');
+  });
+
   test('oda sesi bastırılır; gerçek ağlama PCM zinciri client bildirimi üretir',
       () async {
     SharedPreferences.setMockInitialValues({
@@ -440,6 +538,69 @@ class _ManualAudioMediaSource extends ServerMediaSource {
     _lastAudioChunkAtMs = null;
     _lastAudioChunkBytes = 0;
   }
+}
+
+class _ManualAnalysisMediaSource extends _ManualAudioMediaSource
+    implements ServerLumaFrameSource, ServerAudioChunkMetadataSource {
+  final _lumaFrames = StreamController<LumaFrame>.broadcast(sync: true);
+  var _audioTimestampMs = DateTime.now().millisecondsSinceEpoch;
+  var _videoTimestampMs = DateTime.now().millisecondsSinceEpoch;
+  ServerAudioChunkMetadata? _metadata;
+
+  @override
+  Stream<LumaFrame> get lumaFrames => _lumaFrames.stream;
+
+  @override
+  ServerAudioChunkMetadata? get currentAudioChunkMetadata => _metadata;
+
+  @override
+  void emitAudio(Uint8List pcm16le) {
+    _metadata = ServerAudioChunkMetadata(
+      capturedAtMs: _audioTimestampMs,
+      sampleRate: 16000,
+      channels: 1,
+    );
+    try {
+      super.emitAudio(pcm16le);
+    } finally {
+      _audioTimestampMs += pcm16le.length * 1000 ~/ (16000 * 2);
+      _metadata = null;
+    }
+  }
+
+  void emitLoudSound() => emitAudio(generateSinePcm16le(
+        sampleRate: 16000,
+        frequencyHz: 180,
+        durationMs: 1000,
+        amplitude: .7,
+      ));
+
+  void emitLightChange() {
+    for (var index = 0; index < 7; index++) {
+      _emitLuma(80);
+    }
+    _emitLuma(220);
+  }
+
+  void _emitLuma(int value) {
+    _lumaFrames.add(LumaFrame(
+      yPlane: Uint8List(64 * 48)..fillRange(0, 64 * 48, value),
+      width: 64,
+      height: 48,
+      rowStride: 64,
+      pixelStride: 1,
+      timestampMs: _videoTimestampMs,
+      monotonicTimestampMs: _videoTimestampMs,
+    ));
+    _videoTimestampMs += 400;
+  }
+
+  void advanceTime(Duration duration) {
+    _audioTimestampMs += duration.inMilliseconds;
+    _videoTimestampMs += duration.inMilliseconds;
+  }
+
+  Future<void> dispose() => _lumaFrames.close();
 }
 
 class _RecordingPcmAudioSink implements PcmAudioSink {

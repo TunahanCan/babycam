@@ -104,6 +104,40 @@ void main() {
     }
   });
 
+  test('loud cry candidates wait for one confirmed episode notification', () {
+    final engine = AlertEngine(
+      config: const AlertConfig(emitLoudSoundAlerts: true),
+      episodeAggregator: EpisodeBasedNotificationAggregator(
+        cryThreshold: .65,
+        suspectedCryMs: 750,
+        confirmedCryMs: 1500,
+      ),
+    );
+    addTearDown(engine.dispose);
+
+    expect(
+      engine.onAudioResult(fakeAudioResult(
+        timestampMs: 0,
+        cryScore: .2,
+        rawCryScore: .8,
+        isCryLikely: false,
+        isLoudSound: true,
+        dbfs: -10,
+      )),
+      isNull,
+      reason: 'Score smoothing must not leak a loud alert before cry evidence.',
+    );
+    for (var timestampMs = 500; timestampMs <= 4500; timestampMs += 500) {
+      engine.onAudioResult(fakeAudioResult(
+        timestampMs: timestampMs,
+        isLoudSound: true,
+        dbfs: -10,
+      ));
+    }
+    expect(engine.drainPending().map((event) => event.type),
+        [AlertType.cryDetected]);
+  });
+
   test('unreliable audio breaks evidence before a later cry notification', () {
     var reliable = true;
     final engine = AlertEngine(
@@ -569,6 +603,7 @@ void main() {
 AudioAnalysisResult fakeAudioResult({
   int timestampMs = 1000,
   double cryScore = 0.8,
+  double? rawCryScore,
   bool isCryLikely = true,
   bool isCalibrated = true,
   AudioCalibrationState calibrationState = AudioCalibrationState.calibrated,
@@ -579,7 +614,7 @@ AudioAnalysisResult fakeAudioResult({
     AudioAnalysisResult(
       timestampMs: timestampMs,
       cryScore: cryScore,
-      rawCryScore: cryScore,
+      rawCryScore: rawCryScore ?? cryScore,
       isCryLikely: isCryLikely,
       isCalibrated: isCalibrated,
       calibrationState: calibrationState,

@@ -26,13 +26,30 @@ class SharedPreferencesRoleRepository implements RoleRepository {
 
   @override
   Future<void> saveRole(AppRole role) async {
-    await _preferences.setString(storageKey, role.name);
-    await _preferences.setString('mode', role.name);
+    // A single canonical write avoids a half-saved role when the legacy
+    // compatibility write fails. Old installations still load through mode.
+    await _requireSaved(_preferences.setString(storageKey, role.name));
   }
 
   @override
   Future<void> clearRole() async {
-    await _preferences.remove(storageKey);
-    await _preferences.remove('mode');
+    // Retire the fallback first so a failed canonical clear keeps the current
+    // role, instead of resurrecting an older role at the next launch.
+    await _requireSaved(_preferences.remove('mode'));
+    await _requireSaved(_preferences.remove(storageKey));
+  }
+
+  Future<void> _requireSaved(Future<bool> operation) async {
+    try {
+      if (!await operation) {
+        throw StateError('The application role was not saved.');
+      }
+    } catch (_) {
+      // SharedPreferences updates its in-memory cache before the device write.
+      try {
+        await _preferences.reload();
+      } catch (_) {}
+      rethrow;
+    }
   }
 }

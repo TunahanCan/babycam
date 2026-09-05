@@ -7,6 +7,92 @@ import 'package:miucam/features/client/media/client_live_audio_pipeline.dart';
 import 'package:miucam/features/client/media/pcm_audio_output.dart';
 
 void main() {
+  test('stop cancels a start still waiting for previous output cleanup',
+      () async {
+    var connections = 0;
+    final pipeline = ClientLiveAudioPipeline(
+      audioOutput: _FakePcmAudioSink(),
+      clientFactory: () {
+        connections++;
+        return HttpClient();
+      },
+    );
+    addTearDown(pipeline.stop);
+    final starting = pipeline.start(
+      uri: Uri.parse('http://127.0.0.1:9/audio'),
+      pairedServerHost: '127.0.0.1',
+      pairedServerPort: 9,
+      shouldRetry: (_) => false,
+    );
+    await pipeline.stop();
+    await starting;
+    await Future<void>.delayed(Duration.zero);
+    expect(connections, 0);
+    expect(pipeline.isRunning, isFalse);
+  });
+
+  test('audio reports HTTP rejection without waiting for its body to end',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      request.response
+        ..statusCode = HttpStatus.unauthorized
+        ..bufferOutput = false
+        ..write('The server keeps this error body open.');
+      await request.response.flush();
+    });
+    final failure = Completer<Object>();
+    final pipeline = ClientLiveAudioPipeline(audioOutput: _FakePcmAudioSink());
+    addTearDown(pipeline.stop);
+    await pipeline.start(
+      uri: Uri.parse('http://127.0.0.1:${server.port}/audio'),
+      pairedServerHost: '127.0.0.1',
+      pairedServerPort: server.port,
+      shouldRetry: (_) => false,
+      onError: failure.complete,
+    );
+    expect(
+        await failure.future.timeout(const Duration(milliseconds: 500)),
+        isA<ClientLiveAudioHttpException>().having((error) => error.statusCode,
+            'statusCode', HttpStatus.unauthorized));
+  });
+
+  test('audio never follows a redirect outside the paired endpoint', () async {
+    final redirected = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final paired = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => redirected.close(force: true));
+    addTearDown(() => paired.close(force: true));
+    var redirectedRequests = 0;
+    redirected.listen((request) async {
+      redirectedRequests++;
+      await request.response.close();
+    });
+    paired.listen((request) async {
+      request.response
+        ..statusCode = HttpStatus.temporaryRedirect
+        ..headers.set(HttpHeaders.locationHeader,
+            'http://127.0.0.1:${redirected.port}/audio');
+      await request.response.close();
+    });
+    final failure = Completer<Object>();
+    final pipeline = ClientLiveAudioPipeline(audioOutput: _FakePcmAudioSink());
+    addTearDown(pipeline.stop);
+    await pipeline.start(
+      uri: Uri.parse('http://127.0.0.1:${paired.port}/audio'),
+      pairedServerHost: '127.0.0.1',
+      pairedServerPort: paired.port,
+      bearerToken: 'room-secret',
+      shouldRetry: (_) => false,
+      onError: failure.complete,
+    );
+    expect(
+        await failure.future.timeout(const Duration(seconds: 1)),
+        isA<ClientLiveAudioHttpException>().having((error) => error.statusCode,
+            'statusCode', HttpStatus.temporaryRedirect));
+    expect(redirectedRequests, 0);
+  });
+
   for (final hangs in [false, true]) {
     test(
         'periodic native write ${hangs ? 'timeout' : 'error'} reconnects audio',

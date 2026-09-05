@@ -28,18 +28,16 @@ class ClientAlertDeliveryCoordinator {
         // and interrupt the parent twice for the same server event.
         if (_wasAlreadyDelivered(alert.id)) return;
 
-        final alreadyInHistory =
-            _history.alerts.any((item) => item.id == alert.id);
+        var historySaved = false;
         Object? notificationError;
         StackTrace? notificationStack;
-        if (!alreadyInHistory) {
-          try {
-            await _history.addPendingNotification(alert);
-          } catch (_) {
-            // ClientAlertHistory keeps the item in memory even if persistence
-            // fails. Check the resulting surface below instead of assuming the
-            // write either fully succeeded or fully failed.
-          }
+        try {
+          // Retry persistence even when a previous failed write left this id
+          // in RAM. A denied banner can only fall back to saved history.
+          await _history.addPendingNotification(alert);
+          historySaved = true;
+        } catch (_) {
+          // A native banner may still deliver the alert if storage fails.
         }
 
         NotificationDeliveryReceipt? receipt;
@@ -66,6 +64,7 @@ class ClientAlertDeliveryCoordinator {
         // history is the durable fallback in that case, so acknowledge once it
         // is available and avoid an endless reconnect loop.
         if (availableInHistory &&
+            historySaved &&
             _isPermanentNotificationFailure(receipt?.error)) {
           _notificationRetryAlertIds.remove(alert.id);
           _remember(alert.id);

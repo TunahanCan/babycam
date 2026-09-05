@@ -17,6 +17,13 @@ class ChildProfileLimitException implements Exception {
   String toString() => code;
 }
 
+class PairingSessionPersistenceException implements Exception {
+  const PairingSessionPersistenceException();
+
+  @override
+  String toString() => 'PAIRING_SESSION_PERSISTENCE_FAILED';
+}
+
 class PairingSessionStore {
   PairingSessionStore(
     this._preferences, {
@@ -70,12 +77,12 @@ class PairingSessionStore {
     ];
     await _secureTokens.write(
       key: _childTokenKey(id),
-      value: session.sessionToken,
+      value: _encodeToken(session),
     );
     await _writeProfiles(next);
     if (shouldSelect) {
-      await _preferences.setString(_selectedChildIdKey, id);
-      await _secureTokens.write(key: _tokenKey, value: session.sessionToken);
+      await _setString(_selectedChildIdKey, id);
+      await _secureTokens.write(key: _tokenKey, value: _encodeToken(session));
       await _writeMetadata(session);
     }
   }
@@ -88,7 +95,7 @@ class PairingSessionStore {
     final profiles = await _readProfiles(migrateLegacy: true);
     for (final profile in profiles) {
       if (profile.id != id) continue;
-      final token = await _secureTokens.read(key: _childTokenKey(id));
+      final token = await _readProfileToken(profile);
       if (token == null || token.isEmpty) return null;
       return profile.toSession(sessionToken: token);
     }
@@ -100,14 +107,18 @@ class PairingSessionStore {
     if (profiles.isEmpty) return _loadLegacySession();
     final selectedId = _preferences.getString(_selectedChildIdKey);
     final selected = profiles.firstWhere(
-      (profile) => profile.id == selectedId || profile.selected,
-      orElse: () => profiles.first,
+      (profile) => profile.id == selectedId,
+      orElse: () => profiles.firstWhere(
+        (profile) => profile.selected,
+        orElse: () => profiles.first,
+      ),
     );
-    final token = await _secureTokens.read(key: _childTokenKey(selected.id)) ??
-        await _secureTokens.read(key: _tokenKey);
+    // The legacy selected token may belong to a different room after a
+    // failed selection or an interrupted write. Never borrow it for a child.
+    final token = await _readProfileToken(selected);
     if (token == null || token.isEmpty) return null;
     final session = selected.toSession(sessionToken: token);
-    await _secureTokens.write(key: _tokenKey, value: token);
+    await _secureTokens.write(key: _tokenKey, value: _encodeToken(session));
     await _writeMetadata(session);
     return session;
   }
@@ -124,11 +135,14 @@ class PairingSessionStore {
         profile.copyWith(selected: profile.id == childId),
     ];
     await _writeProfiles(next);
-    await _preferences.setString(_selectedChildIdKey, childId);
-    final token = await _secureTokens.read(key: _childTokenKey(childId));
+    await _setString(_selectedChildIdKey, childId);
+    final token = await _readProfileToken(selected.first);
     if (token != null && token.isNotEmpty) {
-      await _secureTokens.write(key: _tokenKey, value: token);
-      await _writeMetadata(selected.first.toSession(sessionToken: token));
+      final session = selected.first.toSession(sessionToken: token);
+      await _secureTokens.write(key: _tokenKey, value: _encodeToken(session));
+      await _writeMetadata(session);
+    } else {
+      await _clearLegacy();
     }
   }
 
@@ -138,11 +152,13 @@ class PairingSessionStore {
       for (final profile in profiles)
         if (profile.id != childId) profile,
     ];
+    // Delete legacy authority first so a failed metadata deletion cannot
+    // resurrect the removed child through legacy migration on restart.
+    await _clearLegacy();
     await _secureTokens.delete(key: _childTokenKey(childId));
     if (remaining.isEmpty) {
-      await _preferences.remove(_childrenKey);
-      await _preferences.remove(_selectedChildIdKey);
-      await _clearLegacy();
+      await _remove(_childrenKey);
+      await _remove(_selectedChildIdKey);
       return;
     }
     final selectedId = _preferences.getString(_selectedChildIdKey);
@@ -155,7 +171,7 @@ class PairingSessionStore {
     ];
     await _writeProfiles(next);
     if (nextSelected != null) {
-      await _preferences.setString(_selectedChildIdKey, nextSelected);
+      await _setString(_selectedChildIdKey, nextSelected);
       await selectChild(nextSelected);
     }
   }
@@ -174,41 +190,41 @@ class PairingSessionStore {
       );
       if (payload == null) return _clearAndReturnNull();
 
-      var token = await _secureTokens.read(key: _tokenKey);
+      final clientId = json['clientId']?.toString() ?? 'client_unknown';
+      final rawToken = await _secureTokens.read(key: _tokenKey);
+      var token = _decodeToken(rawToken, payload: payload, clientId: clientId);
       final legacyToken = json['token'];
-      if ((token == null || token.isEmpty) &&
-          legacyToken is String &&
-          legacyToken.isNotEmpty) {
+      if (rawToken == null && legacyToken is String && legacyToken.isNotEmpty) {
         token = legacyToken;
-        await _secureTokens.write(key: _tokenKey, value: legacyToken);
       }
       if (token == null || token.isEmpty) return _clearAndReturnNull();
 
       final session = PairingSession(
         payload: payload,
         sessionToken: token,
-        clientId: json['clientId']?.toString() ?? 'client_unknown',
+        clientId: clientId,
         trustedClientTokenExpiresAtMs:
             json['trustedClientTokenExpiresAtMs'] is int
                 ? json['trustedClientTokenExpiresAtMs'] as int
                 : 0,
         pairedAtMs: json['pairedAtMs'] is int ? json['pairedAtMs'] as int : 0,
       );
+      await _secureTokens.write(key: _tokenKey, value: _encodeToken(session));
       if (legacyToken is String) await _writeMetadata(session);
       return session;
-    } catch (_) {
+    } on FormatException {
       return _clearAndReturnNull();
     }
   }
 
   Future<void> clear() async {
     final profiles = await _readProfiles(migrateLegacy: false);
+    await _clearLegacy();
     for (final profile in profiles) {
       await _secureTokens.delete(key: _childTokenKey(profile.id));
     }
-    await _preferences.remove(_childrenKey);
-    await _preferences.remove(_selectedChildIdKey);
-    await _clearLegacy();
+    await _remove(_childrenKey);
+    await _remove(_selectedChildIdKey);
   }
 
   Future<List<ChildProfile>> _readProfiles(
@@ -224,7 +240,7 @@ class PairingSessionStore {
               .toList(growable: false);
         }
       } catch (_) {
-        await _preferences.remove(_childrenKey);
+        await _remove(_childrenKey);
       }
     }
     if (!migrateLegacy) return const [];
@@ -234,13 +250,12 @@ class PairingSessionStore {
     return _readProfiles(migrateLegacy: false);
   }
 
-  Future<void> _writeProfiles(List<ChildProfile> profiles) =>
-      _preferences.setString(
+  Future<void> _writeProfiles(List<ChildProfile> profiles) => _setString(
         _childrenKey,
         jsonEncode([for (final profile in profiles) profile.toJson()]),
       );
 
-  Future<void> _writeMetadata(PairingSession session) => _preferences.setString(
+  Future<void> _writeMetadata(PairingSession session) => _setString(
         _key,
         jsonEncode({
           'payload': session.payload.toJson(),
@@ -257,8 +272,71 @@ class PairingSessionStore {
   }
 
   Future<void> _clearLegacy() async {
-    await _preferences.remove(_key);
     await _secureTokens.delete(key: _tokenKey);
+    await _remove(_key);
+  }
+
+  Future<String?> _readProfileToken(ChildProfile profile) async {
+    final session = profile.toSession(sessionToken: '');
+    final raw = await _secureTokens.read(key: _childTokenKey(profile.id));
+    return _decodeToken(raw,
+        payload: session.payload, clientId: session.clientId);
+  }
+
+  // Secure storage and preferences cannot commit atomically. Bind new
+  // secrets to their destination so an interrupted replacement fails closed
+  // instead of combining an old room endpoint with another room's token.
+  String _encodeToken(PairingSession session) => jsonEncode({
+        'version': 1,
+        'token': session.sessionToken,
+        'deviceId': session.deviceId,
+        'host': session.host,
+        'port': session.port,
+        'transport': session.payload.transport,
+        'clientId': session.clientId,
+      });
+
+  String? _decodeToken(String? raw,
+      {required PairingPayload payload, required String clientId}) {
+    if (raw == null || raw.isEmpty) return null;
+    // Existing releases stored opaque bearer strings. Keep that migration
+    // path, but never interpret a damaged new envelope as a bearer token.
+    if (!raw.startsWith('{')) return raw;
+    try {
+      final json = jsonDecode(raw);
+      if (json is! Map ||
+          json['version'] != 1 ||
+          json['deviceId'] != payload.deviceId ||
+          json['host'] != payload.host ||
+          json['port'] != payload.port ||
+          json['transport'] != payload.transport ||
+          json['clientId'] != clientId) {
+        return null;
+      }
+      final token = json['token'];
+      return token is String && token.isNotEmpty ? token : null;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  Future<void> _setString(String key, String value) =>
+      _checkedPreferenceWrite(() => _preferences.setString(key, value));
+
+  Future<void> _remove(String key) =>
+      _checkedPreferenceWrite(() => _preferences.remove(key));
+
+  Future<void> _checkedPreferenceWrite(Future<bool> Function() write) async {
+    try {
+      if (!await write()) throw const PairingSessionPersistenceException();
+    } catch (_) {
+      // The plugin updates its cache before the platform acknowledges the
+      // write. Reload before another load can mistake that cache for disk.
+      try {
+        await _preferences.reload();
+      } catch (_) {}
+      rethrow;
+    }
   }
 
   String _childTokenKey(String childId) => '$_childTokenPrefix$childId';

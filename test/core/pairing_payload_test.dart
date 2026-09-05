@@ -114,4 +114,58 @@ void main() {
     expect(parsed.httpScheme, 'http');
     expect(parsed.wsScheme, 'ws');
   });
+
+  test('unsupported transport is rejected instead of silently downgraded', () {
+    for (final transport in ['https_wss', 'tls', '', 1]) {
+      expect(
+          PairingPayload.fromJson({
+            ...payload().toJson(),
+            'transport': transport,
+          }),
+          isNull);
+    }
+  });
+
+  test('QR parser bounds untrusted payloads and rejects malformed endpoints',
+      () {
+    for (final change in <Map<String, Object?>>[
+      {'port': 0},
+      {'port': 65536},
+      {'host': 'room.local/path'},
+      {'host': 'room.local\x00'},
+      {'host': 'http://room.local'},
+      {'host': 'room.local:8081'},
+      {'scheme': 'https'},
+      {'deviceId': ''},
+      {'deviceId': 'x' * 129},
+      {'pairingNonce': 'n' * 257},
+      {'expiresAtMs': 8640000000000001},
+      {
+        'capabilities': {1: 'invalid key'}
+      },
+    ]) {
+      expect(
+          PairingPayload.fromJson({...payload().toJson(), ...change}), isNull,
+          reason: change.keys.single);
+    }
+    final oversized = PairingPayload.fromJson({
+      ...payload().toJson(),
+      'capabilities': {'large': 'x' * PairingPayload.maxEncodedUriLength},
+    })!;
+    expect(PairingPayload.parseUri(oversized.toUriString()), isNull);
+  });
+
+  test('validated QR endpoints retain mDNS and scoped IPv6 support', () {
+    for (final host in [
+      'room.local',
+      '192.168.1.20',
+      'fd00::12',
+      'fe80::12%wlan0',
+      '[fe80::12%25en0]'
+    ]) {
+      expect(
+          PairingPayload.fromJson({...payload().toJson(), 'host': host})?.host,
+          host);
+    }
+  });
 }

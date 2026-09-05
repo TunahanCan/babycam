@@ -272,6 +272,113 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(browser.services.single.name, 'Second room');
   });
+
+  test('failed native stop releases the stale handle and listener for restart',
+      () async {
+    final oldDiscovery = nsd.Discovery('old');
+    final newDiscovery = nsd.Discovery('new');
+    var starts = 0;
+    final browser = MiuCamServiceBrowser(
+      startDiscovery: (_) async => starts++ == 0 ? oldDiscovery : newDiscovery,
+      stopDiscovery: (discovery) async {
+        if (discovery == oldDiscovery) throw StateError('native stop failed');
+      },
+      retryPolicy: _noDelayRetry,
+      maxAttempts: 1,
+    );
+    addTearDown(browser.dispose);
+    await browser.start();
+    oldDiscovery.add(_service(
+        name: 'Old room',
+        port: 8080,
+        host: '192.168.1.12',
+        id: 'old',
+        webRtc: false));
+    expect(browser.services, hasLength(1));
+
+    await expectLater(browser.stop(), throwsStateError);
+
+    expect(browser.isRunning, isFalse);
+    expect(browser.services, isEmpty);
+    expect(browser.lastError, isA<StateError>());
+    await browser.start();
+    expect(starts, 2);
+    oldDiscovery.add(_service(
+        name: 'Stale callback',
+        port: 8080,
+        host: '192.168.1.13',
+        id: 'stale',
+        webRtc: false));
+    newDiscovery.add(_service(
+        name: 'Fresh room',
+        port: 8080,
+        host: '192.168.1.14',
+        id: 'fresh',
+        webRtc: false));
+    expect(browser.services.single.name, 'Fresh room');
+    expect(browser.lastError, isNull);
+  });
+
+  test('stalled native stop times out and queued restart can receive updates',
+      () async {
+    final oldDiscovery = nsd.Discovery('stalled');
+    final newDiscovery = nsd.Discovery('fresh');
+    final stopEntered = Completer<void>();
+    final releaseStop = Completer<void>();
+    var starts = 0;
+    final browser = MiuCamServiceBrowser(
+      startDiscovery: (_) async => starts++ == 0 ? oldDiscovery : newDiscovery,
+      stopDiscovery: (discovery) async {
+        if (discovery == oldDiscovery) {
+          stopEntered.complete();
+          await releaseStop.future;
+        }
+      },
+      stopTimeout: const Duration(milliseconds: 20),
+    );
+    addTearDown(browser.dispose);
+    await browser.start();
+    final rejectedStop =
+        expectLater(browser.stop(), throwsA(isA<TimeoutException>()));
+    await stopEntered.future;
+    final restarted = browser.start();
+
+    await rejectedStop;
+    await restarted.timeout(const Duration(seconds: 1));
+    releaseStop.complete();
+    await Future<void>.delayed(Duration.zero);
+    newDiscovery.add(_service(
+        name: 'Fresh room',
+        port: 8080,
+        host: '192.168.1.14',
+        id: 'fresh',
+        webRtc: false));
+
+    expect(starts, 2);
+    expect(browser.isRunning, isTrue);
+    expect(browser.services.single.name, 'Fresh room');
+  });
+
+  test('failed native stop during dispose still closes the updates stream',
+      () async {
+    final browser = MiuCamServiceBrowser(
+      startDiscovery: (_) async => nsd.Discovery('discovery'),
+      stopDiscovery: (_) async => throw StateError('native stop failed'),
+      maxAttempts: 1,
+    );
+    final closed = Completer<void>();
+    final subscription =
+        browser.updates.listen((_) {}, onDone: closed.complete);
+    addTearDown(subscription.cancel);
+    await browser.start();
+
+    await expectLater(browser.dispose(), throwsStateError);
+    await closed.future.timeout(const Duration(seconds: 1));
+
+    expect(browser.isRunning, isFalse);
+    await expectLater(browser.start(), throwsStateError);
+    await browser.dispose();
+  });
 }
 
 final RetryPolicy _noDelayRetry = ExponentialBackoffPolicy(

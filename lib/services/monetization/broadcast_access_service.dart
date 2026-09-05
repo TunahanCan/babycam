@@ -761,7 +761,7 @@ class BroadcastAccessService {
       final normalized = _normalizeSessionId(sessionId);
       if (_activeSessions.containsKey(normalized)) return before;
       final monoNow = _monoNowMs();
-      if (_activeSessions.isEmpty) {
+      if (_activeSessions.isEmpty && !before.unlocked) {
         _activeStartedAtMonoMs = monoNow;
         try {
           await _writeTrialLedger(active: true);
@@ -844,6 +844,12 @@ class BroadcastAccessService {
   }
 
   Future<void> _initializeTrialLedger() async {
+    // A durable, verified lifetime grant no longer depends on the trial file.
+    // Corruption or a full disk must not revoke a previously purchased right.
+    if (_hasValidPersistedEntitlement()) {
+      _trialLedgerInitialized = true;
+      return;
+    }
     final nowWallMs = _nowMs();
     final encoded = _preferences.getString(_trialLedgerKey);
     late final bool wasActive;
@@ -959,6 +965,7 @@ class BroadcastAccessService {
       // Write the grant last, after every piece of trusted evidence is durable.
       await _requireSaved(_preferences.setBool(_unlockedKey, true));
       _entitlementPersistenceFailed = false;
+      _stopLifetimeTrialMeter();
     } catch (_) {
       _entitlementPersistenceFailed = !previouslyUnlocked;
       // Legacy SharedPreferences changes its cache before writing the device.
@@ -1020,6 +1027,10 @@ class BroadcastAccessService {
   }
 
   Future<void> _checkpointActiveElapsed({required bool keepActive}) async {
+    if (_hasValidPersistedEntitlement()) {
+      _stopLifetimeTrialMeter();
+      return;
+    }
     final startedAt = _activeStartedAtMonoMs;
     if (startedAt != null) {
       final monoNow = _monoNowMs();
@@ -1034,6 +1045,14 @@ class BroadcastAccessService {
       _activeStartedAtMonoMs = keepActive ? monoNow : null;
     }
     await _writeTrialLedger(active: keepActive);
+  }
+
+  void _stopLifetimeTrialMeter() {
+    _storedUsedMs = _effectiveUsedMs();
+    _activeStartedAtMonoMs = null;
+    _checkpointTimer?.cancel();
+    _checkpointTimer = null;
+    _trialLedgerDirty = false;
   }
 
   Future<void> _writeTrialLedger({required bool active}) async {

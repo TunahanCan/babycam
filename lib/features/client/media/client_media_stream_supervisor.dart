@@ -281,6 +281,8 @@ class ClientMediaStreamSupervisor {
     final uri = _videoUri();
     try {
       final request = await client.getUrl(uri).timeout(connectTimeout);
+      // A redirect must not move trusted room credentials to another endpoint.
+      request.followRedirects = false;
       request.headers.set(
         HttpHeaders.acceptHeader,
         'multipart/x-mixed-replace, image/jpeg',
@@ -291,7 +293,8 @@ class ClientMediaStreamSupervisor {
       );
       final response = await request.close().timeout(connectTimeout);
       if (response.statusCode != HttpStatus.ok) {
-        await response.drain<void>();
+        // Do not wait for an unbounded error body before refreshing a revoked
+        // session. This dedicated connection is closed in finally.
         throw _failureForStatus(response.statusCode, uri);
       }
 

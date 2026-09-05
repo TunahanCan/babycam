@@ -43,9 +43,12 @@ class RoomAudioCoordinator {
   double _comfortVolume = .5;
   bool _comfortRequested = false;
   bool _comfortWriteInFlight = false;
+  int _consecutiveComfortRejections = 0;
   bool _disposed = false;
   PcmAudioPlaybackLease? _activePlaybackLease;
   final _modeChanges = StreamController<RoomAudioMode>.broadcast(sync: true);
+  final _comfortPlaybackFailures =
+      StreamController<Object>.broadcast(sync: true);
   int _generation = 0;
   int _writesAccepted = 0;
   int _writesDropped = 0;
@@ -55,6 +58,7 @@ class RoomAudioCoordinator {
 
   RoomAudioMode get mode => _mode;
   Stream<RoomAudioMode> get modeChanges => _modeChanges.stream;
+  Stream<Object> get comfortPlaybackFailures => _comfortPlaybackFailures.stream;
 
   /// Installs the platform demand bridge before any room output is started.
   /// The server binds this during construction, including when a feature
@@ -200,6 +204,7 @@ class RoomAudioCoordinator {
       await _stopOutputLocked();
     }, allowDisposed: true);
     await _modeChanges.close();
+    await _comfortPlaybackFailures.close();
   }
 
   Future<void> _startComfortLocked() async {
@@ -215,6 +220,7 @@ class RoomAudioCoordinator {
       channels: channels,
     );
     _setMode(RoomAudioMode.comfort);
+    _consecutiveComfortRejections = 0;
     _lastError = null;
     _comfortTimer = Timer.periodic(frameDuration, (_) {
       _pumpComfort(generation);
@@ -247,15 +253,41 @@ class RoomAudioCoordinator {
       try {
         final accepted =
             await playbackLease.write(frame).timeout(nativeOperationTimeout);
-        if (generation == _generation) _recordWrite(accepted, frame.length);
+        if (generation != _generation) return;
+        _recordWrite(accepted, frame.length);
+        _consecutiveComfortRejections =
+            accepted ? 0 : _consecutiveComfortRejections + 1;
+        // A single full native queue can recover on the next frame. Sustained
+        // rejection means comfort is silent and must not keep analysis paused.
+        if (_consecutiveComfortRejections >= 3) {
+          await _failComfortPlayback(generation,
+              StateError('Native comfort playback rejected frames.'));
+        }
       } catch (error) {
+        if (generation != _generation) return;
         _lastError = error;
         _writesDropped++;
+        await _failComfortPlayback(generation, error);
       } finally {
         _comfortWriteInFlight = false;
       }
     }());
   }
+
+  Future<void> _failComfortPlayback(int generation, Object error) =>
+      _serialize(() async {
+        if (generation != _generation || _mode != RoomAudioMode.comfort) return;
+        _comfortRequested = false;
+        _lastError = error;
+        try {
+          await _stopOutputLocked();
+        } catch (cleanupError) {
+          _lastError = cleanupError;
+        }
+        if (!_comfortPlaybackFailures.isClosed) {
+          _comfortPlaybackFailures.add(error);
+        }
+      });
 
   void _recordWrite(bool accepted, int byteCount) {
     if (accepted) {

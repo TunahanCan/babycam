@@ -8,6 +8,60 @@ import 'package:miucam/services/server/baby_monitor_feature_services.dart';
 import 'package:miucam/services/server/room_audio_coordinator.dart';
 
 void main() {
+  for (final failure in ['error', 'timeout', 'rejection']) {
+    test('comfort $failure clears output mode and advertised playback state',
+        () async {
+      final pending = Completer<bool>();
+      final sink = _ControlledWriteSink()
+        ..writeBehavior = () {
+          if (failure == 'error') throw StateError('native output lost');
+          return failure == 'timeout' ? pending.future : Future.value(false);
+        };
+      final demands = <bool>[];
+      final audio = RoomAudioCoordinator(
+        sink: sink,
+        frameDuration: const Duration(milliseconds: 5),
+        nativeOperationTimeout: const Duration(milliseconds: 20),
+        onOutputDemandChanged: demands.add,
+      );
+      final controller = BabyMonitorFeatureController(roomAudio: audio);
+      addTearDown(() async {
+        if (!pending.isCompleted) pending.complete(false);
+        await controller.dispose();
+      });
+      await controller
+          .applyComfortCommand(const {'action': 'play', 'trackId': 'rain'});
+      await _waitUntil(() => audio.mode == RoomAudioMode.idle);
+      expect(controller.comfortAudio.state.playing, isFalse);
+      expect(
+          controller.comfortAudio.state.lastError, contains('PLAYBACK_FAILED'));
+      expect((await audio.snapshot())['comfortRequested'], isFalse);
+      expect(demands.last, isFalse);
+
+      sink.writeBehavior = null;
+      final resumed = await controller
+          .applyComfortCommand(const {'action': 'play', 'trackId': 'rain'});
+      expect(resumed.playing, isTrue);
+      expect(audio.mode, RoomAudioMode.comfort);
+      await _waitUntil(() => sink.writes.isNotEmpty);
+    });
+  }
+
+  test('isolated comfort backpressure recovers without stopping playback',
+      () async {
+    var writes = 0;
+    final sink = _ControlledWriteSink()
+      ..writeBehavior = () async => ++writes > 2;
+    final audio = RoomAudioCoordinator(
+      sink: sink,
+      frameDuration: const Duration(milliseconds: 5),
+    );
+    addTearDown(audio.dispose);
+    await audio.applyComfort(playing: true, trackId: 'rain', volume: .3);
+    await _waitUntil(() => writes >= 5);
+    expect(audio.mode, RoomAudioMode.comfort);
+  });
+
   test('comfort audio generates PCM and resumes after talk', () async {
     final sink = _FakePcmAudioSink();
     final audio = RoomAudioCoordinator(
@@ -500,6 +554,14 @@ class _FakePcmAudioSink implements PcmAudioSink {
     writes.add(Uint8List.fromList(pcm16le));
     return true;
   }
+}
+
+class _ControlledWriteSink extends _FakePcmAudioSink {
+  Future<bool> Function()? writeBehavior;
+
+  @override
+  Future<bool> write(Uint8List pcm16le) =>
+      writeBehavior?.call() ?? super.write(pcm16le);
 }
 
 class _FailFirstStartPcmAudioSink extends _FakePcmAudioSink {

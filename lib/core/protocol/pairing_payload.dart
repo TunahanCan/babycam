@@ -1,8 +1,10 @@
 import 'dart:convert';
 
+import '../network/lan_endpoint.dart';
 import 'miucam_protocol.dart';
 
 class PairingPayload {
+  static const maxEncodedUriLength = 16384;
   const PairingPayload(
       {required this.schemaVersion,
       this.scheme = 'miucam',
@@ -25,7 +27,7 @@ class PairingPayload {
   final String transport;
   final Map<String, Object?> capabilities;
 
-  bool get isExpired => DateTime.now().millisecondsSinceEpoch > expiresAtMs;
+  bool get isExpired => DateTime.now().millisecondsSinceEpoch >= expiresAtMs;
   String get httpScheme => 'http';
   String get wsScheme => 'ws';
 
@@ -55,27 +57,47 @@ class PairingPayload {
     final capabilities = json['capabilities'];
     if (schemaVersion is! int ||
         schemaVersion != MiuCamProtocolV2.schemaVersion ||
-        scheme is! String ||
+        scheme != 'miucam' ||
         host is! String ||
         port is! int ||
         deviceId is! String ||
         deviceName is! String ||
         pairingNonce is! String ||
         expiresAtMs is! int ||
-        transport is! String ||
+        transport != 'http_ws' ||
         capabilities is! Map) {
+      return null;
+    }
+    // Unsupported secure transport claims must never silently become HTTP.
+    // Reject malformed endpoints before constructing a network request, while
+    // retaining hostname and scoped IPv6 support for older local networks.
+    final endpoint = LanEndpoint.parse(host, defaultPort: port);
+    if (host.length > 512 ||
+        RegExp(r'[\x00-\x20\x7f/?#@\\]').hasMatch(host) ||
+        endpoint == null ||
+        endpoint.port != port ||
+        normalizeLanHost(endpoint.host) != normalizeLanHost(host) ||
+        deviceId.isEmpty ||
+        deviceId.length > 128 ||
+        deviceName.length > 1024 ||
+        pairingNonce.isEmpty ||
+        pairingNonce.length > 256 ||
+        expiresAtMs < 0 ||
+        expiresAtMs > 8640000000000000 ||
+        capabilities.length > 32 ||
+        capabilities.keys.any((key) => key is! String)) {
       return null;
     }
     return PairingPayload(
         schemaVersion: schemaVersion,
-        scheme: scheme,
+        scheme: scheme as String,
         host: host,
         port: port,
         deviceId: deviceId,
         deviceName: deviceName,
         pairingNonce: pairingNonce,
         expiresAtMs: expiresAtMs,
-        transport: transport,
+        transport: transport as String,
         capabilities: Map<String, Object?>.from(capabilities));
   }
 
@@ -87,6 +109,7 @@ class PairingPayload {
     String value, {
     bool allowExpired = false,
   }) {
+    if (value.length > maxEncodedUriLength) return null;
     try {
       final uri = Uri.parse(value);
       if (uri.scheme != 'miucam' || uri.host != 'pair') return null;

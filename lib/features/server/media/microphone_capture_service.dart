@@ -374,16 +374,20 @@ class MicrophoneCaptureService {
         )
         .toInt();
     _restartAttempt++;
+    final scheduledGeneration = _generation;
     _restartTimer = Timer(Duration(milliseconds: delayMs), () {
       _restartTimer = null;
-      if (_disposed) return;
-      unawaited(start(onChunk: onChunk, onError: onError).then<void>(
+      if (!_isCurrent(scheduledGeneration)) return;
+      final restarting = start(onChunk: onChunk, onError: onError);
+      final restartGeneration = _generation;
+      unawaited(restarting.then<void>(
         (started) {
-          if (!started && !_disposed) {
+          if (!started && _isCurrent(restartGeneration)) {
             _scheduleRestart(onChunk: onChunk, onError: onError);
           }
         },
         onError: (Object error, StackTrace stackTrace) {
+          if (!_isCurrent(restartGeneration)) return;
           _lastFailureReason = 'captureRestartFailed';
           _lastStartError = error.toString();
           onError?.call(error, stackTrace);

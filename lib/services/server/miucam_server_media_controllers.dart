@@ -294,8 +294,14 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
     final alertConfig = AlertConfig(
       cryCooldownMs: config.notifyCooldownMs,
       motionCooldownMs: config.notifyCooldownMs,
+      loudSoundCooldownMs: config.notifyCooldownMs,
+      globalLightChangeCooldownMs: config.notifyCooldownMs,
       cryAlertThreshold: config.cryScoreThreshold,
       motionAlertThreshold: config.motionThreshold,
+      // These events share the corresponding audio/video notification
+      // demand below. Live capture alone does not arm room alerts.
+      emitLoudSoundAlerts: true,
+      emitGlobalLightChangeInfo: true,
     );
     final audioAnalyzer = CryAudioAnalyzerV2(config: audioConfig);
     if (calibratedAmbientDbfs != null) {
@@ -319,6 +325,8 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
         confirmedCryMs: config.cryMinDurationMs,
       ),
       networkTierProvider: _activeClientRegistry.effectiveTier,
+      audioReliableProvider: audioAnalysisDemand,
+      videoReliableProvider: videoAnalysisDemand,
     );
     if (cooldownSnapshot != null) {
       alertEngine.restoreCooldowns(cooldownSnapshot);

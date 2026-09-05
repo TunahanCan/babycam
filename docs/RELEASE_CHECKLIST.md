@@ -3,6 +3,10 @@
 Bu belge mağaza yüklemesinden önce tamamlanması gereken teknik ve operasyonel
 kapıları tanımlar.
 
+Son inceleme: [6 Eylül 2026 kapsamlı kod incelemesi](reports/production_code_review_2026-09-06.md).
+Otomatik kontrollerin geçmesi, bu rapordaki açık güvenlik ve mağaza engellerini
+kapatmaz.
+
 ## Otomatik kapılar
 
 Her pull request ve `master/main` güncellemesinde GitHub Actions şunları
@@ -77,7 +81,12 @@ açıklanmıştır. Deneme kapatma bayrağı yalnız teşhis derlemeleri içindi
 
 ## Cihaz kabul testi
 
-Son sınırlı cihaz doğrulaması: [5 Eylül 2026 LG H870 raporu](reports/lg_h870_validation_2026-09-05.md).
+`flutter drive` ile yeniden doğrulamada `--keep-app-running` verilmelidir;
+aksi halde Flutter test sonunda uygulamayı kaldırır ve yerel verileri siler.
+Kullanıcı verisi bulunan cihazda önce uygulama verisinin uygun yedeği alınmalı;
+test sonrasında normal paket `adb install -r` ile geri kurulmalıdır.
+
+Önceki cihaz doğrulaması: [5 Eylül 2026 LG H870 raporu](reports/lg_h870_validation_2026-09-05.md).
 Takip çalışması: [ses/görüntü analizi ve bildirim lokalizasyonu](reports/alert_pipeline_localization_2026-09-05.md)
 (889 test, tüm 9 locale ve LG native dil kontrolü).
 Bu rapor aşağıdaki çoklu cihaz ve platform kapılarının yerine geçmez.
@@ -99,7 +108,8 @@ Aşağıdaki maddeler tamamlanmadan MiuCam, güvenilmeyen/ortak ağlar veya
 - Manuel IP eşleşmesinde QR'a eşdeğer fiziksel onay. Public discovery yanıtı
   tek başına uzun ömürlü trusted token üretmeye yetmemeli.
 - Kayıp telefonu server ekranından listeleme/iptal etme ve iptal anında açık
-  medya, WebSocket, WebRTC ve talk bağlantılarını kapatma.
+  medya, WebSocket, WebRTC ve talk bağlantılarını kapatma (uygulandı; eşleştirme
+  ve iptal yarışları otomatik testlerde kapsanıyor).
 - Uygulama askıda/kapalıyken bildirim vaat edilecekse APNs/FCM, kalıcı event
   sırası, ACK ve kaçırılan olay replay mekanizması.
 - Yukarıdaki tehdit modeli için gerçek iki cihazlı saldırı/yeniden bağlanma
@@ -107,11 +117,11 @@ Aşağıdaki maddeler tamamlanmadan MiuCam, güvenilmeyen/ortak ağlar veya
 
 ## Dış bağımlı blockerlar
 
-- Production bundle/application ID kararı.
 - Apple Developer Team ve Google Play Console sahipliği.
 - Android upload key ve iOS dağıtım sertifikaları.
 - HTTPS gizlilik/support URL'si ve destek e-postası.
-- Paywall açılacaksa mağaza ürünleri ve trusted verifier backend'i.
+- İki saat deneme sonrasında satış için mağaza ürünleri ve trusted verifier
+  backend'i; sandbox satın alma/geri yükleme, iade ve iptal kabul testleri.
 
 ## Toolchain bakım notu
 

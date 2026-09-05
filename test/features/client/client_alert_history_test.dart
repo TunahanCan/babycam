@@ -3,7 +3,56 @@ import 'package:miucam/core/protocol/alert_event_dto.dart';
 import 'package:miucam/features/client/alerts/client_alert_history.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../support/failing_alert_preferences.dart';
+
 void main() {
+  test('false storage result remains an error while the alert stays visible',
+      () async {
+    final preferences = FailingAlertPreferences()..failWrites = true;
+    final history = ClientAlertHistory(preferences: preferences);
+    addTearDown(history.dispose);
+
+    await expectLater(
+      history.addPendingNotification(_alert('not-saved', 'Pending alert')),
+      throwsStateError,
+    );
+    expect(history.alerts.single.id, 'not-saved');
+    expect(history.isNotificationPending('not-saved'), isTrue);
+    expect(preferences.saved, isEmpty);
+  });
+
+  test('loading valid history never deletes it when rewriting fails', () async {
+    final preferences = FailingAlertPreferences();
+    final original = ClientAlertHistory(preferences: preferences);
+    final restored = ClientAlertHistory(preferences: preferences);
+    addTearDown(original.dispose);
+    addTearDown(restored.dispose);
+    await original.addPendingNotification(_alert('saved', 'Saved alert'));
+    final durableValue = preferences.saved[ClientAlertHistory.storageKey];
+    preferences.throwOnWrite = true;
+
+    await restored.load();
+
+    expect(restored.alerts.single.id, 'saved');
+    expect(restored.isNotificationPending('saved'), isTrue);
+    expect(preferences.removalAttempts, 0);
+    expect(preferences.saved[ClientAlertHistory.storageKey], durableValue);
+  });
+
+  test('a failed durable clear is reported and can be retried', () async {
+    final preferences = FailingAlertPreferences();
+    final history = ClientAlertHistory(preferences: preferences);
+    addTearDown(history.dispose);
+    await history.add(_alert('old-alert', 'Saved alert'));
+    preferences.failWrites = true;
+
+    await expectLater(history.clear(), throwsStateError);
+    expect(preferences.saved, isNotEmpty);
+    preferences.failWrites = false;
+    await history.clear();
+    expect(preferences.saved, isEmpty);
+  });
+
   test('gelen alert history icine yazilir ve kalici yuklenir', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();

@@ -1,6 +1,6 @@
 # MiuCam Gizlilik Bildirimi
 
-Son güncelleme: 15 Temmuz 2026
+Son güncelleme: 6 Eylül 2026
 
 > Bu metin mağaza yayını öncesi taslaktır. Nihai yayında geliştirici/veri
 > sorumlusu kimliği ve özel gizlilik başvuru kanalı eklenecektir.
@@ -17,14 +17,19 @@ reklam, analiz SDK'sı veya bulut medya aktarımı kullanılmaz.
   eşleştirdiği yerel ağ cihazlarına gönderilir.
 - Eşleşme bilgileri, cihaz tercihleri ve bildirim geçmişi uygulama verisi olarak
   cihazda saklanır.
+- Oda telefonunun toplam ücretsiz yayın süresi ve doğrulanmış ömür boyu erişim
+  bilgisi cihazda saklanır. Uygulama verileri silinirse yerel deneme kaydı da
+  silinir; satın alınmış hak aynı mağaza hesabından geri yüklenebilir.
 - Client erişim anahtarları işletim sisteminin güvenli anahtar deposunda
   saklanır. Server tarafında ham erişim anahtarı yerine doğrulama özeti tutulur.
 
 ## İnternet ve üçüncü taraflar
 
-MiuCam'in temel izleme işlevi internet bağlantısı olmadan çalışır. İsteğe bağlı
-uygulama içi satın alma etkinleştirilirse Apple App Store veya Google Play ödeme
-altyapısı kullanılır. Satın alma doğrulama verisi yalnızca yapılandırılmış,
+MiuCam'in temel izleme işlevi internet bağlantısı olmadan çalışır. Oda telefonunda
+toplam iki saat ücretsiz yayın sonrasında ömür boyu erişim için tek seferlik
+uygulama içi satın alma gerekir. Ödeme ve geri yükleme Apple App Store veya
+Google Play üzerinden yapılır ve internet bağlantısı gerektirir. Satın alma
+doğrulama verisi yalnızca yapılandırılmış,
 güvenilir HTTPS doğrulama servisine gönderilebilir. Kamera ve mikrofon medyası bu
 servise gönderilmez.
 

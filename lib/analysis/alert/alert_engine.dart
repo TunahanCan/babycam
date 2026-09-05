@@ -166,7 +166,16 @@ class AlertEngine {
 
     final isLoudSound =
         result.isLoudSound || result.dbfs >= config.loudSoundDbfs;
-    if (config.emitLoudSoundAlerts && isLoudSound) {
+    // A cry candidate belongs to its duration-confirmed episode. Reporting
+    // that same sound here would bypass the parent's cry duration setting and
+    // deliver a second notification as soon as the episode is confirmed.
+    // Include the raw score while the analyzer's smoothed score warms up.
+    final belongsToCryEpisode = _episodeAggregator != null &&
+        (result.isCryLikely ||
+            result.rawCryScore >= config.cryAlertThreshold ||
+            result.cryScore >= config.cryAlertThreshold ||
+            _episodeAggregator.state != BabyEventEpisodeState.quiet);
+    if (config.emitLoudSoundAlerts && isLoudSound && !belongsToCryEpisode) {
       return _tryEmit(
         type: AlertType.loudSound,
         severity: AlertSeverity.info,

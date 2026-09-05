@@ -19,6 +19,15 @@ class InstallIntegrityGuard {
     if (isFreshInstallation) {
       await (clearSecureStorage ?? miucamSecureStorage.deleteAll)();
     }
-    await preferences.setBool(markerKey, true);
+    try {
+      if (!await preferences.setBool(markerKey, true)) {
+        throw StateError('Installation preparation could not be saved.');
+      }
+    } catch (_) {
+      try {
+        await preferences.reload();
+      } catch (_) {}
+      rethrow;
+    }
   }
 }

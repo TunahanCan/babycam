@@ -80,8 +80,12 @@ class ClientLiveAudioPipeline {
     ValueChanged<ClientLiveAudioStatus>? onStatus,
     ValueChanged<Object>? onError,
   }) async {
-    await stop();
-    final generation = ++_generation;
+    cancelImmediately();
+    final generation = _generation;
+    await _stopAudioOutput();
+    // A newer start or stop can arrive while native cleanup is pending.
+    // Only the latest request may create a network/playback run.
+    if (generation != _generation) return;
     final run = _PipelineRun(
       uri: uri,
       pairedServerHost: pairedServerHost,
@@ -187,6 +191,8 @@ class ClientLiveAudioPipeline {
 
     try {
       final request = await client.getUrl(run.uri).timeout(connectTimeout);
+      // Room credentials and audio must remain on the paired endpoint.
+      request.followRedirects = false;
       request.headers.set(
         HttpHeaders.acceptHeader,
         'audio/wav, audio/x-wav, application/octet-stream',
@@ -200,7 +206,8 @@ class ClientLiveAudioPipeline {
       }
       final response = await request.close().timeout(connectTimeout);
       if (response.statusCode != HttpStatus.ok) {
-        await response.drain<void>();
+        // The error body may never finish. The finally block closes this
+        // dedicated connection without delaying session refresh or retry.
         throw ClientLiveAudioHttpException(
           statusCode: response.statusCode,
           uri: run.uri,

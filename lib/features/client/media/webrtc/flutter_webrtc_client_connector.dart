@@ -90,20 +90,29 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
     final pendingLocalCandidates = <WebRtcIceCandidateSignal>[];
     String? peerId;
     try {
-      connection = await createPeerConnection(
-        const {
+      connection = await _awaitNativeResource<RTCPeerConnection>(
+        createPeerConnection(const {
           'iceServers': <Object>[],
           'sdpSemantics': 'unified-plan',
           'bundlePolicy': 'max-bundle',
           'rtcpMuxPolicy': 'require',
+        }),
+        (lateConnection) async {
+          await _bestEffort(lateConnection.close, negotiationTimeout);
+          await _bestEffort(lateConnection.dispose, negotiationTimeout);
         },
-      ).timeout(negotiationTimeout);
+      );
       pending
         ..connection = connection
         ..ensureActive();
-      renderer = RTCVideoRenderer();
+      final initializingRenderer = RTCVideoRenderer();
+      // Transfer ownership only after initialization. Disposing an unfinished
+      // renderer can throw before peer cleanup and leave its late texture alive.
+      renderer = await _awaitNativeResource<RTCVideoRenderer>(
+        initializingRenderer.initialize().then((_) => initializingRenderer),
+        (lateRenderer) => _bestEffort(lateRenderer.dispose, negotiationTimeout),
+      );
       pending.renderer = renderer;
-      await renderer.initialize().timeout(negotiationTimeout);
       pending.ensureActive();
 
       if (audio) {
@@ -281,6 +290,23 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
     }
   }
 
+  Future<T> _awaitNativeResource<T>(
+    Future<T> operation,
+    Future<void> Function(T value) disposeLate,
+  ) async {
+    try {
+      return await operation.timeout(negotiationTimeout);
+    } on TimeoutException {
+      // Future.timeout does not cancel platform work. Always release native
+      // resources that finish after the negotiation has already failed.
+      unawaited(operation.then<void>(
+        disposeLate,
+        onError: (Object _, StackTrace __) {},
+      ));
+      rethrow;
+    }
+  }
+
   Future<void> _pollRemoteCandidates({
     required HttpClient http,
     required PairingSession session,
@@ -359,6 +385,7 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
     final request = await http
         .postUrl(ServerEndpointBuilder(session).http(path, query: query))
         .timeout(negotiationTimeout);
+    request.followRedirects = false;
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.authorizationHeader, 'Bearer ${session.sessionToken}');
@@ -375,6 +402,7 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
     final request = await http
         .getUrl(ServerEndpointBuilder(session).http(path, query: query))
         .timeout(negotiationTimeout);
+    request.followRedirects = false;
     request.headers.set(
       HttpHeaders.authorizationHeader,
       'Bearer ${session.sessionToken}',

@@ -13,6 +13,7 @@ fi
 
 flutter drive \
   --profile \
+  --keep-app-running \
   --no-pub \
   --device-id "$device_id" \
   --driver test_driver/ui_frame_time_benchmark_driver.dart \

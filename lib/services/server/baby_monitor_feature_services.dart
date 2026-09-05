@@ -1,6 +1,8 @@
 import 'dart:collection';
 import 'dart:typed_data';
 
+import '../../core/async/serialized_async_executor.dart';
+
 import '../../core/protocol/device_feature_models.dart';
 import '../../core/security/secure_random_token_generator.dart';
 
@@ -178,10 +180,17 @@ class NightLightController {
 
   final DateTime Function() _now;
   NightLightState _state;
+  final _commands = SerializedAsyncExecutor();
 
   NightLightState get state => _state;
 
   Future<NightLightState> applyCommand(
+    Map<Object?, Object?>? command, {
+    Future<bool> Function(bool enabled)? torchSetter,
+  }) =>
+      _commands.run(() => _applyCommand(command, torchSetter: torchSetter));
+
+  Future<NightLightState> _applyCommand(
     Map<Object?, Object?>? command, {
     Future<bool> Function(bool enabled)? torchSetter,
   }) async {

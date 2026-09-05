@@ -73,6 +73,7 @@ class PairingTokenService {
       this.pairConfirmRateLimitWindow = const Duration(minutes: 1),
       this.maxPairConfirmAttemptsPerWindow =
           defaultMaxPairConfirmAttemptsPerWindow,
+      this.maxPairConfirmSources = 256,
       this.maxTrustedClients = defaultMaxTrustedClients,
       this.lastSeenPersistenceInterval = const Duration(minutes: 1),
       TrustedClientRepository? trustedClientRepository,
@@ -99,11 +100,15 @@ class PairingTokenService {
   final int maxActiveNonces;
   final Duration pairConfirmRateLimitWindow;
   final int maxPairConfirmAttemptsPerWindow;
+  final int maxPairConfirmSources;
   final int maxTrustedClients;
   final Duration lastSeenPersistenceInterval;
   final SecureRandomTokenGenerator _tokenGenerator;
   final TrustedClientRepository _trustedClientRepository;
   final _nonces = <String, int>{};
+  String? _publicPairingNonce;
+  int? _publicPairingNonceExpiresAtMs;
+  int _pairingGeneration = 0;
   final _pairConfirmAttempts = <String, List<int>>{};
   final _clients = <String, TrustedClientRecord>{};
   final _streamTokens = <String, StreamTokenRecord>{};
@@ -117,6 +122,7 @@ class PairingTokenService {
   Object? _lastPersistenceError;
 
   Object? get lastPersistenceError => _lastPersistenceError;
+  int get pairingGeneration => _pairingGeneration;
   Stream<void> get trustedClientsChanged => _trustedClientsChanged.stream;
   Set<String> get pendingRevocationClientIds =>
       Set.unmodifiable(_pendingRevocationClientIds);
@@ -129,16 +135,34 @@ class PairingTokenService {
     return nonce;
   }
 
+  /// Public discovery retries share one slot so an unauthenticated status
+  /// poll cannot evict the QR currently displayed on the room phone.
+  String createPublicPairingNonce() {
+    final nonce = _publicPairingNonce;
+    if (nonce != null && isPairingNonceActive(nonce)) return nonce;
+    _publicPairingNonceExpiresAtMs =
+        _now().add(_nonceTtl).millisecondsSinceEpoch;
+    return _publicPairingNonce = _tokenGenerator.generateHex(byteCount: 32);
+  }
+
   bool validateAndConsumeNonce(String nonce) {
     pruneExpiredNonces();
-    final expiry = _nonces.remove(nonce);
+    final isPublic = nonce == _publicPairingNonce;
+    final expiry =
+        isPublic ? _publicPairingNonceExpiresAtMs : _nonces.remove(nonce);
+    if (isPublic) {
+      _publicPairingNonce = null;
+      _publicPairingNonceExpiresAtMs = null;
+    }
     if (expiry == null) return false;
     _notifyTrustedClientsChanged();
-    return _now().millisecondsSinceEpoch <= expiry;
+    return _now().millisecondsSinceEpoch < expiry;
   }
 
   bool isPairingNonceActive(String nonce) {
-    final expiry = _nonces[nonce];
+    final expiry = nonce == _publicPairingNonce
+        ? _publicPairingNonceExpiresAtMs
+        : _nonces[nonce];
     return expiry != null && _now().millisecondsSinceEpoch < expiry;
   }
 
@@ -156,14 +180,24 @@ class PairingTokenService {
     final normalizedKey = key.trim().isEmpty ? 'unknown' : key.trim();
     final nowMs = _now().millisecondsSinceEpoch;
     final windowStart = nowMs - pairConfirmRateLimitWindow.inMilliseconds;
+    // Prune all sources, not just the current address. IPv6 privacy addresses
+    // otherwise leave every old rate-limit bucket in memory indefinitely.
+    _pairConfirmAttempts.removeWhere((_, attempts) {
+      attempts.removeWhere((attemptAtMs) => attemptAtMs <= windowStart);
+      return attempts.isEmpty;
+    });
+    if (!_pairConfirmAttempts.containsKey(normalizedKey) &&
+        _pairConfirmAttempts.length >= maxPairConfirmSources) {
+      // Keep existing throttles; evicting a live bucket lets an attacker
+      // cycle source addresses to reset its limit.
+      return false;
+    }
     final attempts = _pairConfirmAttempts.putIfAbsent(
       normalizedKey,
       () => <int>[],
     );
-    attempts.removeWhere((attemptAtMs) => attemptAtMs < windowStart);
     if (attempts.length >= maxPairConfirmAttemptsPerWindow) return false;
     attempts.add(nowMs);
-    _pairConfirmAttempts.removeWhere((_, values) => values.isEmpty);
     return true;
   }
 
@@ -456,10 +490,17 @@ class PairingTokenService {
   }
 
   void clearEphemeralState() {
-    _nonces.clear();
+    clearPairingNonces();
     _pairConfirmAttempts.clear();
     _streamTokens.clear();
     _pendingRenewalClientIdsByTokenHash.clear();
+  }
+
+  void clearPairingNonces() {
+    _pairingGeneration++;
+    _nonces.clear();
+    _publicPairingNonce = null;
+    _publicPairingNonceExpiresAtMs = null;
   }
 
   Future<void> flushPersistence() async {

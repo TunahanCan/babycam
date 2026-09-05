@@ -39,10 +39,10 @@ class ClientAlertHistory {
       _emit();
       return;
     }
+    final loaded = <AlertEventDto>[];
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! List) throw const FormatException('history not a list');
-      final loaded = <AlertEventDto>[];
       for (final item in decoded) {
         if (item is! Map) continue;
         final alert = AlertEventDto.fromJson(Map<String, Object?>.from(item));
@@ -53,11 +53,18 @@ class ClientAlertHistory {
           }
         }
       }
-      _replaceWith(_mergeAlerts([..._alerts, ...loaded]));
+    } catch (_) {
+      await _removePersisted();
+      if (_alerts.isNotEmpty) await _persist();
+      _emit();
+      return;
+    }
+    _replaceWith(_mergeAlerts([..._alerts, ...loaded]));
+    try {
       await _persist();
     } catch (_) {
-      await preferences.remove(storageKey);
-      if (_alerts.isNotEmpty) await _persist();
+      // Parsing succeeded: a storage failure is not corrupt history. Keep the
+      // existing durable copy and the loaded entries visible for later retry.
     }
     _emit();
   }
@@ -77,6 +84,7 @@ class ClientAlertHistory {
   /// A process restart must not mistake a history entry for a posted banner.
   Future<void> addPendingNotification(AlertEventDto alert) {
     _pendingNotificationIds.add(alert.id);
+    if (_alerts.any((item) => item.id == alert.id)) return _persist();
     return add(alert);
   }
 
@@ -124,7 +132,7 @@ class ClientAlertHistory {
     final preferences = _preferences;
     if (preferences == null) return;
     await _enqueueStorage(() async {
-      await preferences.setString(
+      final saved = await preferences.setString(
         storageKey,
         jsonEncode(_alerts
             .map((alert) => {
@@ -134,6 +142,7 @@ class ClientAlertHistory {
                 })
             .toList()),
       );
+      if (!saved) throw StateError('Alert history could not be saved.');
     });
   }
 
@@ -141,7 +150,8 @@ class ClientAlertHistory {
     final preferences = _preferences;
     if (preferences == null) return;
     await _enqueueStorage(() async {
-      await preferences.remove(storageKey);
+      final removed = await preferences.remove(storageKey);
+      if (!removed) throw StateError('Alert history could not be removed.');
     });
   }
 

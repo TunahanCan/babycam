@@ -135,6 +135,8 @@ class ServerCompositionRoot {
             .enableNotificationsForClient(clientId, cry: true, motion: true),
         onAlertClientDisconnected: (clientId) =>
             runtime.disableNotificationsForClient(clientId),
+        audioAnalysisDemand: () => runtime.currentState.cryAnalyzerActive,
+        videoAnalysisDemand: () => runtime.currentState.motionAnalyzerActive,
         onPlaybackDemandChanged: publishPlaybackDemand,
         tokenService: tokenService,
         transportConfig: transportConfig,

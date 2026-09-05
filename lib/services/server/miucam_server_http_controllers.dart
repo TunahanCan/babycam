@@ -8,7 +8,7 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
       await request.response.close();
       return;
     }
-    final pairingNonce = tokenService.createPairingNonce();
+    final pairingNonce = tokenService.createPublicPairingNonce();
     final descriptorHost = _hostFromHeader(request.headers.host) ??
         _httpServer?.address.address ??
         InternetAddress.loopbackIPv4.address;
@@ -81,6 +81,7 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
       await _rejectInvalidJsonBody(request, error);
       return;
     }
+    if (await _requireTrustedAuth(request) == null) return;
     final state = await _features.applyComfortCommand(body);
     _updateResourceWatchdog();
     await _writeJson(request.response, {
@@ -106,6 +107,7 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
       await _rejectInvalidJsonBody(request, error);
       return;
     }
+    if (await _requireTrustedAuth(request) == null) return;
     final state = await _features.nightLight.applyCommand(
       body,
       torchSetter: _setTorchEnabled,
@@ -134,6 +136,7 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
         await _rejectInvalidJsonBody(request, error);
         return;
       }
+      if (await _requireTrustedAuth(request) == null) return;
       late final String attemptId;
       try {
         attemptId = _talkAttemptIdForRequest(body);
@@ -153,6 +156,14 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
         channels:
             (body?['channels'] as num?)?.toInt() ?? MiuCamServer._audioChannels,
       );
+      if (await _requireTrustedAuth(request) == null) {
+        await _features.stopTalk(
+          clientId: clientId,
+          token: session.token,
+          attemptId: attemptId,
+        );
+        return;
+      }
       _updateResourceWatchdog();
       await _writeJson(request.response, {
         'ok': true,
@@ -191,6 +202,7 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
       await _rejectInvalidJsonBody(request, error);
       return;
     }
+    if (await _requireTrustedAuth(request) == null) return;
     late final String attemptId;
     try {
       attemptId = _talkAttemptIdForRequest(body);
@@ -367,8 +379,10 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
   }
 
   Future<void> _handlePairConfirm(HttpRequest request) async {
+    final pairingGeneration = tokenService.pairingGeneration;
     try {
-      if (!_pairingModeActive) {
+      if (!_pairingModeActive ||
+          pairingGeneration != tokenService.pairingGeneration) {
         request.response.statusCode = HttpStatus.notFound;
         await _writeJson(request.response, {
           'ok': false,
@@ -399,6 +413,17 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
         return;
       }
       final serverDeviceId = await _serverDeviceIdentityResolver.resolve();
+      // Reading a slow body or device identity may outlive the pairing UI.
+      // Closing pairing must take effect before any new authority is issued.
+      if (!_pairingModeActive ||
+          pairingGeneration != tokenService.pairingGeneration) {
+        request.response.statusCode = HttpStatus.notFound;
+        await _writeJson(request.response, {
+          'ok': false,
+          'code': 'PAIRING_NOT_ACTIVE',
+        });
+        return;
+      }
       final originServerDeviceId =
           json['originServerDeviceId']?.toString().trim() ?? '';
       if (originServerDeviceId.isNotEmpty &&
@@ -429,6 +454,16 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
               json['existingTrustedClientToken'] is String
                   ? json['existingTrustedClientToken'] as String
                   : null);
+      if (!_pairingModeActive ||
+          pairingGeneration != tokenService.pairingGeneration) {
+        await revokeTrustedClient(token.clientId);
+        request.response.statusCode = HttpStatus.notFound;
+        await _writeJson(request.response, {
+          'ok': false,
+          'code': 'PAIRING_NOT_ACTIVE',
+        });
+        return;
+      }
       await _writeJson(request.response, {
         'serverDeviceId': serverDeviceId,
         'serverName': 'Bebek Odası',
