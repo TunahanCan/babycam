@@ -10,6 +10,27 @@
   const progressBar = document.querySelector(".page-progress span");
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
+  // A direct FAQ link should reveal its answer as well as scroll to it.
+  const openLinkedDetails = (hash = window.location.hash) => {
+    try {
+      const target = document.getElementById(decodeURIComponent(hash.slice(1)));
+      const details = target?.closest("details");
+      if (details) details.open = true;
+    } catch (_) {
+      // An invalid fragment must not prevent the rest of the page from working.
+    }
+  };
+  window.addEventListener("hashchange", () => openLinkedDetails());
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.("a[href]");
+    if (!link) return;
+    const url = new URL(link.href);
+    if (url.origin === window.location.origin && url.pathname === window.location.pathname) {
+      openLinkedDetails(url.hash);
+    }
+  });
+  openLinkedDetails();
+
   const menuLabel = (isOpen) => {
     const key = isOpen ? "menu.close" : "menu.open";
     const fallback = isOpen ? "Menüyü kapat" : "Menüyü aç";

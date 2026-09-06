@@ -128,11 +128,13 @@ const evaluate = async (expression, awaitPromise = false) => {
     awaitPromise,
     returnByValue: true,
   });
-  if (result.exceptionDetails) throw new Error(result.exceptionDetails.text);
+  if (result.exceptionDetails) {
+    throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
+  }
   return result.result.value;
 };
 
-const waitUntilReady = async () => {
+const waitUntilReady = async ({ reveal = true } = {}) => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     if (await evaluate("document.readyState === 'complete'")) break;
     await delay(50);
@@ -145,6 +147,7 @@ const waitUntilReady = async () => {
     await delay(50);
   }
   if (!i18nReady) throw new Error("Çeviri kataloğu yüklenemedi");
+  if (!reveal) return;
 
   await evaluate(
     `(async () => {
@@ -177,6 +180,7 @@ const runScenario = async ({
   testAllLanguages = false,
   testCompactLayout = false,
   testMenu = false,
+  testPricingLinks = false,
   switchToLanguage,
 }) => {
   await client.command("Emulation.setDeviceMetricsOverride", {
@@ -227,6 +231,9 @@ const runScenario = async ({
       const primaryHeroImage = document.querySelector('.phone-hero img');
       const secondaryHeroImage = document.querySelector('.phone-hero-secondary img');
       return secondaryCta?.hash === '#ekranlar'
+        && hero.querySelector('.hero-pricing a')?.hash === '#fiyatlandirma'
+        && document.querySelector('.final-cta .button-white')?.hash === '#fiyatlandirma'
+        && Boolean(document.querySelector('#fiyatlandirma .pricing-summary'))
         && primaryHeroImage?.fetchPriority === 'high'
         && secondaryHeroImage?.fetchPriority === 'low'
         && Boolean(
@@ -414,11 +421,59 @@ const runScenario = async ({
   });
   writeFileSync(resolve(outputDirectory, `${name}.png`), Buffer.from(screenshot.data, "base64"));
 
+  if (testPricingLinks) {
+    const pricingLinks = await evaluate(`(async () => {
+      const previousScrollBehavior = document.documentElement.style.scrollBehavior;
+      document.documentElement.style.scrollBehavior = 'auto';
+      const settle = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      try {
+        document.querySelector('.hero-pricing a').click();
+        await settle();
+        const card = document.querySelector('.pricing-summary');
+        const rect = card.getBoundingClientRect();
+        const heroOpensPricing = location.hash === '#fiyatlandirma'
+          && rect.top < innerHeight && rect.bottom > 0
+          && getComputedStyle(card).opacity !== '0';
+        const details = document.querySelector('#ucret-detaylari');
+        const explanationLink = card.querySelector('.text-link');
+        explanationLink.click();
+        await settle();
+        const explanationOpens = explanationLink.hash === '#ucret-detaylari'
+          && location.hash === '#ucret-detaylari' && details.open;
+        details.open = false;
+        explanationLink.click();
+        await settle();
+        const sameFragmentReopens = details.open;
+        document.querySelector('.final-cta .button-white').click();
+        await settle();
+        return {
+          heroOpensPricing,
+          explanationOpens,
+          sameFragmentReopens,
+          finalCtaOpensPricing: location.hash === '#fiyatlandirma',
+        };
+      } finally {
+        document.documentElement.style.scrollBehavior = previousScrollBehavior;
+      }
+    })()`, true);
+    for (const [check, passed] of Object.entries(pricingLinks)) {
+      if (!passed) failures.push(`${name}: fiyat bağlantısı davranışı bozuk (${check})`);
+    }
+    await checkLocalizedDocument(expectedLanguage, '', '#fiyatlandirma', `${name} pricing navigation`);
+  }
+
   if (testAllLanguages) {
+    await client.command("Emulation.setDeviceMetricsOverride", {
+      width: 320,
+      height: 568,
+      deviceScaleFactor: 1,
+      mobile: true,
+      screenWidth: 320,
+      screenHeight: 568,
+    });
     const languageCycle = await evaluate(
       `(async () => {
-        const i18nScript = document.querySelector('script[src$="i18n.js"]');
-        const localeBase = new URL('locales/', i18nScript.src);
+        const localeBase = new URL('locales/', ${JSON.stringify(baseUrl.href)});
         const originalFetch = window.fetch.bind(window);
         window.fetch = (input, options) => {
           if (new URL(input).pathname.endsWith('/fr.json')) {
@@ -464,6 +519,25 @@ const runScenario = async ({
                 || 'tr';
               return routeLanguage === language;
             })(),
+            pricingLocalized: ['trialLabel', 'title', 'details', 'region', 'amount', 'payment', 'availability', 'faqLink']
+              .every((key) => document.querySelector('[data-i18n="pricing.' + key + '"]')?.textContent
+                === catalog['pricing.' + key]),
+            pricingOverflow: (() => {
+              const card = document.querySelector('.pricing-summary');
+              const cardRect = card.getBoundingClientRect();
+              if (cardRect.left < -1 || cardRect.right > document.documentElement.clientWidth + 1) return true;
+              const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
+              let node;
+              while ((node = walker.nextNode())) {
+                if (!node.textContent.trim()) continue;
+                const range = document.createRange();
+                range.selectNodeContents(node);
+                if ([...range.getClientRects()].some((rect) => rect.left < cardRect.left - 1 || rect.right > cardRect.right + 1)) {
+                  return true;
+                }
+              }
+              return false;
+            })(),
             hasHorizontalOverflow:
               document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
           });
@@ -488,11 +562,21 @@ const runScenario = async ({
         !result.openGraphLocaleChanged ||
         !result.structuredDataMatches ||
         !result.pathMatches ||
+        !result.pricingLocalized ||
+        result.pricingOverflow ||
         result.hasHorizontalOverflow
       ) {
         failures.push(`${name}: ${result.language} dil geçişi veya yerleşimi hatalı`);
       }
     }
+    await client.command("Emulation.setDeviceMetricsOverride", {
+      width,
+      height,
+      deviceScaleFactor: 1,
+      mobile,
+      screenWidth: width,
+      screenHeight: height,
+    });
   }
 
   if (switchToLanguage) {
@@ -536,10 +620,99 @@ const runScenario = async ({
   );
 };
 
-try {
+const checkLocalizedDocument = async (language, page, hash, context) => {
+  const mismatches = await evaluate(`(async () => {
+    const language = ${JSON.stringify(language)};
+    const page = ${JSON.stringify(page)};
+    const expectedHash = ${JSON.stringify(hash)};
+    const root = new URL(${JSON.stringify(baseUrl.href)});
+    const catalog = await fetch(new URL('locales/' + language + '.json', root))
+      .then((response) => response.json());
+    const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+    const errors = [];
+    const expectText = (actual, key, label) => {
+      if (normalize(actual) !== normalize(catalog[key])) errors.push(label);
+    };
+    expectText(document.title, page ? 'meta.privacyTitle' : 'meta.homeTitle', 'title');
+    expectText(document.querySelector('.skip-link')?.textContent, 'skip.content', 'skip-link');
+    expectText(document.querySelector('.primary-nav a[href*="#nasil-calisir"]')?.textContent,
+      'nav.how', 'navigation text');
+    expectText(document.querySelector('[data-nav]')?.getAttribute('aria-label'),
+      'nav.mainLabel', 'navigation aria-label');
+    expectText(document.querySelector('[data-language-selector]')?.getAttribute('aria-label'),
+      'language.label', 'language aria-label');
+    expectText(document.querySelector('meta[name="description"]')?.content,
+      page ? 'meta.privacyDescription' : 'meta.homeDescription', 'description');
+    if (!page) {
+      expectText(document.querySelector('meta[property="og:title"]')?.content,
+        'meta.socialTitle', 'OG title');
+      expectText(document.querySelector('meta[property="og:description"]')?.content,
+        'meta.socialDescription', 'OG description');
+    }
+    const expectedUrl = new URL((language === 'tr' ? '' : language + '/') + page, root);
+    const canonical = document.querySelector('link[rel="canonical"]')?.href;
+    if (canonical !== expectedUrl.href) errors.push('canonical URL');
+    const ogUrl = document.querySelector('meta[property="og:url"]')?.content;
+    if (ogUrl && ogUrl !== expectedUrl.href) errors.push('OG URL');
+    const structuredData = document.querySelector('script[type="application/ld+json"]');
+    if (structuredData && JSON.parse(structuredData.textContent).url !== expectedUrl.href) {
+      errors.push('JSON-LD URL');
+    }
+    if (location.hash !== expectedHash) errors.push('navigation fragment lost');
+    if (expectedHash === '#ucret-detaylari' && !document.querySelector(expectedHash)?.open) {
+      errors.push('linked pricing explanation closed');
+    }
+    if (location.pathname !== expectedUrl.pathname) errors.push('localized path');
+    if (document.documentElement.lang !== language
+        || document.documentElement.dir !== (language === 'ar' ? 'rtl' : 'ltr')
+        || document.querySelector('[data-language-selector]')?.value !== language
+        || localStorage.getItem('miucam.website.language') !== language) {
+      errors.push('language/RTL/selection/storage');
+    }
+    return errors;
+  })()`, true);
+  if (mismatches.length) failures.push(`${context}: ${mismatches.join(', ')}`);
+};
+
+const runLocalizedEntryRegressions = async () => {
+  const languages = ['tr', 'en', 'de', 'fr', 'es', 'zh', 'hi', 'ar'];
+  await client.command('Page.navigate', { url: baseUrl.href });
+  await waitUntilReady({ reveal: false });
+  for (const page of ['', 'privacy.html']) {
+    for (const source of languages) {
+      // A stored preference must not override an explicitly localized URL.
+      await evaluate(`localStorage.setItem('miucam.website.language', ${JSON.stringify(source === 'ar' ? 'en' : 'ar')})`);
+      const hash = page ? '#izinler' : '#ucret-detaylari';
+      const path = (source === 'tr' ? '' : source + '/') + page + hash;
+      // Hash-only navigation reuses the old document; each entry must be a
+      // fresh prerendered page to exercise its original binding language.
+      await client.command('Page.navigate', { url: 'about:blank' });
+      await client.command('Page.navigate', { url: new URL(path, baseUrl).href });
+      await waitUntilReady({ reveal: false });
+      await checkLocalizedDocument(source, page, hash, `${path} initial`);
+      for (const target of [source === 'de' ? 'ar' : 'de', 'tr']) {
+        await evaluate(`(async () => {
+          const changed = new Promise((resolve) => {
+            window.addEventListener('miucam:languagechange', resolve, { once: true });
+          });
+          const selector = document.querySelector('[data-language-selector]');
+          selector.value = ${JSON.stringify(target)};
+          selector.dispatchEvent(new Event('change', { bubbles: true }));
+          await Promise.race([
+            changed,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('language selection timeout')), 3000)),
+          ]);
+        })()`, true);
+        await checkLocalizedDocument(target, page, hash, `${path} → ${target}`);
+      }
+    }
+  }
+};
+
+const runStandardScenarios = async () => {
   await runScenario({
     name: "desktop-home",
-    path: "/?lang=nope",
+    path: "?lang=nope",
     width: 1440,
     height: 1000,
     mobile: false,
@@ -547,10 +720,11 @@ try {
     expectedDirection: "ltr",
     expectedHeading: "Eski telefonun",
     testAllLanguages: true,
+    testPricingLinks: true,
   });
   await runScenario({
     name: "tablet-home",
-    path: "/en/",
+    path: "en/",
     width: 768,
     height: 1024,
     mobile: true,
@@ -560,7 +734,7 @@ try {
   });
   await runScenario({
     name: "mobile-home",
-    path: "/ar/",
+    path: "ar/",
     width: 375,
     height: 812,
     mobile: true,
@@ -572,7 +746,7 @@ try {
   });
   await runScenario({
     name: "compact-home",
-    path: "/de/",
+    path: "de/",
     width: 320,
     height: 568,
     mobile: true,
@@ -583,7 +757,7 @@ try {
   });
   await runScenario({
     name: "desktop-privacy",
-    path: "/de/privacy.html",
+    path: "de/privacy.html",
     width: 1280,
     height: 900,
     mobile: false,
@@ -593,7 +767,7 @@ try {
   });
   await runScenario({
     name: "mobile-privacy-rtl",
-    path: "/ar/privacy.html",
+    path: "ar/privacy.html",
     width: 390,
     height: 844,
     mobile: true,
@@ -612,7 +786,7 @@ try {
     screenWidth: 375,
     screenHeight: 812,
   });
-  await client.command("Page.navigate", { url: new URL("/en/", baseUrl).href });
+  await client.command("Page.navigate", { url: new URL("en/", baseUrl).href });
   for (let attempt = 0; attempt < 100; attempt += 1) {
     if (await evaluate("document.readyState === 'complete'")) break;
     await delay(50);
@@ -658,7 +832,11 @@ try {
     Buffer.from(noScriptScreenshot.data, "base64"),
   );
   await client.command("Emulation.setScriptExecutionDisabled", { value: false });
+};
 
+try {
+  await runLocalizedEntryRegressions();
+  if (process.env.LANGUAGE_ONLY !== '1') await runStandardScenarios();
   if (failures.length > 0) {
     console.error(`Tarayıcı smoke testi başarısız (${failures.length} hata):`);
     failures.forEach((failure) => console.error(`- ${failure}`));

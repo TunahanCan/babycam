@@ -75,6 +75,13 @@ seçiciler, kataloglar, sitemap ve doğrulayıcı birlikte güncellenmelidir.
 
 ## Doğrulama
 
+Ana sayfadaki `#fiyatlandirma` bölümü iki saatlik toplam denemeyi, Türkiye hedef
+fiyatını, tek seferlik ömür boyu hakkı ve beş izleyici sınırını birlikte açıklar.
+İlk ekran ve son CTA bu bölüme gider; `#ucret-detaylari` bağlantısı ilgili SSS
+yanıtını açar. Mağaza sürümü hazırlanırken satın alma yapılabiliyormuş gibi bir
+mağaza bağlantısı veya kayıt formu gösterilmez. Ücret metinleri sekiz katalogda
+birlikte güncellenmelidir.
+
 ```bash
 node --check website/app.js
 node --check website/language-init.js
@@ -103,6 +110,13 @@ ve Almanca/Arapça gizlilik sayfası senaryolarında kırık görsel, JavaScript
 hatası, yatay taşma, görünmeden kalan animasyon öğesi, dil rotası ve mobil menü
 davranışını denetler; tam sayfa ekran görüntülerini
 `/tmp/miucam-browser-smoke` altına yazar.
+
+Ayrıca 16 dil/sayfa girişinden dil değişimini; title, menü, erişilebilirlik
+etiketleri, açıklamalar ve RTL durumu üzerinden kontrol eder. Bölüm bağlantısı
+gezinirken korunur, canonical/Open Graph/JSON-LD adreslerine eklenmez.
+Fiyat kartı sekiz dilde 320 px genişlikte denetlenir; fiyat CTA'ları ve SSS
+bağlantısının yanıtı açması da kontrol edilir. Test taban URL'si alt dizin
+içerebilir; örneğin GitHub Pages düzeni için `http://127.0.0.1:8080/babycam/`.
 
 ## Dağıtım
 

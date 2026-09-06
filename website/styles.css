@@ -600,6 +600,7 @@ h3 {
 
 .hero h1 {
   max-width: 770px;
+  font-size: clamp(3rem, 5.1vw, 4.5rem);
 }
 
 .hero h1 span {
@@ -623,7 +624,18 @@ h3 {
   display: flex;
   flex-wrap: wrap;
   gap: 13px;
-  margin-bottom: 30px;
+  margin-bottom: 18px;
+}
+
+.hero-pricing {
+  margin-bottom: 24px;
+  font-size: 0.88rem;
+}
+
+.hero-pricing a {
+  min-height: 44px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 .hero-assurances {
@@ -690,7 +702,7 @@ h3 {
 .hero-visual {
   position: relative;
   min-width: 0;
-  align-self: end;
+  align-self: center;
   min-height: 680px;
 }
 
@@ -1935,6 +1947,62 @@ html[lang]:not([lang="tr"]) .screenshot-language-note {
 
 /* Compatibility */
 
+.pricing-summary {
+  display: grid;
+  max-width: 950px;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.5fr);
+  align-items: center;
+  gap: 24px 36px;
+  margin: 0 auto 24px;
+  padding: clamp(24px, 4vw, 38px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.pricing-copy .kicker {
+  margin-bottom: 12px;
+}
+
+.pricing-copy h3 {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+}
+
+.pricing-copy p {
+  margin-bottom: 12px;
+  color: var(--ink-soft);
+}
+
+.pricing-copy .text-link {
+  min-height: 44px;
+  font-size: 0.88rem;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.pricing-price {
+  display: grid;
+  gap: 5px;
+  color: var(--ink-soft);
+  text-align: center;
+  font-size: 0.88rem;
+}
+
+.pricing-price strong {
+  color: var(--violet-dark);
+  font-size: clamp(2.5rem, 4vw, 3.5rem);
+  line-height: 1.2;
+}
+
+.pricing-availability {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+}
+
 .platform-grid {
   display: grid;
   max-width: 950px;
@@ -2882,7 +2950,7 @@ html[lang]:not([lang="tr"]) .screenshot-language-note {
   }
 
   .hero h1 {
-    font-size: clamp(2.8rem, 13.5vw, 4rem);
+    font-size: clamp(2.6rem, 11.5vw, 3.5rem);
   }
 
   .hero-lead {
@@ -3118,6 +3186,14 @@ html[lang]:not([lang="tr"]) .screenshot-language-note {
   .diagram-badge {
     margin-top: 57px;
     font-size: 0.75rem;
+  }
+
+  .pricing-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .pricing-price {
+    text-align: start;
   }
 
   .platform-grid {

@@ -68,12 +68,12 @@
   const currentPageName = () =>
     window.location.pathname.endsWith("/privacy.html") ? "privacy.html" : "";
 
-  const localizedPageUrl = (language) => {
+  const localizedPageUrl = (language, { includeFragment = true } = {}) => {
     const pageName = currentPageName();
     const relativePath =
       language === defaultLanguage ? pageName || "./" : `${language}/${pageName}`;
     const url = new URL(relativePath, siteBaseUrl);
-    url.hash = window.location.hash;
+    if (includeFragment) url.hash = window.location.hash;
     return url;
   };
 
@@ -223,12 +223,26 @@
   };
 
   const updateLocalizedMetadata = (language, catalog) => {
+    // Some languages use identical document/social titles. Those values cannot
+    // identify the original key uniquely, so metadata uses semantic bindings.
+    const privacyPage = currentPageName() === "privacy.html";
+    document.title = format(catalog[privacyPage ? "meta.privacyTitle" : "meta.homeTitle"]);
+    for (const [selector, key] of [
+      ['meta[name="description"]', privacyPage ? "meta.privacyDescription" : "meta.homeDescription"],
+      ['meta[property="og:title"]', "meta.socialTitle"],
+      ['meta[property="og:description"]', "meta.socialDescription"],
+      ['meta[property="og:image:alt"]', "meta.socialImageAlt"],
+      ['meta[name="twitter:title"]', "meta.socialTitle"],
+      ['meta[name="twitter:description"]', "meta.socialDescription"],
+    ]) {
+      document.querySelector(selector)?.setAttribute("content", format(catalog[key]));
+    }
     document
       .querySelector('meta[property="og:locale"]')
       ?.setAttribute("content", openGraphLocales[language]);
 
     if (localizedSite) {
-      const pageUrl = localizedPageUrl(language).href;
+      const pageUrl = localizedPageUrl(language, { includeFragment: false }).href;
       document.querySelector('link[rel="canonical"]')?.setAttribute("href", pageUrl);
       document.querySelector('meta[property="og:url"]')?.setAttribute("content", pageUrl);
       const manifestPath =
@@ -245,7 +259,9 @@
       const value = JSON.parse(structuredData.textContent);
       value.description = catalog["meta.homeDescription"];
       value.inLanguage = language;
-      if (localizedSite) value.url = localizedPageUrl(language).href;
+      if (localizedSite) {
+        value.url = localizedPageUrl(language, { includeFragment: false }).href;
+      }
       structuredData.textContent = JSON.stringify(value);
     } catch (error) {
       console.error("MiuCam structured data could not be localized", error);
@@ -297,17 +313,30 @@
   const initialize = async () => {
     stabilizeResourceUrls();
     const initialLanguage = resolveInitialLanguage();
-    const sourceCatalogRequest = loadCatalog(defaultLanguage);
+    // Static locale routes already contain translated text. Bind automatic
+    // text/attribute keys against that original catalog, independently of a
+    // query-string selection or a later language change.
+    const pageLanguage = document.documentElement.dataset.locale;
+    const sourceLanguage = supportedLanguages.includes(pageLanguage)
+      ? pageLanguage
+      : defaultLanguage;
+    const sourceCatalogRequest = loadCatalog(sourceLanguage);
+    const defaultCatalogRequest = sourceLanguage === defaultLanguage
+      ? sourceCatalogRequest
+      : loadCatalog(defaultLanguage);
     const initialCatalogRequest =
-      initialLanguage === defaultLanguage
+      initialLanguage === sourceLanguage
         ? sourceCatalogRequest
-        : loadCatalog(initialLanguage).catch((error) => {
+        : initialLanguage === defaultLanguage
+          ? defaultCatalogRequest
+          : loadCatalog(initialLanguage).catch((error) => {
             console.error(error);
-            return sourceCatalogRequest;
+            return defaultCatalogRequest;
           });
-    const [sourceCatalog, initialCatalog] = await Promise.all([
+    const [sourceCatalog, initialCatalog, defaultCatalog] = await Promise.all([
       sourceCatalogRequest,
       initialCatalogRequest,
+      defaultCatalogRequest,
     ]);
 
     addExplicitBindings();
@@ -318,7 +347,7 @@
     });
 
     const appliedLanguage =
-      initialLanguage !== defaultLanguage && initialCatalog !== sourceCatalog
+      initialLanguage !== defaultLanguage && initialCatalog !== defaultCatalog
         ? initialLanguage
         : defaultLanguage;
     applyLanguage(appliedLanguage, initialCatalog);

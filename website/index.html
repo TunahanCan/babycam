@@ -186,6 +186,9 @@
                 <span aria-hidden="true">→</span>
               </a>
             </div>
+            <p class="hero-pricing">
+              <a class="text-link" href="#fiyatlandirma" data-i18n="hero.pricingLink">2 saat ücretsiz · Ömür boyu yayın fiyatını gör</a>
+            </p>
             <ul
               class="hero-assurances"
               aria-label="MiuCam kullanım avantajları"
@@ -202,7 +205,7 @@
                 <svg aria-hidden="true" viewBox="0 0 20 20">
                   <path d="m5 10 3 3 7-7" />
                 </svg>
-                <span data-i18n="hero.assuranceInternet">Zorunlu internet yok</span>
+                <span data-i18n="hero.assuranceInternet">İzleme sırasında internet gerekmez</span>
               </li>
               <li>
                 <svg aria-hidden="true" viewBox="0 0 20 20">
@@ -389,9 +392,9 @@
                 </svg>
               </div>
               <h3>QR ile eşleştir</h3>
-              <p>
-                Ebeveyn telefonunda QR kodu okut. İstersen yerel ağ keşfi veya manuel
-                IP ile de bağlan.
+              <p data-i18n="how.pairBody">
+                Oda telefonundaki QR kodu ebeveyn telefonuyla tara. İstersen yerel
+                ağ keşfi veya manuel IP ile de bağlan.
               </p>
             </article>
 
@@ -711,13 +714,28 @@
         </div>
       </section>
 
-      <section class="compatibility section-pad section-tint">
+      <section id="fiyatlandirma" class="compatibility section-pad section-tint">
         <div class="container">
           <div class="section-heading centered" data-reveal>
             <span class="kicker">Platform desteği</span>
             <h2>Evdeki telefonları birlikte değerlendir.</h2>
-            <p data-i18n="compat.subtitle">Rolleri cihazlarına göre seç. Her oda telefonunda izleme veya bildirim takibi için toplam 2 saat ücretsiz kullanım; sonrasında tek seferlik satın almayla ömür boyu kullanım.</p>
+            <p data-i18n="compat.subtitle">Rolleri cihazlarına göre seç; oda kamerası için platform farklarını aşağıda gör.</p>
           </div>
+
+          <article class="pricing-summary" aria-labelledby="pricing-title" data-reveal>
+            <div class="pricing-copy">
+              <span class="kicker" data-i18n="pricing.trialLabel">Toplam 2 saat ücretsiz</span>
+              <h3 id="pricing-title" data-i18n="pricing.title">Tek ödeme, ömür boyu yayın.</h3>
+              <p data-i18n="pricing.details">Oda telefonundan bir kez satın al. Ebeveyn telefonlarından ayrıca ödeme gerekmez; aynı anda en fazla 5 cihaz izleyebilir.</p>
+              <a class="text-link" href="#ucret-detaylari" data-i18n="pricing.faqLink">Deneme süresi nasıl hesaplanıyor?</a>
+            </div>
+            <div class="pricing-price">
+              <span data-i18n="pricing.region">Türkiye hedef fiyatı</span>
+              <strong><bdi data-i18n="pricing.amount">350 TL</bdi></strong>
+              <span data-i18n="pricing.payment">Tek seferlik · Abonelik yok</span>
+            </div>
+            <p class="pricing-availability" data-i18n="pricing.availability">Mağaza sürümü hazırlanıyor. Diğer bölgelerdeki fiyat uygulama mağazasında gösterilecek.</p>
+          </article>
 
           <div class="platform-grid">
             <article class="platform-card" data-reveal>
@@ -782,7 +800,7 @@
           </div>
 
           <div class="faq-list" data-reveal data-reveal-delay="100">
-            <details name="miucam-faq">
+            <details id="ucret-detaylari" name="miucam-faq">
               <summary data-i18n="faq.pricingQ">Ücreti ne kadar, abonelik var mı?</summary>
               <div data-i18n="faq.pricingA">
                 Her oda telefonunda ses, görüntü veya bildirim takibi için toplam 2 saat ücretsiz kullanım sunulur. Süre, bu işlevlerden en az biri aktifken ilerler; eşzamanlı izleyici sayısıyla katlanmaz. QR beklerken, yalnızca yerel önizleme açıkken veya ebeveyn bağlantısı yokken süre işlemez. Sonrasında ömür boyu kullanım oda telefonundan tek seferlik satın alınır; ebeveyn telefonundan ayrıca ödeme gerekmez. Türkiye için belirlenen fiyat 350 TL’dir; diğer bölgelerin fiyatı uygulama mağazasında gösterilir. Abonelik yoktur. Aynı anda en fazla 5 ebeveyn cihazı izleyebilir; satın alma bu sınırı değiştirmez.
@@ -790,10 +808,11 @@
             </details>
             <details name="miucam-faq" open>
               <summary>İnternet bağlantısı gerekiyor mu?</summary>
-              <div>
-                Hayır. Temel izleme için iki cihazın birbirine erişebildiği aynı yerel
-                Wi-Fi ağı yeterlidir. İlk kurulum, güncelleme veya isteğe bağlı mağaza
-                işlemleri internet gerektirebilir.
+              <div data-i18n="faq.internetA">
+                Temel izleme için hayır. İki cihazın birbirine erişebildiği aynı yerel
+                Wi-Fi ağı yeterlidir. Uygulamayı indirmek veya güncellemek, satın almak
+                ve satın almayı doğrulamak ya da geri yüklemek için internet bağlantısı
+                gerekir.
               </div>
             </details>
             <details name="miucam-faq">
@@ -852,14 +871,14 @@
             <div class="cta-orb" aria-hidden="true"></div>
             <div class="cta-copy">
               <span class="kicker kicker-light">Yayın öncesi</span>
-              <h2>MiuCam evine uyuyorsa, gelişmeleri takip et.</h2>
-              <p>
-                Mağaza bağlantıları hazır olduğunda burada olacak. O zamana kadar nasıl
-                çalıştığını inceleyebilir ve yayın ilerlemesini takip edebilirsin.
+              <h2 data-i18n="cta.title">Telefonlarını şimdiden hazırla.</h2>
+              <p data-i18n="cta.body">
+                Mağaza sürümü hazırlanırken telefonlarının uyumluluğunu ve tek
+                seferlik yayın ücretini incele.
               </p>
               <div class="cta-actions">
-                <a class="button button-white" href="#nasil-calisir">
-                  <span data-i18n="cta.how">Nasıl çalıştığını gör</span>
+                <a class="button button-white" href="#fiyatlandirma">
+                  <span data-i18n="cta.how">Uyumluluk ve fiyatı gör</span>
                   <span aria-hidden="true">↑</span>
                 </a>
                 <a
