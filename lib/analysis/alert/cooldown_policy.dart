@@ -9,8 +9,15 @@ class CooldownPolicy {
   final Map<AlertType, int> _lastEmittedAtByType = {};
 
   /// Returns true when [type] can be emitted at [timestampMs].
-  bool canEmit(AlertType type, int timestampMs) =>
-      remainingMs(type, timestampMs) == 0;
+  bool canEmit(AlertType type, int timestampMs) {
+    final lastEmittedAt = _lastEmittedAtByType[type];
+    if (lastEmittedAt != null && timestampMs < lastEmittedAt) {
+      // Re-anchor only while evaluating new evidence after a clock rollback.
+      // Reading diagnostics must never alter a notification's cooldown.
+      _lastEmittedAtByType[type] = timestampMs;
+    }
+    return remainingMs(type, timestampMs) == 0;
+  }
 
   /// Records that [type] was emitted at [timestampMs].
   void markEmitted(AlertType type, int timestampMs) {
@@ -31,10 +38,6 @@ class CooldownPolicy {
 
     final elapsedMs = timestampMs - lastEmittedAt;
     if (elapsedMs < 0) {
-      // Wall time can move backwards after NTP/manual correction. Re-anchor
-      // once so the safety cooldown is preserved without muting alerts until
-      // the clock eventually catches its old value.
-      _lastEmittedAtByType[type] = timestampMs;
       return cooldownMs;
     }
 

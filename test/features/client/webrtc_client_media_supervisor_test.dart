@@ -7,6 +7,29 @@ import 'package:miucam/features/client/media/webrtc/webrtc_client_connector.dart
 import 'package:miucam/features/client/media/webrtc/webrtc_client_media_supervisor.dart';
 
 void main() {
+  test('connected transport without decoded media does not claim live video',
+      () async {
+    final handle = _FakeHandle()
+      ..state = RTCPeerConnectionState.RTCPeerConnectionStateConnected
+      ..stats = const WebRtcClientStatsSnapshot(videoBytesReceived: 200);
+    addTearDown(handle.close);
+    final health = ClientStreamHealthState()..resetForNewWatchSession();
+    final supervisor = WebRtcClientMediaSupervisor(
+      handle: handle,
+      videoExpected: true,
+      audioExpected: true,
+      healthState: health,
+      statsInterval: const Duration(days: 1),
+      onReconnectRequired: () async {},
+      onFatalError: (error) => fail(error.toString()),
+    );
+    await supervisor.start();
+    final snapshot = health.snapshot();
+    expect(snapshot.lastVideoFrameAtMs, isNull);
+    expect(snapshot.lastAudioChunkAtMs, isNull);
+    await supervisor.stop();
+  });
+
   test('connected WebRTC stats feed frame/audio liveness', () async {
     var nowMs = 1000;
     final handle = _FakeHandle();

@@ -251,6 +251,48 @@ void main() {
     expect(update.chunksWritten, 1);
   });
 
+  test('slow native diagnostics never block PCM playout or accumulate polls',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      request.response
+        ..bufferOutput = false
+        ..add(_wavHeader(pcmBytes: 0))
+        ..add(_pcmFrames(12));
+      await request.response.flush();
+      // Keep the stream open while the diagnostics method remains blocked.
+    });
+    final sink = _DelayedStatusPcmAudioSink();
+    final updates = <ClientLiveAudioStatus>[];
+    final pipeline = ClientLiveAudioPipeline(
+      audioOutput: sink,
+      connectTimeout: const Duration(milliseconds: 200),
+    );
+    addTearDown(() async {
+      sink.releaseStatus.complete(const {});
+      await pipeline.stop();
+    });
+
+    await pipeline.start(
+      uri: Uri.parse('http://127.0.0.1:${server.port}/audio'),
+      pairedServerHost: '127.0.0.1',
+      pairedServerPort: server.port,
+      shouldRetry: (_) => false,
+      onStatus: updates.add,
+    );
+    await _waitUntil(() => sink.writes.length >= 8);
+    // The native call must remain coalesced even after connectTimeout passes.
+    await _waitUntil(() => updates.any((update) => update.event == 'underrun'));
+
+    expect(sink.releaseStatus.isCompleted, isFalse);
+    expect(sink.statusCalls, 1);
+    expect(updates.any((update) => update.event == 'write'), isTrue);
+    expect(sink.starts, hasLength(1));
+    await pipeline.stop();
+    expect(pipeline.isRunning, isFalse);
+  });
+
   test('WAV stream veri kesilirse read timeout hata sinyali uretir', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
@@ -676,6 +718,17 @@ class _DelayedStartPcmAudioSink extends _FakePcmAudioSink {
     starts.add((sampleRate: sampleRate, channels: channels));
     if (!startEntered.isCompleted) startEntered.complete();
     await releaseStart.future;
+  }
+}
+
+class _DelayedStatusPcmAudioSink extends _FakePcmAudioSink {
+  final releaseStatus = Completer<Map<String, Object?>>();
+  var statusCalls = 0;
+
+  @override
+  Future<Map<String, Object?>> status() {
+    statusCalls++;
+    return releaseStatus.future;
   }
 }
 

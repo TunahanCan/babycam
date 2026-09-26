@@ -18,6 +18,115 @@ const _wakelockChannel = 'dev.flutter.pigeon.wakelock_plus_platform_interface.'
     'WakelockPlusApi.toggle';
 
 void main() {
+  testWidgets('unmute during a muted retry upgrades the resulting stream',
+      (tester) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final release = Completer<void>();
+    final runtime = _AudioNegotiationRuntime()
+      ..streamError = StateError('Disconnected room')
+      ..restartRelease = release;
+    try {
+      await tester.pumpWidget(_App(
+        home: WatchScreen(runtime: runtime, keepScreenAwake: false),
+      ));
+      await tester.pumpAndSettle();
+      final strings = AppStrings(const Locale('tr'));
+      final mute = find.text(strings.ui('muteAudio'));
+      await tester.scrollUntilVisible(mute, 300,
+          scrollable: find.byType(Scrollable).first);
+      await Scrollable.ensureVisible(tester.element(mute), alignment: .5);
+      await tester.pump();
+      await tester.tap(mute);
+      await tester.pump();
+      runtime.negotiatedAudio = false;
+      final retry = find.byKey(const ValueKey('watch-stream-retry'));
+      await tester.scrollUntilVisible(retry, -300,
+          scrollable: find.byType(Scrollable).first);
+      await Scrollable.ensureVisible(tester.element(retry), alignment: .5);
+      await tester.pump();
+      await tester.tap(retry);
+      await tester.pump();
+      expect(runtime.restartAudio, [false]);
+      final unmute = find.text(strings.ui('unmuteAudio'));
+      await tester.scrollUntilVisible(unmute, 300,
+          scrollable: find.byType(Scrollable).first);
+      await Scrollable.ensureVisible(tester.element(unmute), alignment: .5);
+      await tester.pump();
+      await tester.tap(unmute);
+      await tester.pump();
+      release.complete();
+      await tester.pumpAndSettle();
+      expect(runtime.restartAudio, [false, true]);
+      expect(runtime.negotiatedAudio, isTrue);
+    } finally {
+      if (!release.isCompleted) release.complete();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await runtime.dispose();
+    }
+  });
+
+  for (final honorsAudio in [true, false]) {
+    testWidgets(
+        'unmute renegotiates once after resuming (honorsAudio=$honorsAudio)',
+        (tester) async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      final runtime = _AudioNegotiationRuntime()..honorsAudio = honorsAudio;
+      addTearDown(runtime.dispose);
+      await tester.pumpWidget(_App(
+        home: WatchScreen(runtime: runtime, keepScreenAwake: false),
+      ));
+      await tester.pumpAndSettle();
+      final strings = AppStrings(const Locale('tr'));
+      final mute = find.text(strings.ui('muteAudio'));
+      await tester.scrollUntilVisible(mute, 300,
+          scrollable: find.byType(Scrollable).first);
+      await Scrollable.ensureVisible(tester.element(mute), alignment: .5);
+      await tester.pump();
+      await tester.tap(mute);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(runtime.startAudio, [true, false]);
+      runtime.negotiatedAudio = false;
+      await tester.tap(find.text(strings.ui('unmuteAudio')));
+      await tester.pump();
+      expect(runtime.restartAudio, [true]);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    });
+  }
+
+  testWidgets('watch preference save failure leaves the switch unchanged',
+      (tester) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final runtime = _AudioNegotiationRuntime();
+    addTearDown(runtime.dispose);
+    var saves = 0;
+    await tester.pumpWidget(_App(
+      home: WatchScreen(
+        runtime: runtime,
+        initialTab: 2,
+        keepScreenAwake: false,
+        onKeepScreenAwakeChanged: (_) async {
+          saves++;
+          throw StateError('Disk unavailable');
+        },
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch).last);
+    await tester.pumpAndSettle();
+    expect(saves, 1);
+    expect(tester.widget<Switch>(find.byType(Switch).last).value, isFalse);
+    expect(find.text(AppStrings(const Locale('tr')).ui('settingsSaveFailed')),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final locale in const [Locale('tr'), Locale('ar', 'QA')]) {
     testWidgets(
         'fullscreen polls and scrolls detection pause in ${locale.languageCode}',
@@ -527,3 +636,43 @@ PairingPayload _payload() => PairingPayload(
           DateTime.now().add(const Duration(minutes: 1)).millisecondsSinceEpoch,
       capabilities: const {},
     );
+
+class _AudioNegotiationRuntime extends ClientRuntime {
+  _AudioNegotiationRuntime()
+      : super(
+            pair: (payload) async =>
+                PairingSession(payload: payload, sessionToken: 'token'));
+
+  final startAudio = <bool>[];
+  final restartAudio = <bool>[];
+  bool? negotiatedAudio;
+  bool honorsAudio = true;
+  Object? streamError;
+  Completer<void>? restartRelease;
+
+  @override
+  Stream<ClientRuntimeState> get states => const Stream.empty();
+
+  @override
+  ClientRuntimeState get currentState => ClientRuntimeState(
+        phase: ClientRuntimePhase.pairedIdle,
+        error: streamError,
+        session: PairingSession(payload: _payload(), sessionToken: 'token'),
+        activeStream: negotiatedAudio == null
+            ? null
+            : ActiveStreamSession(
+                streamToken: 'stream', audioEnabled: negotiatedAudio!),
+      );
+
+  @override
+  Future<void> startWatching({bool audioEnabled = false}) async {
+    startAudio.add(audioEnabled);
+  }
+
+  @override
+  Future<void> restartWatching({bool audioEnabled = false}) async {
+    restartAudio.add(audioEnabled);
+    await restartRelease?.future;
+    if (honorsAudio) negotiatedAudio = audioEnabled;
+  }
+}

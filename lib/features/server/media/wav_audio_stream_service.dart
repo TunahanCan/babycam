@@ -5,6 +5,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import '../../../core/media/media_session_telemetry.dart';
+import '../../../core/media/pcm_audio_format.dart';
 import '../../../services/server/stream_backpressure_gate.dart';
 import '../../../services/server/wav_pcm16.dart';
 
@@ -17,7 +18,7 @@ class WavAudioStreamService {
     required this.sampleRate,
     required this.channels,
     required this.bitsPerSample,
-    this.frameDuration = const Duration(milliseconds: 20),
+    this.frameDuration = LiveAudioDefaults.frameDuration,
     this.maxQueuedAudio = const Duration(milliseconds: 160),
     this.flushTimeout = const Duration(milliseconds: 300),
     AudioResponseFlusher? responseFlusher,
@@ -127,6 +128,7 @@ class WavAudioStreamService {
       await _closeResponseBestEffort(response);
     } catch (_) {
       removeClient(response);
+      await _closeResponseBestEffort(response);
       rethrow;
     } finally {
       _backpressure.markIdle(response);
@@ -235,6 +237,9 @@ class WavAudioStreamService {
 
   Future<void> _closeResponseBestEffort(HttpResponse response) async {
     try {
+      // A timed-out close future does not cancel socket output. Bound the
+      // actual connection lifetime as well as the teardown await.
+      response.deadline = flushTimeout;
       await response.close().timeout(flushTimeout);
     } catch (_) {}
   }
@@ -269,9 +274,7 @@ class WavAudioStreamService {
   Future<void> closeAll() async {
     for (final response in _clients.toList()) {
       removeClient(response);
-      try {
-        await response.close().timeout(const Duration(milliseconds: 500));
-      } catch (_) {}
+      await _closeResponseBestEffort(response);
     }
     _clients.clear();
     _clientIds.clear();
@@ -304,19 +307,19 @@ class PcmAudioFramePacketizer {
     required int sampleRate,
     required int channels,
     required int bitsPerSample,
-    this.frameDuration = const Duration(milliseconds: 20),
-  })  : bytesPerSampleFrame = max(1, channels * bitsPerSample ~/ 8),
-        frameBytes = max(
-          1,
-          sampleRate *
-              max(1, channels * bitsPerSample ~/ 8) *
-              frameDuration.inMicroseconds ~/
-              Duration.microsecondsPerSecond,
+    this.frameDuration = LiveAudioDefaults.frameDuration,
+  }) : _format = PcmAudioFormat(
+          sampleRate: sampleRate,
+          channels: channels,
+          bitsPerSample: bitsPerSample,
         );
 
+  final PcmAudioFormat _format;
   final Duration frameDuration;
-  final int bytesPerSampleFrame;
-  final int frameBytes;
+  int get bytesPerSampleFrame => _format.bytesPerSampleFrame;
+  late final int frameBytes = max(1, _format.bytesForDuration(frameDuration));
+  late final int _alignedFrameBytes =
+      max(bytesPerSampleFrame, _format.alignBytes(frameBytes));
   Uint8List _pending = Uint8List(0);
 
   int get pendingBytes => _pending.length;
@@ -326,8 +329,7 @@ class PcmAudioFramePacketizer {
     final combined = Uint8List(_pending.length + pcm.length)
       ..setRange(0, _pending.length, _pending)
       ..setRange(_pending.length, _pending.length + pcm.length, pcm);
-    final alignedFrameBytes = frameBytes - (frameBytes % bytesPerSampleFrame);
-    final safeFrameBytes = max(bytesPerSampleFrame, alignedFrameBytes);
+    final safeFrameBytes = _alignedFrameBytes;
     final frameCount = combined.length ~/ safeFrameBytes;
     if (frameCount == 0) {
       _pending = combined;

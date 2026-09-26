@@ -2,12 +2,75 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:miucam/analysis/alert/alert_engine.dart';
+import 'package:miucam/analysis/audio/audio_analysis_config.dart';
+import 'package:miucam/analysis/audio/audio_calibration_state.dart';
 import 'package:miucam/analysis/audio/audio_chunk.dart';
 import 'package:miucam/analysis/audio/cry_audio_analyzer_v2.dart';
 import 'package:miucam/analysis/video/luma_frame.dart';
 import 'package:miucam/analysis/video/motion_analyzer_v2.dart';
+import 'package:miucam/services/server/media_analysis_coordinator.dart';
+import 'package:miucam/services/server/media_analysis_metrics.dart';
 
 void main() {
+  test(
+      'disabled analysis does no feature work and audio/video enable separately',
+      () async {
+    var audioEnabled = false;
+    var videoEnabled = false;
+    final audio = CryAudioAnalyzerV2(
+      config: const AudioAnalysisConfig(calibrationMs: 1000),
+    )..startCalibration();
+    final metrics = MediaAnalysisMetrics(motionTargetFps: 3);
+    final coordinator = MediaAnalysisCoordinator(
+      motionAnalyzer: MotionAnalyzerV2(),
+      audioAnalyzer: audio,
+      alertEngine: AlertEngine(),
+      metrics: metrics,
+      audioAnalysisEnabled: () => audioEnabled,
+      videoAnalysisEnabled: () => videoEnabled,
+    );
+    addTearDown(coordinator.dispose);
+    final pcm = Uint8List(640);
+    final luma = Uint8List(640 * 480);
+    void feedSecond(int offsetMs) {
+      for (var index = 0; index < 50; index++) {
+        coordinator.onAudioChunk(AudioChunk(
+          pcm16le: pcm,
+          sampleRate: 16000,
+          channels: 1,
+          timestampMs: offsetMs + (index + 1) * 20,
+        ));
+        coordinator.onCameraFrame(LumaFrame(
+          yPlane: luma,
+          width: 640,
+          height: 480,
+          rowStride: 640,
+          pixelStride: 1,
+          timestampMs: offsetMs + (index + 1) * 20,
+        ));
+      }
+    }
+
+    feedSecond(0);
+    expect(metrics.audioWindowsAnalyzed, 0);
+    expect(metrics.videoFramesAnalyzed, 0);
+    expect(audio.diagnostics()['calibrationAcceptedMs'], 0);
+    expect(audio.calibrationState, AudioCalibrationState.calibrating);
+
+    videoEnabled = true;
+    feedSecond(1000);
+    expect(metrics.videoFramesAnalyzed, 3);
+    expect(metrics.audioWindowsAnalyzed, 0);
+
+    videoEnabled = false;
+    audioEnabled = true;
+    feedSecond(2000);
+    expect(metrics.videoFramesAnalyzed, 3);
+    expect(metrics.audioWindowsAnalyzed, 1);
+    expect(audio.calibrationState, AudioCalibrationState.calibrated);
+  });
+
   test('30 FPS 640x480 input performs only the configured 3 full analyses', () {
     final analyzer = MotionAnalyzerV2();
     final yPlane = Uint8List(640 * 480);

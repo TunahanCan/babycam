@@ -68,7 +68,8 @@ class ServerLivePreviewCard extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isCompact = constraints.maxWidth < 420;
-          final stackHeader = constraints.maxWidth < 240 ||
+          final stackHeader = !showCamera ||
+              constraints.maxWidth < 240 ||
               MediaQuery.textScalerOf(context).scale(16) > 20;
           final toggle = _LocalPreviewToggleButton(
             active: previewActive,
@@ -86,76 +87,94 @@ class ServerLivePreviewCard extends StatelessWidget {
                 SizedBox(width: double.infinity, child: toggle),
               ],
               const SizedBox(height: 12),
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: isCompact ? 190 : 280),
-                child: AspectRatio(
-                  aspectRatio:
-                      controller != null && controller.value.isInitialized
-                          ? controller.value.aspectRatio
-                          : 16 / 9,
-                  child: RepaintBoundary(
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        _CameraPreviewSurface(
-                          previewSource: previewSource,
-                          showCamera: showCamera,
-                          localPreviewActive: previewActive,
-                          fit: fit,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        if (!stopped && !stackHeader)
-                          Positioned(
-                            top: 8,
-                            left: 8,
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxWidth: showCamera
-                                    ? constraints.maxWidth - 122
-                                    : constraints.maxWidth - 16,
+              if (!showCamera)
+                ConstrainedBox(
+                  // Status copy must keep its accessibility text size. Only
+                  // live camera pixels require a fixed video aspect ratio.
+                  constraints: BoxConstraints(
+                    minHeight: (constraints.maxWidth * 9 / 16)
+                        .clamp(0.0, isCompact ? 190.0 : 280.0)
+                        .toDouble(),
+                  ),
+                  child: _CameraPreviewSurface(
+                    previewSource: previewSource,
+                    showCamera: false,
+                    localPreviewActive: previewActive,
+                    fit: fit,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                )
+              else
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: isCompact ? 190 : 280),
+                  child: AspectRatio(
+                    aspectRatio:
+                        controller != null && controller.value.isInitialized
+                            ? controller.value.aspectRatio
+                            : 16 / 9,
+                    child: RepaintBoundary(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          _CameraPreviewSurface(
+                            previewSource: previewSource,
+                            showCamera: showCamera,
+                            localPreviewActive: previewActive,
+                            fit: fit,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          if (!stopped && !stackHeader)
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: showCamera
+                                      ? constraints.maxWidth - 122
+                                      : constraints.maxWidth - 16,
+                                ),
+                                child: toggle,
                               ),
-                              child: toggle,
                             ),
-                          ),
-                        if (showCamera)
-                          Positioned(
-                            bottom: 10,
-                            left: 10,
-                            child: _PreviewStatusChip(
-                              label: strings.ui('livePreview'),
-                              color: MiuCamDesignTokens.serverSuccess,
+                          if (showCamera)
+                            Positioned(
+                              bottom: 10,
+                              left: 10,
+                              child: _PreviewStatusChip(
+                                label: strings.ui('livePreview'),
+                                color: MiuCamDesignTokens.serverSuccess,
+                              ),
                             ),
-                          ),
-                        if (showCamera)
-                          Positioned(
-                            top: 8,
-                            right: 8,
-                            child: Row(
-                              children: [
-                                _PreviewIconButton(
-                                  icon: fit == BoxFit.cover
-                                      ? Icons.fit_screen_rounded
-                                      : Icons.crop_free_rounded,
-                                  tooltip: fit == BoxFit.cover
-                                      ? strings.ui('videoFitContain')
-                                      : strings.ui('videoFitCover'),
-                                  onTap: onToggleFit,
-                                ),
-                                const SizedBox(width: 4),
-                                _PreviewIconButton(
-                                  icon: Icons.fullscreen_rounded,
-                                  tooltip:
-                                      strings.ui('serverPreviewFullScreen'),
-                                  onTap: onEnterFullscreen,
-                                ),
-                              ],
+                          if (showCamera)
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Row(
+                                children: [
+                                  _PreviewIconButton(
+                                    icon: fit == BoxFit.cover
+                                        ? Icons.fit_screen_rounded
+                                        : Icons.crop_free_rounded,
+                                    tooltip: fit == BoxFit.cover
+                                        ? strings.ui('videoFitContain')
+                                        : strings.ui('videoFitCover'),
+                                    onTap: onToggleFit,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  _PreviewIconButton(
+                                    icon: Icons.fullscreen_rounded,
+                                    tooltip:
+                                        strings.ui('serverPreviewFullScreen'),
+                                    onTap: onEnterFullscreen,
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
               const SizedBox(height: 10),
               Text(
                 description,

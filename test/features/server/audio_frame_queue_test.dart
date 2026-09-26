@@ -35,6 +35,25 @@ void main() {
     expect(queue.takeNext(), [4]);
   });
 
+  test('custom stereo packet duration preserves sample alignment and tail', () {
+    final packetizer = PcmAudioFramePacketizer(
+      sampleRate: 44100,
+      channels: 2,
+      bitsPerSample: 16,
+      frameDuration: const Duration(microseconds: 1010),
+    );
+    final payload =
+        Uint8List.fromList(List.generate(355, (index) => index % 256));
+
+    final frames = packetizer.add(payload);
+
+    expect(packetizer.frameBytes, 178);
+    expect(packetizer.bytesPerSampleFrame, 4);
+    expect(frames.map((frame) => frame.length), [176, 176]);
+    expect(frames.expand((frame) => frame), payload.take(352));
+    expect(packetizer.pendingBytes, 3);
+  });
+
   test('ilk WAV flush timeout olursa client attach edilmis birakilmaz',
       () async {
     final stalledFlush = Completer<void>();

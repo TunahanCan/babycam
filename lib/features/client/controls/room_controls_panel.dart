@@ -30,6 +30,8 @@ class _RoomControlsPanelState extends State<RoomControlsPanel>
   String _trackId = 'white_noise';
   double _volume = .5;
   bool _comfortBusy = false;
+  bool _adjustingVolume = false;
+  int _comfortGeneration = 0;
   bool _talkBusy = false;
   int? _talkPointer;
   int _talkIntentGeneration = 0;
@@ -38,7 +40,7 @@ class _RoomControlsPanelState extends State<RoomControlsPanel>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _snapshot = widget.controls.currentState;
+    _updateSnapshot(widget.controls.currentState, initialize: true);
     _listen();
     _refresh();
   }
@@ -49,6 +51,9 @@ class _RoomControlsPanelState extends State<RoomControlsPanel>
     final controlsChanged = !identical(oldWidget.controls, widget.controls);
     final sessionChanged = oldWidget.session != widget.session;
     if (controlsChanged || sessionChanged) {
+      _comfortGeneration++;
+      _comfortBusy = false;
+      _adjustingVolume = false;
       _talkIntentGeneration++;
       _talkPointer = null;
       _talkBusy = false;
@@ -56,16 +61,17 @@ class _RoomControlsPanelState extends State<RoomControlsPanel>
     }
     if (controlsChanged) {
       _subscription?.cancel();
-      _snapshot = widget.controls.currentState;
+      _updateSnapshot(widget.controls.currentState, initialize: true);
       _listen();
     }
-    if (sessionChanged) _refresh();
+    if (controlsChanged || sessionChanged) _refresh();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _subscription?.cancel();
+    _comfortGeneration++;
     _talkIntentGeneration++;
     _talkPointer = null;
     // stopTalking serializes behind an in-flight start, so requesting cleanup
@@ -149,10 +155,17 @@ class _RoomControlsPanelState extends State<RoomControlsPanel>
                 Expanded(
                   child: Slider(
                     value: _volume,
+                    onChangeStart:
+                        _comfortBusy ? null : (_) => _adjustingVolume = true,
                     onChanged: _comfortBusy
                         ? null
                         : (value) => setState(() => _volume = value),
-                    onChangeEnd: (_) => _setVolume(),
+                    onChangeEnd: _comfortBusy
+                        ? null
+                        : (_) {
+                            _adjustingVolume = false;
+                            _setVolume();
+                          },
                   ),
                 ),
                 Text('${(_volume * 100).round()}%'),
@@ -248,7 +261,7 @@ class _RoomControlsPanelState extends State<RoomControlsPanel>
               : (_) {
                   setState(() => _trackId = id);
                   if (_snapshot.comfort?.playing == true) {
-                    unawaited(_playComfort());
+                    unawaited(_runComfortCommand(action: 'play'));
                   }
                 },
         ),
@@ -257,62 +270,75 @@ class _RoomControlsPanelState extends State<RoomControlsPanel>
   void _listen() {
     _subscription = widget.controls.states.listen((state) {
       if (!mounted) return;
-      setState(() {
-        _snapshot = state;
-        final comfort = state.comfort;
-        if (comfort?.trackId != null) _trackId = comfort!.trackId!;
-        if (comfort != null) _volume = comfort.volume;
-      });
+      setState(() => _updateSnapshot(state));
       final error = state.lastError;
       if (error != null) widget.onError?.call(error);
     });
   }
 
+  void _updateSnapshot(ClientRoomControlSnapshot state,
+      {bool initialize = false}) {
+    final previous = initialize ? null : _snapshot.comfort;
+    _snapshot = state;
+    final comfort = state.comfort;
+    if (comfort == null) return;
+    if (initialize || !_comfortBusy) {
+      if (comfort.trackId != null &&
+          (initialize || comfort.trackId != previous?.trackId)) {
+        _trackId = comfort.trackId!;
+      }
+      if (!_adjustingVolume &&
+          (initialize || comfort.volume != previous?.volume)) {
+        _volume = comfort.volume;
+      }
+    }
+  }
+
   void _refresh() {
+    final generation = _comfortGeneration;
     unawaited(widget.controls.refreshComfort(widget.session).catchError(
       (Object error) {
-        widget.onError?.call(error);
+        if (mounted && generation == _comfortGeneration) {
+          widget.onError?.call(error);
+        }
         return null;
       },
     ));
   }
 
-  Future<void> _toggleComfort() async {
+  Future<void> _toggleComfort() => _runComfortCommand(
+        action: _snapshot.comfort?.playing == true ? 'pause' : 'play',
+      );
+
+  Future<void> _runComfortCommand({required String action}) async {
     if (_comfortBusy) return;
+    final generation = ++_comfortGeneration;
     setState(() => _comfortBusy = true);
     try {
-      if (_snapshot.comfort?.playing == true) {
-        await widget.controls.setComfort(widget.session, action: 'pause');
-      } else {
-        await _playComfort();
-      }
+      await widget.controls.setComfort(
+        widget.session,
+        action: action,
+        trackId: action == 'play' ? _trackId : null,
+        volume: action == 'play' || action == 'setVolume' ? _volume : null,
+        loop: action == 'play' ? true : null,
+      );
     } catch (error) {
-      widget.onError?.call(error);
+      if (mounted && generation == _comfortGeneration) {
+        widget.onError?.call(error);
+        // Restore confirmed room values when an optimistic edit fails.
+        setState(() =>
+            _updateSnapshot(widget.controls.currentState, initialize: true));
+      }
     } finally {
-      if (mounted) setState(() => _comfortBusy = false);
+      if (mounted && generation == _comfortGeneration) {
+        setState(() => _comfortBusy = false);
+      }
     }
   }
 
-  Future<void> _playComfort() => widget.controls.setComfort(
-        widget.session,
-        action: 'play',
-        trackId: _trackId,
-        volume: _volume,
-        loop: true,
-      );
-
   void _setVolume() {
     if (_snapshot.comfort == null) return;
-    unawaited(widget.controls
-        .setComfort(
-      widget.session,
-      action: 'setVolume',
-      volume: _volume,
-    )
-        .catchError((Object error) {
-      widget.onError?.call(error);
-      return null;
-    }));
+    unawaited(_runComfortCommand(action: 'setVolume'));
   }
 
   void _startTalking(PointerDownEvent event) {

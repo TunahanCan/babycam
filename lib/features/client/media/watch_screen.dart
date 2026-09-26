@@ -12,6 +12,7 @@ import '../../../core/protocol/pairing_session.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../services/monetization/broadcast_access_service.dart';
 import '../../shared/presentation/media_profile_text.dart';
+import '../../shared/presentation/miucam_system_ui.dart';
 import '../../shared/presentation/localized_time.dart';
 import '../../shared/presentation/localized_measurement_text.dart';
 import '../../shared/presentation/localized_room_name.dart';
@@ -44,7 +45,7 @@ class WatchScreen extends StatefulWidget {
   final ClientRuntime runtime;
   final int initialTab;
   final bool keepScreenAwake;
-  final ValueChanged<bool>? onKeepScreenAwakeChanged;
+  final Future<void> Function(bool)? onKeepScreenAwakeChanged;
   final Future<bool> Function()? openSettings;
 
   @override
@@ -58,6 +59,7 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
   bool _nightClock = false;
   bool _notificationsBusy = false;
   bool _streamRetryBusy = false;
+  bool _keepScreenAwakeBusy = false;
   late bool _keepScreenAwake;
   BoxFit _videoFit = BoxFit.cover;
   late final int _presentationToken;
@@ -132,11 +134,19 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _setKeepScreenAwake(bool enabled) {
-    if (_keepScreenAwake == enabled) return;
-    setState(() => _keepScreenAwake = enabled);
-    unawaited(_applyWakelock(enabled && _appInForeground));
-    widget.onKeepScreenAwakeChanged?.call(enabled);
+  Future<void> _setKeepScreenAwake(bool enabled) async {
+    if (_keepScreenAwake == enabled || _keepScreenAwakeBusy) return;
+    setState(() => _keepScreenAwakeBusy = true);
+    try {
+      await widget.onKeepScreenAwakeChanged?.call(enabled);
+      if (!mounted) return;
+      setState(() => _keepScreenAwake = enabled);
+      await _applyWakelock(enabled && _appInForeground);
+    } catch (_) {
+      if (mounted) _showSnack(AppStrings.of(context).ui('settingsSaveFailed'));
+    } finally {
+      if (mounted) setState(() => _keepScreenAwakeBusy = false);
+    }
   }
 
   bool _isCurrentScreenOperation(int generation) =>
@@ -149,6 +159,11 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
     setState(() => _audioEnabled = next);
     if (widget.runtime.currentState.activeStream == null && next) {
       _startLiveWatch();
+    } else if (next &&
+        widget.runtime.currentState.activeStream?.audioEnabled == false) {
+      // A watch resumed while muted negotiates no audio track. Enabling a
+      // local player cannot add that track; renegotiate the stream first.
+      unawaited(_refreshStreamSession());
     }
   }
 
@@ -248,7 +263,12 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => MiuCamSystemUi(
+        darkBackground: _nightClock || _fullscreen,
+        child: _buildScreen(context),
+      );
+
+  Widget _buildScreen(BuildContext context) {
     if (_nightClock) {
       return StreamBuilder<ClientRuntimeState>(
         stream: widget.runtime.states,
@@ -547,7 +567,7 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
                   strings.ui('keepDeviceAwake'),
                   strings.ui('keepAwakeClientText'),
                   _keepScreenAwake,
-                  onChanged: _setKeepScreenAwake,
+                  onChanged: _keepScreenAwakeBusy ? null : _setKeepScreenAwake,
                 ),
               ],
             ),
@@ -636,7 +656,18 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
     final strings = AppStrings.of(context);
     setState(() => _streamRetryBusy = true);
     try {
-      await _restartLiveWatch(audioEnabled: _audioEnabled);
+      final requestedAudioEnabled = _audioEnabled;
+      await _restartLiveWatch(audioEnabled: requestedAudioEnabled);
+      // Coalesce one unmute that arrived during a muted retry. Base this on
+      // the user's changed intent, not what the remote endpoint returned.
+      if (!requestedAudioEnabled &&
+          _audioEnabled &&
+          !_screenDisposed &&
+          widget.runtime.isWatchPresentationCurrent(_presentationToken) &&
+          _appInForeground &&
+          !_nightClock) {
+        await _restartLiveWatch(audioEnabled: true);
+      }
     } catch (_) {
       if (mounted) _showSnack(strings.ui('streamStartFailed'));
     } finally {

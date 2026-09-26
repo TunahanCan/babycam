@@ -11,7 +11,11 @@ void main() {
         File('lib/services/client_preferences_service.dart').readAsStringSync();
     // Guard the cross-language persistence contract; Flutter's legacy store
     // adds the prefix before writing Android SharedPreferences.
-    for (final key in ['client.locale.language', 'client.locale.country']) {
+    for (final key in [
+      'client.locale',
+      'client.locale.language',
+      'client.locale.country',
+    ]) {
       expect(preferences, contains("'$key'"));
       expect(service, contains('"flutter.$key"'));
     }
@@ -23,6 +27,12 @@ void main() {
     expect(service, contains('override fun onConfigurationChanged'));
     expect(service, contains('configuration.setLocale(locale)'));
     expect(service, contains('createConfigurationContext(configuration)'));
+    expect(service, contains('key == LOCALE_KEY'));
+    expect(service, contains('NotificationLocaleResolver.resolve('));
+    expect(service, contains('JSONObject(saved)'));
+    expect(service, contains('value.getString("language")'));
+    expect(service, contains('setScript(value.getString("script"))'));
+    expect(service, contains('setRegion(value.getString("country"))'));
     expect(service,
         contains('localized.getString(R.string.miucam_runtime_title_alerts)'));
   });

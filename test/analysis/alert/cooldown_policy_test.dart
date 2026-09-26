@@ -45,6 +45,15 @@ void main() {
       expect(policy.remainingMs(AlertType.cryDetected, 2000), 0);
     });
 
+    test('reading older diagnostics cannot shorten an active cooldown', () {
+      policy.markEmitted(AlertType.cryDetected, 1000);
+
+      expect(policy.remainingMs(AlertType.cryDetected, 400), 1000);
+      expect(policy.snapshot()[AlertType.cryDetected], 1000);
+      expect(policy.canEmit(AlertType.cryDetected, 1500), isFalse);
+      expect(policy.canEmit(AlertType.cryDetected, 2000), isTrue);
+    });
+
     test('reset for one type clears only that type', () {
       policy
         ..markEmitted(AlertType.cryDetected, 1000)

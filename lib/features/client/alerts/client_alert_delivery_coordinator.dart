@@ -50,8 +50,10 @@ class ClientAlertDeliveryCoordinator {
 
         final availableInHistory =
             _history.alerts.any((item) => item.id == alert.id);
-        final notificationDelivered =
-            receipt?.posted == true && receipt?.verifiedActive != false;
+        // An accepted native post can disappear from the active list before
+        // verification when the parent taps/dismisses it. That observation is
+        // diagnostic, not a delivery failure requiring another interruption.
+        final notificationDelivered = receipt?.posted == true;
         if (notificationDelivered) {
           _notificationRetryAlertIds.remove(alert.id);
           _remember(alert.id);

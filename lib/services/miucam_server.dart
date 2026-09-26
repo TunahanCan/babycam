@@ -25,6 +25,7 @@ import '../analysis/video/motion_analyzer_v2.dart';
 import '../core/async/serialized_async_executor.dart';
 import '../core/media/camera_permission_gateway.dart';
 import '../core/media/adaptive_media_profile.dart';
+import '../core/media/pcm_audio_format.dart';
 import '../core/media/client_quality_tracker.dart';
 import '../core/media/media_session_telemetry.dart';
 import '../core/miucam_protocol.dart';
@@ -205,9 +206,9 @@ class MiuCamServer {
       },
     );
     _media = ServerMediaTransportController(
-      sampleRate: _audioSampleRate,
-      channels: _audioChannels,
-      bitsPerSample: _audioBitsPerSample,
+      sampleRate: LiveAudioDefaults.sampleRate,
+      channels: LiveAudioDefaults.channels,
+      bitsPerSample: LiveAudioDefaults.bitsPerSample,
       telemetry: _mediaTelemetry,
     );
     _eventSockets = MiuCamEventSocketController(
@@ -383,6 +384,8 @@ class MiuCamServer {
   final _cameraControllerDisposals = <CameraController, Future<bool>>{};
   final _cameraControllerRawDisposals = <CameraController, Future<void>>{};
   final _cameraControllerDisposeStarted = <CameraController>{};
+  final _cameraControllerDisposalRetries = <CameraController, Timer>{};
+  final _cameraControllerDisposalAttempts = <CameraController, int>{};
   bool _injectedVideoDemand = false;
   bool _injectedAudioDemand = false;
   final _injectedMediaOperations = SerializedAsyncExecutor();
@@ -417,9 +420,6 @@ class MiuCamServer {
   double _lastMotionEnergy = 0;
   bool _cryActive = false;
   int? _lastCryActiveAtMs;
-  static const _audioSampleRate = 16000;
-  static const _audioChannels = 1;
-  static const _audioBitsPerSample = 16;
   static const maxJsonRequestBodyBytes = 64 * 1024;
   static const _jsonBodyReader = BoundedJsonBodyReader(
     maxBytes: maxJsonRequestBodyBytes,

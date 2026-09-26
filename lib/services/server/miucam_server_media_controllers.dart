@@ -202,6 +202,8 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
   }
 
   void _confirmCameraControllerDisposal(CameraController controller) {
+    _cameraControllerDisposalRetries.remove(controller)?.cancel();
+    _cameraControllerDisposalAttempts.remove(controller);
     _cameraControllersPendingDisposal.remove(controller);
     _cameraControllerDisposals.remove(controller);
     _cameraControllerRawDisposals.remove(controller);
@@ -211,10 +213,19 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
   }
 
   void _scheduleCameraControllerDisposalRetry(CameraController controller) {
-    unawaited(Future<void>.delayed(const Duration(milliseconds: 250), () async {
+    // Both the raw native future and its timeout observer can report one
+    // failure. Coalesce them into one timer for this camera lease so repeated
+    // failures cannot multiply teardown attempts and wakeups.
+    if (_cameraControllerDisposalRetries.containsKey(controller)) return;
+    final attempt = _cameraControllerDisposalAttempts[controller] ?? 0;
+    final delayMs = (250 * (1 << attempt)).clamp(250, 5000);
+    _cameraControllerDisposalAttempts[controller] = (attempt + 1).clamp(0, 5);
+    _cameraControllerDisposalRetries[controller] =
+        Timer(Duration(milliseconds: delayMs), () {
+      _cameraControllerDisposalRetries.remove(controller);
       if (!_cameraControllersPendingDisposal.contains(controller)) return;
-      await _disposeCameraControllerLease(controller);
-    }));
+      unawaited(_disposeCameraControllerLease(controller));
+    });
   }
 
   Future<void> _reconcileInjectedMediaSource(
@@ -277,27 +288,28 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
     Map<AlertType, int>? cooldownSnapshot,
   }) {
     if (_analysisCoordinator != null) return;
+    final detection = config.detectionSettings;
     final motionConfig = MotionAnalysisConfig(
-      motionOnThreshold: config.motionThreshold,
-      minMotionDurationMs: config.motionMinDurationMs,
+      motionOnThreshold: detection.motionThreshold,
+      minMotionDurationMs: detection.motionMinDurationMs,
     );
     final audioConfig = AudioAnalysisConfig(
-      sampleRate: MiuCamServer._audioSampleRate,
-      cryOnThreshold: config.cryScoreThreshold,
+      sampleRate: LiveAudioDefaults.sampleRate,
+      cryOnThreshold: detection.cryScoreThreshold,
       cryOffThreshold: AudioAnalysisConfig.hysteresisOffThreshold(
-        config.cryScoreThreshold,
+        detection.cryScoreThreshold,
       ),
       // EpisodeBasedNotificationAggregator is the single duration policy.
       // Keeping a second gate here would nearly double profile latency.
       minCryDurationMs: 0,
     );
     final alertConfig = AlertConfig(
-      cryCooldownMs: config.notifyCooldownMs,
-      motionCooldownMs: config.notifyCooldownMs,
-      loudSoundCooldownMs: config.notifyCooldownMs,
-      globalLightChangeCooldownMs: config.notifyCooldownMs,
-      cryAlertThreshold: config.cryScoreThreshold,
-      motionAlertThreshold: config.motionThreshold,
+      cryCooldownMs: detection.notifyCooldownMs,
+      motionCooldownMs: detection.notifyCooldownMs,
+      loudSoundCooldownMs: detection.notifyCooldownMs,
+      globalLightChangeCooldownMs: detection.notifyCooldownMs,
+      cryAlertThreshold: detection.cryScoreThreshold,
+      motionAlertThreshold: detection.motionThreshold,
       // These events share the corresponding audio/video notification
       // demand below. Live capture alone does not arm room alerts.
       emitLoudSoundAlerts: true,
@@ -317,12 +329,12 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
       config: alertConfig,
       strings: strings,
       episodeAggregator: EpisodeBasedNotificationAggregator(
-        cryThreshold: config.cryScoreThreshold,
+        cryThreshold: detection.cryScoreThreshold,
         suspectedCryMs: min(
-          config.cryMinDurationMs,
-          max(0, config.cryMinDurationMs ~/ 2),
+          detection.cryMinDurationMs,
+          max(0, detection.cryMinDurationMs ~/ 2),
         ),
-        confirmedCryMs: config.cryMinDurationMs,
+        confirmedCryMs: detection.cryMinDurationMs,
       ),
       networkTierProvider: _activeClientRegistry.effectiveTier,
       audioReliableProvider: audioAnalysisDemand,
@@ -336,6 +348,8 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
       audioAnalyzer: audioAnalyzer,
       alertEngine: alertEngine,
       metrics: metrics,
+      audioAnalysisEnabled: audioAnalysisDemand,
+      videoAnalysisEnabled: videoAnalysisDemand,
       onLog: onLog,
       onAudioResult: _handleAudioAnalysisResult,
       onMotionResult: _handleMotionAnalysisResult,
@@ -397,6 +411,18 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
   }
 
   void _handleAlertEvent(AlertEvent event) {
+    // Engine events cross an async stream boundary. A parent may have
+    // disabled this analysis since the frame was processed.
+    final enabled = switch (event.type) {
+      AlertType.cryDetected ||
+      AlertType.loudSound =>
+        audioAnalysisDemand?.call() ?? true,
+      AlertType.motionDetected ||
+      AlertType.globalLightChange =>
+        videoAnalysisDemand?.call() ?? true,
+      AlertType.systemWarning => true,
+    };
+    if (_disposed || !enabled) return;
     _analysisMetrics?.recordAlert(event);
     final message = event.message;
     onLog(message);
@@ -563,8 +589,8 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
     _handleCapturedAudioChunk(
       analysisPcm16le: pcm16le,
       streamPcm16le: pcm16le,
-      sampleRate: metadata?.sampleRate ?? MiuCamServer._audioSampleRate,
-      channels: metadata?.channels ?? MiuCamServer._audioChannels,
+      sampleRate: metadata?.sampleRate ?? LiveAudioDefaults.sampleRate,
+      channels: metadata?.channels ?? LiveAudioDefaults.channels,
       timestampMs: capturedAtMs != null && capturedAtMs > 0
           ? capturedAtMs
           : DateTime.now().millisecondsSinceEpoch,
@@ -1205,8 +1231,8 @@ extension _MiuCamServerMediaPolicyController on MiuCamServer {
         'twoWayTalk': true,
         'talkAudio': {
           'codec': 'pcm_s16le',
-          'sampleRate': MiuCamServer._audioSampleRate,
-          'channels': MiuCamServer._audioChannels,
+          'sampleRate': LiveAudioDefaults.sampleRate,
+          'channels': LiveAudioDefaults.channels,
         },
         'talkVideo': false,
         'battery': true,

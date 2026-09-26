@@ -1,7 +1,10 @@
 import '../media/adaptive_media_profile.dart';
+import '../alerts/alert_message_key.dart';
+import '../alerts/alert_severity.dart';
+import '../alerts/alert_type.dart';
 import '../../l10n/app_strings.dart';
 
-enum AlertCategory { audio, motion, system }
+export '../alerts/alert_type.dart' show AlertCategory;
 
 class AlertEventDto {
   const AlertEventDto(
@@ -32,53 +35,25 @@ class AlertEventDto {
   final String? childId;
   final Map<String, Object?> metadata;
 
-  String get _presentationType => switch (messageKey.trim().toLowerCase()) {
-        'parentcryalert' ||
-        'parentepisodehighcryalert' ||
-        'parentepisodecryalert' =>
-          'cryDetected',
-        'parentloudsoundalert' || 'parentepisodeshortsoundalert' => 'loudSound',
-        'parentmotionalert' => 'motionDetected',
-        'parentlightchangealert' => 'globalLightChange',
-        'batterylow' => 'batteryLow',
-        _ => type,
-      };
+  // Keep raw strings above intact for unknown peers and persisted history.
+  // Interpretation is typed without normalizing or rewriting wire data.
+  AlertType? get knownType => AlertType.tryParse(type);
+  AlertSeverity? get knownSeverity => AlertSeverity.tryParse(severity);
+  AlertMessageKey? get knownMessageKey => AlertMessageKey.tryParse(messageKey);
+
+  String get _presentationType =>
+      AlertMessageKey.tryParseNormalized(messageKey)?.presentationType ?? type;
 
   AlertCategory get category {
     final normalizedType = _presentationType.trim().toLowerCase();
-    final normalizedMessageKey = messageKey.trim().toLowerCase();
-
-    if (const {
-          'motiondetected',
-          'globallightchange',
-        }.contains(normalizedType) ||
-        const {
-          'parentmotionalert',
-          'parentlightchangealert',
-        }.contains(normalizedMessageKey)) {
-      return AlertCategory.motion;
-    }
-
-    if (const {
-      'systemwarning',
-      'batterylow',
-    }.contains(normalizedType)) {
+    final category = AlertType.tryParse(normalizedType)?.category;
+    if (category != null) return category;
+    if (normalizedType == AlertMessageKey.batteryLow.wireValue.toLowerCase()) {
       return AlertCategory.system;
     }
-
-    if (const {
-          'crydetected',
-          'loudsound',
-          'legacyalert',
-        }.contains(normalizedType) ||
-        const {
-          'parentcryalert',
-          'parentloudsoundalert',
-          'parentepisodehighcryalert',
-          'parentepisodeshortsoundalert',
-          'parentepisodecryalert',
-          'legacyalert',
-        }.contains(normalizedMessageKey)) {
+    if (normalizedType == AlertMessageKey.legacy.wireValue.toLowerCase() ||
+        AlertMessageKey.tryParseNormalized(messageKey) ==
+            AlertMessageKey.legacy) {
       return AlertCategory.audio;
     }
 
@@ -150,35 +125,35 @@ class AlertEventDto {
     // always belongs to the receiving parent's locale, including old events
     // without measurements. Never fabricate zero-valued analysis details.
     if (!_hasLocalizationMetadata) return _localizedFallback(strings);
-    return switch (messageKey) {
-      'parentCryAlert' => strings.parentCryAlert(
+    return switch (knownMessageKey) {
+      AlertMessageKey.cry => strings.parentCryAlert(
           confidencePercent: _int('confidencePercent'),
           ambientDeltaDb: _double('ambientDeltaDb'),
           cryBandPercent: _int('cryBandPercent'),
           calibrated: _bool('isCalibrated'),
         ),
-      'parentLoudSoundAlert' => strings.parentLoudSoundAlert(
+      AlertMessageKey.loudSound => strings.parentLoudSoundAlert(
           dbfs: _double('dbfs'),
           ambientDeltaDb: _double('ambientDeltaDb'),
         ),
-      'parentMotionAlert' => strings.parentMotionAlert(
+      AlertMessageKey.motion => strings.parentMotionAlert(
           scorePercent: _int('scorePercent'),
           activeAreaPercent: _int('activeAreaPercent'),
           meanDiff: _double('meanDiff'),
         ),
-      'parentLightChangeAlert' => strings.parentLightChangeAlert(
+      AlertMessageKey.lightChange => strings.parentLightChangeAlert(
           scorePercent: _int('scorePercent'),
           lumaShift: _double('globalLumaShift'),
         ),
-      'parentEpisodeHighCryAlert' => strings.parentEpisodeHighCryAlert(
+      AlertMessageKey.highCryEpisode => strings.parentEpisodeHighCryAlert(
           seconds: _durationSeconds(),
           motionAgo: strings.parentMotionAgo(_intOrNull('lastMotionAgoMs')),
           networkTier: strings.networkQualityLabel(_networkTier()),
         ),
-      'parentEpisodeShortSoundAlert' => strings.parentEpisodeShortSoundAlert(
+      AlertMessageKey.shortSoundEpisode => strings.parentEpisodeShortSoundAlert(
           seconds: _durationSeconds(),
         ),
-      'parentEpisodeCryAlert' => strings.parentEpisodeCryAlert(
+      AlertMessageKey.cryEpisode => strings.parentEpisodeCryAlert(
           seconds: _durationSeconds(),
           networkTier: strings.networkQualityLabel(_networkTier()),
         ),
@@ -202,29 +177,29 @@ class AlertEventDto {
       localizedMessage(strings);
 
   bool get _hasLocalizationMetadata {
-    switch (messageKey) {
-      case 'parentCryAlert':
+    switch (knownMessageKey) {
+      case AlertMessageKey.cry:
         return _isNumber('confidencePercent', min: 0, max: 100) &&
             _isNumber('ambientDeltaDb', min: -200, max: 200) &&
             _isNumber('cryBandPercent', min: 0, max: 100) &&
             metadata['isCalibrated'] is bool;
-      case 'parentLoudSoundAlert':
+      case AlertMessageKey.loudSound:
         return _isNumber('dbfs', min: -200, max: 20) &&
             _isNumber('ambientDeltaDb', min: -200, max: 200);
-      case 'parentMotionAlert':
+      case AlertMessageKey.motion:
         return _isNumber('scorePercent', min: 0, max: 100) &&
             _isNumber('activeAreaPercent', min: 0, max: 100) &&
             _isNumber('meanDiff', min: 0, max: 255);
-      case 'parentLightChangeAlert':
+      case AlertMessageKey.lightChange:
         return _isNumber('scorePercent', min: 0, max: 100) &&
             _isNumber('globalLumaShift', min: -255, max: 255);
-      case 'parentEpisodeHighCryAlert':
+      case AlertMessageKey.highCryEpisode:
         return _isDuration('durationMs') &&
             _isNetworkTier('networkTier') &&
             _isOptionalNumber('lastMotionAgoMs', min: 0, max: 86400000);
-      case 'parentEpisodeShortSoundAlert':
+      case AlertMessageKey.shortSoundEpisode:
         return _isDuration('durationMs');
-      case 'parentEpisodeCryAlert':
+      case AlertMessageKey.cryEpisode:
         return _isDuration('durationMs') && _isNetworkTier('networkTier');
       default:
         return true;

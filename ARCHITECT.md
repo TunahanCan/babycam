@@ -137,11 +137,13 @@ lib/
 │   ├── audio/
 │   └── video/
 ├── core/
+│   ├── alerts/
 │   ├── bytes/
 │   ├── media/
 │   ├── network/
 │   ├── protocol/
 │   ├── security/
+│   ├── settings/
 │   └── theme/
 ├── features/
 │   ├── client/
@@ -167,6 +169,48 @@ Package ownership:
   stream services near UI/runtime boundaries.
 - `services/`: HTTP server, platform facades, monetization, media-quality
   selectors and backpressure utilities.
+
+## Shared Policy And Value Ownership
+
+Shared values live with the domain that gives them meaning. UI layout values,
+algorithm tuning, transport formats and persistence keys have separate owners.
+
+| Concern | Owner | Used by |
+| --- | --- | --- |
+| User detection defaults, bounds and presets | `core/settings/detection_settings.dart` | `ConfigurationService`, server settings UI, analysis composition |
+| Alert type, category, severity and message identifiers | `core/alerts/` | Analysis, protocol adapter, DTO interpretation, client presentation and native notification policy |
+| PCM byte layout and live audio defaults | `core/media/pcm_audio_format.dart` | WAV header/parser, microphone, packetizer, playback and talkback |
+| Episode intensity and message classification | `analysis/alert/episode_notification_policy.dart` | Episode aggregator, notification composer, protocol adapter |
+
+`DetectionPreset` contains values, while its UI extension owns translated labels
+and icons. `ConfigurationService.setDetectionSettings` owns persistence; screens
+do not duplicate the sequence of preference writes. Settings use milliseconds
+throughout the model and storage, converting to seconds only for presentation.
+Low-level `AudioAnalysisConfig` and `MotionAnalysisConfig` remain separate from
+these user-facing product presets.
+
+`PcmAudioFormat` describes sample rate, channels and bit depth and owns byte/time
+conversion and sample-frame alignment. Live transport packet duration is not the
+comfort-synthesis interval, jitter target or retry delay. Native Kotlin/Swift
+defaults still belong to their platform contracts; changing the Dart default
+alone does not migrate those contracts or add codec support.
+
+Alert enums serialize through explicit `wireValue` identifiers. Renaming a Dart
+enum member must not rename stored history or peer JSON. DTOs retain unknown raw
+values for forward compatibility and apply typed interpretation for known values.
+The old `analysis/alert/alert_type.dart` and `alert_severity.dart` paths re-export
+the shared definitions so existing imports keep the same enum identity.
+
+`BabyEventEpisode`/state, `EpisodeBasedNotificationAggregator`, and
+`NotificationComposer` have separate source files for data, temporal aggregation,
+and localized text. The former aggregator import path retains compatibility
+exports. New code should import the owner it actually uses.
+
+When adding a preset, update the domain enum and its exhaustive UI label/icon
+mapping, then run the settings scenarios. When adding an alert, update the shared
+wire identifiers and exhaustive message mapping, then run serialization,
+localization and notification tests. Changes to PCM layout require parser,
+packetizer, stream and native-output compatibility checks.
 
 ## App Bootstrap
 

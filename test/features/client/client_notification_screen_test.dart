@@ -251,6 +251,70 @@ void main() {
     expect(find.text(AppStrings(const Locale('tr')).alertDetailsUnavailable),
         findsOneWidget);
   });
+
+  testWidgets(
+      'old room notification cannot navigate during or after replacement',
+      (tester) async {
+    final taps = StreamController<String>.broadcast();
+    final replacement = Completer<PairingSession>();
+    final runtime = ClientRuntime(
+      pair: (payload) async => payload.deviceId == 'replacement'
+          ? replacement.future
+          : PairingSession(payload: payload, sessionToken: 'first-token'),
+    );
+    try {
+      await runtime.pairWithServer(_payload());
+      await runtime.recordAlert(_alert('old-room-alert', 'Old room alert'));
+      await tester.pumpWidget(_App(
+        home: ClientHomeScreen(
+          runtime: runtime,
+          activeRole: AppRole.client,
+          onRoleSelected: (_) {},
+          notificationTapStream: taps.stream,
+        ),
+      ));
+      await tester.pumpAndSettle();
+      Navigator.of(tester.element(find.byType(ClientHomeScreen))).push<void>(
+        MaterialPageRoute(
+          builder: (_) => const Scaffold(body: Text('Current room route')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final nextPayload = _payload(deviceId: 'replacement');
+      final pairing = runtime.pairWithServer(nextPayload);
+      await tester.pump();
+      expect(runtime.alerts.single.id, 'old-room-alert');
+      taps.add('${NotificationService.alertsPayload}?alertId=old-room-alert');
+      await tester.pumpAndSettle();
+      expect(find.text('Current room route'), findsOneWidget);
+
+      replacement.complete(
+          PairingSession(payload: nextPayload, sessionToken: 'new-token'));
+      await pairing;
+      await runtime.recordAlert(_alert('new-room-alert', 'New room alert'));
+      taps.add('${NotificationService.alertsPayload}?alertId=old-room-alert');
+      await tester.pumpAndSettle();
+      expect(find.text('Current room route'), findsOneWidget);
+      expect(runtime.alerts.map((alert) => alert.id), ['new-room-alert']);
+
+      taps.add('${NotificationService.alertsPayload}?alertId=new-room-alert');
+      await tester.pumpAndSettle();
+      expect(find.text('Current room route'), findsNothing);
+      expect(find.text(AppStrings(const Locale('tr')).alertDetailsUnavailable),
+          findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      if (!replacement.isCompleted) {
+        replacement.complete(PairingSession(
+            payload: _payload(deviceId: 'replacement'),
+            sessionToken: 'new-token'));
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await runtime.dispose();
+      await taps.close();
+    }
+  });
 }
 
 class _App extends StatelessWidget {
@@ -295,11 +359,11 @@ AlertEventDto _typedAlert(
       sourceDeviceId: 'server',
     );
 
-PairingPayload _payload() => PairingPayload(
+PairingPayload _payload({String deviceId = 'server'}) => PairingPayload(
       schemaVersion: MiuCamProtocolV2.schemaVersion,
       host: '127.0.0.1',
       port: 8080,
-      deviceId: 'server',
+      deviceId: deviceId,
       deviceName: 'Bebek Odası',
       pairingNonce: 'nonce',
       expiresAtMs:

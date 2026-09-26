@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../l10n/app_strings.dart';
+import '../core/alerts/alert_severity.dart';
 
 class NotificationDeliveryReceipt {
   const NotificationDeliveryReceipt({
@@ -14,7 +15,11 @@ class NotificationDeliveryReceipt {
   });
 
   final int notificationId;
+
+  /// The native notification API accepted the post without reporting a failure.
   final bool posted;
+
+  /// A best-effort observation; false may mean the parent already dismissed it.
   final bool? verifiedActive;
   final String? error;
 }
@@ -60,7 +65,8 @@ class NotificationService {
       final details = await (plugin ?? FlutterLocalNotificationsPlugin())
           .getNotificationAppLaunchDetails();
       if (details?.didNotificationLaunchApp == true) {
-        _publishNotificationTap(details?.notificationResponse?.payload);
+        _publishNotificationTap(details?.notificationResponse?.payload,
+            fromLaunchIntent: true);
       }
     } catch (_) {
       // A lifecycle refresh is best effort; initialization still owns errors.
@@ -71,6 +77,7 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _plugin;
   Future<bool>? _initializing;
   Future<void> _channelRefresh = Future<void>.value();
+  String? _channelLocale;
   var _pluginInitialized = false;
   var _enabled = false;
   var _notificationsAttempted = 0;
@@ -137,7 +144,8 @@ class NotificationService {
         _pluginInitialized = true;
         final launchDetails = await _plugin.getNotificationAppLaunchDetails();
         if (launchDetails?.didNotificationLaunchApp == true) {
-          _publishNotificationTap(launchDetails?.notificationResponse?.payload);
+          _publishNotificationTap(launchDetails?.notificationResponse?.payload,
+              fromLaunchIntent: true);
         }
       }
       _enabled = await _requestOrRefreshPermission();
@@ -179,6 +187,7 @@ class NotificationService {
           AndroidFlutterLocalNotificationsPlugin>();
       if (android == null) return;
       final strings = _strings;
+      if (_channelLocale == strings.locale.toLanguageTag()) return;
       await android.createNotificationChannel(AndroidNotificationChannel(
         channelId,
         strings.notificationChannelName,
@@ -197,6 +206,7 @@ class NotificationService {
         enableVibration: false,
         showBadge: true,
       ));
+      _channelLocale = strings.locale.toLanguageTag();
     });
     // Keep rapid locale changes ordered without making a failed refresh poison
     // all later notification attempts.
@@ -315,14 +325,8 @@ class NotificationService {
     }
   }
 
-  bool _isInterruptive(String severity) {
-    final normalized = severity.trim().toLowerCase();
-    return normalized == 'attention' ||
-        normalized == 'warning' ||
-        normalized == 'critical' ||
-        normalized == 'high' ||
-        normalized == 'medium';
-  }
+  bool _isInterruptive(String severity) =>
+      AlertSeverity.tryParse(severity)?.isInterruptive ?? false;
 
   Future<bool> _isAndroidChannelDisabled(String deliveryChannelId) async {
     if (defaultTargetPlatform != TargetPlatform.android) return false;
@@ -366,9 +370,19 @@ class NotificationService {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
-  static void _publishNotificationTap(String? payload) {
-    if (payload == null || !payload.startsWith(alertsPayload)) return;
-    if (_lastPublishedTap == payload) return;
+  static void _publishNotificationTap(String? payload,
+      {bool fromLaunchIntent = false}) {
+    if (payload == null) return;
+    final uri = Uri.tryParse(payload);
+    if (uri?.scheme != 'miucam' ||
+        uri?.host != 'alerts' ||
+        (uri?.path.isNotEmpty ?? true)) {
+      return;
+    }
+    // Re-reading a retained Activity intent must not navigate twice. A fresh
+    // response callback is an intentional user tap, including a second tap
+    // on the same alert after navigating away from its history.
+    if (fromLaunchIntent && _lastPublishedTap == payload) return;
     _lastPublishedTap = payload;
     _pendingTap = payload;
     _notificationTaps.add(payload);

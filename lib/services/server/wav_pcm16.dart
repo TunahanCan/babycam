@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import '../../core/media/pcm_audio_format.dart';
+
 class WavPcm16 {
   const WavPcm16._();
 
@@ -9,8 +11,11 @@ class WavPcm16 {
     required int bitsPerSample,
     int dataSize = 0x7fffffff,
   }) {
-    final byteRate = sampleRate * channels * bitsPerSample ~/ 8;
-    final blockAlign = channels * bitsPerSample ~/ 8;
+    final format = PcmAudioFormat(
+      sampleRate: sampleRate,
+      channels: channels,
+      bitsPerSample: bitsPerSample,
+    );
     final data = ByteData(44);
 
     void writeAscii(int offset, String value) {
@@ -27,8 +32,8 @@ class WavPcm16 {
     data.setUint16(20, 1, Endian.little);
     data.setUint16(22, channels, Endian.little);
     data.setUint32(24, sampleRate, Endian.little);
-    data.setUint32(28, byteRate, Endian.little);
-    data.setUint16(32, blockAlign, Endian.little);
+    data.setUint32(28, format.bytesPerSecond, Endian.little);
+    data.setUint16(32, format.bytesPerSampleFrame, Endian.little);
     data.setUint16(34, bitsPerSample, Endian.little);
     writeAscii(36, 'data');
     data.setUint32(40, dataSize, Endian.little);

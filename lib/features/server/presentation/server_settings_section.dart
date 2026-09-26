@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/async/serialized_async_executor.dart';
+import '../../../core/settings/detection_settings.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../services/configuration_service.dart';
 import '../../shared/presentation/localized_measurement_text.dart';
@@ -59,15 +60,12 @@ class _ServerSettingsSectionState extends State<ServerSettingsSection> {
   }
 
   void _loadSettings() {
-    _motionThreshold = widget.config.motionThreshold.clamp(.10, .60).toDouble();
-    _cryScoreThreshold =
-        widget.config.cryScoreThreshold.clamp(.45, .95).toDouble();
-    _notifyCooldownSeconds =
-        (widget.config.notifyCooldownMs / 1000).clamp(10, 180).toDouble();
-    _motionDurationSeconds =
-        (widget.config.motionMinDurationMs / 1000).clamp(1, 6).toDouble();
-    _cryDurationSeconds =
-        (widget.config.cryMinDurationMs / 1000).clamp(1.5, 6).toDouble();
+    final settings = widget.config.detectionSettings;
+    _motionThreshold = settings.motionThreshold;
+    _cryScoreThreshold = settings.cryScoreThreshold;
+    _notifyCooldownSeconds = settings.notifyCooldownSeconds;
+    _motionDurationSeconds = settings.motionDurationSeconds;
+    _cryDurationSeconds = settings.cryDurationSeconds;
   }
 
   Future<bool> _runMutation(Future<void> Function() mutation) async {
@@ -75,8 +73,13 @@ class _ServerSettingsSectionState extends State<ServerSettingsSection> {
     setState(() => _pendingMutations++);
     try {
       await _mutations.run(() async {
-        await mutation();
-        await widget.runtime.reloadAnalysisSettings();
+        try {
+          await mutation();
+        } finally {
+          // A preset/reset can persist some values before a later write fails.
+          // Keep detection aligned with the durable settings shown by the UI.
+          await widget.runtime.reloadAnalysisSettings();
+        }
       });
       return true;
     } catch (_) {
@@ -123,7 +126,7 @@ class _ServerSettingsSectionState extends State<ServerSettingsSection> {
     if (mounted) setState(_loadSettings);
   }
 
-  Future<void> _applyDetectionPreset(_DetectionPreset preset) async {
+  Future<void> _applyDetectionPreset(DetectionPreset preset) async {
     final values = preset.settings;
     setState(() {
       _motionThreshold = values.motionThreshold;
@@ -132,25 +135,12 @@ class _ServerSettingsSectionState extends State<ServerSettingsSection> {
       _motionDurationSeconds = values.motionDurationSeconds;
       _cryDurationSeconds = values.cryDurationSeconds;
     });
-    await _runMutation(() async {
-      await Future.wait<void>([
-        widget.config.setMotionThreshold(values.motionThreshold),
-        widget.config.setCryScoreThreshold(values.cryScoreThreshold),
-        widget.config
-            .setNotifyCooldownMs((values.notifyCooldownSeconds * 1000).round()),
-        widget.config.setMotionMinDurationMs(
-          (values.motionDurationSeconds * 1000).round(),
-        ),
-        widget.config.setCryMinDurationMs(
-          (values.cryDurationSeconds * 1000).round(),
-        ),
-      ]);
-    });
+    await _runMutation(() => widget.config.setDetectionSettings(values));
     if (mounted) setState(_loadSettings);
   }
 
-  _DetectionPreset? get _activeDetectionPreset {
-    for (final preset in _DetectionPreset.values) {
+  DetectionPreset? get _activeDetectionPreset {
+    for (final preset in DetectionPreset.values) {
       final values = preset.settings;
       if ((_motionThreshold - values.motionThreshold).abs() < .001 &&
           (_cryScoreThreshold - values.cryScoreThreshold).abs() < .001 &&
@@ -201,7 +191,8 @@ class _ServerSettingsSectionState extends State<ServerSettingsSection> {
             setState(() => _notifyCooldownSeconds = value);
             unawaited(
               _saveSetting(
-                () => widget.config.setNotifyCooldownMs((value * 1000).round()),
+                () => widget.config.setNotifyCooldownMs(
+                    (value * Duration.millisecondsPerSecond).round()),
               ),
             );
           },
@@ -209,8 +200,8 @@ class _ServerSettingsSectionState extends State<ServerSettingsSection> {
             setState(() => _motionDurationSeconds = value);
             unawaited(
               _saveSetting(
-                () => widget.config
-                    .setMotionMinDurationMs((value * 1000).round()),
+                () => widget.config.setMotionMinDurationMs(
+                    (value * Duration.millisecondsPerSecond).round()),
               ),
             );
           },
@@ -218,7 +209,8 @@ class _ServerSettingsSectionState extends State<ServerSettingsSection> {
             setState(() => _cryDurationSeconds = value);
             unawaited(
               _saveSetting(
-                () => widget.config.setCryMinDurationMs((value * 1000).round()),
+                () => widget.config.setCryMinDurationMs(
+                    (value * Duration.millisecondsPerSecond).round()),
               ),
             );
           },
@@ -232,68 +224,34 @@ class _ServerSettingsSectionState extends State<ServerSettingsSection> {
   }
 }
 
-enum _DetectionPreset {
-  sensitive,
-  balanced,
-  fewerAlerts;
+extension _DetectionSettingsPresentation on DetectionSettings {
+  double get notifyCooldownSeconds =>
+      notifyCooldownMs / Duration.millisecondsPerSecond;
+  double get motionDurationSeconds =>
+      motionMinDurationMs / Duration.millisecondsPerSecond;
+  double get cryDurationSeconds =>
+      cryMinDurationMs / Duration.millisecondsPerSecond;
+}
 
+extension _DetectionPresetPresentation on DetectionPreset {
   IconData get icon => switch (this) {
-        sensitive => Icons.hearing_rounded,
-        balanced => Icons.balance_rounded,
-        fewerAlerts => Icons.notifications_paused_rounded,
-      };
-
-  _DetectionPresetSettings get settings => switch (this) {
-        sensitive => const _DetectionPresetSettings(
-            motionThreshold: .15,
-            cryScoreThreshold: .50,
-            notifyCooldownSeconds: 45,
-            motionDurationSeconds: 1,
-            cryDurationSeconds: 1.5,
-          ),
-        balanced => const _DetectionPresetSettings(
-            motionThreshold: .22,
-            cryScoreThreshold: .65,
-            notifyCooldownSeconds: 60,
-            motionDurationSeconds: 2,
-            cryDurationSeconds: 1.5,
-          ),
-        fewerAlerts => const _DetectionPresetSettings(
-            motionThreshold: .35,
-            cryScoreThreshold: .78,
-            notifyCooldownSeconds: 90,
-            motionDurationSeconds: 3.5,
-            cryDurationSeconds: 2.5,
-          ),
+        DetectionPreset.sensitive => Icons.hearing_rounded,
+        DetectionPreset.balanced => Icons.balance_rounded,
+        DetectionPreset.fewerAlerts => Icons.notifications_paused_rounded,
       };
 
   String label(AppStrings strings) => switch (this) {
-        sensitive => strings.ui('sensitivePreset'),
-        balanced => strings.ui('balancedPreset'),
-        fewerAlerts => strings.ui('fewerAlertsPreset'),
+        DetectionPreset.sensitive => strings.ui('sensitivePreset'),
+        DetectionPreset.balanced => strings.ui('balancedPreset'),
+        DetectionPreset.fewerAlerts => strings.ui('fewerAlertsPreset'),
       };
 
   String description(AppStrings strings) => switch (this) {
-        sensitive => strings.ui('sensitivePresetDescription'),
-        balanced => strings.ui('balancedPresetDescription'),
-        fewerAlerts => strings.ui('fewerAlertsPresetDescription'),
+        DetectionPreset.sensitive => strings.ui('sensitivePresetDescription'),
+        DetectionPreset.balanced => strings.ui('balancedPresetDescription'),
+        DetectionPreset.fewerAlerts =>
+          strings.ui('fewerAlertsPresetDescription'),
       };
-}
-
-class _DetectionPresetSettings {
-  const _DetectionPresetSettings({
-    required this.motionThreshold,
-    required this.cryScoreThreshold,
-    required this.notifyCooldownSeconds,
-    required this.motionDurationSeconds,
-    required this.cryDurationSeconds,
-  });
-
-  final double motionThreshold;
-  final double cryScoreThreshold;
-  final double notifyCooldownSeconds;
-  final double motionDurationSeconds;
-  final double cryDurationSeconds;
 }
 
 class _ServerSettingsCard extends StatelessWidget {
@@ -320,8 +278,8 @@ class _ServerSettingsCard extends StatelessWidget {
   final double motionDurationSeconds;
   final double cryDurationSeconds;
   final bool saving;
-  final _DetectionPreset? activePreset;
-  final ValueChanged<_DetectionPreset> onPresetSelected;
+  final DetectionPreset? activePreset;
+  final ValueChanged<DetectionPreset> onPresetSelected;
   final VoidCallback onReset;
   final ValueChanged<double> onMotionThresholdChangeEnd;
   final ValueChanged<double> onCryScoreThresholdChangeEnd;
@@ -381,7 +339,7 @@ class _ServerSettingsCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final preset in _DetectionPreset.values)
+              for (final preset in DetectionPreset.values)
                 ChoiceChip(
                   selected: activePreset == preset,
                   onSelected: saving ? null : (_) => onPresetSelected(preset),
@@ -484,8 +442,8 @@ class _ServerSettingsCard extends StatelessWidget {
         description: strings.ui('cryThresholdDescription'),
         valueLabel: (value) => strings.formatPercent((value * 100).round()),
         value: cryScoreThreshold,
-        min: .45,
-        max: .95,
+        min: DetectionSettings.minCryScoreThreshold,
+        max: DetectionSettings.maxCryScoreThreshold,
         divisions: 50,
         color: MiuCamDesignTokens.serverCyan,
         onChangeEnd: onCryScoreThresholdChangeEnd,
@@ -495,8 +453,8 @@ class _ServerSettingsCard extends StatelessWidget {
         description: strings.ui('motionThresholdDescription'),
         valueLabel: (value) => strings.formatPercent((value * 100).round()),
         value: motionThreshold,
-        min: .10,
-        max: .60,
+        min: DetectionSettings.minMotionThreshold,
+        max: DetectionSettings.maxMotionThreshold,
         divisions: 50,
         color: MiuCamDesignTokens.serverViolet,
         onChangeEnd: onMotionThresholdChangeEnd,
@@ -506,8 +464,10 @@ class _ServerSettingsCard extends StatelessWidget {
         description: strings.ui('notificationCooldownDescription'),
         valueLabel: (value) => localizedSecondsLabel(strings, value),
         value: notifyCooldownSeconds,
-        min: 10,
-        max: 180,
+        min: DetectionSettings.minNotificationCooldownMs /
+            Duration.millisecondsPerSecond,
+        max: DetectionSettings.maxNotificationCooldownMs /
+            Duration.millisecondsPerSecond,
         divisions: 34,
         color: MiuCamDesignTokens.serverBlue,
         onChangeEnd: onNotifyCooldownChangeEnd,
@@ -521,8 +481,10 @@ class _ServerSettingsCard extends StatelessWidget {
           fractionDigits: 1,
         ),
         value: cryDurationSeconds,
-        min: 1.5,
-        max: 6,
+        min: DetectionSettings.minCryEvidenceDurationMs /
+            Duration.millisecondsPerSecond,
+        max: DetectionSettings.maxDetectionDurationMs /
+            Duration.millisecondsPerSecond,
         divisions: 9,
         color: MiuCamDesignTokens.serverCyan,
         onChangeEnd: onCryDurationChangeEnd,
@@ -536,8 +498,10 @@ class _ServerSettingsCard extends StatelessWidget {
           fractionDigits: 1,
         ),
         value: motionDurationSeconds,
-        min: 1,
-        max: 6,
+        min: DetectionSettings.minDetectionDurationMs /
+            Duration.millisecondsPerSecond,
+        max: DetectionSettings.maxDetectionDurationMs /
+            Duration.millisecondsPerSecond,
         divisions: 10,
         color: MiuCamDesignTokens.serverViolet,
         onChangeEnd: onMotionDurationChangeEnd,

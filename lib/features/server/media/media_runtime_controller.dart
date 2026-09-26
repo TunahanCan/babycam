@@ -96,7 +96,8 @@ class MediaRuntimeController {
   bool _videoMayBeActive = false;
   bool _audioMayBeActive = false;
   int _intentGeneration = 0;
-  final _resourceStopRetries = <_MediaResource>{};
+  final _resourceRecoveryTimers = <_MediaResource, Timer>{};
+  final _resourceRecoveryAttempts = <_MediaResource, int>{};
 
   bool get isActive => !_activeDemand.isEmpty;
   bool get videoActive => _activeDemand.video;
@@ -179,7 +180,7 @@ class MediaRuntimeController {
       if (generation != _intentGeneration) return;
       _activeDemand = target;
       _combinedMayBeActive = false;
-      _resourceStopRetries.remove(_MediaResource.combined);
+      _resetResourceRecovery(_MediaResource.combined);
       return;
     }
     if (!_activeDemand.isEmpty || _combinedMayBeActive) {
@@ -201,7 +202,7 @@ class MediaRuntimeController {
       if (generation == _intentGeneration) {
         _activeDemand = MediaResourceDemand.none;
         _combinedMayBeActive = false;
-        _resourceStopRetries.remove(_MediaResource.combined);
+        _resetResourceRecovery(_MediaResource.combined);
       }
     }
   }
@@ -228,7 +229,7 @@ class MediaRuntimeController {
             video: false,
             audio: _activeDemand.audio,
           );
-          _resourceStopRetries.remove(_MediaResource.video);
+          _resetResourceRecovery(_MediaResource.video);
         }
       } catch (_) {
         if (generation == _intentGeneration) {
@@ -254,7 +255,7 @@ class MediaRuntimeController {
             video: _activeDemand.video,
             audio: false,
           );
-          _resourceStopRetries.remove(_MediaResource.audio);
+          _resetResourceRecovery(_MediaResource.audio);
         }
       } catch (_) {
         if (generation == _intentGeneration) {
@@ -283,7 +284,7 @@ class MediaRuntimeController {
       }
       if (generation != _intentGeneration) return;
       _videoMayBeActive = false;
-      _resourceStopRetries.remove(_MediaResource.video);
+      _resetResourceRecovery(_MediaResource.video);
       _activeDemand = MediaResourceDemand(
         video: true,
         audio: _activeDemand.audio,
@@ -307,7 +308,7 @@ class MediaRuntimeController {
       }
       if (generation != _intentGeneration) return;
       _audioMayBeActive = false;
-      _resourceStopRetries.remove(_MediaResource.audio);
+      _resetResourceRecovery(_MediaResource.audio);
       _activeDemand = MediaResourceDemand(
         video: _activeDemand.video,
         audio: true,
@@ -425,13 +426,28 @@ class MediaRuntimeController {
   }
 
   void _scheduleResourceRecovery(_MediaResource resource) {
-    if (!_resourceStopRetries.add(resource)) return;
-    unawaited(_retryResourceRecovery(resource));
+    if (_resourceRecoveryTimers.containsKey(resource)) return;
+    final attempt = _resourceRecoveryAttempts[resource] ?? 0;
+    // Persistent native/permission failures must not wake the device and
+    // re-open hardware ten times per second. Keep the first retry prompt,
+    // then back off while retaining eventual cleanup of uncertain resources.
+    final delayMs = (100 * (1 << attempt)).clamp(100, 5000);
+    _resourceRecoveryAttempts[resource] = (attempt + 1).clamp(0, 6);
+    _resourceRecoveryTimers[resource] = Timer(
+      Duration(milliseconds: delayMs),
+      () {
+        _resourceRecoveryTimers.remove(resource);
+        unawaited(_retryResourceRecovery(resource));
+      },
+    );
+  }
+
+  void _resetResourceRecovery(_MediaResource resource) {
+    _resourceRecoveryTimers.remove(resource)?.cancel();
+    _resourceRecoveryAttempts.remove(resource);
   }
 
   Future<void> _retryResourceRecovery(_MediaResource resource) async {
-    await Future<void>.delayed(const Duration(milliseconds: 100));
-    if (!_resourceStopRetries.remove(resource)) return;
     final generation = _intentGeneration;
     final target = _suspended ? MediaResourceDemand.none : _requestedDemand;
     final wanted = switch (resource) {
@@ -459,18 +475,18 @@ class MediaRuntimeController {
     switch (resource) {
       case _MediaResource.combined:
         _combinedMayBeActive = false;
-        _resourceStopRetries.remove(resource);
+        _resetResourceRecovery(resource);
         _activeDemand = target.isEmpty ? MediaResourceDemand.all : target;
       case _MediaResource.video:
         _videoMayBeActive = false;
-        _resourceStopRetries.remove(resource);
+        _resetResourceRecovery(resource);
         _activeDemand = MediaResourceDemand(
           video: true,
           audio: _activeDemand.audio,
         );
       case _MediaResource.audio:
         _audioMayBeActive = false;
-        _resourceStopRetries.remove(resource);
+        _resetResourceRecovery(resource);
         _activeDemand = MediaResourceDemand(
           video: _activeDemand.video,
           audio: true,
@@ -482,18 +498,18 @@ class MediaRuntimeController {
     switch (resource) {
       case _MediaResource.combined:
         _combinedMayBeActive = false;
-        _resourceStopRetries.remove(resource);
+        _resetResourceRecovery(resource);
         _activeDemand = MediaResourceDemand.none;
       case _MediaResource.video:
         _videoMayBeActive = false;
-        _resourceStopRetries.remove(resource);
+        _resetResourceRecovery(resource);
         _activeDemand = MediaResourceDemand(
           video: false,
           audio: _activeDemand.audio,
         );
       case _MediaResource.audio:
         _audioMayBeActive = false;
-        _resourceStopRetries.remove(resource);
+        _resetResourceRecovery(resource);
         _activeDemand = MediaResourceDemand(
           video: _activeDemand.video,
           audio: false,

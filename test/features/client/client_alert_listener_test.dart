@@ -12,6 +12,79 @@ import 'package:miucam/features/client/media/client_stream_health_state.dart';
 import '../../support/blackhole_tcp_proxy.dart';
 
 void main() {
+  test('late old-room delivery cannot seed a replacement room replay cursor',
+      () async {
+    final firstServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final secondServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final thirdServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final deliveryStarted = Completer<void>();
+    final releaseDelivery = Completer<void>();
+    final replacementCursor = Completer<String?>();
+    var supersededConnections = 0;
+    firstServer.listen((request) async {
+      final socket = await WebSocketTransformer.upgrade(request);
+      socket.listen((_) {});
+      socket.add(_alertJson('old-room-alert'));
+    });
+    secondServer.listen((request) async {
+      supersededConnections++;
+      final socket = await WebSocketTransformer.upgrade(request);
+      socket.listen((_) {});
+    });
+    thirdServer.listen((request) async {
+      replacementCursor.complete(
+          request.uri.queryParameters[MiuCamProtocolV2.alertCursorQuery]);
+      final socket = await WebSocketTransformer.upgrade(request);
+      socket.listen((_) {});
+    });
+    final listener = ClientAlertListener(onAlert: (_) async {
+      deliveryStarted.complete();
+      await releaseDelivery.future;
+    });
+    try {
+      await listener.start(_session(firstServer.port));
+      await deliveryStarted.future.timeout(const Duration(seconds: 2));
+      final superseded = listener.start(_session(secondServer.port));
+      final replacement = listener.start(_session(thirdServer.port));
+      releaseDelivery.complete();
+      await Future.wait([superseded, replacement])
+          .timeout(const Duration(seconds: 2));
+      expect(await replacementCursor.future, isNull);
+      expect(supersededConnections, 0);
+      expect(listener.isConnected, isTrue);
+    } finally {
+      if (!releaseDelivery.isCompleted) releaseDelivery.complete();
+      await listener.stop();
+      await firstServer.close(force: true);
+      await secondServer.close(force: true);
+      await thirdServer.close(force: true);
+    }
+  });
+
+  test('replacement device at the same endpoint starts with its own cursor',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final cursors = <String?>[];
+    final delivered = Completer<void>();
+    server.listen((request) async {
+      cursors
+          .add(request.uri.queryParameters[MiuCamProtocolV2.alertCursorQuery]);
+      final socket = await WebSocketTransformer.upgrade(request);
+      socket.listen((_) {});
+      if (cursors.length == 1) socket.add(_alertJson('first-device-alert'));
+    });
+    final listener = ClientAlertListener(onAlert: (_) => delivered.complete());
+    try {
+      await listener.start(_session(server.port));
+      await delivered.future.timeout(const Duration(seconds: 2));
+      await listener.start(_session(server.port, deviceId: 'replacement'));
+      expect(cursors, [null, null]);
+    } finally {
+      await listener.stop();
+      await server.close(force: true);
+    }
+  });
+
   test('silent network loss reconnects with the last delivered alert cursor',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -320,12 +393,13 @@ String _alertJson(String id) => jsonEncode({
       'metadata': <String, Object?>{},
     });
 
-PairingSession _session(int port) => PairingSession(
+PairingSession _session(int port, {String deviceId = 'server'}) =>
+    PairingSession(
       payload: PairingPayload(
         schemaVersion: MiuCamProtocolV2.schemaVersion,
         host: InternetAddress.loopbackIPv4.address,
         port: port,
-        deviceId: 'server',
+        deviceId: deviceId,
         deviceName: 'Bebek Odası',
         pairingNonce: 'nonce',
         expiresAtMs: DateTime.now()

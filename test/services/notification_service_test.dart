@@ -433,6 +433,69 @@ void main() {
     expect(plugin.showCalls, 0);
   });
 
+  test('alert delivery does not rewrite unchanged Android channel metadata',
+      () async {
+    final android = _FakeAndroidNotifications();
+    final plugin = _FakeNotificationsPlugin(android: android);
+    final service =
+        NotificationService(AppStrings(const Locale('tr')), plugin: plugin);
+    for (var index = 0; index < 4; index++) {
+      await service.showAlert('Room update',
+          alertId: 'channel-write-$index', severity: 'info');
+    }
+    expect(android.channelWrites, 2);
+    expect(plugin.showCalls, 4);
+    service.updateStrings(AppStrings(const Locale('en', 'US')));
+    await service.initialize();
+    expect(android.channelWrites, 4);
+  });
+
+  test('partial channel initialization retries both channel definitions',
+      () async {
+    final android = _FakeAndroidNotifications()..failChannelWrite = 2;
+    final service = NotificationService(AppStrings(const Locale('tr')),
+        plugin: _FakeNotificationsPlugin(android: android));
+    expect(await service.initialize(), isFalse);
+    expect(await service.initialize(), isTrue);
+    expect(android.channelWrites, 4);
+  });
+
+  test('every genuine tap works while rereading the launch intent stays quiet',
+      () async {
+    const payload = 'miucam://alerts?alertId=repeated-user-tap';
+    final plugin = _FakeNotificationsPlugin(
+      launchDetails: const NotificationAppLaunchDetails(true,
+          notificationResponse: NotificationResponse(
+            notificationResponseType:
+                NotificationResponseType.selectedNotification,
+            payload: payload,
+          )),
+    );
+    final service =
+        NotificationService(AppStrings(const Locale('tr')), plugin: plugin);
+    await service.initialize();
+    NotificationService.takePendingTap();
+    final received = <String>[];
+    final subscription =
+        NotificationService.notificationTaps.listen(received.add);
+    try {
+      for (var tap = 0; tap < 2; tap++) {
+        plugin.notificationResponse?.call(const NotificationResponse(
+          notificationResponseType:
+              NotificationResponseType.selectedNotification,
+          payload: payload,
+        ));
+        await Future<void>.delayed(Duration.zero);
+        expect(NotificationService.takePendingTap(), payload);
+      }
+      await NotificationService.refreshLaunchTap(plugin: plugin);
+      await Future<void>.delayed(Duration.zero);
+      expect(received, [payload, payload]);
+    } finally {
+      await subscription.cancel();
+    }
+  });
+
   test('notification tap stream accepts only MiuCam alert payloads', () async {
     final plugin = _FakeNotificationsPlugin();
     final service = NotificationService(
@@ -445,6 +508,10 @@ void main() {
     plugin.notificationResponse?.call(const NotificationResponse(
       notificationResponseType: NotificationResponseType.selectedNotification,
       payload: 'other-app://alerts',
+    ));
+    plugin.notificationResponse?.call(const NotificationResponse(
+      notificationResponseType: NotificationResponseType.selectedNotification,
+      payload: 'miucam://alerts-other?alertId=wrong-route',
     ));
     plugin.notificationResponse?.call(const NotificationResponse(
       notificationResponseType: NotificationResponseType.selectedNotification,
@@ -569,10 +636,16 @@ class _FakeAndroidNotifications
     implements AndroidFlutterLocalNotificationsPlugin {
   final createdChannels = <String, AndroidNotificationChannel>{};
   int permissionRequests = 0;
+  int channelWrites = 0;
+  int? failChannelWrite;
 
   @override
   Future<void> createNotificationChannel(
       AndroidNotificationChannel notificationChannel) async {
+    channelWrites++;
+    if (channelWrites == failChannelWrite) {
+      throw StateError('Channel write failed');
+    }
     createdChannels[notificationChannel.id] = notificationChannel;
   }
 

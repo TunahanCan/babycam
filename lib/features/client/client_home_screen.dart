@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../app/app_role.dart';
+import '../../core/alerts/alert_severity.dart';
 import '../../core/network/lan_endpoint.dart';
 import '../../core/protocol/alert_event_dto.dart';
 import '../../core/protocol/pairing_payload.dart';
@@ -99,9 +100,23 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
   }
 
   void _openNotificationTab(String payload) {
-    if (!payload.startsWith(NotificationService.alertsPayload)) return;
+    final uri = Uri.tryParse(payload);
+    if (uri?.scheme != 'miucam' ||
+        uri?.host != 'alerts' ||
+        (uri?.path.isNotEmpty ?? true)) {
+      return;
+    }
     NotificationService.takePendingTap();
     if (!mounted) return;
+    final alertId = uri!.queryParameters['alertId'];
+    // History is drained and cleared when pairing switches rooms. An older
+    // notification retained by the OS must not dismiss the new room's watch
+    // screen or present that room's history as if it belonged to this alert.
+    if (widget.runtime.currentState.phase == ClientRuntimePhase.pairing ||
+        (alertId != null &&
+            !widget.runtime.alerts.any((alert) => alert.id == alertId))) {
+      return;
+    }
     Navigator.maybeOf(context)?.popUntil((route) => route.isFirst);
     if (_tab != _ClientHomeTab.history) {
       setState(() => _tab = _ClientHomeTab.history);
@@ -399,16 +414,26 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
         builder: (_) => WatchScreen(
           runtime: widget.runtime,
           keepScreenAwake: _keepScreenAwake,
-          onKeepScreenAwakeChanged: _setKeepScreenAwake,
+          onKeepScreenAwakeChanged: _persistKeepScreenAwake,
         ),
       ),
     );
   }
 
   Future<void> _setKeepScreenAwake(bool enabled) async {
+    try {
+      await _persistKeepScreenAwake(enabled);
+    } catch (_) {
+      if (mounted) {
+        _showMessage(context, AppStrings.of(context).ui('settingsSaveFailed'));
+      }
+    }
+  }
+
+  Future<void> _persistKeepScreenAwake(bool enabled) async {
     if (_keepScreenAwake == enabled) return;
-    setState(() => _keepScreenAwake = enabled);
     await widget.preferences?.setKeepScreenAwake(enabled);
+    if (mounted) setState(() => _keepScreenAwake = enabled);
   }
 
   String _languageLabel(BuildContext context) {
@@ -458,9 +483,14 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
             (locale) => locale.toLanguageTag() == selectedTag,
           );
     if (selected == _selectedLocale) return;
-    setState(() => _selectedLocale = selected);
-    await widget.preferences?.setLocale(selected);
+    try {
+      await widget.preferences?.setLocale(selected);
+    } catch (_) {
+      if (mounted) _showMessage(context, strings.ui('settingsSaveFailed'));
+      return;
+    }
     if (!mounted) return;
+    setState(() => _selectedLocale = selected);
     widget.onLocaleChanged?.call(selected);
   }
 

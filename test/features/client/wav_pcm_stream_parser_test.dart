@@ -41,6 +41,26 @@ void main() {
     expect(third.pcm16le, [11, 0]);
   });
 
+  test('WAV stereo format overrides raw defaults and retains channel alignment',
+      () {
+    final parser = WavPcmStreamParser(defaultSampleRate: 8000);
+    final wav = _wavBytes(
+      sampleRate: 44100,
+      channels: 2,
+      pcm: Uint8List.fromList([1, 2, 3]),
+    );
+
+    final first = parser.add(wav);
+    final second = parser.add(Uint8List.fromList([4, 5, 6, 7]));
+    final third = parser.add(Uint8List.fromList([8]));
+
+    expect(first.sampleRate, 44100);
+    expect(first.channels, 2);
+    expect(first.pcm16le, isEmpty);
+    expect(second.pcm16le, [1, 2, 3, 4]);
+    expect(third.pcm16le, [5, 6, 7, 8]);
+  });
+
   test('streaming WAV data chunk buyuk olsa bile PCM hemen akar', () {
     final parser = WavPcmStreamParser();
     final wav = _wavBytes(

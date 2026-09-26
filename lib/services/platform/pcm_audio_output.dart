@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import '../../core/media/pcm_audio_format.dart';
+
 abstract class PcmAudioSink {
   Future<void> start({
     required int sampleRate,
@@ -101,8 +103,8 @@ class PcmAudioOutput implements PcmAudioSink, PcmAudioLeaseSink {
   }
 
   Future<void> playTestTone({
-    int sampleRate = 16000,
-    int channels = 1,
+    int sampleRate = LiveAudioDefaults.sampleRate,
+    int channels = LiveAudioDefaults.channels,
     int durationMs = 1200,
     int frequencyHz = 440,
     double amplitude = .35,

@@ -10,6 +10,54 @@ import 'package:miucam/l10n/app_strings.dart';
 import 'package:miucam/services/server/alert_protocol_adapter.dart';
 
 void main() {
+  test('episode message keys preserve strict classification boundaries', () {
+    for (final scenario in [
+      (
+        duration: 15001,
+        score: .81,
+        resolved: false,
+        key: 'parentEpisodeHighCryAlert'
+      ),
+      (
+        duration: 15000,
+        score: .81,
+        resolved: false,
+        key: 'parentEpisodeCryAlert'
+      ),
+      (
+        duration: 18000,
+        score: .8,
+        resolved: false,
+        key: 'parentEpisodeCryAlert'
+      ),
+      (
+        duration: 4999,
+        score: .81,
+        resolved: true,
+        key: 'parentEpisodeShortSoundAlert'
+      ),
+      (duration: 5000, score: .4, resolved: true, key: 'parentEpisodeCryAlert'),
+    ]) {
+      final dto = AlertProtocolAdapter.toDto(AlertEvent(
+        id: 'episode-boundary',
+        type: AlertType.cryDetected,
+        severity: AlertSeverity.attention,
+        message: 'Room event',
+        score: scenario.score,
+        timestampMs: 1,
+        metadata: {
+          'event': 'baby_event',
+          'durationMs': scenario.duration,
+          'cryScore': scenario.score,
+          'resolved': scenario.resolved,
+        },
+      ));
+      expect(dto.messageKey, scenario.key);
+      expect(dto.type, 'cryDetected');
+      expect(dto.severity, 'attention');
+    }
+  });
+
   test('semantic message keys keep filtering and translated copy consistent',
       () {
     const alert = AlertEventDto(

@@ -1,79 +1,15 @@
+import '../../core/alerts/alert_severity.dart';
 import '../../core/media/adaptive_media_profile.dart';
-import '../../l10n/app_strings.dart';
 import '../audio/audio_analysis_result.dart';
 import '../audio/audio_calibration_state.dart';
 import '../video/motion_analysis_result.dart';
-import 'alert_severity.dart';
+import 'baby_event_episode.dart';
+import 'episode_notification_policy.dart';
 
-enum BabyEventEpisodeState {
-  quiet,
-  suspectedCry,
-  confirmedCry,
-  ongoingCry,
-  resolved,
-}
-
-class BabyEventEpisode {
-  const BabyEventEpisode({
-    required this.episodeId,
-    required this.startedAtMs,
-    required this.lastUpdatedAtMs,
-    required this.totalCryDurationMs,
-    required this.maxCryScore,
-    required this.avgCryScore,
-    required this.motionBursts,
-    this.lastMotionAtMs,
-    this.streamQualityTier = NetworkQualityTier.unknown,
-    this.audioReliable = true,
-    this.videoReliable = true,
-    this.severity = AlertSeverity.info,
-    this.intensity = 'low',
-    this.resolved = false,
-    this.confirmed = false,
-    this.activeEvidenceRatio = 0,
-  });
-
-  final String episodeId;
-  final int startedAtMs;
-  final int lastUpdatedAtMs;
-  final int totalCryDurationMs;
-  final double maxCryScore;
-  final double avgCryScore;
-  final int motionBursts;
-  final int? lastMotionAtMs;
-  final NetworkQualityTier streamQualityTier;
-  final bool audioReliable;
-  final bool videoReliable;
-  final AlertSeverity severity;
-  final String intensity;
-  final bool resolved;
-  final bool confirmed;
-  final double activeEvidenceRatio;
-
-  int? lastMotionAgoMs() =>
-      lastMotionAtMs == null ? null : lastUpdatedAtMs - lastMotionAtMs!;
-
-  Map<String, Object?> toJson() => {
-        'event': 'baby_event',
-        'episodeId': episodeId,
-        'startedAtMs': startedAtMs,
-        'lastUpdatedAtMs': lastUpdatedAtMs,
-        'durationMs': totalCryDurationMs,
-        'cryScore': maxCryScore,
-        'avgCryScore': avgCryScore,
-        'motionDetected': motionBursts > 0,
-        'motionBursts': motionBursts,
-        'lastMotionAgoMs': lastMotionAgoMs(),
-        'audioReliable': audioReliable,
-        'videoReliable': videoReliable,
-        'networkTier': streamQualityTier.name,
-        'severity': severity.name,
-        'intensity': intensity,
-        'resolved': resolved,
-        'confirmed': confirmed,
-        'activeEvidenceRatio': activeEvidenceRatio,
-      };
-}
+// Preserve the original public import path while keeping episode data,
+// aggregation, and localized notification text in separate libraries.
+export 'baby_event_episode.dart';
+export 'notification_composer.dart';
 
 class EpisodeBasedNotificationAggregator {
   EpisodeBasedNotificationAggregator({
@@ -146,6 +82,7 @@ class EpisodeBasedNotificationAggregator {
     bool audioReliable = true,
     bool videoReliable = true,
   }) {
+    if (!videoReliable) markVideoDiscontinuity();
     // Ambient calibration is part of the signal contract. Before it finishes,
     // a loud room, microphone gain change, or startup transient must not start
     // an episode that can later be promoted to a phone notification.
@@ -271,6 +208,7 @@ class EpisodeBasedNotificationAggregator {
   void _startIfNeeded(int nowMs) {
     if (_episodeStartedAtMs != null) return;
     if (_lastMotionAtMs == null ||
+        nowMs < _lastMotionAtMs! ||
         nowMs - _lastMotionAtMs! > _motionAssociationWindowMs) {
       _motionBursts = 0;
       _lastMotionAtMs = null;
@@ -290,12 +228,11 @@ class EpisodeBasedNotificationAggregator {
   }) {
     final durationMs = _episodeStartedAtMs == null ? 0 : _totalCryDurationMs;
     final avgScore = _sampleCount == 0 ? 0.0 : _scoreSum / _sampleCount;
-    final intensity = _maxScore >= 0.8
-        ? 'high'
-        : _maxScore >= 0.55
-            ? 'medium'
-            : 'low';
-    final severity = _maxScore > 0.8 && durationMs > 15000
+    final intensity = EpisodeNotificationPolicy.intensityForScore(_maxScore);
+    final severity = EpisodeNotificationPolicy.isStrongProlongedCry(
+      cryScore: _maxScore,
+      durationMs: durationMs,
+    )
         ? AlertSeverity.warning
         : durationMs >= confirmedCryMs
             ? AlertSeverity.attention
@@ -334,43 +271,5 @@ class EpisodeBasedNotificationAggregator {
     return (_totalCryDurationMs / (nowMs - startedAtMs))
         .clamp(0.0, 1.0)
         .toDouble();
-  }
-}
-
-class NotificationComposer {
-  const NotificationComposer();
-
-  String compose(BabyEventEpisode episode, {AppStrings? strings}) {
-    final seconds = (episode.totalCryDurationMs / 1000).round();
-    final localized = strings;
-    if (localized != null) {
-      final networkTier = localized.networkQualityLabel(
-        episode.streamQualityTier,
-      );
-      if (episode.maxCryScore > 0.8 && episode.totalCryDurationMs > 15000) {
-        return localized.parentEpisodeHighCryAlert(
-          seconds: seconds,
-          motionAgo: localized.parentMotionAgo(episode.lastMotionAgoMs()),
-          networkTier: networkTier,
-        );
-      }
-      if (episode.resolved && episode.totalCryDurationMs < 5000) {
-        return localized.parentEpisodeShortSoundAlert(seconds: seconds);
-      }
-      return localized.parentEpisodeCryAlert(
-        seconds: seconds,
-        networkTier: networkTier,
-      );
-    }
-    if (episode.maxCryScore > 0.8 && episode.totalCryDurationMs > 15000) {
-      final ago = episode.lastMotionAgoMs();
-      final motionText =
-          ago == null ? 'hareket yok' : '${(ago / 1000).round()} sn önce';
-      return 'Yaklaşık $seconds sn süren güçlü ağlama benzeri ses algılandı. Son kamera hareketi $motionText. Yayın ${episode.streamQualityTier.label} modunda.';
-    }
-    if (episode.resolved && episode.totalCryDurationMs < 5000) {
-      return 'Kısa süreli ses yükselmesi algılandı. Devam ederse tekrar bildirilecek.';
-    }
-    return 'Yaklaşık $seconds sn süren ağlama benzeri sinyal algılandı. Yayın ${episode.streamQualityTier.label} modunda.';
   }
 }

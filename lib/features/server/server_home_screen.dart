@@ -9,6 +9,7 @@ import '../../l10n/app_strings.dart';
 import '../../services/configuration_service.dart';
 import '../shared/presentation/miucam_design_tokens.dart';
 import '../shared/presentation/miucam_shells.dart';
+import '../shared/presentation/miucam_system_ui.dart';
 import 'presentation/server_home_components.dart';
 import 'presentation/server_pairing_section.dart';
 import 'presentation/server_preview_section.dart';
@@ -77,7 +78,12 @@ class _ServerHomeScreenState extends State<ServerHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_fullscreenPreview) return _buildFullscreenPreview();
+    if (_fullscreenPreview) {
+      return MiuCamSystemUi(
+        darkBackground: true,
+        child: _buildFullscreenPreview(),
+      );
+    }
 
     final strings = AppStrings.of(context);
     return Scaffold(

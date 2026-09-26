@@ -13,6 +13,22 @@ import '../../support/failing_alert_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('a successfully posted but dismissed banner is not replayed', () async {
+    final history = ClientAlertHistory();
+    final notifications = _DismissedNotificationService();
+    final coordinator = ClientAlertDeliveryCoordinator(
+      history: history,
+      notifications: notifications,
+    );
+    addTearDown(history.dispose);
+    final alert = _alert(id: 'dismissed-cry');
+    await coordinator.deliver(alert);
+    await coordinator.deliver(alert);
+    expect(notifications.calls, 1);
+    expect(history.alerts.single.id, alert.id);
+    expect(history.isNotificationPending(alert.id), isFalse);
+  });
+
   test('denied notifications require a saved fallback before acknowledging',
       () async {
     final preferences = FailingAlertPreferences()..failWrites = true;
@@ -266,6 +282,20 @@ class _RecordingNotificationService extends ClientNotificationService {
       notificationId: NotificationService.notificationIdFor(alert.id),
       posted: true,
       verifiedActive: true,
+    );
+  }
+}
+
+class _DismissedNotificationService extends ClientNotificationService {
+  int calls = 0;
+
+  @override
+  Future<NotificationDeliveryReceipt> showAlert(AlertEventDto alert) async {
+    calls++;
+    return NotificationDeliveryReceipt(
+      notificationId: NotificationService.notificationIdFor(alert.id),
+      posted: true,
+      verifiedActive: false,
     );
   }
 }

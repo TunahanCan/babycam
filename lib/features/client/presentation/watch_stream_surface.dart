@@ -190,7 +190,7 @@ class _StreamSurfaceState extends State<_StreamSurface>
     supervisor = ClientMediaStreamSupervisor(
       session: session,
       activeStream: activeStream,
-      audioEnabled: widget.audioEnabled,
+      audioEnabled: widget.audioEnabled && activeStream.audioEnabled,
       healthState: widget.streamHealthState,
       onVideoFrame: (frame) {
         if (!mounted || !identical(_supervisor, supervisor)) return;
@@ -246,7 +246,8 @@ class _StreamSurfaceState extends State<_StreamSurface>
         final audioController = handle as WebRtcClientAudioController;
         unawaited(
           audioController
-              .setAudioEnabled(widget.audioEnabled)
+              .setAudioEnabled(
+                  widget.audioEnabled && (activeStream?.audioEnabled ?? false))
               .catchError((Object _) {}),
         );
       }
@@ -256,7 +257,8 @@ class _StreamSurfaceState extends State<_StreamSurface>
     if (supervisor != null) {
       unawaited(
         supervisor
-            .setAudioEnabled(widget.audioEnabled)
+            .setAudioEnabled(
+                widget.audioEnabled && (activeStream?.audioEnabled ?? false))
             .catchError((Object _) {}),
       );
     }

@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import '../../../core/media/pcm_audio_format.dart';
+
 class ParsedPcmAudio {
   const ParsedPcmAudio({
     required this.sampleRate,
@@ -22,16 +24,18 @@ class ParsedPcmAudio {
 /// unbounded [BytesBuilder] while a network connection stays open.
 class WavPcmStreamParser {
   WavPcmStreamParser({
-    this.defaultSampleRate = 16000,
-    this.defaultChannels = 1,
-    this.defaultBitsPerSample = 16,
+    this.defaultSampleRate = LiveAudioDefaults.sampleRate,
+    this.defaultChannels = LiveAudioDefaults.channels,
+    this.defaultBitsPerSample = LiveAudioDefaults.bitsPerSample,
     this.maxHeaderBytes = 64 * 1024,
     this.minSampleRate = 8000,
     this.maxSampleRate = 48000,
   })  : assert(maxHeaderBytes >= 12),
-        _sampleRate = defaultSampleRate,
-        _channels = defaultChannels,
-        _bitsPerSample = defaultBitsPerSample,
+        _format = PcmAudioFormat(
+          sampleRate: defaultSampleRate,
+          channels: defaultChannels,
+          bitsPerSample: defaultBitsPerSample,
+        ),
         _header = Uint8List(maxHeaderBytes);
 
   final int defaultSampleRate;
@@ -45,9 +49,7 @@ class WavPcmStreamParser {
   int _headerLength = 0;
   int _peakHeaderBytes = 0;
   bool _configured = false;
-  int _sampleRate;
-  int _channels;
-  int _bitsPerSample;
+  PcmAudioFormat _format;
   Uint8List _pendingBytes = Uint8List(0);
 
   int get peakHeaderBytes => _peakHeaderBytes;
@@ -89,15 +91,15 @@ class WavPcmStreamParser {
   }
 
   ParsedPcmAudio get _empty => ParsedPcmAudio(
-        sampleRate: _sampleRate,
-        channels: _channels,
+        sampleRate: _format.sampleRate,
+        channels: _format.channels,
         pcm16le: Uint8List(0),
         isConfigured: _configured,
       );
 
   ParsedPcmAudio _parsed(Uint8List pcm) => ParsedPcmAudio(
-        sampleRate: _sampleRate,
-        channels: _channels,
+        sampleRate: _format.sampleRate,
+        channels: _format.channels,
         pcm16le: pcm,
         isConfigured: _configured,
       );
@@ -137,25 +139,28 @@ class WavPcmStreamParser {
         final byteRate = _uint32le(bytes, chunkDataOffset + 8);
         final blockAlign = _uint16le(bytes, chunkDataOffset + 12);
         final bitsPerSample = _uint16le(bytes, chunkDataOffset + 14);
-        final expectedBlockAlign = channels * bitsPerSample ~/ 8;
-        final expectedByteRate = sampleRate * expectedBlockAlign;
         final supported = audioFormat == 1 &&
-            bitsPerSample == 16 &&
+            bitsPerSample == PcmAudioFormat.pcm16BitsPerSample &&
             channels >= 1 &&
             channels <= 2 &&
             sampleRate >= minSampleRate &&
-            sampleRate <= maxSampleRate &&
-            blockAlign == expectedBlockAlign &&
-            byteRate == expectedByteRate;
-        if (!supported) {
+            sampleRate <= maxSampleRate;
+        final format = supported
+            ? PcmAudioFormat(
+                sampleRate: sampleRate,
+                channels: channels,
+                bitsPerSample: bitsPerSample,
+              )
+            : null;
+        if (format == null ||
+            blockAlign != format.bytesPerSampleFrame ||
+            byteRate != format.bytesPerSecond) {
           throw FormatException(
             'Unsupported WAV format: format=$audioFormat, channels=$channels, '
             'sampleRate=$sampleRate, bits=$bitsPerSample.',
           );
         }
-        _channels = channels;
-        _sampleRate = sampleRate;
-        _bitsPerSample = bitsPerSample;
+        _format = format;
         foundSupportedFormat = true;
       }
       offset = nextOffset;
@@ -182,7 +187,7 @@ class WavPcmStreamParser {
 
   Uint8List _align(Uint8List bytes) {
     if (bytes.isEmpty) return bytes;
-    final frameSize = (_channels * _bitsPerSample ~/ 8).clamp(2, 16).toInt();
+    final frameSize = _format.bytesPerSampleFrame.clamp(2, 16).toInt();
     final pending = _pendingBytes;
     if (pending.isEmpty) {
       final alignedLength = bytes.length - (bytes.length % frameSize);

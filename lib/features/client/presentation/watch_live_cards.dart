@@ -264,7 +264,9 @@ class _VideoPanel extends StatelessWidget {
       // Bağlantı kurulurken açıklama ve yeniden dene eylemi videodan daha
       // fazla dikey alana ihtiyaç duyar. 5:4 alan, dar ekranlarda ve büyük
       // yazıda durum metninin kesilmesini önler; canlı görüntü 16:9 kalır.
-      aspectRatio: connection.isLive ? 16 / 9 : 5 / 4,
+      aspectRatio: connection.isLive
+          ? 16 / 9
+          : (5 / 4) / MediaQuery.textScalerOf(context).scale(1).clamp(1, 3),
       child: Container(
         decoration: BoxDecoration(
           color: const Color(0xFF162B4A),

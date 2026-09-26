@@ -9,8 +9,54 @@ import 'package:miucam/l10n/app_strings.dart';
 import 'package:miucam/services/configuration_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../support/failing_configuration_preferences.dart';
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  testWidgets(
+      'failed preset reports storage error and reloads durable settings',
+      (tester) async {
+    final preferences = FailingConfigurationPreferences({})
+      ..failKey = 'config.motion_threshold';
+    final config = ConfigurationService(preferences);
+    double? activeMotion;
+    double? activeCry;
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(),
+      onSettingsChanged: () async {
+        activeMotion = config.motionThreshold;
+        activeCry = config.cryScoreThreshold;
+      },
+    );
+    addTearDown(runtime.dispose);
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('tr'),
+      supportedLocales: AppStrings.supportedLocales,
+      localizationsDelegates: const [
+        AppStrings.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ServerSettingsSection(config: config, runtime: runtime),
+        ),
+      ),
+    ));
+    await _selectPreset(tester, 'Hassas');
+    await tester.pumpAndSettle();
+    expect(find.text(AppStrings(const Locale('tr')).ui('settingsSaveFailed')),
+        findsOneWidget);
+    expect(config.motionThreshold, .22);
+    expect(activeMotion, config.motionThreshold);
+    expect(activeCry, config.cryScoreThreshold);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await runtime.dispose();
+  });
 
   testWidgets(
       'algılama profilleri ses ve bildirim politikasını birlikte kaydeder',

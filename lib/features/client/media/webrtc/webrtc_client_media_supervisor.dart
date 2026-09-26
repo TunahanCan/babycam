@@ -65,8 +65,6 @@ class WebRtcClientMediaSupervisor {
       case RTCPeerConnectionState.RTCPeerConnectionStateConnected:
         _disconnectTimer?.cancel();
         _disconnectTimer = null;
-        if (videoExpected) healthState?.markVideoFrameReceived();
-        if (audioExpected) healthState?.markAudioChunkReceived();
       case RTCPeerConnectionState.RTCPeerConnectionStateDisconnected:
         _disconnectTimer ??= Timer(disconnectedGrace, _dispatchReconnect);
       case RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
@@ -88,14 +86,11 @@ class WebRtcClientMediaSupervisor {
       if (_stopped) return;
       final previous = _previousStats;
       if (videoExpected &&
-          (previous == null ||
-              current.videoBytesReceived > previous.videoBytesReceived ||
-              current.videoFramesDecoded > previous.videoFramesDecoded)) {
+          current.videoFramesDecoded > (previous?.videoFramesDecoded ?? 0)) {
         healthState?.markVideoFrameReceived();
       }
       if (audioExpected &&
-          (previous == null ||
-              current.audioBytesReceived > previous.audioBytesReceived)) {
+          current.audioBytesReceived > (previous?.audioBytesReceived ?? 0)) {
         healthState?.markAudioChunkReceived();
       }
       final jitterMs = current.jitterMs;

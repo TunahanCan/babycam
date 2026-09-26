@@ -24,8 +24,8 @@ class AlertEvent {
   /// Converts this alert into a JSON-friendly map.
   Map<String, Object?> toJson() => {
         'id': id,
-        'type': type.name,
-        'severity': severity.name,
+        'type': type.wireValue,
+        'severity': severity.wireValue,
         'message': message,
         'score': score,
         'timestampMs': timestampMs,

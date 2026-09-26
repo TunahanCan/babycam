@@ -365,6 +365,42 @@ void main() {
     await service.dispose();
   });
 
+  test('unexpected stream completion reports discontinuity before restart',
+      () async {
+    final recorder = _FakeRecorder();
+    final resumedStream = StreamController<Uint8List>();
+    final service = MicrophoneCaptureService(
+      sampleRate: 16000,
+      channels: 1,
+      recorder: recorder,
+      restartBaseDelay: const Duration(milliseconds: 1),
+      restartMaxDelay: const Duration(milliseconds: 2),
+    );
+    addTearDown(resumedStream.close);
+    addTearDown(service.dispose);
+    final events = <String>[];
+
+    await service.start(
+      onChunk: (_) => events.add('audio'),
+      onError: (error, _) {
+        expect(error, isA<StateError>());
+        events.add('discontinuity');
+      },
+    );
+    recorder.add(_pcm16le([100, -100]));
+    await pumpEventQueue();
+    recorder.nextStreamResult = Future.value(resumedStream.stream);
+    await recorder.endStream();
+    await _waitUntil(() => recorder.startCalls == 2);
+    resumedStream.add(_pcm16le([100, -100]));
+    await pumpEventQueue();
+
+    expect(events, ['audio', 'discontinuity', 'audio']);
+    expect(service.isActive, isTrue);
+    await service.stop();
+    expect(events, ['audio', 'discontinuity', 'audio']);
+  });
+
   test('takilan terminal cancel mikrofon yeniden baslatmayi engellemez',
       () async {
     final cancelRelease = Completer<void>();
@@ -440,6 +476,8 @@ class _FakeRecorder implements MicrophoneRecorderPort {
   void addError(Object error) {
     _controller.addError(error, StackTrace.current);
   }
+
+  Future<void> endStream() => _controller.close();
 
   @override
   Future<void> stop() async {

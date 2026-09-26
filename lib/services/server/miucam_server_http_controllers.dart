@@ -152,9 +152,9 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
         clientId: clientId,
         attemptId: attemptId,
         sampleRate: (body?['sampleRate'] as num?)?.toInt() ??
-            MiuCamServer._audioSampleRate,
+            LiveAudioDefaults.sampleRate,
         channels:
-            (body?['channels'] as num?)?.toInt() ?? MiuCamServer._audioChannels,
+            (body?['channels'] as num?)?.toInt() ?? LiveAudioDefaults.channels,
       );
       if (await _requireTrustedAuth(request) == null) {
         await _features.stopTalk(
@@ -237,14 +237,8 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
     TalkSession? session;
     var playedChunks = 0;
     var rejected = false;
-    final frameBytes = max(
-      2,
-      (MiuCamServer._audioSampleRate *
-              MiuCamServer._audioChannels *
-              2 *
-              20 /
-              1000)
-          .round(),
+    final frameBytes = LiveAudioDefaults.format.bytesForDuration(
+      LiveAudioDefaults.frameDuration,
     );
     final assembler = Pcm16FrameAssembler(frameBytes: frameBytes);
 

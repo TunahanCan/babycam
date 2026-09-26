@@ -66,6 +66,17 @@ void main() {
     await listener.start(_session(base.port, trusted));
     await server.startAudioRuntime();
     await server.startVideoRuntime();
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+    Future<Map<String, Object?>> analysisStatus() async {
+      final status = await _getJson(
+        client,
+        base.port,
+        MiuCamProtocolV2.status,
+        trusted.token,
+      );
+      return Map<String, Object?>.from(status['analysis'] as Map);
+    }
 
     // Capture alone (a live watch or local preview) must not arm alerts.
     source.emitAudio(_quietRoomCalibration());
@@ -73,16 +84,28 @@ void main() {
     source.emitLightChange();
     await _settleEvents();
     expect(received, isEmpty);
+    final inactiveAnalysis = await analysisStatus();
+    expect((inactiveAnalysis['audio'] as Map)['windowsAnalyzed'], 0,
+        reason:
+            'Live capture without alerts must skip expensive audio analysis.');
+    expect((inactiveAnalysis['motion'] as Map)['framesAnalyzed'], 0,
+        reason: 'Live capture without alerts must skip motion analysis.');
 
     // Audio and video demand are independent and change without rebuilding
     // the pipeline. The production default AlertConfig is exercised here.
     audioAnalysisDemand = true;
+    source.emitAudio(_quietRoomCalibration());
     source.emitLoudSound();
     source.emitLightChange();
     await _settleEvents();
     expect(received.map((event) => event.type), ['loudSound']);
     expect(received.single.messageKey, 'parentLoudSoundAlert');
     expect(received.single.severity, 'info');
+    final audioOnlyAnalysis = await analysisStatus();
+    final analyzedAudioWindows =
+        (audioOnlyAnalysis['audio'] as Map)['windowsAnalyzed'] as int;
+    expect(analyzedAudioWindows, greaterThan(0));
+    expect((audioOnlyAnalysis['motion'] as Map)['framesAnalyzed'], 0);
 
     audioAnalysisDemand = false;
     videoAnalysisDemand = true;
@@ -94,6 +117,12 @@ void main() {
     expect(received.last.messageKey, 'parentLightChangeAlert');
     expect(received.last.severity, 'info',
         reason: 'A room light change must use the quiet updates channel.');
+    final videoOnlyAnalysis = await analysisStatus();
+    expect((videoOnlyAnalysis['audio'] as Map)['windowsAnalyzed'],
+        analyzedAudioWindows,
+        reason: 'Turning audio alerts off stops FFT/window processing.');
+    expect(
+        (videoOnlyAnalysis['motion'] as Map)['framesAnalyzed'], greaterThan(0));
 
     audioAnalysisDemand = true;
     source.emitLoudSound();
@@ -115,7 +144,9 @@ void main() {
     source.emitLoudSound();
     source.emitLightChange();
     await _settleEvents();
-    expect(received, hasLength(2));
+    expect(received, hasLength(2),
+        reason:
+            'Received: ${received.map((event) => '${event.type}@${event.timestampMs}')}');
 
     audioAnalysisDemand = false;
     videoAnalysisDemand = false;
@@ -125,6 +156,19 @@ void main() {
     await _settleEvents();
     expect(received, hasLength(2),
         reason: 'Clearing notification demand suppresses later events.');
+
+    // An event can already be queued when the parent switches alerts off.
+    // The final transport boundary must check the current demand as well.
+    audioAnalysisDemand = true;
+    videoAnalysisDemand = true;
+    source.emitLoudSound();
+    source.emitLightChange();
+    audioAnalysisDemand = false;
+    videoAnalysisDemand = false;
+    await _settleEvents();
+    expect(received, hasLength(2),
+        reason:
+            'Queued alerts must not escape after the parent disables them.');
   });
 
   test('oda sesi bastırılır; gerçek ağlama PCM zinciri client bildirimi üretir',

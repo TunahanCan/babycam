@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-27",
+  "scope": [
+    "audio/video transport",
+    "analysis demand and resource efficiency",
+    "alert correctness and delivery",
+    "notification navigation"
+  ],
+  "encryptionInScope": false,
+  "published": false,
+  "validation": {
+    "flutterTests": {
+      "passed": 1107,
+      "failed": 0,
+      "newSincePreviousReview": 17,
+      "exitCode": 0
+    },
+    "flutterAnalyze": {
+      "issues": 0,
+      "exitCode": 0
+    },
+    "dartFormat": {
+      "files": 352,
+      "changed": 0,
+      "exitCode": 0
+    },
+    "gitDiffCheck": {
+      "passed": true
+    },
+    "device": {
+      "model": "LG H870",
+      "androidApi": 28,
+      "mode": "profile",
+      "applicationId": "com.miucam.app.review",
+      "audioPassed": true,
+      "audioSource": "controlled localhost HTTP WAV/PCM16",
+      "audioRuns": [
+        {
+          "run": 1,
+          "passed": true,
+          "observedDurationMs": 3169,
+          "nativeBytesWrittenDelta": 101120,
+          "playbackHeadFramesDelta": 50560,
+          "steadyStateUnderrunDelta": 0
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "observedDurationMs": 3115,
+          "nativeBytesWrittenDelta": 99840,
+          "playbackHeadFramesDelta": 49920,
+          "steadyStateUnderrunDelta": 0
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "observedDurationMs": 3104,
+          "nativeBytesWrittenDelta": 98560,
+          "playbackHeadFramesDelta": 49600,
+          "steadyStateUnderrunDelta": 0
+        }
+      ],
+      "notificationPassed": true,
+      "notificationInitialVerifiedActive": false,
+      "notificationSubsequentlyObserved": true,
+      "notificationCleanedUp": true,
+      "testPackageRemoved": true,
+      "batteryMeasurement": false
+    }
+  },
+  "limits": [
+    "No labeled real infant/non-cry corpus accuracy measurement",
+    "No two-phone Wi-Fi microphone/acoustic acceptance test",
+    "No long-duration battery/thermal/memory measurement",
+    "No new iOS runtime/XCTest result",
+    "Calibration fallback and +6 dB ambient threshold require real room acceptance"
+  ],
+  "artifacts": {
+    "directory": "build/media_alert_review_2026-09-27",
+    "fullTests": "flutter_test.log",
+    "staticAnalysis": "flutter_analyze.log",
+    "format": "format.log",
+    "device": "device_audio_notification.json"
+  }
+}

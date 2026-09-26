@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import '../../core/async/serialized_async_executor.dart';
+import '../../core/media/pcm_audio_format.dart';
 import '../platform/pcm_audio_output.dart';
 
 enum RoomAudioMode { idle, comfort, talk }
@@ -10,8 +11,8 @@ enum RoomAudioMode { idle, comfort, talk }
 class RoomAudioCoordinator {
   RoomAudioCoordinator({
     PcmAudioSink sink = const PcmAudioOutput(),
-    this.sampleRate = 16000,
-    this.channels = 1,
+    this.sampleRate = LiveAudioDefaults.sampleRate,
+    this.channels = LiveAudioDefaults.channels,
     this.frameDuration = const Duration(milliseconds: 100),
     this.nativeOperationTimeout = const Duration(seconds: 2),
     ComfortPcmGenerator? generator,
@@ -96,8 +97,8 @@ class RoomAudioCoordinator {
       });
 
   Future<void> beginTalk({
-    int sampleRate = 16000,
-    int channels = 1,
+    int sampleRate = LiveAudioDefaults.sampleRate,
+    int channels = LiveAudioDefaults.channels,
   }) =>
       _serialize(() async {
         _generation++;

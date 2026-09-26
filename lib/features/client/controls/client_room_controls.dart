@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../../../core/media/pcm_audio_format.dart';
 import '../../../core/protocol/device_feature_models.dart';
 import '../../../core/protocol/miucam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
@@ -48,7 +49,10 @@ class ClientRoomControls {
     Future<void> Function(HttpClientRequest request)? talkRequestFlusher,
     SecureRandomTokenGenerator? talkAttemptTokenGenerator,
   })  : _microphone = microphone ??
-            MicrophoneCaptureService(sampleRate: 16000, channels: 1),
+            MicrophoneCaptureService(
+              sampleRate: LiveAudioDefaults.sampleRate,
+              channels: LiveAudioDefaults.channels,
+            ),
         _clientFactory = clientFactory ?? HttpClient.new,
         _talkAttemptTokenGenerator =
             talkAttemptTokenGenerator ?? SecureRandomTokenGenerator(),
@@ -195,8 +199,8 @@ class ClientRoomControls {
         MiuCamProtocolV2.talkStart,
         method: 'POST',
         body: {
-          'sampleRate': 16000,
-          'channels': 1,
+          'sampleRate': LiveAudioDefaults.sampleRate,
+          'channels': LiveAudioDefaults.channels,
           'codec': 'pcm_s16le',
           MiuCamProtocolV2.talkAttemptId: attempt.id,
         },
@@ -250,8 +254,8 @@ class ClientRoomControls {
       }
       request.headers
         ..contentType = ContentType('audio', 'L16', parameters: {
-          'rate': '16000',
-          'channels': '1',
+          'rate': '${LiveAudioDefaults.sampleRate}',
+          'channels': '${LiveAudioDefaults.channels}',
         })
         ..set(HttpHeaders.acceptHeader, 'application/json')
         ..set(

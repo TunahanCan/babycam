@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/bytes/byte_chunk.dart';
 import '../../../core/media/media_session_telemetry.dart';
+import '../../../core/media/pcm_audio_format.dart';
 import '../../../core/network/retry_policy.dart';
 import 'pcm_audio_output.dart';
 import 'wav_pcm_stream_parser.dart';
@@ -19,7 +20,7 @@ class ClientLiveAudioPipeline {
     this.readTimeout = const Duration(seconds: 8),
     this.retryDelay = const Duration(milliseconds: 500),
     this.maxRetryDelay = const Duration(seconds: 4),
-    this.frameDuration = const Duration(milliseconds: 20),
+    this.frameDuration = LiveAudioDefaults.frameDuration,
     this.minPlayoutDelay = const Duration(milliseconds: 60),
     this.maxPlayoutDelay = const Duration(milliseconds: 220),
     this.maxBufferedAudio = const Duration(milliseconds: 320),
@@ -186,6 +187,7 @@ class ClientLiveAudioPipeline {
     _buffer = null;
     _frameAssembler = null;
     _jitterEstimator = null;
+    run.nativeStatus = const {};
     run.connectedAtMs = _nowMs();
     _emitStatus(run, 'connecting');
 
@@ -227,24 +229,23 @@ class ClientLiveAudioPipeline {
             channels: parsed.channels,
           );
           if (!started || !_isCurrent(generation, run)) return;
+          final format = PcmAudioFormat.pcm16(
+            sampleRate: parsed.sampleRate,
+            channels: parsed.channels,
+          );
           _buffer = ClientAudioJitterBuffer(
-            bytesPerFrame: parsed.channels * 2,
-            maxBytes: _bufferBytesFor(
-              sampleRate: parsed.sampleRate,
-              channels: parsed.channels,
-            ),
+            bytesPerFrame: format.bytesPerSampleFrame,
+            maxBytes: _bufferBytesFor(format),
           );
           _jitterEstimator = AdaptiveAudioJitterEstimator(
             frameDuration: frameDuration,
             minDelay: minPlayoutDelay,
             maxDelay: maxPlayoutDelay,
           );
-          run.sampleRate = parsed.sampleRate;
-          run.channels = parsed.channels;
+          run.format = format;
           run.playoutFrameBytes = _durationBytesFor(
             duration: frameDuration,
-            sampleRate: parsed.sampleRate,
-            channels: parsed.channels,
+            format: format,
           );
           _frameAssembler = PcmAudioFrameAssembler(
             frameBytes: run.playoutFrameBytes,
@@ -307,8 +308,7 @@ class ClientLiveAudioPipeline {
     );
     final targetBytes = _durationBytesFor(
       duration: startupDelay,
-      sampleRate: run.sampleRate ?? 16000,
-      channels: run.channels ?? 1,
+      format: run.pcmFormat,
     );
     if (buffer.bufferedBytes < max(run.playoutFrameBytes, targetBytes)) return;
     run.playoutStarts++;
@@ -322,7 +322,7 @@ class ClientLiveAudioPipeline {
       }
     }
     run.nativeQueueUntilUs = 0;
-    unawaited(_emitStatus(run, 'playout_started'));
+    _emitStatus(run, 'playout_started');
     final pumpInterval = Duration(
       microseconds: max(1000, frameDuration.inMicroseconds ~/ 2),
     );
@@ -355,7 +355,7 @@ class ClientLiveAudioPipeline {
       run.playoutUnderruns++;
       MediaSessionTelemetry.shared
           .increment(MediaMetricName.audioUnderrunCount);
-      await _emitStatus(run, 'underrun');
+      _emitStatus(run, 'underrun');
       await _startPlayoutIfReady(generation, run);
       return;
     }
@@ -411,7 +411,7 @@ class ClientLiveAudioPipeline {
       run.droppedNativeWrites++;
     }
     if (run.chunksWritten == 1 || run.chunksWritten % 25 == 0) {
-      await _emitStatus(run, 'write');
+      _emitStatus(run, 'write');
     }
     return accepted;
   }
@@ -425,42 +425,33 @@ class ClientLiveAudioPipeline {
 
   int _durationBytesFor({
     required Duration duration,
-    required int sampleRate,
-    required int channels,
+    required PcmAudioFormat format,
   }) {
-    final bytesPerSampleFrame = max(1, channels * 2);
-    final raw = sampleRate *
-        bytesPerSampleFrame *
-        duration.inMicroseconds ~/
-        Duration.microsecondsPerSecond;
-    final aligned = raw - (raw % bytesPerSampleFrame);
-    return max(bytesPerSampleFrame, aligned);
+    return max(
+      format.bytesPerSampleFrame,
+      format.alignBytes(format.bytesForDuration(duration)),
+    );
   }
 
   int _mediaDurationMs(
     int bytes, {
-    required int sampleRate,
-    required int channels,
+    required PcmAudioFormat format,
   }) {
     if (bytes <= 0) return 0;
-    final bytesPerSecond = max(1, sampleRate * channels * 2);
-    return max(1, bytes * 1000 ~/ bytesPerSecond);
+    return max(1, format.durationForBytes(bytes).inMilliseconds);
   }
 
-  Future<void> _emitStatus(_PipelineRun run, String event) async {
+  void _emitStatus(_PipelineRun run, String event) {
     if (!identical(_run, run)) return;
-    Map<String, Object?> nativeStatus = const {};
-    if (_outputStarted || event == 'error') {
-      try {
-        final lease = _audioOutputLease;
-        if (lease != null) {
-          nativeStatus = await _audioOutputCoordinator
-              .status(owner: lease)
-              .timeout(connectTimeout);
-        }
-      } catch (_) {}
+    final lease = _audioOutputLease;
+    if ((_outputStarted || event == 'error') &&
+        lease != null &&
+        !run.nativeStatusInFlight) {
+      // Diagnostics must never stall 20 ms playout or network consumption.
+      // Reuse the latest sample while at most one native query is pending.
+      unawaited(_refreshNativeStatus(run, lease));
     }
-    if (!identical(_run, run)) return;
+    final nativeStatus = run.nativeStatus;
     final status = ClientLiveAudioStatus(
       event: event,
       connectedAtMs: run.connectedAtMs,
@@ -475,8 +466,7 @@ class ClientLiveAudioPipeline {
       bufferedBytes: _buffer?.bufferedBytes ?? 0,
       bufferedAudioMs: _mediaDurationMs(
         _buffer?.bufferedBytes ?? 0,
-        sampleRate: run.sampleRate ?? 16000,
-        channels: run.channels ?? 1,
+        format: run.pcmFormat,
       ),
       droppedBufferBytes: run.droppedBufferBytes,
       droppedBufferFrames: run.droppedBufferFrames,
@@ -498,6 +488,22 @@ class ClientLiveAudioPipeline {
     run.onStatus?.call(status);
     if (kDebugMode) {
       debugPrint('MiuCam live audio ${status.toJson()}');
+    }
+  }
+
+  Future<void> _refreshNativeStatus(_PipelineRun run, Object lease) async {
+    run.nativeStatusInFlight = true;
+    try {
+      // A Future timeout cannot cancel a platform call. Keep this slot until
+      // that call settles so an unresponsive diagnostic cannot build a queue.
+      final status = await _audioOutputCoordinator.status(owner: lease);
+      if (identical(_run, run) && identical(_audioOutputLease, lease)) {
+        run.nativeStatus = status;
+      }
+    } catch (_) {
+      // Diagnostics are best effort; transport/output recovery is independent.
+    } finally {
+      run.nativeStatusInFlight = false;
     }
   }
 
@@ -599,9 +605,13 @@ class ClientLiveAudioPipeline {
     }
   }
 
-  int _bufferBytesFor({required int sampleRate, required int channels}) {
-    final bytesPerSecond = sampleRate * channels * 2;
-    return max(2048, bytesPerSecond * maxBufferedAudio.inMilliseconds ~/ 1000);
+  int _bufferBytesFor(PcmAudioFormat format) {
+    return max(
+      2048,
+      format.bytesForDuration(
+        Duration(milliseconds: maxBufferedAudio.inMilliseconds),
+      ),
+    );
   }
 
   void _closeClient() {
@@ -906,7 +916,7 @@ class ClientAudioJitterBuffer {
 /// 1/16 EWMA gain prevents one delayed TCP chunk from causing oscillation.
 class AdaptiveAudioJitterEstimator {
   AdaptiveAudioJitterEstimator({
-    this.frameDuration = const Duration(milliseconds: 20),
+    this.frameDuration = LiveAudioDefaults.frameDuration,
     this.minDelay = const Duration(milliseconds: 60),
     this.maxDelay = const Duration(milliseconds: 220),
   }) : assert(maxDelay >= minDelay);
@@ -1061,8 +1071,10 @@ class _PipelineRun {
   final ValueChanged<Object>? onError;
 
   int? connectedAtMs;
-  int? sampleRate;
-  int? channels;
+  PcmAudioFormat? format;
+  PcmAudioFormat get pcmFormat => format ?? LiveAudioDefaults.format;
+  int? get sampleRate => format?.sampleRate;
+  int? get channels => format?.channels;
   bool wavHeaderParsed = false;
   int networkBytesReceived = 0;
   int pcmChunksParsed = 0;
@@ -1071,7 +1083,8 @@ class _PipelineRun {
   int chunksWritten = 0;
   int droppedBufferBytes = 0;
   int droppedBufferFrames = 0;
-  int playoutFrameBytes = 640;
+  int playoutFrameBytes = LiveAudioDefaults.format
+      .bytesForDuration(LiveAudioDefaults.frameDuration);
   double estimatedJitterMs = 0;
   int targetPlayoutDelayMs = 60;
   int playoutStarts = 0;
@@ -1087,6 +1100,8 @@ class _PipelineRun {
   void Function(Object error, StackTrace stackTrace)? onPlayoutError;
   bool playoutWriteInFlight = false;
   int nativeQueueUntilUs = 0;
+  bool nativeStatusInFlight = false;
+  Map<String, Object?> nativeStatus = const {};
 }
 
 class ClientLiveAudioHttpException implements Exception {

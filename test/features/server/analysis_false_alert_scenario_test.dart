@@ -17,6 +17,101 @@ import 'package:miucam/services/server/media_analysis_metrics.dart';
 import '../../analysis/audio/test_audio_generators.dart';
 
 void main() {
+  test('enabling audio alerts requires fresh continuous evidence', () async {
+    var enabled = true;
+    final alertEngine = AlertEngine(
+      episodeAggregator: EpisodeBasedNotificationAggregator(
+        cryThreshold: .45,
+        suspectedCryMs: 750,
+        confirmedCryMs: 1500,
+      ),
+    );
+    final coordinator = MediaAnalysisCoordinator(
+      motionAnalyzer: MotionAnalyzerV2(),
+      audioAnalyzer: CryAudioAnalyzerV2(
+        config: const AudioAnalysisConfig(
+          cryOnThreshold: .45,
+          cryOffThreshold: .30,
+          smoothingAlpha: 1,
+          minCryDurationMs: 0,
+        ),
+      )..restoreCalibratedAmbient(-55),
+      alertEngine: alertEngine,
+      metrics: MediaAnalysisMetrics(motionTargetFps: 3),
+      audioAnalysisEnabled: () => enabled,
+    );
+    addTearDown(coordinator.dispose);
+    var timestampMs = 0;
+    void feedCry(int durationMs) {
+      timestampMs += durationMs;
+      coordinator.onAudioChunk(AudioChunk(
+        pcm16le: generateCryLikePcm16le(
+          sampleRate: 16000,
+          durationMs: durationMs,
+          amplitude: .8,
+        ),
+        sampleRate: 16000,
+        channels: 1,
+        timestampMs: timestampMs,
+      ));
+    }
+
+    feedCry(1500);
+    enabled = false;
+    feedCry(1000);
+    enabled = true;
+    feedCry(1500);
+    expect(alertEngine.drainPending(), isEmpty);
+    feedCry(1000);
+    final alerts = alertEngine.drainPending();
+    expect(alerts.map((event) => event.type.name), ['cryDetected']);
+    expect(alerts.single.metadata['startedAtMs'], greaterThanOrEqualTo(3500));
+    expect(alerts.single.metadata['durationMs'], 1500);
+  });
+
+  test('learned loud room noise stays quiet but a new loud rise alerts',
+      () async {
+    final alertEngine = AlertEngine(
+      config: const AlertConfig(emitLoudSoundAlerts: true),
+      episodeAggregator: EpisodeBasedNotificationAggregator(),
+    );
+    final coordinator = MediaAnalysisCoordinator(
+      motionAnalyzer: MotionAnalyzerV2(),
+      audioAnalyzer: CryAudioAnalyzerV2(
+        config: const AudioAnalysisConfig(calibrationMs: 1000),
+      )..startCalibration(timestampMs: 0),
+      alertEngine: alertEngine,
+      metrics: MediaAnalysisMetrics(motionTargetFps: 3),
+    );
+    addTearDown(coordinator.dispose);
+    var timestampMs = 0;
+    void feedNoise({required int durationMs, required double amplitude}) {
+      timestampMs += durationMs;
+      coordinator.onAudioChunk(AudioChunk(
+        pcm16le: generateNoisePcm16le(
+          sampleRate: 16000,
+          durationMs: durationMs,
+          amplitude: amplitude,
+          seed: timestampMs,
+        ),
+        sampleRate: 16000,
+        channels: 1,
+        timestampMs: timestampMs,
+      ));
+    }
+
+    // The microphone gain can put a steady fan above the absolute -18 dBFS
+    // loud threshold. That level is already part of this room's baseline.
+    feedNoise(durationMs: 1000, amplitude: .25);
+    feedNoise(durationMs: 4000, amplitude: .30);
+    expect(alertEngine.drainPending(), isEmpty);
+
+    feedNoise(durationMs: 2000, amplitude: .90);
+    final alerts = alertEngine.drainPending();
+    expect(alerts.map((event) => event.type.name), ['loudSound']);
+    expect(alerts.single.metadata['ambientDeltaDb'], greaterThanOrEqualTo(6));
+  });
+
   test(
       'son kullanıcı zinciri fan, sabit ton ve kısa transienti susturup sürekli cry sinyalini bir kez bildirir',
       () async {

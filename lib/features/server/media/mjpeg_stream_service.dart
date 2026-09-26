@@ -86,6 +86,7 @@ class MjpegStreamService {
       } catch (_) {
         _backpressure.recordFailure(response);
         removeClient(response);
+        await _closeResponseBestEffort(response);
         rethrow;
       } finally {
         _backpressure.markIdle(response);
@@ -113,6 +114,7 @@ class MjpegStreamService {
     } catch (_) {
       _backpressure.recordFailure(response);
       removeClient(response);
+      await _closeResponseBestEffort(response);
       rethrow;
     } finally {
       _backpressure.markIdle(response);
@@ -225,18 +227,14 @@ class MjpegStreamService {
         .toList(growable: false);
     for (final response in responses) {
       removeClient(response);
-      try {
-        await response.close().timeout(const Duration(milliseconds: 500));
-      } catch (_) {}
+      await _closeResponseBestEffort(response);
     }
   }
 
   Future<void> closeAll() async {
     for (final response in _clients.toList()) {
       removeClient(response);
-      try {
-        await response.close().timeout(const Duration(milliseconds: 500));
-      } catch (_) {}
+      await _closeResponseBestEffort(response);
     }
     _clients.clear();
     _clientIds.clear();
@@ -264,6 +262,10 @@ class MjpegStreamService {
 
   Future<void> _closeResponseBestEffort(HttpResponse response) async {
     try {
+      // Future.timeout only stops waiting; an output-stalled socket otherwise
+      // stays alive after its client/demand has been removed. The response
+      // deadline also terminates that underlying connection.
+      response.deadline = flushTimeout;
       await response.close().timeout(flushTimeout);
     } catch (_) {}
   }

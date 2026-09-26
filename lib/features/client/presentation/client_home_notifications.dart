@@ -67,8 +67,9 @@ class _NotificationList extends StatelessWidget {
       ..sort((a, b) => b.timestampMs.compareTo(a.timestampMs));
     final items = filteredAlerts.isEmpty
         ? [_emptyNotificationSpec(strings)]
-        : filteredAlerts.map(
-            (alert) => _notificationSpecFromAlert(context, strings, alert));
+        : filteredAlerts
+            .map((alert) => _notificationSpecFromAlert(context, strings, alert))
+            .toList(growable: false);
 
     return Column(
       children: [
@@ -125,22 +126,14 @@ _NotificationSpec _notificationSpecFromAlert(
   );
 }
 
-String _severityLabel(AppStrings strings, String severity) {
-  final normalized = severity.toLowerCase();
-  if (normalized.contains('critical') || normalized.contains('high')) {
-    return strings.ui('important');
-  }
-  if (normalized.contains('warning') || normalized.contains('medium')) {
-    return strings.ui('warning');
-  }
-  if (normalized.contains('attention')) {
-    return strings.ui('important');
-  }
-  if (normalized.contains('info') || normalized.contains('low')) {
-    return strings.ui('info');
-  }
-  return strings.ui('system');
-}
+String _severityLabel(AppStrings strings, String severity) => strings.ui(
+      switch (AlertSeverity.fromLegacyLabel(severity)) {
+        AlertSeverity.critical || AlertSeverity.attention => 'important',
+        AlertSeverity.warning => 'warning',
+        AlertSeverity.info => 'info',
+        null => 'system',
+      },
+    );
 
 class _NotificationSpec {
   const _NotificationSpec(

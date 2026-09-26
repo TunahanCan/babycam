@@ -125,6 +125,27 @@ void main() {
     expect(server.cameraController?.value.isInitialized, isTrue);
     expect(cameraPlatform.disposedCameraIds, isNot(contains(2)));
   });
+
+  test('persistent native dispose failures keep one retry per camera lease',
+      () async {
+    await server.startVideoRuntime();
+    cameraPlatform.failEveryDispose = true;
+    try {
+      expect(
+          await _errorOf(server.stopVideoRuntime()), isA<TimeoutException>());
+      await Future<void>.delayed(const Duration(milliseconds: 650));
+      expect(cameraPlatform.disposeCalls, inInclusiveRange(2, 3));
+      expect(cameraPlatform.disposedCameraIds, isNot(contains(1)));
+    } finally {
+      cameraPlatform.failEveryDispose = false;
+      await server.stopVideoRuntime();
+    }
+
+    final callsAfterCleanup = cameraPlatform.disposeCalls;
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    expect(cameraPlatform.disposeCalls, callsAfterCleanup);
+    expect(cameraPlatform.disposedCameraIds, contains(1));
+  });
 }
 
 Future<Object?> _errorOf(Future<void> operation) async {
@@ -166,6 +187,7 @@ class _LeaseCameraPlatform extends CameraPlatform {
   int _nextCameraId = 0;
   int initializeCalls = 0;
   int disposeCalls = 0;
+  bool failEveryDispose = false;
 
   void hangInitializeCall(int call) {
     _initializeReleases[call] = Completer<void>();
@@ -255,7 +277,7 @@ class _LeaseCameraPlatform extends CameraPlatform {
   @override
   Future<void> dispose(int cameraId) async {
     final call = ++disposeCalls;
-    if (_failingDisposeCalls.remove(call)) {
+    if (failEveryDispose || _failingDisposeCalls.remove(call)) {
       throw StateError('dispose failed on call $call');
     }
     disposedCameraIds.add(cameraId);

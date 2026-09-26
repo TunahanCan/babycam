@@ -21,6 +21,8 @@ class MediaAnalysisCoordinator {
     void Function(String message)? onLog,
     void Function(AudioAnalysisResult result)? onAudioResult,
     void Function(MotionAnalysisResult result)? onMotionResult,
+    bool Function()? audioAnalysisEnabled,
+    bool Function()? videoAnalysisEnabled,
   })  : _motionAnalyzer = motionAnalyzer,
         _audioAnalyzer = audioAnalyzer,
         _alertEngine = alertEngine,
@@ -29,7 +31,9 @@ class MediaAnalysisCoordinator {
             FrameRateGate(fps: motionAnalyzer.config.analysisFps),
         _onLog = onLog,
         _onAudioResult = onAudioResult,
-        _onMotionResult = onMotionResult;
+        _onMotionResult = onMotionResult,
+        _audioAnalysisEnabled = audioAnalysisEnabled,
+        _videoAnalysisEnabled = videoAnalysisEnabled;
 
   final MotionAnalyzerV2 _motionAnalyzer;
   final CryAudioAnalyzerV2 _audioAnalyzer;
@@ -39,12 +43,16 @@ class MediaAnalysisCoordinator {
   final void Function(String message)? _onLog;
   final void Function(AudioAnalysisResult result)? _onAudioResult;
   final void Function(MotionAnalysisResult result)? _onMotionResult;
+  final bool Function()? _audioAnalysisEnabled;
+  final bool Function()? _videoAnalysisEnabled;
 
   bool _isMotionAnalysisBusy = false;
   bool _disposed = false;
   int _lastMotionErrorLog = 0;
   int _lastAudioErrorLog = 0;
   int? _lastVideoAnalysisTimestampMs;
+  bool _audioAnalysisWasEnabled = true;
+  bool _videoAnalysisWasEnabled = true;
 
   Stream<AlertEvent> get alerts => _alertEngine.alerts;
   double? get calibratedAmbientDbfs => _audioAnalyzer.calibratedAmbientDbfs;
@@ -53,6 +61,12 @@ class MediaAnalysisCoordinator {
   void onCameraFrame(LumaFrame frame) {
     if (_disposed) return;
     _metrics.recordVideoFrameReceived();
+    final enabled = _videoAnalysisEnabled?.call() ?? true;
+    if (enabled != _videoAnalysisWasEnabled) {
+      markVideoDiscontinuity();
+      _videoAnalysisWasEnabled = enabled;
+    }
+    if (!enabled) return;
     final analysisTimestampMs = frame.analysisTimestampMs;
     final lastVideoAnalysisTimestampMs = _lastVideoAnalysisTimestampMs;
     if (lastVideoAnalysisTimestampMs != null &&
@@ -93,6 +107,12 @@ class MediaAnalysisCoordinator {
   void onAudioChunk(AudioChunk chunk) {
     if (_disposed) return;
     _metrics.recordAudioChunkReceived();
+    final enabled = _audioAnalysisEnabled?.call() ?? true;
+    if (enabled != _audioAnalysisWasEnabled) {
+      markAudioDiscontinuity();
+      _audioAnalysisWasEnabled = enabled;
+    }
+    if (!enabled) return;
     try {
       final results = _audioAnalyzer.addChunk(chunk);
       for (final result in results) {

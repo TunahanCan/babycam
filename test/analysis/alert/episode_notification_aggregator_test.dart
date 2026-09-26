@@ -9,6 +9,126 @@ import 'package:miucam/core/media/adaptive_media_profile.dart';
 import 'package:miucam/l10n/app_strings.dart';
 
 void main() {
+  for (final sample in [
+    (score: .549, durationMs: 16000, intensity: 'low', warning: false),
+    (score: .55, durationMs: 16000, intensity: 'medium', warning: false),
+    (score: .799, durationMs: 16000, intensity: 'medium', warning: false),
+    (score: .8, durationMs: 16000, intensity: 'high', warning: false),
+    (score: .801, durationMs: 15000, intensity: 'high', warning: false),
+    (score: .801, durationMs: 15001, intensity: 'high', warning: true),
+  ]) {
+    test('episode classification preserves boundaries: $sample', () {
+      final aggregator = EpisodeBasedNotificationAggregator();
+      BabyEventEpisode? episode;
+      for (var timestampMs = 0;
+          timestampMs < sample.durationMs;
+          timestampMs += 1000) {
+        aggregator.onAudioResult(
+          _audio(timestampMs: timestampMs, cryScore: sample.score),
+        );
+      }
+      episode = aggregator.onAudioResult(
+        _audio(timestampMs: sample.durationMs, cryScore: sample.score),
+      );
+      expect(episode, isNotNull);
+      expect(episode!.intensity, sample.intensity);
+      expect(episode.severity,
+          sample.warning ? AlertSeverity.warning : AlertSeverity.attention);
+      expect(episode.toJson()['intensity'], sample.intensity);
+      expect(episode.toJson()['severity'],
+          sample.warning ? 'warning' : 'attention');
+
+      const composer = NotificationComposer();
+      expect(composer.compose(episode).contains('güçlü'), sample.warning);
+      final strings = AppStrings(const Locale('en'));
+      final seconds = (sample.durationMs / 1000).round();
+      final tier = strings.networkQualityLabel(episode.streamQualityTier);
+      expect(
+        composer.compose(episode, strings: strings),
+        sample.warning
+            ? strings.parentEpisodeHighCryAlert(
+                seconds: seconds,
+                motionAgo: strings.parentMotionAgo(null),
+                networkTier: tier,
+              )
+            : strings.parentEpisodeCryAlert(
+                seconds: seconds, networkTier: tier),
+      );
+    });
+  }
+
+  for (final durationMs in [4999, 5000]) {
+    test('resolved sound keeps strict short-duration boundary at $durationMs',
+        () {
+      final episode = BabyEventEpisode(
+        episodeId: 'resolved',
+        startedAtMs: 0,
+        lastUpdatedAtMs: durationMs,
+        totalCryDurationMs: durationMs,
+        maxCryScore: .7,
+        avgCryScore: .7,
+        motionBursts: 0,
+        resolved: true,
+      );
+      const composer = NotificationComposer();
+      expect(composer.compose(episode).startsWith('Kısa'), durationMs == 4999);
+      final strings = AppStrings(const Locale('en'));
+      expect(
+        composer.compose(episode, strings: strings),
+        durationMs == 4999
+            ? strings.parentEpisodeShortSoundAlert(seconds: 5)
+            : strings.parentEpisodeCryAlert(
+                seconds: 5,
+                networkTier:
+                    strings.networkQualityLabel(NetworkQualityTier.unknown),
+              ),
+      );
+    });
+  }
+
+  test('video reliability loss clears motion without interrupting valid cry',
+      () {
+    final aggregator = EpisodeBasedNotificationAggregator(
+      suspectedCryMs: 500,
+      confirmedCryMs: 1000,
+    );
+    aggregator.onMotionResult(_motion(timestampMs: 1000));
+    expect(aggregator.onAudioResult(_audio(timestampMs: 1000)), isNull);
+    expect(
+      aggregator.onAudioResult(_audio(timestampMs: 1500), videoReliable: false),
+      isNull,
+    );
+    final episode = aggregator.onAudioResult(_audio(timestampMs: 2000));
+    expect(episode, isNotNull);
+    expect(episode!.confirmed, isTrue);
+    expect(episode.totalCryDurationMs, 1000);
+    expect(episode.motionBursts, 0);
+    expect(episode.lastMotionAtMs, isNull);
+
+    aggregator.reset();
+    aggregator.onMotionResult(_motion(timestampMs: 3000));
+    aggregator.onAudioResult(_audio(timestampMs: 3000));
+    aggregator.onAudioResult(_audio(timestampMs: 3500));
+    final recovered = aggregator.onAudioResult(_audio(timestampMs: 4000));
+    expect(recovered!.motionBursts, 1);
+    expect(recovered.lastMotionAtMs, 3000);
+  });
+
+  test('motion from before a clock rollback is not future episode evidence',
+      () {
+    final aggregator = EpisodeBasedNotificationAggregator(
+      suspectedCryMs: 500,
+      confirmedCryMs: 1000,
+    );
+    aggregator.onMotionResult(_motion(timestampMs: 10000));
+    aggregator.onAudioResult(_audio(timestampMs: 1000));
+    aggregator.onAudioResult(_audio(timestampMs: 1500));
+    final episode = aggregator.onAudioResult(_audio(timestampMs: 2000));
+    expect(episode!.confirmed, isTrue);
+    expect(episode.motionBursts, 0);
+    expect(episode.lastMotionAgoMs(), isNull);
+  });
+
   test('unreliable input cannot confirm or preserve an active episode', () {
     final aggregator = EpisodeBasedNotificationAggregator(
       suspectedCryMs: 500,
@@ -62,11 +182,11 @@ void main() {
     expect(episode!.severity, AlertSeverity.attention);
     expect(episode.streamQualityTier, NetworkQualityTier.weak);
     expect(episode.videoReliable, isFalse);
-    expect(episode.motionBursts, 1);
+    expect(episode.motionBursts, 0);
     expect(episode.confirmed, isTrue);
     expect(episode.activeEvidenceRatio, 1);
     expect(episode.toJson()['event'], 'baby_event');
-    expect(episode.toJson()['lastMotionAgoMs'], 3500);
+    expect(episode.toJson()['lastMotionAgoMs'], isNull);
   });
 
   test('10 saniye sessizlik kısa ses yükselmesi episodeunu resolve eder', () {

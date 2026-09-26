@@ -645,6 +645,38 @@ private enum PcmAudioPlayerError: LocalizedError {
   }
 }
 
+/// Converts the interleaved PCM16LE wire format to the engine's standard
+/// noninterleaved Float32 format without an extra intermediate sample buffer.
+enum Pcm16PlaybackBuffer {
+  static func make(data: Data, format: AVAudioFormat) -> AVAudioPCMBuffer? {
+    guard format.commonFormat == .pcmFormatFloat32,
+          !format.isInterleaved,
+          format.channelCount > 0 else { return nil }
+    let channelCount = Int(format.channelCount)
+    let frameCount = data.count / (channelCount * MemoryLayout<Int16>.size)
+    guard frameCount > 0,
+          frameCount <= Int(UInt32.max),
+          let buffer = AVAudioPCMBuffer(
+            pcmFormat: format,
+            frameCapacity: AVAudioFrameCount(frameCount)
+          ),
+          let output = buffer.floatChannelData else { return nil }
+    buffer.frameLength = AVAudioFrameCount(frameCount)
+    data.withUnsafeBytes { rawBytes in
+      let bytes = rawBytes.bindMemory(to: UInt8.self)
+      for channel in 0..<channelCount {
+        let destination = output[channel]
+        for frame in 0..<frameCount {
+          let offset = (frame * channelCount + channel) * 2
+          let bits = UInt16(bytes[offset]) | (UInt16(bytes[offset + 1]) << 8)
+          destination[frame] = Float(Int16(bitPattern: bits)) / 32768.0
+        }
+      }
+    }
+    return buffer
+  }
+}
+
 private final class PcmAudioPlayer {
   typealias EventEmitter = (_ type: String, _ details: [String: Any]) -> Void
 
@@ -709,11 +741,12 @@ private final class PcmAudioPlayer {
     try audioSessionPolicy.acquireOutput()
     ownsAudioSessionOutput = true
 
+    // Use the engine's standard Float32 format rather than relying on mixer
+    // support for the PCM16 wire format. Graph format rejection raises an
+    // Objective-C exception before Swift's start-error handling can run.
     guard let format = AVAudioFormat(
-      commonFormat: .pcmFormatInt16,
-      sampleRate: Double(sampleRate),
-      channels: AVAudioChannelCount(channels),
-      interleaved: true
+      standardFormatWithSampleRate: Double(sampleRate),
+      channels: AVAudioChannelCount(channels)
     ) else {
       throw PcmAudioPlayerError.invalidFormat(
         sampleRate: sampleRate,
@@ -759,7 +792,7 @@ private final class PcmAudioPlayer {
             : "write before start"
         return false
       }
-      let bytesPerFrame = Int(format.streamDescription.pointee.mBytesPerFrame)
+      let bytesPerFrame = Int(format.channelCount) * MemoryLayout<Int16>.size
       guard bytesPerFrame > 0 else {
         self.writeErrors += 1
         self.lastError = "invalid bytesPerFrame"
@@ -777,24 +810,10 @@ private final class PcmAudioPlayer {
         self.writesDropped += 1
         return false
       }
-      guard let buffer = AVAudioPCMBuffer(
-        pcmFormat: format,
-        frameCapacity: frameCount
-      ) else {
+      guard let buffer = Pcm16PlaybackBuffer.make(data: data, format: format) else {
         self.writeErrors += 1
         self.lastError = "AVAudioPCMBuffer allocation failed"
         return false
-      }
-      buffer.frameLength = frameCount
-      data.withUnsafeBytes { source in
-        guard let sourceBase = source.baseAddress else { return }
-        let audioBufferList = buffer.mutableAudioBufferList
-        audioBufferList.pointee.mBuffers.mData?.copyMemory(
-          from: sourceBase,
-          byteCount: alignedByteCount
-        )
-        audioBufferList.pointee.mBuffers.mDataByteSize =
-          UInt32(alignedByteCount)
       }
       self.queuedFrames += Int(frameCount)
       self.writesAccepted += 1
@@ -1016,6 +1035,7 @@ private final class PcmAudioPlayer {
         } catch {
           self.writeErrors += 1
           self.lastError = "media services reset: \(error.localizedDescription)"
+          self.stopLocked(releaseAudioSession: true)
         }
       }
       self.eventEmitter(

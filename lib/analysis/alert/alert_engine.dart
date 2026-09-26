@@ -73,8 +73,11 @@ class AlertEngine {
     // A skipped or malformed frame is not evidence of movement. Treating it
     // as motion is especially harmful when the camera reconnects or the
     // device is under load because it creates believable-looking false alerts.
-    if (result.invalidFrame || result.skippedByFrameRateGate) return null;
-    if (_videoReliableProvider?.call() == false) return null;
+    if (result.invalidFrame || _videoReliableProvider?.call() == false) {
+      markVideoDiscontinuity();
+      return null;
+    }
+    if (result.skippedByFrameRateGate) return null;
     _episodeAggregator?.onMotionResult(result);
     if (result.isGlobalLightChange) {
       if (!config.emitGlobalLightChangeInfo) {
@@ -164,8 +167,12 @@ class AlertEngine {
       );
     }
 
+    // PCM level depends on device gain: a fan already present during room
+    // calibration can exceed the absolute threshold indefinitely. Notify
+    // only for a loud rise above that baseline, not the learned room itself.
     final isLoudSound =
-        result.isLoudSound || result.dbfs >= config.loudSoundDbfs;
+        (result.isLoudSound || result.dbfs >= config.loudSoundDbfs) &&
+            result.ambientDeltaDb >= config.loudSoundMinAmbientDeltaDb;
     // A cry candidate belongs to its duration-confirmed episode. Reporting
     // that same sound here would bypass the parent's cry duration setting and
     // deliver a second notification as soon as the episode is confirmed.
@@ -229,16 +236,17 @@ class AlertEngine {
 
   /// Returns lightweight runtime diagnostics for tests and future integration.
   Map<String, Object?> diagnostics() {
-    final nowMs = _lastAlertAt ?? DateTime.now().millisecondsSinceEpoch;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     return {
       'alertsProduced': _alertsProduced,
       'pendingAlerts': _pending.length,
       'pendingAlertsDropped': _pendingAlertsDropped,
-      'lastAlertType': _lastAlertType?.name,
+      'lastAlertType': _lastAlertType?.wireValue,
       'lastAlertAt': _lastAlertAt,
       'cooldowns': {
         for (final type in AlertType.values)
-          '${type.name}RemainingMs': _cooldownPolicy.remainingMs(type, nowMs),
+          '${type.wireValue}RemainingMs':
+              _cooldownPolicy.remainingMs(type, nowMs),
       },
     };
   }
@@ -256,7 +264,7 @@ class AlertEngine {
     }
 
     final event = AlertEvent(
-      id: '${type.name}-$timestampMs-${_sequence++}',
+      id: '${type.wireValue}-$timestampMs-${_sequence++}',
       type: type,
       severity: severity,
       message: message,

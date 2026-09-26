@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "reviewDate": "2026-09-27",
+  "baseCommit": "6687e90",
+  "flutterVersion": "3.44.2",
+  "dartVersion": "3.12.2",
+  "flutterTests": {
+    "passed": 1090,
+    "failed": 0,
+    "baselinePassed": 1023
+  },
+  "androidJvmTests": {
+    "passed": 17,
+    "failed": 0
+  },
+  "dartAnalyze": "passed",
+  "dartFormat": {
+    "files": 348,
+    "changes": 0
+  },
+  "release": {
+    "artifact": "build/app/outputs/bundle/release/app-release.aab",
+    "sha256": "f1adbc4056fae6ff9a1e2df93183e1b69c012b826568b2f3fb418c97276927fc",
+    "signed": false,
+    "buildExitCode": 0
+  },
+  "uiMatrix": {
+    "locales": 9,
+    "scenarios": 36,
+    "viewports": [
+      {
+        "width": 320,
+        "height": 568,
+        "textScale": 2.0
+      },
+      {
+        "width": 640,
+        "height": 360,
+        "textScale": 1.3
+      }
+    ]
+  },
+  "physicalDevice": {
+    "model": "LG H870",
+    "androidVersion": 9,
+    "testPackage": "com.miucam.app.review",
+    "originalPackageModified": false,
+    "screenshots": 34,
+    "screenshotLocales": [
+      "tr",
+      "ar_SA"
+    ],
+    "qrScreenshotsDecoded": [
+      "tr",
+      "ar_SA"
+    ],
+    "audioRuns": [
+      {
+        "passed": true,
+        "observedDurationMs": 3127,
+        "steadyStateUnderrunDelta": 0,
+        "stoppedAfterRun": true
+      },
+      {
+        "passed": true,
+        "observedDurationMs": 3119,
+        "steadyStateUnderrunDelta": 0,
+        "stoppedAfterRun": true
+      },
+      {
+        "passed": true,
+        "observedDurationMs": 3081,
+        "steadyStateUnderrunDelta": 0,
+        "stoppedAfterRun": true
+      }
+    ],
+    "notificationPassed": true,
+    "notificationCleanedUp": true,
+    "frameTimeBaseline": {
+      "schemaVersion": 1,
+      "benchmark": "server_settings_slider_scroll",
+      "mode": "profile",
+      "frameP95BudgetMs": 35.0,
+      "minimumFrameSamples": 30,
+      "viewport": {
+        "physicalWidth": 1440.0,
+        "physicalHeight": 2672.0,
+        "devicePixelRatio": 4.0
+      },
+      "scenarios": {
+        "slider": {
+          "sampleCount": 96,
+          "buildP50Ms": 5.451,
+          "buildP95Ms": 17.019,
+          "rasterP50Ms": 7.561,
+          "rasterP95Ms": 17.162,
+          "totalP50Ms": 15.074,
+          "totalP95Ms": 34.65,
+          "totalMaxMs": 44.154,
+          "framesOver16Ms": 44,
+          "framesOver32Ms": 7,
+          "framesOver16Ratio": 0.4583333333333333,
+          "framesOver32Ratio": 0.07291666666666667
+        },
+        "scroll": {
+          "sampleCount": 178,
+          "buildP50Ms": 1.529,
+          "buildP95Ms": 4.874,
+          "rasterP50Ms": 7.333,
+          "rasterP95Ms": 17.836,
+          "totalP50Ms": 10.791,
+          "totalP95Ms": 24.109,
+          "totalMaxMs": 35.533,
+          "framesOver16Ms": 32,
+          "framesOver32Ms": 1,
+          "framesOver16Ratio": 0.1797752808988764,
+          "framesOver32Ratio": 0.0056179775280898875
+        }
+      }
+    },
+    "frameTimeFinal": {
+      "schemaVersion": 1,
+      "benchmark": "server_settings_slider_scroll",
+      "mode": "profile",
+      "frameP95BudgetMs": 35.0,
+      "minimumFrameSamples": 30,
+      "viewport": {
+        "physicalWidth": 1440.0,
+        "physicalHeight": 2672.0,
+        "devicePixelRatio": 4.0
+      },
+      "scenarios": {
+        "slider": {
+          "sampleCount": 98,
+          "buildP50Ms": 5.296,
+          "buildP95Ms": 16.434,
+          "rasterP50Ms": 7.503,
+          "rasterP95Ms": 17.759,
+          "totalP50Ms": 14.212,
+          "totalP95Ms": 33.388,
+          "totalMaxMs": 40.662,
+          "framesOver16Ms": 45,
+          "framesOver32Ms": 6,
+          "framesOver16Ratio": 0.45918367346938777,
+          "framesOver32Ratio": 0.061224489795918366
+        },
+        "scroll": {
+          "sampleCount": 159,
+          "buildP50Ms": 1.943,
+          "buildP95Ms": 4.959,
+          "rasterP50Ms": 7.994,
+          "rasterP95Ms": 17.753,
+          "totalP50Ms": 11.87,
+          "totalP95Ms": 26.91,
+          "totalMaxMs": 33.293,
+          "framesOver16Ms": 36,
+          "framesOver32Ms": 2,
+          "framesOver16Ratio": 0.22641509433962265,
+          "framesOver32Ratio": 0.012578616352201259
+        }
+      }
+    },
+    "testPackageRemoved": true
+  },
+  "ios": {
+    "xcodeBuildExecuted": false,
+    "newXCTests": 4,
+    "xctestsExecuted": false
+  },
+  "remainingReleaseBlockers": [
+    "HTTP/WS cleartext transport",
+    "Physical approval for manual/discovery pairing",
+    "Real store/verifier purchase acceptance",
+    "iOS, current Android, two-device LAN and long thermal/battery acceptance"
+  ]
+}

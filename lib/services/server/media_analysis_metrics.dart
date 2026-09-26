@@ -71,7 +71,7 @@ class MediaAnalysisMetrics {
 
   void recordAlert(AlertEvent event) {
     alertsProduced++;
-    lastAlertType = event.type.name;
+    lastAlertType = event.type.wireValue;
     lastAlertAt = event.timestampMs;
   }
 

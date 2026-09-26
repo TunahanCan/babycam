@@ -17,6 +17,29 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('disabled motion input cannot linger in a later cry notification', () {
+    var videoReliable = true;
+    final engine = AlertEngine(
+      videoReliableProvider: () => videoReliable,
+      episodeAggregator: EpisodeBasedNotificationAggregator(
+        suspectedCryMs: 500,
+        confirmedCryMs: 1000,
+      ),
+    );
+    addTearDown(engine.dispose);
+    engine.onMotionResult(fakeMotionResult(timestampMs: 1000));
+    engine.drainPending();
+    videoReliable = false;
+    expect(engine.onMotionResult(fakeMotionResult(timestampMs: 1100)), isNull);
+    videoReliable = true;
+    engine.onAudioResult(fakeAudioResult(timestampMs: 1200));
+    engine.onAudioResult(fakeAudioResult(timestampMs: 1700));
+    final event = engine.onAudioResult(fakeAudioResult(timestampMs: 2200));
+    expect(event!.type, AlertType.cryDetected);
+    expect(event.metadata['motionDetected'], isFalse);
+    expect(event.metadata['lastMotionAgoMs'], isNull);
+  });
+
   test(
       'analysis alerts keep semantic payload across every sender/receiver locale',
       () {

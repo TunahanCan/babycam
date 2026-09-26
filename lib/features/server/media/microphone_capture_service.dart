@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:record/record.dart';
 
+import '../../../core/media/pcm_audio_format.dart';
 import '../../../services/server/audio_stream_leveler.dart';
 
 typedef MicrophoneChunkHandler = void Function(MicrophonePcmChunk chunk);
@@ -48,13 +49,18 @@ class MicrophoneCaptureService {
     this.restartBaseDelay = const Duration(milliseconds: 250),
     this.restartMaxDelay = const Duration(seconds: 5),
     this.cleanupTimeout = const Duration(seconds: 2),
-  })  : _recorder = recorder,
+  })  : _format = PcmAudioFormat.pcm16(
+          sampleRate: sampleRate,
+          channels: channels,
+        ),
+        _recorder = recorder,
         _recorderFactory = recorderFactory ?? RecordMicrophoneRecorder.new,
         _streamLeveler = streamLeveler ?? AudioStreamLeveler.liveMonitor(),
         _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final int sampleRate;
   final int channels;
+  final PcmAudioFormat _format;
   MicrophoneRecorderPort? _recorder;
   final MicrophoneRecorderFactory _recorderFactory;
   final AudioStreamLeveler _streamLeveler;
@@ -244,6 +250,12 @@ class MicrophoneCaptureService {
           if (_isCurrent(generation) &&
               identical(_subscription, subscription)) {
             _lastFailureReason = 'captureStreamEnded';
+            final error = StateError('Microphone capture stream ended.');
+            _lastStartError = error.toString();
+            // A stream ending is a discontinuity even when the recorder can
+            // restart inside the analyzer's timestamp-gap tolerance. Notify
+            // its owner before any new PCM can extend the old cry episode.
+            onError?.call(error, StackTrace.current);
             unawaited(_handleTerminalCapture(
               generation: generation,
               subscription: subscription,
@@ -446,8 +458,7 @@ class MicrophoneCaptureService {
         : (Uint8List(pending.length + pcm16le.length)
           ..setRange(0, pending.length, pending)
           ..setRange(pending.length, pending.length + pcm16le.length, pcm16le));
-    final frameBytes = channels * 2;
-    final alignedLength = combined.length - combined.length % frameBytes;
+    final alignedLength = _format.alignBytes(combined.length);
     _pendingPcmBytes = alignedLength == combined.length
         ? Uint8List(0)
         : Uint8List.fromList(Uint8List.sublistView(combined, alignedLength));

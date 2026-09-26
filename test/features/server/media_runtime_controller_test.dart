@@ -264,6 +264,70 @@ void main() {
     expect(controller.isActive, isFalse);
   });
 
+  testWidgets('persistent capture failures back off and stop cancels retries',
+      (tester) async {
+    var starts = 0;
+    var stops = 0;
+    final controller = MediaRuntimeController(
+      onStartVideo: () async {
+        starts++;
+        throw StateError('camera unavailable');
+      },
+      onStopVideo: () async => stops++,
+    );
+
+    await expectLater(
+      controller.reconcile(
+        const MediaResourceDemand(video: true, audio: false),
+      ),
+      throwsStateError,
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(starts, 2, reason: 'The first transient failure retries promptly.');
+
+    for (var tick = 0; tick < 99; tick++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(starts, lessThanOrEqualTo(8));
+    expect(starts, greaterThan(2));
+
+    await controller.stop();
+    final startsAtStop = starts;
+    await tester.pump(const Duration(seconds: 10));
+    expect(starts, startsAtStop);
+    expect(stops, 1);
+    expect(controller.isActive, isFalse);
+  });
+
+  testWidgets('successful recovery resets delay for a later capture failure',
+      (tester) async {
+    var starts = 0;
+    var unavailable = true;
+    final controller = MediaRuntimeController(
+      onStartVideo: () async {
+        starts++;
+        if (unavailable) throw StateError('camera unavailable');
+      },
+      onStopVideo: () async {},
+    );
+
+    await expectLater(controller.start(), throwsStateError);
+    for (var tick = 0; tick < 10; tick++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    unavailable = false;
+    await tester.pump(const Duration(seconds: 1));
+    expect(controller.videoActive, isTrue);
+    await controller.stop();
+
+    unavailable = true;
+    await expectLater(controller.start(), throwsStateError);
+    final startsBeforeRetry = starts;
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(starts, startsBeforeRetry + 1);
+    await controller.stop();
+  });
+
   test('timed-out stop late error keeps uncertainty and retries stop',
       () async {
     final firstStopRelease = Completer<void>();

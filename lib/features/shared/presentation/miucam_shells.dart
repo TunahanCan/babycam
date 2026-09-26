@@ -5,6 +5,7 @@ import '../../../core/theme/miucam_colors.dart';
 import '../../../l10n/app_strings.dart';
 import 'miucam_design_tokens.dart';
 import 'miucam_role_presentation.dart';
+import 'miucam_system_ui.dart';
 
 class MiuCamCard extends StatelessWidget {
   const MiuCamCard({super.key, required this.child, this.dark = false});
@@ -210,29 +211,31 @@ class MiuCamRoleBadge extends StatelessWidget {
                 children: [
                   Icon(Icons.lock_rounded, color: accent, size: 15),
                   const SizedBox(width: 8),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        role.badgeTitle,
-                        style: TextStyle(
-                          color: textColor,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: .7,
+                  Flexible(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          role.badgeTitle,
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: .7,
+                          ),
                         ),
-                      ),
-                      Text(
-                        role.badgeSubtitle,
-                        style: TextStyle(
-                          color: mutedColor,
-                          fontSize: 8,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: .4,
+                        Text(
+                          role.badgeSubtitle,
+                          style: TextStyle(
+                            color: mutedColor,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: .4,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Icon(
@@ -480,9 +483,11 @@ class MiuCamGradientShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(gradient: variant.gradient),
-      child: child,
+    return MiuCamSystemUi(
+      child: Container(
+        decoration: BoxDecoration(gradient: variant.gradient),
+        child: child,
+      ),
     );
   }
 }

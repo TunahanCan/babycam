@@ -172,9 +172,10 @@ class PcmAudioPlayer(private val context: Context) {
         generation += 1
         val safeSampleRate = sampleRate.coerceIn(8000, 48000)
         val safeChannels = channels.coerceIn(1, 2)
-        requestAudioFocus()
-        registerAudioObservers()
+        var pendingTrack: AudioTrack? = null
         try {
+            requestAudioFocus()
+            registerAudioObservers()
             val channelMask = if (safeChannels == 2) {
                 AudioFormat.CHANNEL_OUT_STEREO
             } else {
@@ -206,14 +207,15 @@ class PcmAudioPlayer(private val context: Context) {
                 builder = builder.setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
             }
             val track = builder.build()
+            pendingTrack = track
             if (track.state != AudioTrack.STATE_INITIALIZED) {
-                track.release()
                 lastError = "AudioTrack state ${track.state}"
                 throw IllegalStateException(lastError)
             }
             track.setVolume(AudioTrack.getMaxVolume())
             track.play()
             audioTrack = track
+            pendingTrack = null
             this.sampleRate = safeSampleRate
             this.channels = safeChannels
             bufferSizeBytes = bufferSize
@@ -232,6 +234,9 @@ class PcmAudioPlayer(private val context: Context) {
             )
             MiuCamPlatformRuntime.setAudioOutputActive(true, "audio_playback_started")
         } catch (error: Exception) {
+            pendingTrack?.let(::releaseTrack)
+            audioTrack?.let(::releaseTrack)
+            audioTrack = null
             MiuCamPlatformRuntime.setAudioOutputActive(false, "audio_playback_start_failed")
             abandonAudioFocus()
             unregisterAudioObservers()
@@ -268,8 +273,8 @@ class PcmAudioPlayer(private val context: Context) {
             currentExecutor = executor
         }
         val payload = bytes.copyOf()
-        try {
-            currentExecutor.execute {
+        val task = PcmAudioWriteTask(
+            write = {
                 var accepted = false
                 var totalWritten = 0
                 try {
@@ -326,18 +331,22 @@ class PcmAudioPlayer(private val context: Context) {
                         writeErrors += 1
                         lastError = "${error.javaClass.simpleName}: ${error.message}"
                     }
-                } finally {
-                    currentPendingWrites.decrementAndGet()
-                    mainHandler.post { completion(accepted) }
                 }
+                accepted
+            },
+            completion = { accepted ->
+                currentPendingWrites.decrementAndGet()
+                mainHandler.post { completion(accepted) }
             }
+        )
+        try {
+            currentExecutor.execute(task)
         } catch (_: RejectedExecutionException) {
-            currentPendingWrites.decrementAndGet()
             synchronized(this) {
                 writesDropped += 1
                 lastError = "write rejected because playback generation stopped"
             }
-            mainHandler.post { completion(false) }
+            task.cancelBeforeRun()
         }
     }
 
@@ -420,22 +429,37 @@ class PcmAudioPlayer(private val context: Context) {
         val retiredExecutor = executor
         executor = newWriteExecutor()
         pendingWrites = AtomicInteger(0)
-        retiredExecutor.shutdownNow()
+        // shutdownNow returns work that will never run, including its finally
+        // block. Complete those channel calls so Dart can release old writes.
+        retiredExecutor.shutdownNow().forEach { task ->
+            if ((task as? PcmAudioWriteTask)?.cancelBeforeRun() == true) {
+                writesDropped += 1
+            }
+        }
         pausedForFocusLoss = false
         if (track != null) {
-            cleanupExecutor.execute {
-                try {
-                    track.pause()
-                    track.flush()
-                    track.release()
-                } catch (_: Exception) {
-                }
-            }
+            releaseTrack(track)
         }
         abandonAudioFocus()
         unregisterAudioObservers()
         MiuCamPlatformRuntime.emit("audioPlaybackStopped")
         MiuCamPlatformRuntime.setAudioOutputActive(false, "audio_playback_stopped")
+    }
+
+    private fun releaseTrack(track: AudioTrack) {
+        cleanupExecutor.execute {
+            try {
+                track.pause()
+                track.flush()
+            } catch (_: Exception) {
+                // An uninitialized/dead track may reject pause or flush.
+            } finally {
+                try {
+                    track.release()
+                } catch (_: Exception) {
+                }
+            }
+        }
     }
 
     private fun newWriteExecutor(): ExecutorService =

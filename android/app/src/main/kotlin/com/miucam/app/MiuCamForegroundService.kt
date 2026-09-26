@@ -14,6 +14,7 @@ import android.os.Build
 import androidx.lifecycle.LifecycleService
 import io.flutter.embedding.engine.FlutterEngine
 import java.util.Locale
+import org.json.JSONObject
 
 class MiuCamForegroundService : LifecycleService(),
     SharedPreferences.OnSharedPreferenceChangeListener {
@@ -53,7 +54,8 @@ class MiuCamForegroundService : LifecycleService(),
     }
 
     override fun onSharedPreferenceChanged(preferences: SharedPreferences?, key: String?) {
-        if (key == null || key == LOCALE_LANGUAGE_KEY || key == LOCALE_COUNTRY_KEY) {
+        if (key == null || key == LOCALE_KEY ||
+            key == LOCALE_LANGUAGE_KEY || key == LOCALE_COUNTRY_KEY) {
             refreshNotificationLocale()
         }
     }
@@ -65,10 +67,19 @@ class MiuCamForegroundService : LifecycleService(),
     }
 
     private fun notificationContext(): Context {
-        val language = localePreferences.getString(LOCALE_LANGUAGE_KEY, null)
-        if (language.isNullOrBlank()) return this
-        val country = localePreferences.getString(LOCALE_COUNTRY_KEY, null)
-        val locale = if (country.isNullOrBlank()) Locale(language) else Locale(language, country)
+        val locale = NotificationLocaleResolver.resolve(
+            canonical = localePreferences.getString(LOCALE_KEY, null),
+            legacyLanguage = localePreferences.getString(LOCALE_LANGUAGE_KEY, null),
+            legacyCountry = localePreferences.getString(LOCALE_COUNTRY_KEY, null)
+        ) { saved ->
+            val value = JSONObject(saved)
+            val language = value.getString("language")
+            require(language.isNotEmpty())
+            Locale.Builder().setLanguage(language).apply {
+                if (!value.isNull("script")) setScript(value.getString("script"))
+                if (!value.isNull("country")) setRegion(value.getString("country"))
+            }.build()
+        } ?: return this
         val configuration = Configuration(resources.configuration)
         configuration.setLocale(locale)
         return createConfigurationContext(configuration)
@@ -452,6 +463,7 @@ class MiuCamForegroundService : LifecycleService(),
         private const val SERVER_CHANNEL_ID = "miucam_server_runtime"
         private const val ALERT_CHANNEL_ID = "miucam_client_alert_runtime"
         private const val NOTIFICATION_ID = 4101
+        private const val LOCALE_KEY = "flutter.client.locale"
         private const val LOCALE_LANGUAGE_KEY = "flutter.client.locale.language"
         private const val LOCALE_COUNTRY_KEY = "flutter.client.locale.country"
 

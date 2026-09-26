@@ -8,6 +8,7 @@ class AlertConfig {
     this.cryAlertThreshold = 0.65,
     this.motionAlertThreshold = 0.35,
     this.loudSoundDbfs = -18.0,
+    this.loudSoundMinAmbientDeltaDb = 6.0,
     this.emitGlobalLightChangeInfo = false,
     this.emitLoudSoundAlerts = false,
   });
@@ -19,6 +20,7 @@ class AlertConfig {
   final double cryAlertThreshold;
   final double motionAlertThreshold;
   final double loudSoundDbfs;
+  final double loudSoundMinAmbientDeltaDb;
   final bool emitGlobalLightChangeInfo;
   final bool emitLoudSoundAlerts;
 
@@ -31,6 +33,7 @@ class AlertConfig {
     double? cryAlertThreshold,
     double? motionAlertThreshold,
     double? loudSoundDbfs,
+    double? loudSoundMinAmbientDeltaDb,
     bool? emitGlobalLightChangeInfo,
     bool? emitLoudSoundAlerts,
   }) =>
@@ -43,6 +46,8 @@ class AlertConfig {
         cryAlertThreshold: cryAlertThreshold ?? this.cryAlertThreshold,
         motionAlertThreshold: motionAlertThreshold ?? this.motionAlertThreshold,
         loudSoundDbfs: loudSoundDbfs ?? this.loudSoundDbfs,
+        loudSoundMinAmbientDeltaDb:
+            loudSoundMinAmbientDeltaDb ?? this.loudSoundMinAmbientDeltaDb,
         emitGlobalLightChangeInfo:
             emitGlobalLightChangeInfo ?? this.emitGlobalLightChangeInfo,
         emitLoudSoundAlerts: emitLoudSoundAlerts ?? this.emitLoudSoundAlerts,
@@ -57,6 +62,7 @@ class AlertConfig {
         'cryAlertThreshold': cryAlertThreshold,
         'motionAlertThreshold': motionAlertThreshold,
         'loudSoundDbfs': loudSoundDbfs,
+        'loudSoundMinAmbientDeltaDb': loudSoundMinAmbientDeltaDb,
         'emitGlobalLightChangeInfo': emitGlobalLightChangeInfo,
         'emitLoudSoundAlerts': emitLoudSoundAlerts,
       };

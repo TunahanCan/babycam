@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import '../../core/media/pcm_audio_format.dart';
 import '../../core/protocol/device_feature_models.dart';
 import 'baby_monitor_feature_services.dart';
 import 'room_audio_coordinator.dart';
@@ -62,8 +63,8 @@ class BabyMonitorFeatureController {
   Future<TalkSession> startTalk({
     required String clientId,
     String? attemptId,
-    int sampleRate = 16000,
-    int channels = 1,
+    int sampleRate = LiveAudioDefaults.sampleRate,
+    int channels = LiveAudioDefaults.channels,
   }) async {
     final session = talkSessions.start(
       clientId: clientId,

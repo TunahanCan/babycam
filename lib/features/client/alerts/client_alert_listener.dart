@@ -66,10 +66,12 @@ class ClientAlertListener {
   WebSocket? _socket;
   HttpClient? _client;
   Future<void>? _loop;
+  Future<void>? _stopOperation;
   Completer<void>? _firstConnection;
   Completer<void>? _retryDelay;
   Timer? _retryTimer;
   var _generation = 0;
+  var _startIntentGeneration = 0;
   var _intentionalStop = false;
   String? _sessionKey;
   String? _cursorSessionKey;
@@ -79,17 +81,22 @@ class ClientAlertListener {
     PairingSession session, {
     bool waitForFirstConnection = true,
   }) async {
+    final intentGeneration = ++_startIntentGeneration;
     final sessionKey = _keyForSession(session);
-    if (_cursorSessionKey != sessionKey) {
-      _cursorSessionKey = sessionKey;
-      _lastDeliveredAlertId = null;
-    }
     if (isListening) {
       if (_sessionKey == sessionKey) {
         if (!waitForFirstConnection) return;
         return _firstConnection?.future ?? Future<void>.value();
       }
-      await stop();
+      await _stopListening();
+    }
+    await _stopOperation;
+    if (intentGeneration != _startIntentGeneration) return;
+    // An old delivery may finish while teardown is waiting for its callback.
+    // Only reset the next room's cursor after that transport has drained.
+    if (_cursorSessionKey != sessionKey) {
+      _cursorSessionKey = sessionKey;
+      _lastDeliveredAlertId = null;
     }
     _intentionalStop = false;
     isListening = true;
@@ -104,7 +111,22 @@ class ClientAlertListener {
     return _firstConnection!.future;
   }
 
-  Future<void> stop() async {
+  Future<void> stop() {
+    _startIntentGeneration++;
+    return _stopListening();
+  }
+
+  Future<void> _stopListening() {
+    final pending = _stopOperation;
+    if (pending != null) return pending;
+    final operation = _stopListeningNow();
+    _stopOperation = operation;
+    return operation.whenComplete(() {
+      if (identical(_stopOperation, operation)) _stopOperation = null;
+    });
+  }
+
+  Future<void> _stopListeningNow() async {
     _intentionalStop = true;
     isListening = false;
     _setConnected(false);
@@ -112,6 +134,12 @@ class ClientAlertListener {
     _generation++;
     final socket = _socket;
     _socket = null;
+    final client = _client;
+    _client = null;
+    final loop = _loop;
+    _loop = null;
+    final first = _firstConnection;
+    _firstConnection = null;
     _cancelRetryDelay();
     if (socket != null) {
       try {
@@ -119,13 +147,9 @@ class ClientAlertListener {
       } catch (_) {}
       await socket.close();
     }
-    _client?.close(force: true);
-    _client = null;
-    final first = _firstConnection;
+    client?.close(force: true);
     if (first != null && !first.isCompleted) first.complete();
-    _firstConnection = null;
-    await _loop?.catchError((_) {});
-    _loop = null;
+    await loop?.catchError((_) {});
   }
 
   Future<void> _listenLoop(int generation, PairingSession session) async {
@@ -218,7 +242,7 @@ class ClientAlertListener {
       await for (final data in socket) {
         if (!_isCurrent(generation)) return;
         try {
-          await _handleSocketMessage(socket, data);
+          await _handleSocketMessage(socket, data, generation);
         } catch (_) {
           // ACKs are cumulative cursors. Continuing to a later event after one
           // failed delivery would let that later ACK permanently skip the
@@ -250,7 +274,7 @@ class ClientAlertListener {
       generation == _generation && isListening && !_intentionalStop;
 
   String _keyForSession(PairingSession session) =>
-      '${session.payload.transport}|${session.payload.host}|'
+      '${session.deviceId}|${session.payload.transport}|${session.payload.host}|'
       '${session.payload.port}|${session.clientId}|${session.sessionToken}';
 
   Future<void> _waitBeforeReconnect(Duration delay) {
@@ -272,10 +296,12 @@ class ClientAlertListener {
     if (delay != null && !delay.isCompleted) delay.complete();
   }
 
-  Future<void> _handleSocketMessage(WebSocket socket, dynamic data) async {
+  Future<void> _handleSocketMessage(
+      WebSocket socket, dynamic data, int generation) async {
     final alert = _parseAlert(data);
     if (alert == null) return;
     await onAlert?.call(alert);
+    if (!_isCurrent(generation)) return;
     _lastDeliveredAlertId = alert.id;
     if (socket.readyState != WebSocket.open) return;
     socket.add(jsonEncode({

@@ -708,8 +708,9 @@ class _ReportRoomControls extends ClientRoomControls {
   }
 }
 
-const _qrPayload =
-    'miucam://pair?payload=eyJob3N0IjoiMTkyLjE2OC4xLjQyIiwicG9ydCI6ODA4MCwiZGV2aWNlTmFtZSI6IkJlYmVrIE9kYXNpIiwidHJhbnNwb3J0IjoiaHR0cF93cyJ9';
+// Use the same current schema as real pairing; the old abbreviated fixture
+// lacked required identity/expiry fields and only captured the error state.
+String get _qrPayload => _payload().toUriString();
 
 class _QrScannerReportScene extends StatelessWidget {
   const _QrScannerReportScene();

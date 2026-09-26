@@ -20,7 +20,7 @@ void main() {
   test('streamToken ile gerçek video ve audio endpointleri medya üretir',
       () async {
     final tokenService = PairingTokenService();
-    final server = await _testServer(tokenService);
+    final server = await _testServer(tokenService, analysisEnabled: false);
     addTearDown(server.dispose);
     final base = Uri.parse(await server.startPairingMode());
     final trusted = tokenService.issueTrustedClientToken(
@@ -59,6 +59,11 @@ void main() {
     expect(audio.channels, 1);
     expect(audio.pcm16le.length, greaterThan(0));
     expect(status['activeStreamClients'], 1);
+    final analysis = status['analysis'] as Map;
+    expect((analysis['audio'] as Map)['windowsAnalyzed'], 0,
+        reason: 'Disabling alerts must preserve the real WAV stream.');
+    expect((analysis['motion'] as Map)['framesAnalyzed'], 0,
+        reason: 'Disabling alerts must preserve the real MJPEG stream.');
   });
 
   test('media socket reconnect aynı aktif watch slotunu düşürmez', () async {
@@ -337,6 +342,7 @@ void main() {
 Future<MiuCamServer> _testServer(
   PairingTokenService tokenService, {
   bool startMediaOnSessionStart = true,
+  bool analysisEnabled = true,
   int maxMediaConnectionsPerClient = 2,
   int? maxTotalMediaConnections,
 }) async {
@@ -350,6 +356,8 @@ Future<MiuCamServer> _testServer(
     tokenService: tokenService,
     httpPort: 0,
     startMediaOnSessionStart: startMediaOnSessionStart,
+    audioAnalysisDemand: () => analysisEnabled,
+    videoAnalysisDemand: () => analysisEnabled,
     maxMediaConnectionsPerClient: maxMediaConnectionsPerClient,
     maxTotalMediaConnections: maxTotalMediaConnections,
     mediaSource: DeterministicServerMediaSource(

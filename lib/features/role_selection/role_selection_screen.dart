@@ -4,6 +4,7 @@ import '../../app/app_role.dart';
 import '../../l10n/app_strings.dart';
 import '../shared/presentation/miucam_design_tokens.dart';
 import '../shared/presentation/miucam_role_presentation.dart';
+import '../shared/presentation/miucam_system_ui.dart';
 
 class RoleSelectionScreen extends StatelessWidget {
   const RoleSelectionScreen({super.key, required this.onRoleSelected});
@@ -15,7 +16,8 @@ class RoleSelectionScreen extends StatelessWidget {
     final strings = AppStrings.of(context);
     final serverRole = MiuCamRolePresentation.of(AppRole.server, strings);
     final clientRole = MiuCamRolePresentation.of(AppRole.client, strings);
-    return Scaffold(
+    return MiuCamSystemUi(
+        child: Scaffold(
       body: _WelcomeShell(
         child: SafeArea(
           child: Center(
@@ -87,7 +89,7 @@ class RoleSelectionScreen extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 

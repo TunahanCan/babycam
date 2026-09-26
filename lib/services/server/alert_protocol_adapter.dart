@@ -1,7 +1,8 @@
 import 'dart:convert';
 
 import '../../analysis/alert/alert_event.dart';
-import '../../analysis/alert/alert_type.dart';
+import '../../analysis/alert/episode_notification_policy.dart';
+import '../../core/alerts/alert_message_key.dart';
 import '../../core/miucam_protocol.dart';
 import '../../core/protocol/alert_event_dto.dart';
 
@@ -14,9 +15,9 @@ class AlertProtocolAdapter {
 
   static AlertEventDto toDto(AlertEvent event) => AlertEventDto(
         id: event.id,
-        type: event.type.name,
-        severity: event.severity.name,
-        messageKey: _messageKey(event),
+        type: event.type.wireValue,
+        severity: event.severity.wireValue,
+        messageKey: _messageKey(event).wireValue,
         message: event.message,
         score: event.score,
         timestampMs: event.timestampMs,
@@ -32,25 +33,24 @@ class AlertProtocolAdapter {
         metadata: event.metadata,
       );
 
-  static String _messageKey(AlertEvent event) {
+  static AlertMessageKey _messageKey(AlertEvent event) {
     if (event.metadata['event'] == 'baby_event') {
       final durationMs = event.metadata['durationMs'];
       final cryScore = event.metadata['cryScore'];
       final resolved = event.metadata['resolved'] == true;
-      if (cryScore is num && cryScore > 0.8 && durationMs is num) {
-        if (durationMs > 15000) return 'parentEpisodeHighCryAlert';
+      if (cryScore is num &&
+          durationMs is num &&
+          EpisodeNotificationPolicy.isStrongProlongedCry(
+              cryScore: cryScore, durationMs: durationMs)) {
+        return AlertMessageKey.highCryEpisode;
       }
-      if (resolved && durationMs is num && durationMs < 5000) {
-        return 'parentEpisodeShortSoundAlert';
+      if (durationMs is num &&
+          EpisodeNotificationPolicy.isShortResolvedSound(
+              resolved: resolved, durationMs: durationMs)) {
+        return AlertMessageKey.shortSoundEpisode;
       }
-      return 'parentEpisodeCryAlert';
+      return AlertMessageKey.cryEpisode;
     }
-    return switch (event.type) {
-      AlertType.cryDetected => 'parentCryAlert',
-      AlertType.loudSound => 'parentLoudSoundAlert',
-      AlertType.motionDetected => 'parentMotionAlert',
-      AlertType.globalLightChange => 'parentLightChangeAlert',
-      AlertType.systemWarning => 'legacyAlert',
-    };
+    return AlertMessageKey.forType(event.type);
   }
 }

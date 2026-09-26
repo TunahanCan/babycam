@@ -1,8 +1,3 @@
-/// Categories of structured alerts produced by the alert engine.
-enum AlertType {
-  cryDetected,
-  motionDetected,
-  loudSound,
-  globalLightChange,
-  systemWarning,
-}
+// Compatibility export for existing analysis consumers. The shared model has
+// no dependency on the analysis engine or Flutter presentation.
+export '../../core/alerts/alert_type.dart' show AlertType;
