@@ -1059,7 +1059,7 @@ h3 {
   background: linear-gradient(145deg, #f4fcf9, #fff 70%);
 }
 
-.fit-card-boundary {
+.fit-card-privacy {
   color: var(--violet-dark);
   background: linear-gradient(145deg, #f5f5ff, #fff 70%);
 }
@@ -1107,18 +1107,26 @@ h3 {
   place-items: center;
   border-radius: 50%;
   color: #fff;
-  background: currentColor;
+  background: var(--mint-dark);
   content: "✓";
   font-size: 0.7rem;
   font-weight: 900;
 }
 
-.fit-card-boundary li::before {
-  content: "→";
+.fit-card-privacy li::before {
+  background: var(--violet-dark);
 }
 
-[dir="rtl"] .fit-card-boundary li::before {
-  content: "←";
+.fit-card-privacy .fit-local-network {
+  margin-top: 4px;
+  padding-top: 18px;
+  border-top: 1px solid #dcdcf2;
+  color: var(--violet-deep);
+  font-weight: 700;
+}
+
+.fit-card .fit-local-network::before {
+  top: calc(18px + 0.12em);
 }
 
 .fit-next {
