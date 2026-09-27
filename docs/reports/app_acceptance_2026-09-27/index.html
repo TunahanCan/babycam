@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MiuCam · Ekran ve ödeme kabul galerisi</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:28px;background:#f4f3fa;color:#162033;font:15px/1.5 system-ui,sans-serif}
+main{max-width:1160px;margin:auto}h1{font-size:28px;margin:0 0 8px}p{max-width:850px;margin:6px 0;color:#526071}
+nav{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0}button{font:inherit;min-height:44px;padding:8px 16px;border:1px solid #cbc7e2;border-radius:12px;background:white;color:#34266f;cursor:pointer}
+button[aria-pressed=true]{background:#6257c8;color:white}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:start}
+article{padding:12px;background:white;border:1px solid #ddd9eb;border-radius:16px}article[hidden]{display:none}h2{font-size:14px;min-height:42px;margin:0 0 10px}
+img{display:block;width:100%;height:auto;border-radius:8px}a:focus-visible,button:focus-visible{outline:3px solid #157961;outline-offset:3px}
+footer{margin-top:24px;color:#687083;font-size:13px}@media(max-width:800px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){.grid{grid-template-columns:1fr}}
+</style><main>
+<h1>MiuCam · Ekran ve ödeme kabul galerisi</h1>
+<p>17 ekran/durum ve 13 ödeme durumu. Görseller gerçek uygulama widget'larından hostta üretildi; donanım, oda ve mağaza sınırlarında kontrollü test verisi kullanıldı.</p>
+<p>Görüntü alanındaki ikon test yayınıdır. Fiyat ve ödeme sonuçları simülasyondur; gerçek mağaza penceresi veya fiziksel cihaz görüntüsü değildir. Görsele tıklayarak tam boyutta açabilirsiniz.</p>
+<nav aria-label="Galeri filtresi"><button data-filter="all" aria-pressed="true">Tümü</button><button data-filter="screens" aria-pressed="false">Ekranlar</button><button data-filter="purchases" aria-pressed="false">Ödeme durumları</button></nav>
+<div class="grid"><article data-category="screens"><h2>Mod seçimi</h2><a href="screens/01_role.png" target="_blank" rel="noopener"><img src="screens/01_role.png" alt="Mod seçimi"></a></article>
+<article data-category="screens"><h2>Ebeveyn · eşleştirilmemiş</h2><a href="screens/02_parent_unpaired.png" target="_blank" rel="noopener"><img src="screens/02_parent_unpaired.png" alt="Ebeveyn · eşleştirilmemiş"></a></article>
+<article data-category="screens"><h2>Oda bul · QR / IP</h2><a href="screens/03_find_room.png" target="_blank" rel="noopener"><img src="screens/03_find_room.png" alt="Oda bul · QR / IP"></a></article>
+<article data-category="screens"><h2>Oda bul · QR / IP · aşağı kaydırılmış</h2><a href="screens/03_find_room_bottom.png" target="_blank" rel="noopener"><img src="screens/03_find_room_bottom.png" alt="Oda bul · QR / IP · aşağı kaydırılmış"></a></article>
+<article data-category="screens"><h2>Bildirimler · geçmiş ve filtreler</h2><a href="screens/04_notifications.png" target="_blank" rel="noopener"><img src="screens/04_notifications.png" alt="Bildirimler · geçmiş ve filtreler"></a></article>
+<article data-category="screens"><h2>Ebeveyn ayarları</h2><a href="screens/05_parent_settings.png" target="_blank" rel="noopener"><img src="screens/05_parent_settings.png" alt="Ebeveyn ayarları"></a></article>
+<article data-category="screens"><h2>Ebeveyn ayarları · aşağı kaydırılmış</h2><a href="screens/05_parent_settings_bottom.png" target="_blank" rel="noopener"><img src="screens/05_parent_settings_bottom.png" alt="Ebeveyn ayarları · aşağı kaydırılmış"></a></article>
+<article data-category="screens"><h2>Ebeveyn · bağlı oda</h2><a href="screens/06_parent_paired.png" target="_blank" rel="noopener"><img src="screens/06_parent_paired.png" alt="Ebeveyn · bağlı oda"></a></article>
+<article data-category="screens"><h2>QR · kamera izni yok / manuel giriş</h2><a href="screens/07_qr_permission_denied.png" target="_blank" rel="noopener"><img src="screens/07_qr_permission_denied.png" alt="QR · kamera izni yok / manuel giriş"></a></article>
+<article data-category="screens"><h2>Canlı izleme</h2><a href="screens/08_watch_live.png" target="_blank" rel="noopener"><img src="screens/08_watch_live.png" alt="Canlı izleme"></a></article>
+<article data-category="screens"><h2>Canlı izleme · aşağı kaydırılmış</h2><a href="screens/08_watch_live_bottom.png" target="_blank" rel="noopener"><img src="screens/08_watch_live_bottom.png" alt="Canlı izleme · aşağı kaydırılmış"></a></article>
+<article data-category="screens"><h2>Olay geçmişi</h2><a href="screens/09_watch_history.png" target="_blank" rel="noopener"><img src="screens/09_watch_history.png" alt="Olay geçmişi"></a></article>
+<article data-category="screens"><h2>Olay geçmişi · aşağı kaydırılmış</h2><a href="screens/09_watch_history_bottom.png" target="_blank" rel="noopener"><img src="screens/09_watch_history_bottom.png" alt="Olay geçmişi · aşağı kaydırılmış"></a></article>
+<article data-category="screens"><h2>İzleme ayarları</h2><a href="screens/10_watch_settings.png" target="_blank" rel="noopener"><img src="screens/10_watch_settings.png" alt="İzleme ayarları"></a></article>
+<article data-category="screens"><h2>Oda kontrolleri</h2><a href="screens/11_room_controls.png" target="_blank" rel="noopener"><img src="screens/11_room_controls.png" alt="Oda kontrolleri"></a></article>
+<article data-category="screens"><h2>Oda kontrolleri · aşağı kaydırılmış</h2><a href="screens/11_room_controls_bottom.png" target="_blank" rel="noopener"><img src="screens/11_room_controls_bottom.png" alt="Oda kontrolleri · aşağı kaydırılmış"></a></article>
+<article data-category="screens"><h2>İzleme · bağlantı hatası</h2><a href="screens/12_watch_connection_error.png" target="_blank" rel="noopener"><img src="screens/12_watch_connection_error.png" alt="İzleme · bağlantı hatası"></a></article>
+<article data-category="screens"><h2>İzleme · bağlantı hatası · aşağı kaydırılmış</h2><a href="screens/12_watch_connection_error_bottom.png" target="_blank" rel="noopener"><img src="screens/12_watch_connection_error_bottom.png" alt="İzleme · bağlantı hatası · aşağı kaydırılmış"></a></article>
+<article data-category="screens"><h2>Oda · yerel önizleme kapalı</h2><a href="screens/13_server_preview_off.png" target="_blank" rel="noopener"><img src="screens/13_server_preview_off.png" alt="Oda · yerel önizleme kapalı"></a></article>
+<article data-category="screens"><h2>Oda · yerel önizleme kapalı · aşağı kaydırılmış</h2><a href="screens/13_server_preview_off_bottom.png" target="_blank" rel="noopener"><img src="screens/13_server_preview_off_bottom.png" alt="Oda · yerel önizleme kapalı · aşağı kaydırılmış"></a></article>
+<article data-category="screens"><h2>Oda · yerel önizleme açık</h2><a href="screens/14_server_preview_on.png" target="_blank" rel="noopener"><img src="screens/14_server_preview_on.png" alt="Oda · yerel önizleme açık"></a></article>
+<article data-category="screens"><h2>Oda · yerel önizleme açık · aşağı kaydırılmış</h2><a href="screens/14_server_preview_on_bottom.png" target="_blank" rel="noopener"><img src="screens/14_server_preview_on_bottom.png" alt="Oda · yerel önizleme açık · aşağı kaydırılmış"></a></article>
+<article data-category="screens"><h2>Oda · QR / IP eşleştirme</h2><a href="screens/15_server_qr_ip.png" target="_blank" rel="noopener"><img src="screens/15_server_qr_ip.png" alt="Oda · QR / IP eşleştirme"></a></article>
+<article data-category="screens"><h2>Oda · servis durumu</h2><a href="screens/16_server_services.png" target="_blank" rel="noopener"><img src="screens/16_server_services.png" alt="Oda · servis durumu"></a></article>
+<article data-category="screens"><h2>Oda ayarları</h2><a href="screens/17_server_settings.png" target="_blank" rel="noopener"><img src="screens/17_server_settings.png" alt="Oda ayarları"></a></article>
+<article data-category="purchases"><h2>Satın almaya hazır</h2><a href="purchases/ready.png" target="_blank" rel="noopener"><img src="purchases/ready.png" alt="Satın almaya hazır"></a></article>
+<article data-category="purchases"><h2>Mağaza işlemi sürüyor</h2><a href="purchases/purchasing.png" target="_blank" rel="noopener"><img src="purchases/purchasing.png" alt="Mağaza işlemi sürüyor"></a></article>
+<article data-category="purchases"><h2>Mağaza onayı bekleniyor</h2><a href="purchases/pending.png" target="_blank" rel="noopener"><img src="purchases/pending.png" alt="Mağaza onayı bekleniyor"></a></article>
+<article data-category="purchases"><h2>Satın alma doğrulanmayı bekliyor</h2><a href="purchases/verification_pending.png" target="_blank" rel="noopener"><img src="purchases/verification_pending.png" alt="Satın alma doğrulanmayı bekliyor"></a></article>
+<article data-category="purchases"><h2>Oda lisansı etkinleştiriliyor</h2><a href="purchases/activating.png" target="_blank" rel="noopener"><img src="purchases/activating.png" alt="Oda lisansı etkinleştiriliyor"></a></article>
+<article data-category="purchases"><h2>Oda çevrimdışı · lisans teslimi bekliyor</h2><a href="purchases/activation_pending.png" target="_blank" rel="noopener"><img src="purchases/activation_pending.png" alt="Oda çevrimdışı · lisans teslimi bekliyor"></a></article>
+<article data-category="purchases"><h2>Aile lisansı etkin</h2><a href="purchases/active.png" target="_blank" rel="noopener"><img src="purchases/active.png" alt="Aile lisansı etkin"></a></article>
+<article data-category="purchases"><h2>Mağaza iadesi / iptali</h2><a href="purchases/revoked.png" target="_blank" rel="noopener"><img src="purchases/revoked.png" alt="Mağaza iadesi / iptali"></a></article>
+<article data-category="purchases"><h2>Satın alma kullanılamıyor</h2><a href="purchases/unavailable.png" target="_blank" rel="noopener"><img src="purchases/unavailable.png" alt="Satın alma kullanılamıyor"></a></article>
+<article data-category="purchases"><h2>Oda uygulaması güncellenmeli</h2><a href="purchases/room_update_required.png" target="_blank" rel="noopener"><img src="purchases/room_update_required.png" alt="Oda uygulaması güncellenmeli"></a></article>
+<article data-category="purchases"><h2>Geri yüklenecek satın alma bulunamadı</h2><a href="purchases/no_purchase_found.png" target="_blank" rel="noopener"><img src="purchases/no_purchase_found.png" alt="Geri yüklenecek satın alma bulunamadı"></a></article>
+<article data-category="purchases"><h2>Satın alma başarısız</h2><a href="purchases/failed.png" target="_blank" rel="noopener"><img src="purchases/failed.png" alt="Satın alma başarısız"></a></article>
+<article data-category="purchases"><h2>Kullanıcı satın almayı iptal etti</h2><a href="purchases/canceled.png" target="_blank" rel="noopener"><img src="purchases/canceled.png" alt="Kullanıcı satın almayı iptal etti"></a></article></div>
+<footer>Bu görseller davranış testlerini tamamlar. Mağazanın kendi ödeme penceresi, gerçek hoparlör/kamera ve uzun süreli pil kabulü ayrı doğrulamalardır.</footer>
+</main><script>
+const cards=[...document.querySelectorAll('article')];
+const buttons=[...document.querySelectorAll('[data-filter]')];
+function filter(value){cards.forEach(c=>c.hidden=value!=='all'&&c.dataset.category!==value);buttons.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filter===value)));}
+buttons.forEach(b=>b.addEventListener('click',()=>filter(b.dataset.filter)));
+const group=new URLSearchParams(location.search).get('group');
+if(group!==null&&/^\d+$/.test(group)){const start=Number(group)*6;cards.forEach((c,i)=>c.hidden=i<start||i>=start+6);}
+</script></html>

@@ -39,9 +39,18 @@ void main() {
       });
       for (final state in [
         ('ready', ParentPurchasePhase.ready),
+        ('purchasing', ParentPurchasePhase.purchasing),
         ('pending', ParentPurchasePhase.purchasePending),
+        ('verification_pending', ParentPurchasePhase.verificationPending),
+        ('activating', ParentPurchasePhase.activating),
         ('activation_pending', ParentPurchasePhase.activationPending),
         ('active', ParentPurchasePhase.activated),
+        ('revoked', ParentPurchasePhase.revoked),
+        ('unavailable', ParentPurchasePhase.unavailable),
+        ('room_update_required', ParentPurchasePhase.roomUpdateRequired),
+        ('no_purchase_found', ParentPurchasePhase.noPurchaseFound),
+        ('failed', ParentPurchasePhase.failed),
+        ('canceled', ParentPurchasePhase.canceled),
       ]) {
         final runtime = _UiRuntime(phase: state.$2);
         final key = GlobalKey();
@@ -81,7 +90,9 @@ void main() {
             ),
           ),
         ));
-        await tester.pumpAndSettle();
+        // Busy states deliberately animate until the store/room replies.
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
         expect(tester.takeException(), isNull);
         await tester.runAsync(() async {
           final boundary =

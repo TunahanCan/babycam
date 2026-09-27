@@ -106,7 +106,7 @@ class _SystemNotificationSettingsCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  strings.ui('navNotifications'),
+                  strings.ui('systemNotificationSettingsTitle'),
                   style: const TextStyle(
                     color: MiuCamDesignTokens.navy,
                     fontSize: 15.5,
@@ -115,7 +115,7 @@ class _SystemNotificationSettingsCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  strings.ui('notificationsManageText'),
+                  strings.ui('systemNotificationSettingsDescription'),
                   style: const TextStyle(
                     color: MiuCamDesignTokens.slate,
                     fontSize: 13,

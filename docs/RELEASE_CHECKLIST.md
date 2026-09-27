@@ -3,7 +3,9 @@
 Bu belge mağaza yüklemesinden önce tamamlanması gereken teknik ve operasyonel
 kapıları tanımlar.
 
-Son inceleme: [27 Eylül 2026 performans ve ekran incelemesi](reports/performance_ui_review_2026-09-27.md).
+Son kabul: [27 Eylül 2026 uygulama, medya ve mağaza kabulü](reports/full_app_acceptance_2026-09-27.md)
+(1381 Flutter + 92 backend testi; 38 görüntülü galeri; gerçek mağaza kabulü açık).
+Önceki inceleme: [27 Eylül 2026 performans ve ekran incelemesi](reports/performance_ui_review_2026-09-27.md).
 Odaklı takip: [ses/video akışı ve bildirim tutarlılığı](reports/media_alert_review_2026-09-27.md)
 (1.107 test ve son kaynaklarla Android ses/bildirim doğrulaması).
 Önceki kapsamlı inceleme: [6 Eylül 2026 kod incelemesi](reports/production_code_review_2026-09-06.md).

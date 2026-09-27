@@ -1,0 +1,247 @@
+{
+  "renderer": "Flutter host widget renderer",
+  "locale": "tr",
+  "screens": 17,
+  "purchaseStates": 13,
+  "viewport": {
+    "screens": [
+      390,
+      844
+    ],
+    "purchases": [
+      320,
+      568
+    ]
+  },
+  "fixtures": "Generated loopback media; mocked native output and store states; no real charges.",
+  "items": [
+    {
+      "title": "Mod seçimi",
+      "category": "screens",
+      "path": "screens/01_role.png",
+      "sha256": "7b46bd75f07783642b3ec16df7a062cddb20a90439b08e20de507f30340a1715"
+    },
+    {
+      "title": "Ebeveyn · eşleştirilmemiş",
+      "category": "screens",
+      "path": "screens/02_parent_unpaired.png",
+      "sha256": "f9963cdeb0f9f555d716a783458643123a1113af59580e5e63e9de642b6d6cee"
+    },
+    {
+      "title": "Oda bul · QR / IP",
+      "category": "screens",
+      "path": "screens/03_find_room.png",
+      "sha256": "66544ec2020a87ca8052e44bedce9b905b0689e5bbb149450de1732d4d3d3ab8"
+    },
+    {
+      "title": "Oda bul · QR / IP · aşağı kaydırılmış",
+      "category": "screens",
+      "path": "screens/03_find_room_bottom.png",
+      "sha256": "3631fac7b0788cbbd8559d353f602a53ade3e8bb5f1c127fdf75a70a04405cfc"
+    },
+    {
+      "title": "Bildirimler · geçmiş ve filtreler",
+      "category": "screens",
+      "path": "screens/04_notifications.png",
+      "sha256": "e0ed67b61488917e5c62da933ce1118deaf55a43af3099d225b1f763d4c97ee8"
+    },
+    {
+      "title": "Ebeveyn ayarları",
+      "category": "screens",
+      "path": "screens/05_parent_settings.png",
+      "sha256": "f33e419ceecabf88fbe15d6d02a15826380d1aff888f0d68c152742284aec05c"
+    },
+    {
+      "title": "Ebeveyn ayarları · aşağı kaydırılmış",
+      "category": "screens",
+      "path": "screens/05_parent_settings_bottom.png",
+      "sha256": "09cba955739bf6617761cc1aa60be0a018729dd86dfc9c9044dfb72ee2759522"
+    },
+    {
+      "title": "Ebeveyn · bağlı oda",
+      "category": "screens",
+      "path": "screens/06_parent_paired.png",
+      "sha256": "24b5271923f3e013408668af636e687bf49ffd828fde72403488ba4fcee19958"
+    },
+    {
+      "title": "QR · kamera izni yok / manuel giriş",
+      "category": "screens",
+      "path": "screens/07_qr_permission_denied.png",
+      "sha256": "b6655edcdac2708a9518f0b6caf50278649ce527070f1a115da89dd7dff032be"
+    },
+    {
+      "title": "Canlı izleme",
+      "category": "screens",
+      "path": "screens/08_watch_live.png",
+      "sha256": "1c652c8b53915e584b741a85ec5966c9bbb79aa4a558fc3e3918619d744f19a2"
+    },
+    {
+      "title": "Canlı izleme · aşağı kaydırılmış",
+      "category": "screens",
+      "path": "screens/08_watch_live_bottom.png",
+      "sha256": "3cf183504a243474a33247d9d48b9f4827438b88bbb09bdfff8259c79793a886"
+    },
+    {
+      "title": "Olay geçmişi",
+      "category": "screens",
+      "path": "screens/09_watch_history.png",
+      "sha256": "d6b8975a4ca9ba95de707de010086f05f34d6d78f5ccadf2283d0a9d4ea8f02e"
+    },
+    {
+      "title": "Olay geçmişi · aşağı kaydırılmış",
+      "category": "screens",
+      "path": "screens/09_watch_history_bottom.png",
+      "sha256": "a3066d685802615b3ba3d946a3d67a7dfffae755da903700e88494345bd779ac"
+    },
+    {
+      "title": "İzleme ayarları",
+      "category": "screens",
+      "path": "screens/10_watch_settings.png",
+      "sha256": "4ac000f652d7c7270d96b41c1d698992c82bcaa079a0115cdd1e9f87eb2477f8"
+    },
+    {
+      "title": "Oda kontrolleri",
+      "category": "screens",
+      "path": "screens/11_room_controls.png",
+      "sha256": "1c425036e66d96186951a95f371c990fff4eff30c9f5d4c91a471b9defacbe9d"
+    },
+    {
+      "title": "Oda kontrolleri · aşağı kaydırılmış",
+      "category": "screens",
+      "path": "screens/11_room_controls_bottom.png",
+      "sha256": "71bdfd32ba02f93380d3e896b02f37743aafcf2f9730f5ca46713a10c6aeaf79"
+    },
+    {
+      "title": "İzleme · bağlantı hatası",
+      "category": "screens",
+      "path": "screens/12_watch_connection_error.png",
+      "sha256": "a9796669605b6d9dff0a04894c93d80d86927b0837dceb094b27a4236fe1ee77"
+    },
+    {
+      "title": "İzleme · bağlantı hatası · aşağı kaydırılmış",
+      "category": "screens",
+      "path": "screens/12_watch_connection_error_bottom.png",
+      "sha256": "e6e0bf2f1d50adbbddd92b005fb2ed04ca4350d2a1dac735befa45f4d84b3bb7"
+    },
+    {
+      "title": "Oda · yerel önizleme kapalı",
+      "category": "screens",
+      "path": "screens/13_server_preview_off.png",
+      "sha256": "3688d674e577ccc26f3c84270c66e22ae3de545b72d227d77ee691d5a5e1e6ce"
+    },
+    {
+      "title": "Oda · yerel önizleme kapalı · aşağı kaydırılmış",
+      "category": "screens",
+      "path": "screens/13_server_preview_off_bottom.png",
+      "sha256": "71471d94e7df496a34576192a33aae686799463dcc5e8f0fdbe123a80246dea9"
+    },
+    {
+      "title": "Oda · yerel önizleme açık",
+      "category": "screens",
+      "path": "screens/14_server_preview_on.png",
+      "sha256": "8fc6dffeef52a70811d78b89cd3e5762e69fcaece20895589289fd2feeb1fb1a"
+    },
+    {
+      "title": "Oda · yerel önizleme açık · aşağı kaydırılmış",
+      "category": "screens",
+      "path": "screens/14_server_preview_on_bottom.png",
+      "sha256": "b2b007b8997e41238493ba5ee4ed77ca5ff7a3b4c56fb5406fda717f9bbcb597"
+    },
+    {
+      "title": "Oda · QR / IP eşleştirme",
+      "category": "screens",
+      "path": "screens/15_server_qr_ip.png",
+      "sha256": "f5e66c88fce4f337f5bc4fa6c6b13b6d9692ea6af72cd77dfac71247325f595a"
+    },
+    {
+      "title": "Oda · servis durumu",
+      "category": "screens",
+      "path": "screens/16_server_services.png",
+      "sha256": "e9bc858aad2a50255702959279392d0cb3613d7880db3ccf14ea475d03d2f960"
+    },
+    {
+      "title": "Oda ayarları",
+      "category": "screens",
+      "path": "screens/17_server_settings.png",
+      "sha256": "92c36a06f06c3be7fe3de3fea483ee18fcc98c2dac0ef2bd770d770597dcd0c9"
+    },
+    {
+      "title": "Satın almaya hazır",
+      "category": "purchases",
+      "path": "purchases/ready.png",
+      "sha256": "d466dedd852d1ac7b6e4c305d43fcf2b24f8bf1c60275275db4c83657e7314f2"
+    },
+    {
+      "title": "Mağaza işlemi sürüyor",
+      "category": "purchases",
+      "path": "purchases/purchasing.png",
+      "sha256": "4f97fb185cc8c4e582f702fd8857db2bde6ff6b004401ac3fa7f7a7009728d50"
+    },
+    {
+      "title": "Mağaza onayı bekleniyor",
+      "category": "purchases",
+      "path": "purchases/pending.png",
+      "sha256": "3a565921f889733738e5b0522ebcbe6f95a67ec4ab9262b27d74b629e44a20c2"
+    },
+    {
+      "title": "Satın alma doğrulanmayı bekliyor",
+      "category": "purchases",
+      "path": "purchases/verification_pending.png",
+      "sha256": "ddbae68edb82e0e2f0860aa2f5a2eb2c82a875f21dff6102afcbecf9f1f899c7"
+    },
+    {
+      "title": "Oda lisansı etkinleştiriliyor",
+      "category": "purchases",
+      "path": "purchases/activating.png",
+      "sha256": "30255fa23fa410cb799e96b09fa2e96777852f4c3a4cb30e5b8560a1922702ed"
+    },
+    {
+      "title": "Oda çevrimdışı · lisans teslimi bekliyor",
+      "category": "purchases",
+      "path": "purchases/activation_pending.png",
+      "sha256": "b871c9a5f5d13b1c43984dda3c608dd700082ff5bd2851e64b411ceec2e3c46a"
+    },
+    {
+      "title": "Aile lisansı etkin",
+      "category": "purchases",
+      "path": "purchases/active.png",
+      "sha256": "8ada7a835ff53f50dc6723816db86f2e40f3dd710bde1db140fe1922ef9c101a"
+    },
+    {
+      "title": "Mağaza iadesi / iptali",
+      "category": "purchases",
+      "path": "purchases/revoked.png",
+      "sha256": "c9e09fac6acd73782e29a3c56a7d4f54fd24475cc29dbf006ac48d63894ff25d"
+    },
+    {
+      "title": "Satın alma kullanılamıyor",
+      "category": "purchases",
+      "path": "purchases/unavailable.png",
+      "sha256": "9a61f02d692e521cd7a95dd5f81f3ad69738ce83b24169aff5a15862b45bd68b"
+    },
+    {
+      "title": "Oda uygulaması güncellenmeli",
+      "category": "purchases",
+      "path": "purchases/room_update_required.png",
+      "sha256": "464280b79cf4fe99f71850658370f3661ccd34e129316581a7c7067500f8ec39"
+    },
+    {
+      "title": "Geri yüklenecek satın alma bulunamadı",
+      "category": "purchases",
+      "path": "purchases/no_purchase_found.png",
+      "sha256": "d8d62e69e97d20c0174ce46c6fa6a69f778c86a0980f8e3f5230bbf30af87471"
+    },
+    {
+      "title": "Satın alma başarısız",
+      "category": "purchases",
+      "path": "purchases/failed.png",
+      "sha256": "41a7fb5bc0693bfcf18a72470362d69a313e7f820687bf979afa02959085acca"
+    },
+    {
+      "title": "Kullanıcı satın almayı iptal etti",
+      "category": "purchases",
+      "path": "purchases/canceled.png",
+      "sha256": "38621fde1ed2050e8397000b6884b26885078a3b4f7c2c6985c263a89fbc9528"
+    }
+  ]
+}

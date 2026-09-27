@@ -64,6 +64,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
   late _ClientHomeTab _tab;
   late bool _keepScreenAwake;
   Locale? _selectedLocale;
+  bool _pairingBusy = false;
   StreamSubscription<String>? _notificationTapSubscription;
 
   @override
@@ -220,6 +221,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
         ),
       _ClientHomeTab.find => _ClientFindSection(
           key: const ValueKey('client-find'),
+          connecting: _pairingBusy,
           activeRole: widget.activeRole,
           onRoleSelected: widget.onRoleSelected,
           switchingRole: widget.switchingRole,
@@ -314,69 +316,63 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
     return ClipRect(child: SlideTransition(position: offset, child: child));
   }
 
-  Future<void> _scanQr(BuildContext context) async {
-    final strings = AppStrings.of(context);
-    final code = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const QRScanScreen()),
-    );
-    if (!context.mounted || code == null) return;
-
-    final payload = PairingPayload.parseUri(code);
-    if (payload == null) {
-      _showMessage(context, strings.ui('invalidQrCode'));
-      return;
-    }
-
-    try {
-      await ClientPairingFlow(widget.runtime).pairAndArmAlerts(payload);
-      if (!context.mounted) return;
-      setState(() => _tab = _ClientHomeTab.watch);
-      _showMessage(
-          context,
-          strings.uiFormat('pairedMessage',
-              {'name': localizedRoomName(strings, payload.deviceName)}));
-    } catch (error) {
-      if (!context.mounted) return;
-      _showMessage(context, _pairingFailureMessage(strings, error));
-    }
-  }
+  Future<void> _scanQr(BuildContext context) => _runPairing(
+        context,
+        () async {
+          final code = await Navigator.of(context).push<String>(
+            MaterialPageRoute(builder: (_) => const QRScanScreen()),
+          );
+          if (!context.mounted || code == null) return null;
+          final payload = PairingPayload.parseUri(code);
+          if (payload == null) {
+            _showMessage(context, AppStrings.of(context).ui('invalidQrCode'));
+          }
+          return payload;
+        },
+      );
 
   Future<void> _connectManualIp(
     BuildContext context,
     String manualAddress,
   ) async {
-    final strings = AppStrings.of(context);
+    if (_pairingBusy) return;
     final parsed = _parseManualAddress(manualAddress);
     if (parsed == null) {
-      _showMessage(context, strings.ui('invalidIpFormat'));
+      _showMessage(context, AppStrings.of(context).ui('invalidIpFormat'));
       return;
     }
-    try {
-      final payload = await _fetchManualPairingPayload(parsed);
-      await ClientPairingFlow(widget.runtime).pairAndArmAlerts(payload);
-      if (!context.mounted) return;
-      setState(() => _tab = _ClientHomeTab.watch);
-      _showMessage(
-          context,
-          strings.uiFormat('pairedMessage',
-              {'name': localizedRoomName(strings, payload.deviceName)}));
-    } catch (error) {
-      if (!context.mounted) return;
-      _showMessage(context, _pairingFailureMessage(strings, error));
-    }
+    await _runPairing(context, () => _fetchManualPairingPayload(parsed));
   }
 
   Future<void> _connectDiscoveredService(
     BuildContext context,
     MiuCamDiscoveredService service,
-  ) async {
-    final strings = AppStrings.of(context);
-    try {
-      final payload = await _fetchManualPairingPayload(
-        (host: service.host, port: service.port),
+  ) =>
+      _runPairing(
+        context,
+        () => _fetchManualPairingPayload(
+          (host: service.host, port: service.port),
+        ),
       );
+
+  Future<void> _runPairing(
+    BuildContext context,
+    Future<PairingPayload?> Function() loadPayload,
+  ) async {
+    if (_pairingBusy || widget.runtime.isDisposed) return;
+    final strings = AppStrings.of(context);
+    setState(() => _pairingBusy = true);
+    try {
+      final payload = await loadPayload();
+      // A LAN reply can arrive after this screen or its role has closed.
+      if (!mounted ||
+          !context.mounted ||
+          widget.runtime.isDisposed ||
+          payload == null) {
+        return;
+      }
       await ClientPairingFlow(widget.runtime).pairAndArmAlerts(payload);
-      if (!context.mounted) return;
+      if (!mounted || !context.mounted || widget.runtime.isDisposed) return;
       setState(() => _tab = _ClientHomeTab.watch);
       _showMessage(
         context,
@@ -384,8 +380,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
             {'name': localizedRoomName(strings, payload.deviceName)}),
       );
     } catch (error) {
-      if (!context.mounted) return;
+      if (!mounted || !context.mounted || widget.runtime.isDisposed) return;
       _showMessage(context, _pairingFailureMessage(strings, error));
+    } finally {
+      if (mounted) setState(() => _pairingBusy = false);
     }
   }
 
@@ -393,7 +391,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
     if (error is PairingFailure) {
       return strings.pairingFailureMessage(error.code.name);
     }
-    return strings.uiFormat('pairingFailed', {'error': error});
+    return strings
+        .pairingFailureMessage(PairingFailureCode.connectionUnavailable.name);
   }
 
   Future<PairingPayload> _fetchManualPairingPayload(

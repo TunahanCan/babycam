@@ -180,6 +180,12 @@ Server ekranındaki IP ve portu kullan.
 
 ## Ürün raporu
 
+Son [uygulama, medya ve mağaza kabulü](docs/reports/full_app_acceptance_2026-09-27.md)
+1381 Flutter testi, 92 backend testi ve
+[38 görüntülü ekran/ödeme galerisi](docs/reports/app_acceptance_2026-09-27/index.html)
+ile belgelenmiştir. Galeri host üzerinde mock sınırlarla üretilmiştir; gerçek
+mağaza ve fiziksel cihaz kabulünün durumu raporda ayrıca belirtilir.
+
 Güncel rapor; rol seçimi, eşleşme, Client ve Server ekranları, canlı izleme,
 oda kontrolleri, hata kurtarma ve ayar akışlarını fiziksel Android cihazından
 alınmış görüntülerle belgeliyor.

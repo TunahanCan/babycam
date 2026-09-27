@@ -2,10 +2,71 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miucam/core/media/camera_permission_gateway.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
 import 'package:miucam/features/client/pairing/qr_scan_screen.dart';
 import 'package:miucam/l10n/app_strings.dart';
 
 void main() {
+  testWidgets('valid pasted QR returns to the caller without camera access',
+      (tester) async {
+    final gateway = _FakeQRCameraPermissionGateway(
+      statusResult: CameraPermissionStatus.denied,
+      requestResult: CameraPermissionStatus.denied,
+    );
+    final code = PairingPayload(
+      schemaVersion: 2,
+      host: '192.168.1.20',
+      port: 8080,
+      deviceId: 'room',
+      deviceName: 'Room',
+      pairingNonce: 'valid-qr',
+      expiresAtMs: DateTime.now()
+          .add(const Duration(minutes: 10))
+          .millisecondsSinceEpoch,
+      capabilities: const {},
+    ).toUriString();
+    String? returnedCode;
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('tr'),
+      supportedLocales: AppStrings.supportedLocales,
+      localizationsDelegates: const [
+        AppStrings.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: Builder(
+          builder: (context) => Scaffold(
+                body: FilledButton(
+                  onPressed: () async {
+                    returnedCode = await Navigator.of(context).push<String>(
+                      MaterialPageRoute(
+                          builder: (_) => QRScanScreen(
+                                permissionGateway: gateway,
+                                cameraAvailabilityGateway:
+                                    _FakeQRCameraAvailabilityGateway(
+                                        available: false),
+                              )),
+                    );
+                  },
+                  child: const Text('Open scanner'),
+                ),
+              )),
+    ));
+    await tester.tap(find.text('Open scanner'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '  $code  ');
+    tester.testTextInput.hide();
+    await tester.ensureVisible(find.byKey(const ValueKey('qr-manual-submit')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('qr-manual-submit')));
+    await tester.pumpAndSettle();
+    expect(find.byType(QRScanScreen), findsNothing);
+    expect(returnedCode, code);
+    expect(gateway.requestCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('kamera izni reddedilince manuel QR girişi açık kalır',
       (tester) async {
     final gateway = _FakeQRCameraPermissionGateway(

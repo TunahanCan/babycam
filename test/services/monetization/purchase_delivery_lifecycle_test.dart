@@ -184,6 +184,122 @@ void main() {
     expect(store.buyCalls, 2);
   });
 
+  test('a store sheet still open after timeout remains the only checkout',
+      () async {
+    final store = _FakeInAppPurchaseStore()..buyGate = Completer<bool>();
+    final gateway = InAppBroadcastPurchaseGateway(
+      store: store,
+      verifier: _ControlledVerifier(),
+      deliverPurchase: (_) async {},
+      timeout: const Duration(milliseconds: 15),
+    );
+    addTearDown(store.dispose);
+    addTearDown(gateway.dispose);
+    Future<BroadcastPurchaseResult> buy() => gateway.purchase(
+        productId: BroadcastAccessConfig.productId, priceLabel: '350 TL');
+
+    expect((await buy()).status, BroadcastPurchaseStatus.pending);
+    expect((await buy()).status, BroadcastPurchaseStatus.pending);
+    expect(store.buyCalls, 1);
+
+    final completed = gateway.updates.first;
+    store.emit(
+        [_purchase(status: PurchaseStatus.purchased, pendingComplete: true)]);
+    expect((await completed).unlocksAccess, isTrue);
+    store.buyGate!.complete(true);
+    expect(store.completedPurchases, 1);
+  });
+
+  for (final failedWithException in [false, true]) {
+    test('late store launch failure releases checkout: $failedWithException',
+        () async {
+      final store = _FakeInAppPurchaseStore()..buyGate = Completer<bool>();
+      final gateway = InAppBroadcastPurchaseGateway(
+        store: store,
+        verifier: _ControlledVerifier(),
+        deliverPurchase: (_) async {},
+        timeout: const Duration(milliseconds: 15),
+      );
+      addTearDown(store.dispose);
+      addTearDown(gateway.dispose);
+      Future<BroadcastPurchaseResult> buy() => gateway.purchase(
+          productId: BroadcastAccessConfig.productId, priceLabel: '350 TL');
+      expect((await buy()).status, BroadcastPurchaseStatus.pending);
+      final failed = gateway.updates.first;
+      if (failedWithException) {
+        store.buyGate!.completeError(StateError('store declined checkout'));
+      } else {
+        store.buyGate!.complete(false);
+      }
+      expect((await failed).status, BroadcastPurchaseStatus.error);
+      store.buyGate = null;
+      expect((await buy()).status, BroadcastPurchaseStatus.pending);
+      expect(store.buyCalls, 2);
+    });
+  }
+
+  test('late launch result from a canceled sheet cannot cancel a new sheet',
+      () async {
+    final firstSheet = Completer<bool>();
+    final store = _FakeInAppPurchaseStore()..buyGate = firstSheet;
+    final gateway = InAppBroadcastPurchaseGateway(
+      store: store,
+      verifier: _ControlledVerifier(),
+      deliverPurchase: (_) async {},
+      timeout: const Duration(milliseconds: 15),
+    );
+    addTearDown(store.dispose);
+    addTearDown(gateway.dispose);
+    Future<BroadcastPurchaseResult> buy() => gateway.purchase(
+        productId: BroadcastAccessConfig.productId, priceLabel: '350 TL');
+    expect((await buy()).status, BroadcastPurchaseStatus.pending);
+    final canceled = gateway.updates.first;
+    store.emit([_purchase(status: PurchaseStatus.canceled)]);
+    expect((await canceled).status, BroadcastPurchaseStatus.canceled);
+
+    store.buyGate = null;
+    expect((await buy()).status, BroadcastPurchaseStatus.pending);
+    firstSheet.complete(false);
+    await Future<void>.delayed(Duration.zero);
+    expect((await buy()).status, BroadcastPurchaseStatus.pending);
+    expect(store.buyCalls, 2);
+  });
+
+  for (final includesPending in [false, true]) {
+    test(
+        'open native sheet survives empty foreground and restore queries: '
+        'pending query=$includesPending', () async {
+      final store = _OwnedStore()
+        ..includesPending = includesPending
+        ..buyGate = Completer<bool>();
+      final gateway = InAppBroadcastPurchaseGateway(
+        store: store,
+        verifier: _ControlledVerifier(),
+        deliverPurchase: (_) async {},
+        timeout: const Duration(milliseconds: 15),
+      );
+      addTearDown(store.dispose);
+      addTearDown(gateway.dispose);
+      Future<BroadcastPurchaseResult> buy() => gateway.purchase(
+          productId: BroadcastAccessConfig.productId, priceLabel: '350 TL');
+      expect((await buy()).status, BroadcastPurchaseStatus.pending);
+      await gateway.reconcilePurchases(force: true);
+      expect(
+          (await gateway.restore(productId: BroadcastAccessConfig.productId))
+              .status,
+          BroadcastPurchaseStatus.pending);
+      expect((await buy()).status, BroadcastPurchaseStatus.pending);
+      expect(store.buyCalls, 1);
+      final declined = gateway.updates.first;
+      store.emit([_purchase(status: PurchaseStatus.error)]);
+      expect((await declined).status, BroadcastPurchaseStatus.error);
+      store.buyGate!.complete(false);
+      store.buyGate = null;
+      expect((await buy()).status, BroadcastPurchaseStatus.pending);
+      expect(store.buyCalls, 2);
+    });
+  }
+
   test('unowned store transaction is never acknowledged', () async {
     final store = _FakeInAppPurchaseStore();
     final gateway = InAppBroadcastPurchaseGateway(
@@ -220,6 +336,31 @@ void main() {
     await service.dispose().timeout(const Duration(milliseconds: 200));
     store.completeGate!.complete();
     await store.dispose();
+  });
+
+  test('duplicate paid store events deliver and acknowledge only once',
+      () async {
+    final store = _FakeInAppPurchaseStore();
+    final verifier = _ControlledVerifier();
+    var deliveries = 0;
+    final gateway = InAppBroadcastPurchaseGateway(
+      store: store,
+      verifier: verifier,
+      deliverPurchase: (_) async {
+        deliveries++;
+      },
+    );
+    addTearDown(store.dispose);
+    addTearDown(gateway.dispose);
+    final updates = gateway.updates.take(3).toList();
+    store.emit(List.generate(
+        3,
+        (_) => _purchase(
+            status: PurchaseStatus.purchased, pendingComplete: true)));
+    expect((await updates).every((result) => result.unlocksAccess), isTrue);
+    expect(deliveries, 1);
+    expect(verifier.calls, 1);
+    expect(store.completedPurchases, 1);
   });
 
   test('stalled acknowledgement cannot block gateway disposal', () async {
@@ -396,6 +537,7 @@ class _FakeInAppPurchaseStore implements InAppPurchaseStore {
   int buyCalls = 0;
   int restoreCalls = 0;
   Completer<void>? completeGate;
+  Completer<bool>? buyGate;
   final completeStarted = Completer<void>();
   Future<ProductDetailsResponse>? delayedCatalog;
   int completeFailuresRemaining = 0;
@@ -438,7 +580,7 @@ class _FakeInAppPurchaseStore implements InAppPurchaseStore {
   Future<bool> buyNonConsumable({required PurchaseParam purchaseParam}) async {
     buyCalls++;
     if (!buyStarted.isCompleted) buyStarted.complete();
-    return true;
+    return buyGate == null ? true : await buyGate!.future;
   }
 
   @override
@@ -465,8 +607,9 @@ class _OwnedStore extends _FakeInAppPurchaseStore
   int ownedQueries = 0;
   Object? queryError;
   Completer<void>? queryGate;
+  bool includesPending = true;
   @override
-  bool get ownedQueryIncludesPending => true;
+  bool get ownedQueryIncludesPending => includesPending;
   @override
   Future<List<PurchaseDetails>> queryOwnedPurchases(
       {bool includeFinished = true}) async {

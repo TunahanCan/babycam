@@ -80,6 +80,8 @@ class InAppBroadcastPurchaseGateway
   bool _disposed = false;
   bool _pendingStoreApproval = false;
   bool _checkoutAwaitingResult = false;
+  int _checkoutGeneration = 0;
+  int? _nativeCheckoutGeneration;
   bool _restoring = false;
 
   @override
@@ -120,9 +122,10 @@ class InAppBroadcastPurchaseGateway
           .toList();
       _lastQueryHadProduct = relevant.isNotEmpty;
       if (relevant.isEmpty &&
+          _nativeCheckoutGeneration == null &&
           (store as InAppPurchaseOwnedQueryStore).ownedQueryIncludesPending) {
         _pendingStoreApproval = false;
-        _checkoutAwaitingResult = false;
+        _finishCheckout();
       }
       await _events.run(() => _handlePurchases(relevant));
     })()
@@ -316,23 +319,25 @@ class InAppBroadcastPurchaseGateway
             }
             if (completer.isCompleted) return completer.future;
           }
-          final launched = await _awaitStore(
-              () => _store.buyNonConsumable(
-                    purchaseParam: PurchaseParam(productDetails: product),
-                  ),
-              timeout);
+          final launched =
+              await _awaitStore(() => _openCheckout(product), timeout);
+          if (completer.isCompleted) return completer.future;
           if (!launched) {
             _publishAndComplete(const BroadcastPurchaseResult(
               status: BroadcastPurchaseStatus.error,
               message: 'Purchase sheet could not be opened.',
             ));
-          } else if (!completer.isCompleted) {
-            _checkoutAwaitingResult = true;
           }
         }
       }
     } catch (error) {
       if (completer.isCompleted) return completer.future;
+      if (error is TimeoutException && _checkoutAwaitingResult) {
+        // StoreKit's native call remains open while the user decides in the
+        // payment sheet. A UI deadline is not evidence of a failed checkout.
+        _publishAndComplete(_pendingResult);
+        return completer.future;
+      }
       if (error is TimeoutException &&
           _verifier is CancellableBroadcastPurchaseVerifier) {
         (_verifier as CancellableBroadcastPurchaseVerifier).cancelPending();
@@ -423,6 +428,39 @@ class InAppBroadcastPurchaseGateway
     return _active = Completer<BroadcastPurchaseResult>();
   }
 
+  Future<bool> _openCheckout(ProductDetails product) async {
+    final generation = ++_checkoutGeneration;
+    _nativeCheckoutGeneration = generation;
+    _checkoutAwaitingResult = true;
+    try {
+      final launched = await _store.buyNonConsumable(
+          purchaseParam: PurchaseParam(productDetails: product));
+      if (!launched) _rejectCheckoutLaunch(generation);
+      return launched;
+    } catch (_) {
+      _rejectCheckoutLaunch(generation);
+      return false;
+    } finally {
+      if (_nativeCheckoutGeneration == generation) {
+        _nativeCheckoutGeneration = null;
+      }
+    }
+  }
+
+  void _rejectCheckoutLaunch(int generation) {
+    if (_disposed || generation != _checkoutGeneration) return;
+    _finishCheckout();
+    _publishAndComplete(const BroadcastPurchaseResult(
+      status: BroadcastPurchaseStatus.error,
+      message: 'Purchase sheet could not be opened.',
+    ));
+  }
+
+  void _finishCheckout() {
+    _checkoutGeneration++;
+    _checkoutAwaitingResult = false;
+  }
+
   // Native store calls may never finish when the owner leaves the room screen.
   // Complete their wrapper on disposal so catalog timers cannot keep running
   // and a late store response cannot open checkout after the screen is gone.
@@ -449,9 +487,6 @@ class InAppBroadcastPurchaseGateway
         timeout,
         onTimeout: () {
           if (identical(_active, completer)) {
-            if (_restoring && !_pendingStoreApproval) {
-              _checkoutAwaitingResult = false;
-            }
             _active = null;
             _restoring = false;
           }
@@ -496,7 +531,7 @@ class InAppBroadcastPurchaseGateway
           ));
         case PurchaseStatus.canceled:
           _pendingStoreApproval = false;
-          _checkoutAwaitingResult = false;
+          _finishCheckout();
           await _completeTerminalPurchase(purchase);
           _publishAndComplete(const BroadcastPurchaseResult(
             status: BroadcastPurchaseStatus.canceled,
@@ -504,7 +539,7 @@ class InAppBroadcastPurchaseGateway
           ));
         case PurchaseStatus.error:
           _pendingStoreApproval = false;
-          _checkoutAwaitingResult = false;
+          _finishCheckout();
           await _completeTerminalPurchase(purchase);
           _publishAndComplete(BroadcastPurchaseResult(
             status: BroadcastPurchaseStatus.error,
@@ -520,7 +555,7 @@ class InAppBroadcastPurchaseGateway
   ) async {
     final evidenceKey = purchaseEvidenceFingerprint(purchase);
     _pendingStoreApproval = false;
-    _checkoutAwaitingResult = false;
+    _finishCheckout();
     final processed = _processedEvidence[evidenceKey];
     if (processed != null &&
         !_restoring &&

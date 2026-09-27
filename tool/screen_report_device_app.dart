@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:miucam/app/app_role.dart';
 import 'package:miucam/core/media/adaptive_media_profile.dart';
+import 'package:miucam/core/media/camera_permission_gateway.dart';
 import 'package:miucam/core/protocol/alert_event_dto.dart';
 import 'package:miucam/core/protocol/device_feature_models.dart';
 import 'package:miucam/core/protocol/miucam_protocol.dart';
@@ -18,6 +19,7 @@ import 'package:miucam/features/client/client_runtime.dart';
 import 'package:miucam/features/client/controls/client_room_controls.dart';
 import 'package:miucam/features/client/media/active_stream_session.dart';
 import 'package:miucam/features/client/media/watch_screen.dart';
+import 'package:miucam/features/client/pairing/qr_scan_screen.dart';
 import 'package:miucam/features/role_selection/role_selection_screen.dart';
 import 'package:miucam/features/server/media/media_runtime_controller.dart';
 import 'package:miucam/features/server/media/server_media_source.dart';
@@ -25,6 +27,7 @@ import 'package:miucam/features/server/server_home_screen.dart';
 import 'package:miucam/features/server/server_runtime.dart';
 import 'package:miucam/l10n/app_strings.dart';
 import 'package:miucam/services/configuration_service.dart';
+import 'package:miucam/services/server/wav_pcm16.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _scene = String.fromEnvironment('REPORT_SCENE', defaultValue: 'role');
@@ -48,7 +51,7 @@ Future<void> main() async {
     runApp(const _ReportApp(child: _ReportSequence()));
     return;
   }
-  final scene = await _buildScene(_scene, tab: _reportTab);
+  final scene = await buildScreenReportScene(_scene, tab: _reportTab);
   runApp(
     _ReportApp(
       child: _ReportSceneHost(
@@ -59,16 +62,19 @@ Future<void> main() async {
   );
 }
 
-Future<_BuiltReportScene> _buildScene(
+Future<ReportSceneFixture> buildScreenReportScene(
   String scene, {
   required int tab,
+  ThemeData Function(ThemeData)? themeTransform,
 }) async {
+  ThemeData reportTheme(ThemeData theme) =>
+      themeTransform?.call(theme) ?? theme;
   switch (scene) {
     case 'client_unpaired':
       final runtime = ClientRuntime(pair: (_) async => _session());
-      return _BuiltReportScene(
+      return ReportSceneFixture(
         child: _ThemedScene(
-          theme: MiuCamTheme.clientTheme(),
+          theme: reportTheme(MiuCamTheme.clientTheme()),
           child: ClientHomeScreen(
             runtime: runtime,
             activeRole: AppRole.client,
@@ -89,9 +95,9 @@ Future<_BuiltReportScene> _buildScene(
         stopStream: (_) async {},
       );
       await runtime.pairWithServer(_payload());
-      return _BuiltReportScene(
+      return ReportSceneFixture(
         child: _ThemedScene(
-          theme: MiuCamTheme.clientTheme(),
+          theme: reportTheme(MiuCamTheme.clientTheme()),
           child: ClientHomeScreen(
             runtime: runtime,
             activeRole: AppRole.client,
@@ -138,9 +144,9 @@ Future<_BuiltReportScene> _buildScene(
       await runtime.pairWithServer(session.payload);
       await _seedWatchAlerts(runtime);
       await runtime.startAlertListening();
-      return _BuiltReportScene(
+      return ReportSceneFixture(
         child: _ThemedScene(
-          theme: MiuCamTheme.clientTheme(),
+          theme: reportTheme(MiuCamTheme.clientTheme()),
           child: WatchScreen(runtime: runtime, initialTab: tab),
         ),
         readyWidget: fixture == null || tab != 0
@@ -152,7 +158,14 @@ Future<_BuiltReportScene> _buildScene(
         },
       );
     case 'qr_scanner':
-      return _BuiltReportScene(child: const _QrScannerReportScene());
+      return ReportSceneFixture(
+        child: _ThemedScene(
+          theme: reportTheme(MiuCamTheme.clientTheme()),
+          child: const QRScanScreen(
+            permissionGateway: _ReportDeniedCameraPermission(),
+          ),
+        ),
+      );
     case 'server':
     case 'server_preview_on':
       final preferences = await SharedPreferences.getInstance();
@@ -177,9 +190,9 @@ Future<_BuiltReportScene> _buildScene(
           const StreamSessionOptions(video: true, audio: true),
         );
       }
-      return _BuiltReportScene(
+      return ReportSceneFixture(
         child: _ThemedScene(
-          theme: MiuCamTheme.serverTheme(),
+          theme: reportTheme(MiuCamTheme.serverTheme()),
           child: ServerHomeScreen(
             runtime: runtime,
             config: config,
@@ -203,9 +216,9 @@ Future<_BuiltReportScene> _buildScene(
       );
     case 'role':
     default:
-      return _BuiltReportScene(
+      return ReportSceneFixture(
         child: _ThemedScene(
-          theme: MiuCamTheme.neutralTheme(),
+          theme: reportTheme(MiuCamTheme.neutralTheme()),
           child: RoleSelectionScreen(onRoleSelected: (_) {}),
         ),
       );
@@ -219,8 +232,8 @@ Future<Uint8List> _loadReportFrame() async {
   return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
 }
 
-class _BuiltReportScene {
-  _BuiltReportScene({
+class ReportSceneFixture {
+  ReportSceneFixture({
     required this.child,
     this.readyWidget,
     Future<void> Function()? dispose,
@@ -275,7 +288,7 @@ class _ReportSequenceState extends State<_ReportSequence> {
   var _transitioning = true;
   var _generation = 0;
   int? _reportedReadyIndex;
-  _BuiltReportScene? _activeScene;
+  ReportSceneFixture? _activeScene;
 
   @override
   void initState() {
@@ -301,7 +314,7 @@ class _ReportSequenceState extends State<_ReportSequence> {
     await previous?.dispose();
 
     final spec = _reportScenes[next];
-    final loaded = await _buildScene(spec.scene, tab: spec.tab);
+    final loaded = await buildScreenReportScene(spec.scene, tab: spec.tab);
     if (!mounted || generation != _generation) {
       await loaded.dispose();
       return;
@@ -314,7 +327,7 @@ class _ReportSequenceState extends State<_ReportSequence> {
     });
   }
 
-  void _reportReady(_BuiltReportScene scene, int index) {
+  void _reportReady(ReportSceneFixture scene, int index) {
     if (!identical(_activeScene, scene) ||
         _transitioning ||
         _reportedReadyIndex == index) {
@@ -359,7 +372,7 @@ class _ReportSceneHost extends StatefulWidget {
     required this.onReady,
   });
 
-  final _BuiltReportScene scene;
+  final ReportSceneFixture scene;
   final VoidCallback onReady;
 
   @override
@@ -483,7 +496,13 @@ class _ReportMediaFixtureServer {
     response.headers
       ..contentType = ContentType('audio', 'wav')
       ..chunkedTransferEncoding = true;
-    final silence = Uint8List(640);
+    response.add(WavPcm16.header(
+      sampleRate: 16000,
+      channels: 1,
+      bitsPerSample: 16,
+    ));
+    // 100 ms of 16 kHz mono PCM16, matching the fixture's send interval.
+    final silence = Uint8List(3200);
     try {
       while (!_disposed) {
         response.add(silence);
@@ -712,76 +731,19 @@ class _ReportRoomControls extends ClientRoomControls {
 // lacked required identity/expiry fields and only captured the error state.
 String get _qrPayload => _payload().toUriString();
 
-class _QrScannerReportScene extends StatelessWidget {
-  const _QrScannerReportScene();
+// Exercise the production scanner's supported manual fallback. The report
+// neither opens a physical camera nor substitutes a hand-drawn scanner screen.
+class _ReportDeniedCameraPermission implements CameraPermissionGateway {
+  const _ReportDeniedCameraPermission();
 
   @override
-  Widget build(BuildContext context) {
-    final strings = AppStrings.of(context);
-    return Scaffold(
-      backgroundColor: const Color(0xFF07111F),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF07111F),
-        foregroundColor: Colors.white,
-        title: Text(strings.ui('scanQr')),
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Container(color: const Color(0xFF10233B)),
-                  Center(
-                    child: Container(
-                      width: 250,
-                      height: 250,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.white, width: 3),
-                        borderRadius: BorderRadius.circular(26),
-                      ),
-                    ),
-                  ),
-                  const Align(
-                    alignment: Alignment.center,
-                    child: Icon(
-                      Icons.qr_code_scanner_rounded,
-                      color: Colors.white54,
-                      size: 96,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-              color: Colors.white,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      enabled: false,
-                      decoration: InputDecoration(
-                        labelText: strings.ui('qrCodeText'),
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const SizedBox(
-                    height: 56,
-                    child: FilledButton(
-                      onPressed: null,
-                      child: Icon(Icons.check_rounded),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Future<CameraPermissionStatus> status() async =>
+      CameraPermissionStatus.denied;
+
+  @override
+  Future<CameraPermissionStatus> request() async =>
+      CameraPermissionStatus.denied;
+
+  @override
+  Future<bool> openSettings() async => false;
 }

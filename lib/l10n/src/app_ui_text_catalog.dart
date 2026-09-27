@@ -2,6 +2,38 @@
 // Kept separate so AppStrings stays a small localization facade.
 
 const appUiTextCatalog = <String, Map<String, String>>{
+  'systemNotificationSettingsTitle': {
+    'tr': 'Telefon bildirim ayarları',
+    'en': 'Phone notification settings',
+    'zh': '手机通知设置',
+    'hi': 'फ़ोन की सूचना सेटिंग',
+    'es': 'Notificaciones del teléfono',
+    'fr': 'Notifications du téléphone',
+  },
+  'systemNotificationSettingsDescription': {
+    'tr': 'MiuCam bildirim iznini ve sesini telefonun ayarlarından düzenleyin.',
+    'en':
+        'Manage MiuCam notification permission and sound in your phone settings.',
+    'zh': '在手机设置中管理 MiuCam 的通知权限和声音。',
+    'hi': 'फ़ोन की सेटिंग में MiuCam की सूचना अनुमति और ध्वनि बदलें।',
+    'es':
+        'Gestiona el permiso y el sonido de las notificaciones de MiuCam en los ajustes del teléfono.',
+    'fr':
+        'Gérez l’autorisation et le son des notifications MiuCam dans les paramètres du téléphone.',
+  },
+  'stopRoomStreamFailed': {
+    'tr':
+        'Yayın tamamen durdurulamadı. Tekrar deneyin; sorun sürerse uygulamayı tamamen kapatın.',
+    'en':
+        'The broadcast could not fully stop. Try again; if this continues, fully close the app.',
+    'zh': '直播未能完全停止。请重试；如果问题持续，请完全关闭应用。',
+    'hi':
+        'प्रसारण पूरी तरह बंद नहीं हो सका। फिर कोशिश करें; समस्या बनी रहे तो ऐप पूरी तरह बंद करें।',
+    'es':
+        'La transmisión no pudo detenerse por completo. Inténtalo de nuevo; si el problema persiste, cierra la aplicación por completo.',
+    'fr':
+        'La diffusion n’a pas pu s’arrêter complètement. Réessayez ; si le problème persiste, fermez complètement l’application.',
+  },
   'broadcastAccessPriceFallback': {
     'tr':
         'Türkiye fiyatı: {price}. Ödeme sırasında mağazandaki güncel fiyat gösterilir.',
@@ -2814,12 +2846,16 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'fr': 'L’air de la chambre semble dans la plage attendue.',
   },
   'notificationsManageText': {
-    'tr': 'Bildirimlerin ne zaman ve nasıl görüneceğini ayarlayın.',
-    'en': 'Choose when and how notifications appear.',
-    'zh': '选择通知何时以及如何显示。',
-    'hi': 'सूचनाएँ कब और कैसे दिखें, यह चुनें।',
-    'es': 'Elige cuándo y cómo aparecen las notificaciones.',
-    'fr': 'Choisissez quand et comment les notifications apparaissent.',
+    'tr':
+        'Odanın uyarı geçmişini açın; ses, hareket ve sistem kayıtlarını filtreleyin.',
+    'en': 'Open room alert history and filter sound, motion and system events.',
+    'zh': '打开房间提醒历史记录，筛选声音、活动和系统事件。',
+    'hi':
+        'कमरे की पिछली सूचनाएँ खोलें और आवाज़, गतिविधि व सिस्टम की घटनाएँ छाँटें।',
+    'es':
+        'Abre el historial de alertas y filtra los eventos de sonido, movimiento y sistema.',
+    'fr':
+        'Ouvrez l’historique des alertes et filtrez les sons, mouvements et événements système.',
   },
   'languageSelectText': {
     'tr': 'Uygulama dilini seçin.',

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/billing_client_wrappers.dart';
@@ -110,7 +111,9 @@ class FlutterInAppPurchaseStore
       final pendingIds =
           unfinished.map((transaction) => transaction.id).toSet();
       final byId = <String, SK2Transaction>{
-        for (final transaction in transactions) transaction.id: transaction,
+        for (final transaction in transactions)
+          if (!_isRevokedStoreKitHistory(transaction))
+            transaction.id: transaction,
         for (final transaction in unfinished) transaction.id: transaction,
       };
       final purchases = byId.values
@@ -176,5 +179,22 @@ class FlutterInAppPurchaseStore
       return purchases;
     }
     return const [];
+  }
+
+  static bool _isRevokedStoreKitHistory(SK2Transaction transaction) {
+    // The pinned plugin enumerates verified Transaction.all records, which
+    // includes refunded history, and omits their JWS. Such history cannot be
+    // recovered through currentEntitlements and must not block a new purchase.
+    // This only filters a native lookup; entitlement removal still requires
+    // the backend's signed revocation. Unfinished transactions remain queued.
+    final representation = transaction.jsonRepresentation;
+    if (representation == null) return false;
+    try {
+      final decoded = jsonDecode(representation);
+      final date = decoded is Map ? decoded['revocationDate'] : null;
+      return date is num && date.isFinite && date > 0;
+    } on FormatException {
+      return false;
+    }
   }
 }

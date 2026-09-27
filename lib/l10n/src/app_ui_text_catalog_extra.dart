@@ -27,6 +27,11 @@ String _localizedFallback(
 }
 
 const _deUiText = <String, String>{
+  'systemNotificationSettingsTitle': 'Mitteilungen des Telefons',
+  'systemNotificationSettingsDescription':
+      'Verwalte die Berechtigung und den Ton für MiuCam-Mitteilungen in den Telefoneinstellungen.',
+  'stopRoomStreamFailed':
+      'Die Übertragung konnte nicht vollständig beendet werden. Versuche es erneut. Wenn das Problem weiterhin besteht, schließe die App vollständig.',
   'roleShutdownFailedTitle': 'Der vorherige Modus konnte nicht beendet werden',
   'roleShutdownFailedBody':
       'Der neue Modus wurde nicht gestartet. Versuche es erneut. Wenn das Problem bestehen bleibt, schließe MiuCam vollständig und öffne die App erneut.',
@@ -428,7 +433,8 @@ const _deUiText = <String, String>{
   'connectionRenewedText': 'Das Babyzimmer-Gerät wirkt wieder stabil.',
   'humidityNormalTitle': 'Luftfeuchte stabil',
   'humidityNormalText': 'Die Zimmerluft liegt im erwarteten Bereich.',
-  'notificationsManageText': 'Wähle, wann und wie Hinweise erscheinen.',
+  'notificationsManageText':
+      'Öffne den Hinweisverlauf und filtere Geräusch-, Bewegungs- und Systemereignisse.',
   'languageSelectText': 'Sprache auswählen.',
   'turkishShort': 'TR',
   'keepAwakeClientText': 'Display beim Ansehen wach halten.',
@@ -552,6 +558,11 @@ const _deUiText = <String, String>{
 };
 
 const _arUiText = <String, String>{
+  'systemNotificationSettingsTitle': 'إعدادات إشعارات الهاتف',
+  'systemNotificationSettingsDescription':
+      'عدّل إذن إشعارات MiuCam وصوتها من إعدادات الهاتف.',
+  'stopRoomStreamFailed':
+      'تعذر إيقاف البث بالكامل. حاول مرة أخرى؛ وإذا استمرت المشكلة، فأغلق التطبيق بالكامل.',
   'roleShutdownFailedTitle': 'تعذر إيقاف الوضع السابق',
   'roleShutdownFailedBody':
       'لم يبدأ الوضع الجديد. حاول مرة أخرى. إذا استمرت المشكلة، أغلق MiuCam بالكامل ثم أعد فتحه.',
@@ -920,7 +931,8 @@ const _arUiText = <String, String>{
   'connectionRenewedText': 'يبدو جهاز غرفة الطفل مستقراً مرة أخرى.',
   'humidityNormalTitle': 'الرطوبة مستقرة',
   'humidityNormalText': 'هواء الغرفة ضمن النطاق المتوقع.',
-  'notificationsManageText': 'اختر متى وكيف تظهر الإشعارات.',
+  'notificationsManageText':
+      'افتح سجل تنبيهات الغرفة وصفِّ أحداث الصوت والحركة والنظام.',
   'languageSelectText': 'اختيار اللغة.',
   'turkishShort': 'TR',
   'keepAwakeClientText': 'إبقاء الشاشة نشطة أثناء المشاهدة.',

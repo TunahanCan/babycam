@@ -12,6 +12,7 @@ class _ClientFindSection extends StatefulWidget {
     required this.onScanQr,
     required this.onManualConnect,
     required this.onConnectDiscovered,
+    required this.connecting,
   });
 
   final AppRole activeRole;
@@ -21,6 +22,7 @@ class _ClientFindSection extends StatefulWidget {
   final VoidCallback onScanQr;
   final ValueChanged<String> onManualConnect;
   final ValueChanged<MiuCamDiscoveredService> onConnectDiscovered;
+  final bool connecting;
 
   @override
   State<_ClientFindSection> createState() => _ClientFindSectionState();
@@ -50,6 +52,7 @@ class _ClientFindSectionState extends State<_ClientFindSection> {
         ),
         const SizedBox(height: 18),
         _FindActionCard(
+          connecting: widget.connecting,
           onScanQr: widget.onScanQr,
           manualIpController: _manualIpController,
           onManualConnect: () =>
@@ -60,6 +63,7 @@ class _ClientFindSectionState extends State<_ClientFindSection> {
           stream: widget.runtime.discoveryUpdates,
           initialData: widget.runtime.discoveredServices,
           builder: (context, snapshot) => _DiscoveredRoomsCard(
+            connecting: widget.connecting,
             services: snapshot.data ?? const [],
             onRefresh: widget.runtime.startDiscovery,
             onConnect: widget.onConnectDiscovered,
@@ -580,12 +584,14 @@ class _ClientWatchSummary extends StatelessWidget {
 
 class _FindActionCard extends StatelessWidget {
   const _FindActionCard({
+    required this.connecting,
     required this.onScanQr,
     required this.manualIpController,
     required this.onManualConnect,
   });
 
   final VoidCallback onScanQr;
+  final bool connecting;
   final TextEditingController manualIpController;
   final VoidCallback onManualConnect;
 
@@ -599,7 +605,7 @@ class _FindActionCard extends StatelessWidget {
           title: strings.ui('scanQr'),
           text: strings.ui('scanQrSecurely'),
           backgroundColor: MiuCamDesignTokens.mintSoft,
-          onTap: onScanQr,
+          onTap: connecting ? null : onScanQr,
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 22),
@@ -667,9 +673,10 @@ class _FindActionCard extends StatelessWidget {
               const SizedBox(height: 16),
               TextField(
                 controller: manualIpController,
+                enabled: !connecting,
                 keyboardType: TextInputType.url,
                 textInputAction: TextInputAction.done,
-                onSubmitted: (_) => onManualConnect(),
+                onSubmitted: connecting ? null : (_) => onManualConnect(),
                 decoration: InputDecoration(
                   labelText: strings.ui('ipOrHostPort'),
                   hintText: '192.168.1.20:8080',
@@ -680,7 +687,7 @@ class _FindActionCard extends StatelessWidget {
                 width: double.infinity,
                 height: 48,
                 child: FilledButton.tonalIcon(
-                  onPressed: onManualConnect,
+                  onPressed: connecting ? null : onManualConnect,
                   icon: const Icon(Icons.link_rounded),
                   style: FilledButton.styleFrom(
                     foregroundColor: MiuCamDesignTokens.nightPlum,
@@ -698,6 +705,13 @@ class _FindActionCard extends StatelessWidget {
             ],
           ),
         ),
+        if (connecting) ...[
+          const SizedBox(height: 12),
+          Semantics(
+            liveRegion: true,
+            child: Text(strings.ui('clientTitlePairing')),
+          ),
+        ],
         const SizedBox(height: 28),
         _PrivacyNote(text: strings.ui('localNetworkPrivacyNote')),
       ],
@@ -707,11 +721,13 @@ class _FindActionCard extends StatelessWidget {
 
 class _DiscoveredRoomsCard extends StatelessWidget {
   const _DiscoveredRoomsCard({
+    required this.connecting,
     required this.services,
     required this.onRefresh,
     required this.onConnect,
   });
 
+  final bool connecting;
   final List<MiuCamDiscoveredService> services;
   final Future<void> Function() onRefresh;
   final ValueChanged<MiuCamDiscoveredService> onConnect;
@@ -776,7 +792,7 @@ class _DiscoveredRoomsCard extends StatelessWidget {
                   '${service.webRtcAvailable ? ' · WebRTC' : ''}',
                 ),
                 trailing: FilledButton(
-                  onPressed: () => onConnect(service),
+                  onPressed: connecting ? null : () => onConnect(service),
                   child: Text(strings.ui('connectDiscoveredRoom')),
                 ),
               ),
@@ -802,7 +818,7 @@ class _ConnectionActionCard extends StatelessWidget {
   final String title;
   final String text;
   final Color backgroundColor;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
