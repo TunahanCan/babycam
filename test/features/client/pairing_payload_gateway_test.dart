@@ -16,6 +16,7 @@ void main() {
           'serverDeviceId': 'room-1',
           'serverName': 'Bebek Odasi',
           'pairingNonce': 'nonce-1',
+          'pairingCodeRequired': true,
           'transport': 'http_ws',
           'capabilities': {'video': 'mjpeg'},
         }));
@@ -33,6 +34,8 @@ void main() {
     expect(payload.deviceId, 'room-1');
     expect(payload.deviceName, 'Bebek Odasi');
     expect(payload.pairingNonce, 'nonce-1');
+    expect(payload.requiresPairingCode, isTrue);
+    expect(payload.pairingCode, isNull);
     expect(payload.capabilities, {'video': 'mjpeg'});
     expect(payload.expiresAtMs, 121000);
   });

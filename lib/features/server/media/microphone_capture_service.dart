@@ -409,6 +409,9 @@ class MicrophoneCaptureService {
     try {
       await subscription.cancel().timeout(cleanupTimeout);
     } catch (_) {}
+    // Cancelling a failed stream may outlive stop() and the next capture.
+    // Its cleanup must not stop the recorder now owned by that newer lease.
+    if (!_isCurrent(generation)) return;
     final recorder = _recorder;
     if (recorder != null) await _stopRecorder(recorder);
     if (!_isCurrent(generation)) return;

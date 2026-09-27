@@ -253,6 +253,9 @@ class MjpegStreamService {
   }
 
   void _recordSuccess(HttpResponse response, {required Duration duration}) {
+    // A pending flush can finish after session teardown removed this response.
+    // Do not recreate its backpressure entry and retain a detached socket.
+    if (!_clients.contains(response)) return;
     _framesStreamed++;
     _lastClientWriteAtMs = DateTime.now().millisecondsSinceEpoch;
     _backpressure.recordSuccess(response, duration: duration);

@@ -64,11 +64,21 @@ class TrustedClientPersistenceException implements Exception {
   String toString() => '$code: $cause';
 }
 
+enum PairingInvitationResult {
+  accepted,
+  invalidNonce,
+  invalidCode,
+  rateLimited,
+}
+
 class PairingTokenService {
   PairingTokenService(
       {DateTime Function()? now,
       Duration nonceTtl = const Duration(minutes: 10),
       Duration streamTokenTtl = const Duration(seconds: 90),
+      this.pairingCodeTtl = const Duration(minutes: 10),
+      this.pairingCodeRateLimitWindow = const Duration(minutes: 1),
+      this.maxPairingCodeAttemptsPerWindow = 5,
       this.maxActiveNonces = defaultMaxActiveNonces,
       this.pairConfirmRateLimitWindow = const Duration(minutes: 1),
       this.maxPairConfirmAttemptsPerWindow =
@@ -97,6 +107,9 @@ class PairingTokenService {
   final DateTime Function() _now;
   final Duration _nonceTtl;
   final Duration _streamTokenTtl;
+  final Duration pairingCodeTtl;
+  final Duration pairingCodeRateLimitWindow;
+  final int maxPairingCodeAttemptsPerWindow;
   final int maxActiveNonces;
   final Duration pairConfirmRateLimitWindow;
   final int maxPairConfirmAttemptsPerWindow;
@@ -108,8 +121,12 @@ class PairingTokenService {
   final _nonces = <String, int>{};
   String? _publicPairingNonce;
   int? _publicPairingNonceExpiresAtMs;
+  String? _pairingCode;
+  int? _pairingCodeExpiresAtMs;
+  final _pairingCodeAttempts = <int>[];
   int _pairingGeneration = 0;
   final _pairConfirmAttempts = <String, List<int>>{};
+  final _qrPairConfirmAttempts = <String, List<int>>{};
   final _clients = <String, TrustedClientRecord>{};
   final _streamTokens = <String, StreamTokenRecord>{};
   final _pendingRenewalClientIdsByTokenHash = <String, String>{};
@@ -123,6 +140,14 @@ class PairingTokenService {
 
   Object? get lastPersistenceError => _lastPersistenceError;
   int get pairingGeneration => _pairingGeneration;
+  String? get pairingCode {
+    final expiry = _pairingCodeExpiresAtMs;
+    return expiry != null && _now().millisecondsSinceEpoch < expiry
+        ? _pairingCode
+        : null;
+  }
+
+  int? get pairingCodeExpiresAtMs => _pairingCodeExpiresAtMs;
   Stream<void> get trustedClientsChanged => _trustedClientsChanged.stream;
   Set<String> get pendingRevocationClientIds =>
       Set.unmodifiable(_pendingRevocationClientIds);
@@ -135,6 +160,16 @@ class PairingTokenService {
     return nonce;
   }
 
+  /// Only the room's local pairing activation/refresh or a successful code
+  /// confirmation calls this. Public discovery never reveals or renews a code.
+  void refreshPairingCode() {
+    _pairingCode = _tokenGenerator.generateSixDigitCode();
+    _pairingCodeExpiresAtMs = _now().add(pairingCodeTtl).millisecondsSinceEpoch;
+    _publicPairingNonce = null;
+    _publicPairingNonceExpiresAtMs = null;
+    _notifyTrustedClientsChanged();
+  }
+
   /// Public discovery retries share one slot so an unauthenticated status
   /// poll cannot evict the QR currently displayed on the room phone.
   String createPublicPairingNonce() {
@@ -145,18 +180,69 @@ class PairingTokenService {
     return _publicPairingNonce = _tokenGenerator.generateHex(byteCount: 32);
   }
 
-  bool validateAndConsumeNonce(String nonce) {
+  bool validateAndConsumeNonce(String nonce, {String? pairingCode}) =>
+      consumePairingInvitation(nonce, pairingCode: pairingCode) ==
+      PairingInvitationResult.accepted;
+
+  bool isPrivatePairingNonceActive(String nonce) {
+    final expiry = _nonces[nonce];
+    return expiry != null && _now().millisecondsSinceEpoch < expiry;
+  }
+
+  /// Public nonces identify discovery requests; they are not access secrets.
+  /// Keep their code verification and global limit here so alternate callers
+  /// cannot consume one through the QR-only convenience API.
+  PairingInvitationResult consumePairingInvitation(
+    String nonce, {
+    String? pairingCode,
+  }) {
     pruneExpiredNonces();
-    final isPublic = nonce == _publicPairingNonce;
-    final expiry =
-        isPublic ? _publicPairingNonceExpiresAtMs : _nonces.remove(nonce);
-    if (isPublic) {
-      _publicPairingNonce = null;
-      _publicPairingNonceExpiresAtMs = null;
+    if (isPrivatePairingNonceActive(nonce)) {
+      _nonces.remove(nonce);
+      _notifyTrustedClientsChanged();
+      return PairingInvitationResult.accepted;
     }
-    if (expiry == null) return false;
-    _notifyTrustedClientsChanged();
-    return _now().millisecondsSinceEpoch < expiry;
+    final isPublic = nonce == _publicPairingNonce;
+    if (isPublic || pairingCode != null) {
+      if (!_consumePairingCodeAttempt()) {
+        return PairingInvitationResult.rateLimited;
+      }
+      final expectedCode = this.pairingCode;
+      if (expectedCode == null ||
+          pairingCode == null ||
+          !RegExp(r'^[0-9]{6}$').hasMatch(pairingCode) ||
+          !_sameCode(expectedCode, pairingCode)) {
+        return PairingInvitationResult.invalidCode;
+      }
+    }
+    final expiry = _publicPairingNonceExpiresAtMs;
+    if (!isPublic ||
+        expiry == null ||
+        _now().millisecondsSinceEpoch >= expiry) {
+      return PairingInvitationResult.invalidNonce;
+    }
+    // Code use does not invalidate a QR or any remembered-device token.
+    refreshPairingCode();
+    return PairingInvitationResult.accepted;
+  }
+
+  bool _consumePairingCodeAttempt() {
+    final nowMs = _now().millisecondsSinceEpoch;
+    final windowStart = nowMs - pairingCodeRateLimitWindow.inMilliseconds;
+    _pairingCodeAttempts.removeWhere((attempt) => attempt <= windowStart);
+    if (_pairingCodeAttempts.length >= maxPairingCodeAttemptsPerWindow) {
+      return false;
+    }
+    _pairingCodeAttempts.add(nowMs);
+    return true;
+  }
+
+  static bool _sameCode(String expected, String supplied) {
+    var difference = 0;
+    for (var index = 0; index < expected.length; index++) {
+      difference |= expected.codeUnitAt(index) ^ supplied.codeUnitAt(index);
+    }
+    return difference == 0;
   }
 
   bool isPairingNonceActive(String nonce) {
@@ -176,23 +262,34 @@ class PairingTokenService {
     return _nonces.length;
   }
 
-  bool consumePairConfirmAttempt(String key) {
+  bool consumePairConfirmAttempt(String key) =>
+      _consumePairConfirmAttempt(_pairConfirmAttempts, key);
+
+  /// A verified private QR gets its own bounded source map. Public requests
+  /// cannot fill the source capacity and prevent the owner's QR fallback.
+  bool consumeQrPairConfirmAttempt(String key) =>
+      _consumePairConfirmAttempt(_qrPairConfirmAttempts, key);
+
+  bool _consumePairConfirmAttempt(
+    Map<String, List<int>> attemptsBySource,
+    String key,
+  ) {
     final normalizedKey = key.trim().isEmpty ? 'unknown' : key.trim();
     final nowMs = _now().millisecondsSinceEpoch;
     final windowStart = nowMs - pairConfirmRateLimitWindow.inMilliseconds;
     // Prune all sources, not just the current address. IPv6 privacy addresses
     // otherwise leave every old rate-limit bucket in memory indefinitely.
-    _pairConfirmAttempts.removeWhere((_, attempts) {
+    attemptsBySource.removeWhere((_, attempts) {
       attempts.removeWhere((attemptAtMs) => attemptAtMs <= windowStart);
       return attempts.isEmpty;
     });
-    if (!_pairConfirmAttempts.containsKey(normalizedKey) &&
-        _pairConfirmAttempts.length >= maxPairConfirmSources) {
+    if (!attemptsBySource.containsKey(normalizedKey) &&
+        attemptsBySource.length >= maxPairConfirmSources) {
       // Keep existing throttles; evicting a live bucket lets an attacker
       // cycle source addresses to reset its limit.
       return false;
     }
-    final attempts = _pairConfirmAttempts.putIfAbsent(
+    final attempts = attemptsBySource.putIfAbsent(
       normalizedKey,
       () => <int>[],
     );
@@ -492,6 +589,8 @@ class PairingTokenService {
   void clearEphemeralState() {
     clearPairingNonces();
     _pairConfirmAttempts.clear();
+    _qrPairConfirmAttempts.clear();
+    _pairingCodeAttempts.clear();
     _streamTokens.clear();
     _pendingRenewalClientIdsByTokenHash.clear();
   }
@@ -501,6 +600,8 @@ class PairingTokenService {
     _nonces.clear();
     _publicPairingNonce = null;
     _publicPairingNonceExpiresAtMs = null;
+    _pairingCode = null;
+    _pairingCodeExpiresAtMs = null;
   }
 
   Future<void> flushPersistence() async {

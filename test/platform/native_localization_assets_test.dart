@@ -73,6 +73,21 @@ void main() {
     expect(service, isNot(contains('Bebek odası bildirimleri')));
   });
 
+  test('Play installs retain native languages for offline app language changes',
+      () {
+    final gradle = File('android/app/build.gradle.kts').readAsStringSync();
+    final config = gradle.replaceAll(RegExp(r'//[^\n]*'), '');
+
+    expect(
+      config,
+      matches(RegExp(
+        r'bundle\s*\{\s*language\s*\{\s*enableSplit\s*=\s*false\b',
+      )),
+      reason: 'The app changes notification locale without downloading a '
+          'language split; Play must install all native language resources.',
+    );
+  });
+
   test('iOS permission copy is localized and included in the Runner bundle',
       () {
     final localeDirectories = AppStrings.supportedLocales.map((locale) =>

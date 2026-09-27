@@ -12,6 +12,7 @@ import 'package:miucam/features/client/client_home_screen.dart';
 import 'package:miucam/features/client/client_runtime.dart';
 import 'package:miucam/features/client/media/watch_screen.dart';
 import 'package:miucam/features/client/pairing/pairing_failure.dart';
+import 'package:miucam/features/client/pairing/pairing_code_dialog.dart';
 import 'package:miucam/features/client/pairing/pairing_payload_gateway.dart';
 import 'package:miucam/l10n/app_strings.dart';
 import 'package:miucam/services/client_preferences_service.dart';
@@ -23,6 +24,144 @@ import '../../support/runtime_widget_cleanup.dart';
 void main() {
   setUp(() => WidgetController.hitTestWarningShouldBeFatal = true);
   tearDown(() => WidgetController.hitTestWarningShouldBeFatal = false);
+
+  for (final alertsEnabled in [false, true]) {
+    testWidgets('resuming preserves alerts enabled=$alertsEnabled',
+        (tester) async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      var starts = 0;
+      var permissionChecks = 0;
+      final runtime = ClientRuntime(
+        pair: (payload) async =>
+            PairingSession(payload: payload, sessionToken: 'token'),
+        startAlerts: (_) async {
+          starts++;
+          return true;
+        },
+        initializeSystemNotifications: () async {
+          permissionChecks++;
+          return permissionChecks > 1;
+        },
+      );
+      try {
+        await runtime.restoreSession(
+            PairingSession(payload: _payload(), sessionToken: 'token'));
+        await runtime.startAlertListening();
+        if (!alertsEnabled) await runtime.stopAlertListening();
+        await tester.pumpWidget(_app(runtime));
+        await tester.pumpAndSettle();
+
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        tester.binding
+            .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        await tester.pumpAndSettle();
+
+        expect(runtime.currentState.alertsActive, alertsEnabled);
+        expect(starts, 1,
+            reason: 'Returning to the app must not re-enable alerts that the '
+                'parent explicitly turned off.');
+        expect(permissionChecks, alertsEnabled ? 2 : 1);
+        if (alertsEnabled) {
+          expect(runtime.systemNotificationsEnabled, isTrue,
+              reason: 'Armed alerts still refresh OS permissions on resume.');
+        }
+      } finally {
+        await disposeClientRuntime(tester, runtime);
+      }
+    });
+  }
+
+  testWidgets('manual pairing validates six digits and submits only once',
+      (tester) async {
+    final gateway = _PayloadGateway()..requiresPairingCode = true;
+    final codes = <String?>[];
+    final runtime = ClientRuntime(pair: (payload) async {
+      codes.add(payload.pairingCode);
+      return PairingSession(
+          payload: payload.withPairingCode(null), sessionToken: 'token');
+    });
+    try {
+      await tester.pumpWidget(_app(runtime, gateway: gateway, initialTab: 1));
+      await _enterAddress(tester, '192.168.1.20:8080');
+      await _tap(tester, find.text(_strings.ui('connectWithIp')));
+      expect(find.byType(PairingCodeDialog), findsOneWidget);
+      expect(codes, isEmpty);
+      final input = find.byKey(const ValueKey('pairing-code-input'));
+      await tester.enterText(input, '123');
+      tester.testTextInput.hide();
+      await _tap(tester, find.text(_strings.ui('confirmPairingCode')));
+      expect(
+          find.text(_strings.ui('pairingCodeInvalidFormat')), findsOneWidget);
+      expect(codes, isEmpty);
+      await tester.enterText(input, '000042');
+      tester.testTextInput.hide();
+      final confirm = find.ancestor(
+        of: find.text(_strings.ui('confirmPairingCode')),
+        matching: find.byType(FilledButton),
+      );
+      final submit = tester.widget<FilledButton>(confirm).onPressed!;
+      submit();
+      submit();
+      await tester.pumpAndSettle();
+      expect(codes, ['000042']);
+      expect(gateway.requests, hasLength(1));
+      expect(find.byType(PairingCodeDialog), findsNothing);
+      expect(find.byKey(const ValueKey('client-watch')), findsOneWidget);
+    } finally {
+      await disposeClientRuntime(tester, runtime);
+    }
+  });
+
+  testWidgets('canceling code entry pairs nothing and forgets typed digits',
+      (tester) async {
+    final gateway = _PayloadGateway()..requiresPairingCode = true;
+    var pairs = 0;
+    final runtime = ClientRuntime(pair: (payload) async {
+      pairs++;
+      return PairingSession(payload: payload, sessionToken: 'token');
+    });
+    try {
+      await tester.pumpWidget(_app(runtime, gateway: gateway, initialTab: 1));
+      await _enterAddress(tester, '192.168.1.20:8080');
+      await _tap(tester, find.text(_strings.ui('connectWithIp')));
+      await tester.enterText(
+          find.byKey(const ValueKey('pairing-code-input')), '000042');
+      tester.testTextInput.hide();
+      await _tap(tester, find.text(_strings.ui('cancel')));
+      expect(pairs, 0);
+      expect(runtime.currentState.session, isNull);
+      await _tap(tester, find.text(_strings.ui('connectWithIp')));
+      final input = tester.widget<TextFormField>(
+          find.byKey(const ValueKey('pairing-code-input')));
+      expect(input.controller?.text, isEmpty);
+      expect(pairs, 0);
+    } finally {
+      await disposeClientRuntime(tester, runtime);
+    }
+  });
+
+  testWidgets('leaving the client screen closes its pending code dialog',
+      (tester) async {
+    final gateway = _PayloadGateway()..requiresPairingCode = true;
+    var pairs = 0;
+    final runtime = ClientRuntime(pair: (payload) async {
+      pairs++;
+      return PairingSession(payload: payload, sessionToken: 'token');
+    });
+    try {
+      await tester.pumpWidget(_app(runtime, gateway: gateway, initialTab: 1));
+      await _enterAddress(tester, '192.168.1.20:8080');
+      await _tap(tester, find.text(_strings.ui('connectWithIp')));
+      expect(find.byType(PairingCodeDialog), findsOneWidget);
+      await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+      await tester.pumpAndSettle();
+      expect(find.byType(PairingCodeDialog), findsNothing);
+      expect(pairs, 0);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await disposeClientRuntime(tester, runtime);
+    }
+  });
 
   testWidgets(
       'manual connection validates, retries, arms alerts and opens watch',
@@ -108,6 +247,41 @@ void main() {
     }
   });
 
+  testWidgets('repeated watch actions open a single route and can reopen',
+      (tester) async {
+    var starts = 0;
+    final runtime = ClientRuntime(
+      pair: (payload) async =>
+          PairingSession(payload: payload, sessionToken: 'token'),
+      startStream: (_, {bool audioEnabled = false}) async {
+        starts++;
+        return null;
+      },
+    );
+    try {
+      await runtime.restoreSession(
+          PairingSession(payload: _payload(), sessionToken: 'token'));
+      await tester.pumpWidget(_app(runtime));
+      await tester.pumpAndSettle();
+      final watch = tester.widget<IconButton>(find.byWidgetPredicate((widget) =>
+          widget is IconButton &&
+          widget.tooltip == _strings.ui('openLiveWatch')));
+      watch.onPressed!();
+      watch.onPressed!();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(WatchScreen, skipOffstage: false), findsOneWidget);
+      expect(starts, 1);
+      await _tap(tester, find.byType(BackButtonIcon));
+      expect(find.byType(WatchScreen, skipOffstage: false), findsNothing);
+      await _tap(tester, find.byTooltip(_strings.ui('openLiveWatch')));
+      expect(find.byType(WatchScreen, skipOffstage: false), findsOneWidget);
+      expect(starts, 2);
+    } finally {
+      await disposeClientRuntime(tester, runtime);
+    }
+  });
+
   testWidgets('closing the pairing screen ignores a late LAN reply',
       (tester) async {
     final reply = Completer<PairingPayload>();
@@ -160,10 +334,14 @@ void main() {
       'discovered room refresh and selection use the advertised endpoint',
       (tester) async {
     final browser = _DiscoveryBrowser();
-    final gateway = _PayloadGateway();
+    final gateway = _PayloadGateway()..requiresPairingCode = true;
+    String? submittedCode;
     final runtime = ClientRuntime(
-      pair: (payload) async =>
-          PairingSession(payload: payload, sessionToken: 'token'),
+      pair: (payload) async {
+        submittedCode = payload.pairingCode;
+        return PairingSession(
+            payload: payload.withPairingCode(null), sessionToken: 'token');
+      },
       serviceBrowser: browser,
     );
     try {
@@ -182,6 +360,13 @@ void main() {
       await tester.pumpAndSettle();
       await _tap(tester, find.text(_strings.ui('connectDiscoveredRoom')));
       expect(gateway.requests, ['192.168.1.45:8123']);
+      expect(find.byType(PairingCodeDialog), findsOneWidget);
+      expect(submittedCode, isNull);
+      await tester.enterText(
+          find.byKey(const ValueKey('pairing-code-input')), '482610');
+      tester.testTextInput.hide();
+      await _tap(tester, find.text(_strings.ui('confirmPairingCode')));
+      expect(submittedCode, '482610');
       expect(find.byKey(const ValueKey('client-watch')), findsOneWidget);
     } finally {
       await disposeClientRuntime(tester, runtime);
@@ -323,13 +508,14 @@ Future<void> _enterAddress(WidgetTester tester, String value) async {
   await tester.pumpAndSettle();
 }
 
-PairingPayload _payload() => PairingPayload(
+PairingPayload _payload({bool requiresPairingCode = false}) => PairingPayload(
     schemaVersion: 2,
     host: '192.168.1.20',
     port: 8080,
     deviceId: 'room',
     deviceName: 'Test room',
     pairingNonce: 'nonce',
+    requiresPairingCode: requiresPairingCode,
     expiresAtMs:
         DateTime.now().add(const Duration(minutes: 10)).millisecondsSinceEpoch,
     capabilities: const {});
@@ -338,12 +524,15 @@ class _PayloadGateway implements PairingPayloadGateway {
   final requests = <String>[];
   Object? failure;
   Completer<PairingPayload>? reply;
+  bool requiresPairingCode = false;
   @override
   Future<PairingPayload> fetch(
       {required String host, required int port}) async {
     requests.add('$host:$port');
     if (failure case final error?) throw error;
-    return reply == null ? _payload() : reply!.future;
+    return reply == null
+        ? _payload(requiresPairingCode: requiresPairingCode)
+        : reply!.future;
   }
 }
 

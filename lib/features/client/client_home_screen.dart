@@ -22,6 +22,7 @@ import 'media/watch_screen.dart';
 import 'presentation/client_broadcast_access_card.dart';
 import 'pairing/client_pairing_flow.dart';
 import 'pairing/pairing_failure.dart';
+import 'pairing/pairing_code_dialog.dart';
 import 'pairing/pairing_payload_gateway.dart';
 import 'pairing/qr_scan_screen.dart';
 
@@ -65,6 +66,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
   late bool _keepScreenAwake;
   Locale? _selectedLocale;
   bool _pairingBusy = false;
+  bool _watchRouteOpen = false;
+  DialogRoute<String>? _pairingCodeRoute;
   StreamSubscription<String>? _notificationTapSubscription;
 
   @override
@@ -95,9 +98,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
 
   Future<void> _resumeAlertDelivery() async {
     final state = widget.runtime.currentState;
-    if (state.session == null) return;
+    if (state.session == null || !state.alertsActive) return;
     // This is important on iOS: a user who enables notifications in Settings
     // should not need to pair the room again before alert delivery resumes.
+    // Refresh only an armed transport; foregrounding must preserve Alerts Off.
     await widget.runtime.startAlertListening().catchError((_) => false);
   }
 
@@ -126,7 +130,16 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
   }
 
   @override
+  void didUpdateWidget(covariant ClientHomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.switchingRole || oldWidget.runtime != widget.runtime) {
+      _dismissPairingCodeDialog();
+    }
+  }
+
+  @override
   void dispose() {
+    _dismissPairingCodeDialog();
     WidgetsBinding.instance.removeObserver(this);
     _notificationTapSubscription?.cancel();
     super.dispose();
@@ -341,7 +354,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
       _showMessage(context, AppStrings.of(context).ui('invalidIpFormat'));
       return;
     }
-    await _runPairing(context, () => _fetchManualPairingPayload(parsed));
+    await _runPairing(
+        context, () => _fetchManualPairingPayload(context, parsed));
   }
 
   Future<void> _connectDiscoveredService(
@@ -351,6 +365,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
       _runPairing(
         context,
         () => _fetchManualPairingPayload(
+          context,
           (host: service.host, port: service.port),
         ),
       );
@@ -359,7 +374,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
     BuildContext context,
     Future<PairingPayload?> Function() loadPayload,
   ) async {
-    if (_pairingBusy || widget.runtime.isDisposed) return;
+    if (_pairingBusy || widget.runtime.isDisposed || widget.switchingRole) {
+      return;
+    }
+    final runtime = widget.runtime;
     final strings = AppStrings.of(context);
     setState(() => _pairingBusy = true);
     try {
@@ -368,10 +386,12 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
       if (!mounted ||
           !context.mounted ||
           widget.runtime.isDisposed ||
+          !identical(widget.runtime, runtime) ||
+          widget.switchingRole ||
           payload == null) {
         return;
       }
-      await ClientPairingFlow(widget.runtime).pairAndArmAlerts(payload);
+      await ClientPairingFlow(runtime).pairAndArmAlerts(payload);
       if (!mounted || !context.mounted || widget.runtime.isDisposed) return;
       setState(() => _tab = _ClientHomeTab.watch);
       _showMessage(
@@ -395,33 +415,88 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
         .pairingFailureMessage(PairingFailureCode.connectionUnavailable.name);
   }
 
-  Future<PairingPayload> _fetchManualPairingPayload(
+  Future<PairingPayload?> _fetchManualPairingPayload(
+    BuildContext context,
     ({String host, int port}) address,
-  ) =>
-      widget.pairingPayloadGateway.fetch(
-        host: address.host,
-        port: address.port,
-      );
+  ) async {
+    final runtime = widget.runtime;
+    final payload = await widget.pairingPayloadGateway.fetch(
+      host: address.host,
+      port: address.port,
+    );
+    if (!mounted ||
+        !context.mounted ||
+        widget.runtime.isDisposed ||
+        !identical(widget.runtime, runtime) ||
+        widget.switchingRole) {
+      return null;
+    }
+    if (!payload.requiresPairingCode) return payload;
+    final route = DialogRoute<String>(
+      context: context,
+      builder: (_) => PairingCodeDialog(
+        canSubmit: () =>
+            mounted &&
+            identical(widget.runtime, runtime) &&
+            !runtime.isDisposed &&
+            !widget.switchingRole,
+      ),
+    );
+    _pairingCodeRoute = route;
+    try {
+      final code = await Navigator.of(context).push(route);
+      if (!mounted ||
+          !context.mounted ||
+          widget.runtime.isDisposed ||
+          !identical(widget.runtime, runtime) ||
+          widget.switchingRole ||
+          code == null) {
+        return null;
+      }
+      return payload.withPairingCode(code);
+    } finally {
+      if (identical(_pairingCodeRoute, route)) _pairingCodeRoute = null;
+    }
+  }
+
+  void _dismissPairingCodeDialog() {
+    final route = _pairingCodeRoute;
+    _pairingCodeRoute = null;
+    if (route == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final navigator = route.navigator;
+      if (navigator != null && route.isActive) navigator.removeRoute(route);
+    });
+  }
 
   ({String host, int port})? _parseManualAddress(String value) {
     final endpoint = LanEndpoint.parse(value);
     return endpoint == null ? null : (host: endpoint.host, port: endpoint.port);
   }
 
-  void _openWatch(BuildContext context, ClientRuntimeState state) {
+  Future<void> _openWatch(
+      BuildContext context, ClientRuntimeState state) async {
+    if (_watchRouteOpen || widget.switchingRole || widget.runtime.isDisposed) {
+      return;
+    }
     if (state.session == null) {
       _showMessage(context, AppStrings.of(context).ui('scanServerQrFirst'));
       return;
     }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => WatchScreen(
-          runtime: widget.runtime,
-          keepScreenAwake: _keepScreenAwake,
-          onKeepScreenAwakeChanged: _persistKeepScreenAwake,
+    _watchRouteOpen = true;
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => WatchScreen(
+            runtime: widget.runtime,
+            keepScreenAwake: _keepScreenAwake,
+            onKeepScreenAwakeChanged: _persistKeepScreenAwake,
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      _watchRouteOpen = false;
+    }
   }
 
   Future<void> _setKeepScreenAwake(bool enabled) async {

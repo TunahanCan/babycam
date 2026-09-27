@@ -36,15 +36,15 @@ class NetworkQualityMonitor {
   Stream<NetworkQualityUpdate> watch(PairingSession session) async* {
     var failures = 0;
     final reportSchedule = _QualityReportSchedule();
-    late final HttpClient client;
-    try {
-      client = _createClient(session)..connectionTimeout = timeout;
-    } catch (_) {
-      yield _offlineUpdate(previousFailures: failures);
-      return;
-    }
+    HttpClient? client;
     try {
       while (true) {
+        try {
+          client ??= _createClient(session)..connectionTimeout = timeout;
+        } catch (_) {
+          yield _offlineUpdate(previousFailures: failures);
+          return;
+        }
         final update = await _measure(
           client,
           session,
@@ -52,13 +52,20 @@ class NetworkQualityMonitor {
           reportSchedule,
         );
         failures = update.snapshot.consecutiveFailures;
+        if (failures > 0) {
+          // Future.timeout only stops waiting. Dispose the failed connection
+          // pool so stalled headers/bodies cannot accumulate across polls.
+          // Healthy polls continue reusing their keep-alive connections.
+          client.close(force: true);
+          client = null;
+        }
         yield update;
         await Future<void>.delayed(
           (healthState?.watchActive ?? false) ? livePollInterval : pollInterval,
         );
       }
     } finally {
-      client.close(force: true);
+      client?.close(force: true);
     }
   }
 

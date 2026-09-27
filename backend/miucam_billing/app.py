@@ -19,6 +19,7 @@ from .service import BillingService
 from .stores import AppStore, GooglePlayStore, StoreConfig
 
 MAX_REQUEST_BYTES = 128 * 1024
+REQUEST_BODY_TIMEOUT_SECONDS = 10
 
 
 def configured_service() -> BillingService:
@@ -42,7 +43,7 @@ def configured_service() -> BillingService:
         )
     if not stores:
         raise ValueError("At least one real store verifier must be configured")
-    return BillingService(repository, signer, stores)
+    return BillingService(repository, signer, stores, store_environment=environment)
 
 
 class BodyLimitMiddleware:
@@ -52,23 +53,35 @@ class BodyLimitMiddleware:
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
-        size = 0
-        messages = []
-        while True:
-            try:
-                message = await asyncio.wait_for(receive(), timeout=10)
-            except TimeoutError:
-                return await JSONResponse({"verified": False, "reasonCode": "transient"}, status_code=408)(scope, receive, send)
-            if message["type"] == "http.disconnect":
-                return
-            size += len(message.get("body", b""))
-            if size > MAX_REQUEST_BYTES:
-                return await JSONResponse({"verified": False, "reasonCode": "rejected"}, status_code=413)(scope, receive, send)
-            messages.append(message)
-            if not message.get("more_body", False):
-                break
+        body = bytearray()
+        too_large = False
+        try:
+            # One deadline for the whole body: periodic tiny chunks must not
+            # keep a request alive indefinitely. Buffer bytes rather than an
+            # unbounded number of empty/tiny ASGI message objects.
+            async with asyncio.timeout(REQUEST_BODY_TIMEOUT_SECONDS):
+                while True:
+                    message = await receive()
+                    if message["type"] == "http.disconnect":
+                        return
+                    chunk = message.get("body", b"")
+                    if len(body) + len(chunk) > MAX_REQUEST_BYTES:
+                        too_large = True
+                        break
+                    body.extend(chunk)
+                    if not message.get("more_body", False):
+                        break
+        except TimeoutError:
+            return await JSONResponse({"verified": False, "reasonCode": "transient"}, status_code=408)(scope, receive, send)
+        if too_large:
+            return await JSONResponse({"verified": False, "reasonCode": "rejected"}, status_code=413)(scope, receive, send)
+        replayed = False
         async def replay():
-            return messages.pop(0) if messages else await receive()
+            nonlocal replayed
+            if replayed:
+                return await receive()
+            replayed = True
+            return {"type": "http.request", "body": bytes(body), "more_body": False}
         await self.app(scope, replay, send)
 
 
@@ -142,7 +155,10 @@ def create_app(service: BillingService | None = None, *, run_recovery: bool = Tr
     @app.get("/health")
     async def health(request: Request):
         billing = request.app.state.billing
-        return {"ok": True, "sources": billing.available_sources, "productId": billing.product_id}
+        result = {"ok": True, "sources": billing.available_sources, "productId": billing.product_id}
+        if billing.store_environment is not None:
+            result["storeEnvironment"] = billing.store_environment
+        return result
 
     @app.post("/verify")
     async def verify(request: Request):

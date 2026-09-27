@@ -12,9 +12,14 @@ from .licenses import LicenseRepository, LicenseSigner
 
 class BillingService:
     def __init__(self, repository: LicenseRepository, signer: LicenseSigner,
-                 stores: Mapping[str, StoreAdapter]):
+                 stores: Mapping[str, StoreAdapter], *, store_environment: str | None = None):
+        if store_environment not in (None, "production", "sandbox"):
+            raise ValueError("Store environment must be production or sandbox")
         self.repository = repository
         self.signer = signer
+        # Only the deployment composition can attest the configured environment.
+        # Injected test services must never implicitly claim to be production.
+        self.store_environment = store_environment
         # Composition owns adapter selection; request handlers cannot mutate it
         # midway through a checkout or background acknowledgement.
         registry: dict[str, StoreAdapter] = {}
@@ -99,8 +104,11 @@ class BillingService:
         source = body.get("source")
         store = self._store(source)
         if body.get("preflight") is True:
-            return {"ready": True, "source": source, "productId": self.signer.product_id,
-                    "licensePublicKey": self.signer.public_key}
+            result = {"ready": True, "source": source, "productId": self.signer.product_id,
+                      "licensePublicKey": self.signer.public_key}
+            if self.store_environment is not None:
+                result["storeEnvironment"] = self.store_environment
+            return result
         evidence = body.get("serverVerificationData")
         if not isinstance(evidence, str) or not evidence or len(evidence) > 110_000:
             raise StoreFailure("rejected")

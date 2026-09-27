@@ -27,6 +27,37 @@ void main() {
     );
   });
 
+  test('Android 12 backup and device transfer exclude installation state', () {
+    final manifest =
+        File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+    final rules = File('android/app/src/main/res/xml/data_extraction_rules.xml')
+        .readAsStringSync();
+
+    expect(manifest,
+        contains('android:dataExtractionRules="@xml/data_extraction_rules"'));
+    expect(rules, isNot(contains('<include ')));
+    for (final transport in ['cloud-backup', 'device-transfer']) {
+      final section = RegExp('<$transport>([\\s\\S]*?)</$transport>')
+          .firstMatch(rules)
+          ?.group(1);
+      expect(section, isNotNull, reason: '$transport must have explicit rules');
+      for (final domain in [
+        'root',
+        'file',
+        'database',
+        'sharedpref',
+        'external',
+        'device_root',
+        'device_file',
+        'device_database',
+        'device_sharedpref',
+      ]) {
+        expect(section, contains('<exclude domain="$domain" path="."'),
+            reason: '$transport must exclude the entire $domain domain');
+      }
+    }
+  });
+
   test('release gate compiles both mobile platforms', () {
     final workflow = File('.github/workflows/ios-build.yml').readAsStringSync();
 

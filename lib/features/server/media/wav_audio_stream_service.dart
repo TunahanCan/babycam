@@ -230,6 +230,7 @@ class WavAudioStreamService {
 
   void removeClient(HttpResponse response) {
     final hadClient = _clients.remove(response);
+    if (hadClient && _clients.isEmpty) _framePacketizer.reset();
     final clientId = _clientIds.remove(response);
     final detach = _clientDetachCallbacks.remove(response);
     _clientQueues.remove(response);

@@ -19,6 +19,8 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
       'serverDeviceId': deviceId,
       'serverName': 'Bebek Odası',
       'pairingNonce': pairingNonce,
+      'pairingCodeRequired': true,
+      'pairingCodeExpiresAtMs': tokenService.pairingCodeExpiresAtMs,
       'transport': transportConfig.payloadTransport,
       'capabilities': _mediaCapabilities(),
       'discovery': {
@@ -487,9 +489,17 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
         });
         return;
       }
-      if (!tokenService.consumePairConfirmAttempt(
-        _pairConfirmAttemptKey(request),
-      )) {
+      final sourceKey = _pairConfirmAttemptKey(request);
+      final sourceAttemptAllowed =
+          tokenService.consumePairConfirmAttempt(sourceKey);
+      final json = await _readJsonObjectBody(request);
+      final nonce = json?['pairingNonce']?.toString() ?? '';
+      // A physical QR has its own per-source budget so exhausted code guesses
+      // cannot deny the room owner's strong, unguessable invitation.
+      final attemptAllowed = tokenService.isPrivatePairingNonceActive(nonce)
+          ? tokenService.consumeQrPairConfirmAttempt(sourceKey)
+          : sourceAttemptAllowed;
+      if (!attemptAllowed) {
         request.response.statusCode = HttpStatus.tooManyRequests;
         await _writeJson(request.response, {
           'ok': false,
@@ -498,7 +508,6 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
         });
         return;
       }
-      final json = await _readJsonObjectBody(request);
       if (json == null) {
         request.response.statusCode = HttpStatus.badRequest;
         await _writeJson(request.response, {
@@ -532,14 +541,24 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
         });
         return;
       }
-      if (tokenService.validateAndConsumeNonce(
-              json['pairingNonce']?.toString() ?? '') ==
-          false) {
-        request.response.statusCode = HttpStatus.unauthorized;
+      final invitation = tokenService.consumePairingInvitation(
+        nonce,
+        pairingCode: json['pairingCode'] is String
+            ? json['pairingCode'] as String
+            : null,
+      );
+      if (invitation != PairingInvitationResult.accepted) {
+        final rateLimited = invitation == PairingInvitationResult.rateLimited;
+        final invalidCode = invitation == PairingInvitationResult.invalidCode;
+        request.response.statusCode =
+            rateLimited ? HttpStatus.tooManyRequests : HttpStatus.unauthorized;
         await _writeJson(request.response, {
           'ok': false,
-          'code': 'PAIRING_NONCE_INVALID_OR_EXPIRED',
-          'message': 'This pairing QR has expired or was already used.',
+          'code': rateLimited
+              ? 'PAIR_CONFIRM_RATE_LIMITED'
+              : invalidCode
+                  ? 'PAIRING_CODE_INVALID_OR_EXPIRED'
+                  : 'PAIRING_NONCE_INVALID_OR_EXPIRED',
         });
         return;
       }

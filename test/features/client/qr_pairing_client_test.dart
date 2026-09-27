@@ -9,6 +9,49 @@ import 'package:miucam/features/client/pairing/pairing_failure.dart';
 import 'package:miucam/features/client/pairing/qr_pairing_client.dart';
 
 void main() {
+  test('manual pairing submits the six digits and clears them from the session',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final submitted = <Map<String, dynamic>>[];
+    server.listen((request) async {
+      final body = jsonDecode(await utf8.decoder.bind(request).join())
+          as Map<String, dynamic>;
+      submitted.add(body);
+      request.response.headers.contentType = ContentType.json;
+      if (body['pairingCode'] == '000042') {
+        request.response.write(jsonEncode({'trustedClientToken': 'trusted'}));
+      } else {
+        request.response
+          ..statusCode = HttpStatus.unauthorized
+          ..write(jsonEncode({'code': 'PAIRING_CODE_INVALID_OR_EXPIRED'}));
+      }
+      await request.response.close();
+    });
+    final payload = PairingPayload(
+      schemaVersion: MiuCamProtocolV2.schemaVersion,
+      host: '127.0.0.1',
+      port: server.port,
+      deviceId: 'room',
+      deviceName: 'Room',
+      pairingNonce: 'public-nonce',
+      expiresAtMs:
+          DateTime.now().add(const Duration(minutes: 1)).millisecondsSinceEpoch,
+      requiresPairingCode: true,
+      capabilities: const {},
+    );
+    final session =
+        await const QRPairingClient().pair(payload.withPairingCode('000042'));
+    expect(submitted.single['pairingCode'], '000042');
+    expect(session.sessionToken, 'trusted');
+    expect(session.payload.pairingCode, isNull);
+    await expectLater(
+      const QRPairingClient().pair(payload.withPairingCode('000043')),
+      throwsA(isA<PairingFailure>().having((failure) => failure.code, 'code',
+          PairingFailureCode.pairingCodeInvalidOrExpired)),
+    );
+  });
+
   test(
       're-pair proves remembered server-assigned identity only to its endpoint',
       () async {
@@ -47,6 +90,7 @@ void main() {
     await client.pair(payload(), rememberedSession: remembered);
     expect(bodies.last['deviceId'], 'server-assigned-id');
     expect(bodies.last['existingTrustedClientToken'], 'remembered-secret');
+    expect(bodies.last, isNot(contains('pairingCode')));
 
     await client.pair(payload(),
         rememberedSession:

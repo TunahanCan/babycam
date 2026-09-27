@@ -71,6 +71,7 @@ class HttpPairingPayloadGateway implements PairingPayloadGateway {
             .add(const Duration(minutes: 2))
             .millisecondsSinceEpoch,
         transport: json['transport']?.toString() ?? 'http_ws',
+        requiresPairingCode: json['pairingCodeRequired'] == true,
         capabilities: capabilities,
       );
     } on PairingFailure {

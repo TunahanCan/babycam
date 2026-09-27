@@ -28,7 +28,8 @@ void main() {
     addTearDown(() => client.close(force: true));
     final paired = <Map<String, Object?>>[];
     for (var index = 0; index < 5; index++) {
-      final response = await _pair(client, firstBase.port, 'parent-$index');
+      final response = await _pair(client, firstBase.port, 'parent-$index',
+          tokens: firstTokens);
       expect(response.statusCode, HttpStatus.ok);
       paired.add(response.body);
     }
@@ -60,10 +61,12 @@ void main() {
     expect(restartedServer.activeWatchClientIds, {firstId});
 
     await restartedServer.startPairingMode();
-    final sixth = await _pair(client, base.port, 'parent-6');
+    final sixth =
+        await _pair(client, base.port, 'parent-6', tokens: restartedTokens);
     expect(sixth.statusCode, HttpStatus.conflict);
     expect(sixth.body['code'], TrustedClientLimitException.code);
-    final unprovenCollision = await _pair(client, base.port, firstId);
+    final unprovenCollision =
+        await _pair(client, base.port, firstId, tokens: restartedTokens);
     expect(unprovenCollision.statusCode, HttpStatus.conflict);
     expect(unprovenCollision.body['code'], TrustedClientLimitException.code);
     expect(restartedTokens.validateSessionToken(firstSecret), isTrue);
@@ -72,6 +75,7 @@ void main() {
       client,
       base.port,
       firstId,
+      tokens: restartedTokens,
       proof: firstSecret,
     );
     expect(rePaired.statusCode, HttpStatus.ok);
@@ -106,7 +110,8 @@ void main() {
     final mediaResponse = await mediaRequest.close();
     await mediaResponse.drain<void>();
     expect(mediaResponse.statusCode, HttpStatus.unauthorized);
-    final newPhone = await _pair(client, base.port, 'parent-6');
+    final newPhone =
+        await _pair(client, base.port, 'parent-6', tokens: restartedTokens);
     expect(newPhone.statusCode, HttpStatus.ok);
     expect(restartedTokens.pairedClientCount, 5);
     final stored = PairingTokenService(
@@ -139,6 +144,7 @@ Future<({int statusCode, Map<String, Object?> body})> _pair(
   HttpClient client,
   int port,
   String deviceId, {
+  required PairingTokenService tokens,
   String? proof,
 }) async {
   final status =
@@ -147,6 +153,7 @@ Future<({int statusCode, Map<String, Object?> body})> _pair(
   return _jsonRequest(client, port, 'POST', MiuCamProtocolV2.pairConfirm,
       body: {
         'pairingNonce': status.body['pairingNonce'],
+        'pairingCode': tokens.pairingCode,
         'clientName': 'MiuCam phone',
         'deviceId': deviceId,
         if (proof != null) 'existingTrustedClientToken': proof,

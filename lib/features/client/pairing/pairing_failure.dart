@@ -2,6 +2,7 @@ enum PairingFailureCode {
   payloadExpired,
   pairingNotActive,
   nonceInvalidOrExpired,
+  pairingCodeInvalidOrExpired,
   rateLimited,
   selfPairingNotAllowed,
   maxTrustedClientsReached,

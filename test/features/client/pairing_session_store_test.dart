@@ -8,6 +8,29 @@ import 'package:miucam/features/client/pairing/pairing_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('saving an attempted code never persists it or changes a trusted token',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final secure = _FakeSecureTokenStore();
+    final store = PairingSessionStore(preferences, secureTokens: secure);
+    final session = _session('remembered-token');
+    await store.save(
+        session.copyWith(payload: session.payload.withPairingCode('000042')));
+
+    for (final key in preferences.getKeys()) {
+      expect(preferences.get(key).toString(), isNot(contains('000042')));
+      expect(preferences.get(key).toString(), isNot(contains('pairingCode')));
+    }
+    expect(
+        secure.values.values.any((value) => value.contains('000042')), isFalse);
+    final restored = await store.loadSelected();
+    expect(restored?.payload.pairingCode, isNull);
+    expect(restored?.sessionToken, 'remembered-token');
+    expect((await store.loadForPayload(session.payload))?.sessionToken,
+        'remembered-token');
+  });
+
   test(
       'remembered room lookup preserves selected child and never borrows its token',
       () async {

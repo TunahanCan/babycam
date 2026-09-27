@@ -215,6 +215,8 @@ class ServerCompositionRoot {
       trustedClientsChanged: server.trustedClientsChanged,
       activeWatchClientIds: () => server.activeWatchClientIds,
       isPairingNonceActive: tokenService.isPairingNonceActive,
+      pairingCode: () => tokenService.pairingCode,
+      pairingCodeExpiresAtMs: () => tokenService.pairingCodeExpiresAtMs,
       onRenameTrustedClient: server.renameTrustedClient,
       maxTrustedClients: tokenService.maxTrustedClients,
       maxActiveWatchClients: server.maxActiveWatchClients,

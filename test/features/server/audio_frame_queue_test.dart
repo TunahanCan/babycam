@@ -54,6 +54,46 @@ void main() {
     expect(packetizer.pendingBytes, 3);
   });
 
+  test('new audio session does not inherit the previous session PCM tail',
+      () async {
+    final service = WavAudioStreamService(
+      sampleRate: 16000,
+      channels: 1,
+      bitsPerSample: 16,
+    );
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var connectionNumber = 0;
+    final requests = server.listen((request) {
+      unawaited(
+          service.attachClient(request.response, '${++connectionNumber}'));
+    });
+    final client = HttpClient();
+    addTearDown(() async {
+      await service.closeAll();
+      client.close(force: true);
+      await requests.cancel();
+      await server.close(force: true);
+    });
+
+    final first = await (await client.getUrl(_audioUri(server))).close();
+    unawaited(first.drain<void>());
+    service.broadcast(Uint8List(320));
+    expect(service.snapshot.chunksStreamed, 0);
+    await service.closeClient('1');
+
+    final second = await (await client.getUrl(_audioUri(server))).close();
+    final received =
+        second.fold<List<int>>([], (bytes, chunk) => bytes..addAll(chunk));
+    final currentAudio = Uint8List.fromList(List.filled(640, 0x55));
+    service.broadcast(currentAudio);
+    await pumpEventQueue();
+    await service.closeAll();
+
+    final bytes = await received.timeout(const Duration(seconds: 1));
+    expect(bytes.length, 44 + currentAudio.length);
+    expect(bytes.skip(44), currentAudio);
+  });
+
   test('ilk WAV flush timeout olursa client attach edilmis birakilmaz',
       () async {
     final stalledFlush = Completer<void>();

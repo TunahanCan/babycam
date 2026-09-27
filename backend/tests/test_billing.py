@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 
 from miucam_billing.app import create_app, configured_service
+from miucam_billing.keygen import generate
 from miucam_billing.licenses import LicenseRepository, LicenseSigner, PRODUCT_ID, StorePurchase, b64, fingerprint
 from miucam_billing.service import BillingService
 from miucam_billing.stores import StoreFailure
@@ -281,6 +282,42 @@ def test_unconfigured_production_service_never_falls_back_to_fake_verification(m
     monkeypatch.delenv("MIUCAM_LICENSE_PRIVATE_KEY_FILE", raising=False)
     with pytest.raises(KeyError):
         configured_service()
+
+
+@pytest.mark.parametrize("environment", [None, "production", "sandbox"])
+def test_configured_environment_is_attested_in_health_and_preflight(tmp_path, monkeypatch, environment):
+    key_file = tmp_path / "license-signing.pem"
+    generate(key_file)
+    monkeypatch.setenv("MIUCAM_LICENSE_PRIVATE_KEY_FILE", str(key_file))
+    monkeypatch.setenv("MIUCAM_LICENSE_DATABASE", str(tmp_path / "licenses.sqlite3"))
+    monkeypatch.setenv("MIUCAM_GOOGLE_PLAY_ENABLED", "true")
+    monkeypatch.setenv("MIUCAM_APP_STORE_ENABLED", "false")
+    if environment is None:
+        monkeypatch.delenv("MIUCAM_STORE_ENVIRONMENT", raising=False)
+    else:
+        monkeypatch.setenv("MIUCAM_STORE_ENVIRONMENT", environment)
+    configs = []
+    def configured_google(config):
+        configs.append(config)
+        return Store()
+    monkeypatch.setattr("miucam_billing.app.GooglePlayStore", configured_google)
+
+    service = configured_service()
+    expected = environment or "production"
+    with TestClient(create_app(service, run_recovery=False)) as client:
+        assert client.get("/health").json()["storeEnvironment"] == expected
+        response = client.post("/verify", json=purchase(preflight=True)).json()
+        assert response["storeEnvironment"] == expected
+        assert response["ready"] is True
+        assert "licenseToken" not in response
+    assert configs[0].allow_test_purchases is (expected == "sandbox")
+    assert service.stores["google_play"].refresh_calls == 0
+
+
+def test_injected_service_cannot_claim_an_unknown_environment(billing):
+    with pytest.raises(ValueError, match="environment"):
+        BillingService(billing.repository, billing.signer, billing.stores,
+                       store_environment="staging")
 
 
 @pytest.mark.parametrize("payload", [[], 1, {"packageName": "com.miucam.app", "oneTimeProductNotification": [1]}])

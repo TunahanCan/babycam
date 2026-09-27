@@ -37,6 +37,43 @@ void main() {
     expect(service.isActive, isFalse);
   });
 
+  test('late failed-stream cleanup cannot stop a newer microphone capture',
+      () async {
+    final cancelStarted = Completer<void>();
+    final releaseCancel = Completer<void>();
+    final failedStream = StreamController<Uint8List>(onCancel: () {
+      cancelStarted.complete();
+      return releaseCancel.future;
+    });
+    final recorder = _FakeRecorder()
+      ..nextStreamResult = Future.value(failedStream.stream);
+    final service = MicrophoneCaptureService(
+      sampleRate: 16000,
+      channels: 1,
+      recorder: recorder,
+      cleanupTimeout: const Duration(seconds: 1),
+    );
+    addTearDown(() async {
+      if (!releaseCancel.isCompleted) releaseCancel.complete();
+      await service.dispose();
+      await failedStream.close();
+    });
+
+    expect(await service.start(onChunk: (_) {}), isTrue);
+    failedStream.addError(StateError('lost capture'));
+    await cancelStarted.future;
+    await service.stop();
+    expect(recorder.stopCalls, 1);
+    expect(await service.start(onChunk: (_) {}), isTrue);
+
+    releaseCancel.complete();
+    await pumpEventQueue();
+
+    expect(recorder.startCalls, 2);
+    expect(recorder.stopCalls, 1);
+    expect(service.isActive, isTrue);
+  });
+
   test('parcali PCM orneklerini gain ve analizden once kayipsiz birlestirir',
       () async {
     final recorder = _FakeRecorder();

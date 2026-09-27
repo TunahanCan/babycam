@@ -26,6 +26,20 @@ MIUCAM_BACKEND_TEST_PYTHON="$PWD/backend/.venv/bin/python" \
   flutter test tool/tests/purchase_backend_contract_test.dart
 ```
 
+Docker daemon bulunan makinede üretim imajını ve kalıcı veri kurtarmasını sınayın:
+
+```bash
+python3 backend/tests/docker_smoke.py
+```
+
+Bu kontrol imajı oluşturur; ağsız container içinde sentetik satın alma, yeniden
+başlatma, lisans anahtarı/SQLite backup API yedeği ve geri yükleme, mağaza kesintisi,
+iade, istek boyutu ve hız sınırlarını gerçek HTTP üzerinden sınar. Süreç UID 10001
+ile salt okunur kök dosya sisteminde çalışır. Test mağazası yalnız geçici test
+volume'üne eklenir; üretim imajına girmez ve production ortamı iddia etmez. Host
+portu açılmaz; gerçek mağazaya istek yapılmaz. Test container ve veri volume'ü
+sonunda silinir; gerçek dağıtım verisine dokunulmaz.
+
 ## Dağıtım
 
 1. Google Play ve App Store Connect'te `com.miucam.app` uygulaması için
@@ -76,7 +90,11 @@ MIUCAM_BACKEND_TEST_PYTHON="$PWD/backend/.venv/bin/python" \
    açmayın. Aksi halde IP bazlı limit tüm trafiği aynı proxy altında sayabilir.
    Proxy access log'a
    gövde, Authorization başlığı veya makbuz eklemeyin.
-7. `/health` yanıtında açık mağazaları kontrol edin. Flutter release'e aynı
+7. `/health` yanıtında açık mağazaları ve `storeEnvironment` değerini kontrol edin.
+   Gerçek dağıtım bu alanı `/verify` preflight yanıtında da döndürür. Mağazaya
+   gönderilecek release için değer `production` olmalıdır; `sandbox`, eksik veya
+   bilinmeyen değer yayın hazırlık kontrolünden geçmez. Enjekte edilen test
+   servisleri kendiliğinden production olarak işaretlenmez. Flutter release'e aynı
    dağıtımın public key'ini ve HTTPS URL'sini verin:
 
    ```bash
@@ -130,7 +148,9 @@ tatbikatında aynı alımın entitlement ID'sinin korunduğunu sınayın. Kaydı
 imzalı lisans yenilemesinde servis geçici hata verir; ücretli kullanıcıyı iptal
 edilmiş saymaz.
 
-API istek gövdesi ve Google yanıtı sınırlıdır; ağ çağrılarında timeout vardır.
+API istek gövdesi 128 KiB ile sınırlıdır ve tamamı 10 saniye içinde alınmalıdır;
+parça göndermek süreyi uzatmaz. Google yanıtı da sınırlıdır; ağ çağrılarında
+timeout vardır.
 Apple SDK sertifika/OCSP doğrulaması kendi 30 saniyelik ağ timeout'unu kullanır.
 İstemci kısa timeout ile ekranda bekleme durumuna geçebilir; kalıcı işlem sonra
 geri kazanılır. Süreç/proxy için CPU, RAM ve eşzamanlı bağlantı limitlerini hedef

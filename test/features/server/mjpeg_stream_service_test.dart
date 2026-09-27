@@ -125,6 +125,62 @@ void main() {
     expect(flushCalls, 2);
     expect(service.clientCount, 0);
   });
+
+  for (final firstFrame in [false, true]) {
+    test(
+        'late ${firstFrame ? 'initial' : 'broadcast'} frame flush does not '
+        'restore detached response metrics', () async {
+      final flushStarted = Completer<void>();
+      final releaseFlush = Completer<void>();
+      final attached = Completer<void>();
+      final serverResponse = Completer<HttpResponse>();
+      var flushCalls = 0;
+      final service = MjpegStreamService(
+        flushTimeout: const Duration(seconds: 2),
+        responseFlusher: (response) {
+          flushCalls++;
+          if (!firstFrame && flushCalls == 1) return response.flush();
+          if (!flushStarted.isCompleted) flushStarted.complete();
+          return releaseFlush.future;
+        },
+      );
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final frame = Uint8List.fromList([0xff, 0xd8, 0xff, 0xd9]);
+      final requests = server.listen((request) {
+        serverResponse.complete(request.response);
+        unawaited(service
+            .attachClient(
+              request.response,
+              'detached',
+              firstFrame: firstFrame ? frame : null,
+            )
+            .then((_) => attached.complete()));
+      });
+      final client = HttpClient();
+      addTearDown(() async {
+        if (!releaseFlush.isCompleted) releaseFlush.complete();
+        await service.closeAll();
+        client.close(force: true);
+        await requests.cancel();
+        await server.close(force: true);
+      });
+      final request = await client.getUrl(_videoUri(server));
+      unawaited(_discardResponse(request.close()));
+      if (!firstFrame) {
+        await attached.future.timeout(const Duration(seconds: 1));
+        service.broadcast(frame);
+      }
+      await flushStarted.future.timeout(const Duration(seconds: 1));
+      service.removeClient(await serverResponse.future);
+      releaseFlush.complete();
+      await pumpEventQueue();
+
+      expect(service.clientCount, 0);
+      expect(service.snapshot.framesStreamed, 0);
+      expect(service.backpressureMetrics.lastSuccessfulVideoWriteAtMs, isNull);
+      expect(service.backpressureMetrics.averageWriteDurationMs, isNull);
+    });
+  }
 }
 
 Uri _videoUri(HttpServer server) =>

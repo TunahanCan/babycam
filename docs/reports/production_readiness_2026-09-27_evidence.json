@@ -1,0 +1,129 @@
+{
+  "date": "2026-09-27",
+  "scope": "Local host and one physical Android device; not store acceptance",
+  "device": {
+    "model": "LG H870",
+    "androidVersion": 9,
+    "apiLevel": 28
+  },
+  "role": {
+    "passed": true,
+    "cycles": [
+      {
+        "cycle": 1,
+        "passed": true,
+        "capturedVideoFrames": 1,
+        "capturedAudioChunks": 15,
+        "switchDurationMs": 3236
+      },
+      {
+        "cycle": 2,
+        "passed": true,
+        "capturedVideoFrames": 1,
+        "capturedAudioChunks": 14,
+        "switchDurationMs": 2288
+      }
+    ],
+    "resourcesActiveAfterTest": false
+  },
+  "audio": {
+    "passed": true,
+    "source": "controlled localhost HTTP WAV/PCM16 stream",
+    "runs": [
+      {
+        "run": 1,
+        "passed": true,
+        "observedDurationMs": 3185,
+        "playbackHeadFramesDelta": 50880,
+        "steadyStateUnderrunDelta": 0
+      },
+      {
+        "run": 2,
+        "passed": true,
+        "observedDurationMs": 3112,
+        "playbackHeadFramesDelta": 49600,
+        "steadyStateUnderrunDelta": 0
+      },
+      {
+        "run": 3,
+        "passed": true,
+        "observedDurationMs": 3092,
+        "playbackHeadFramesDelta": 49280,
+        "steadyStateUnderrunDelta": 0
+      }
+    ],
+    "startupUnderrunCounter": 1,
+    "discardedStaleWriteAtStop": 1,
+    "nativeWriteErrors": 0
+  },
+  "notification": {
+    "posted": true,
+    "verifiedActive": true,
+    "cleanedUp": true
+  },
+  "uiFrames": {
+    "budgetP95Ms": 35.0,
+    "scenarios": {
+      "slider": {
+        "sampleCount": 103,
+        "totalP95Ms": 34.351,
+        "totalMaxMs": 46.034
+      },
+      "scroll": {
+        "sampleCount": 179,
+        "totalP95Ms": 24.87,
+        "totalMaxMs": 35.075
+      }
+    }
+  },
+  "coverage": {
+    "files": 194,
+    "linesFound": 21561,
+    "linesHit": 18484,
+    "lineCoveragePercent": 85.73,
+    "scope": "Flutter host tests with backend contract; executable lines, not feature/device coverage"
+  },
+  "deviceRestoration": {
+    "normalApkRestored": true,
+    "latestNormalDebugApkInstalled": true,
+    "existingDataFilesCompared": 9,
+    "changedOrMissing": 1,
+    "uninstalled": false,
+    "changedGeneratedFiles": [
+      "files/profileInstalled"
+    ],
+    "applicationPreferencesAndTokensChanged": false,
+    "note": "Compared normalized archive paths. Only Android profile installation marker changed; existing user data matched pre-test backup."
+  },
+  "notValidated": [
+    "iOS build/XCTest/physical device",
+    "Real store purchase and refund",
+    "Two physical phones over LAN",
+    "Long thermal/battery or weak Wi-Fi soak",
+    "Android API 29+ physical devices"
+  ],
+  "publicReleaseReady": false,
+  "androidArtifact": {
+    "path": "build/app/outputs/bundle/release/app-release.aab",
+    "sizeBytes": 92428425,
+    "sha256": "0b230d59b6833e780651e26c410e6804511f26caa40dbd30a4ea935ff249ad6a",
+    "signed": false,
+    "scope": "Compilation evidence only; production billing and signing were not configured"
+  },
+  "androidLint": {
+    "errors": 0,
+    "warnings": 18
+  },
+  "checks": {
+    "backendTestsPassed": 99,
+    "releaseGateTestsPassed": 22,
+    "androidJvmTestsPassed": 17,
+    "screenTestsPassed": 17,
+    "websiteLanguages": 8,
+    "websitePages": 16,
+    "dockerRuntimeSmoke": "passed",
+    "flutterTestsPassed": 1418,
+    "flutterAnalyze": "no issues",
+    "dartFormat": "415 files, 0 changed"
+  }
+}

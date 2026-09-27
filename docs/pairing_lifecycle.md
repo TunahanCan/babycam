@@ -7,18 +7,20 @@ bütçesi vardır; aynı telefondaki ek bağlantılar yeni cihaz sayılmaz.
 
 | Senaryo | Beklenen davranış |
 | --- | --- |
-| İlk eşleştirme | Tek kullanımlık QR doğrulanır; kayıt diske yazılmadan başarı dönmez. |
+| İlk eşleştirme | Tek kullanımlık QR doğrulanır. Keşif veya manuel IP kullanılırsa oda telefonunda görünen 6 haneli kod da gerekir; kayıt diske yazılmadan başarı dönmez. |
+| Kod yenilenir veya eşleştirme yeniden açılır | Yeni rastgele 6 haneli kod üretilir; eski kod geçersiz olur. Kod 10 dakika geçerlidir. |
+| Yanlış veya eksik kod girilir | Eşleştirme reddedilir; geçerli eşleştirme bileti tüketilmez. Tüm IP adresleri için toplam dakikada 5 kod denemesi sınırı uygulanır. |
 | Sonraki telefon | Kullanılan QR ekranda otomatik yenilenir; kayıtlı cihaz listesi canlı güncellenir. |
 | Uygulama yeniden açılır | Kayıtlı cihazların kimlikleri, adları, ilk eşleşme ve son bağlantı bilgileri korunur. |
-| Kayıtlı telefon yeniden bağlanır | Geçerli saklanmış anahtarla QR taramadan bağlanır. Yeni cihaz kontenjanı tüketmez. |
+| Kayıtlı telefon yeniden bağlanır | Geçerli saklanmış anahtarla QR taramadan veya tekrar kod girmeden bağlanır. Yeni cihaz kontenjanı tüketmez. |
 | Kayıtlı telefon yeniden QR tarar | Aynı kayıt, saklanmış anahtarın doğrulanmasıyla yenilenir. Sahibinin verdiği ad ve ilk eşleşme tarihi korunur. |
 | Aynı kimliği bildiren başka telefon | Eski anahtarın sahipliğini kanıtlayamazsa mevcut kaydı değiştiremez. Yer varsa farklı kimlik verilir; liste doluysa reddedilir. |
 | Altıncı cihaz eşleşmek ister | HTTP 409 `MAX_TRUSTED_CLIENTS_REACHED`; mevcut cihazların kaydı değişmez. Önce oda telefonundan bir cihaz kaldırılmalıdır. |
 | Altıncı eşzamanlı yayın | HTTP 429 `MAX_ACTIVE_CLIENTS_REACHED`; eşzamanlı isteklerde de beş sınırı aşılmaz. |
-| Uzun süre kullanılmayan anahtarın süresi dolar | Mevcut 60 günlük anahtar ömrü korunur. Son 7 günde normal bağlantı akışı yenilemeyi dener; süre dolmuşsa yeni QR gerekir. |
+| Uzun süre kullanılmayan anahtarın süresi dolar | Mevcut 60 günlük anahtar ömrü korunur. Son 7 günde normal bağlantı akışı yenilemeyi dener; süre dolmuşsa QR veya güncel kodla yeniden eşleştirme gerekir. |
 | Yayın durdurulur | Yayın kontenjanı geri verilir; cihaz hatırlanmaya devam eder. |
 | Tek cihaz kaldırılır | Yetki hemen iptal edilir. Ses, görüntü, konuşma ve bildirim bağlantıları kapatılır; diğer cihazlar çalışmaya devam eder. |
-| Tüm cihazlar kaldırılır | Tüm erişimler iptal edilir. Tekrar bağlanmak için yeni QR eşleştirmesi gerekir. |
+| Tüm cihazlar kaldırılır | Tüm erişimler iptal edilir. Tekrar bağlanmak için QR veya güncel kodla yeniden eşleştirme gerekir. |
 | Silme kaydı başarısız olur | O anki erişim engellenir. Listede kaydetme bekleyen satır ve yeniden deneme imkânı kalır. Kalıcı silme tamamlanmadan yeniden başlatma sonrasında silinmiş olduğu varsayılmaz. |
 | Ad değiştirme kaydedilemez | Önceki ad geri yüklenir; eşzamanlı erişim iptali geri alınmaz. |
 | İstek kuyrukta beklerken cihaz silinir | Yayın başlatma/durdurma ve bildirim bağlantısı, işlem sırasında yetkiyi tekrar doğrular. Silinmiş yetkiyle oturum canlandırılamaz. |
@@ -28,6 +30,13 @@ Ebeveyn tarafında anahtarlar güvenli depoda, oda telefonunda yalnızca anahtar
 yalnızca aynı oda kimliği ve aynı adres/port için gönderilir; QR içindeki oda
 kimliği tek başına anahtarı başka adrese göndermek için yeterli değildir.
 Adres değiştiğinde mevcut keşif ve bağlantıyı yenileme akışı kullanılır.
+
+6 haneli kod yalnızca oda ekranında gösterilir; herkese açık keşif yanıtına,
+QR içeriğine veya kalıcı depoya eklenmez. Kod yalnız ilk erişimi doğrular;
+medya ve kontrol aktarımı mevcut HTTP/WS üzerinden şifrelenmeden sürer.
+Görüntü veya ses karelerine yeni bir şifreleme işlemi eklenmez. Kod yenileme,
+genel deneme sınırını sıfırlamaz; QR ile eşleştirme bu kod deneme bütçesini
+kullanmaz. Eşleştirme kapatıldığında geçici kod da geçersiz olur.
 
 Cihaz yönetimi hem eşleştirme hem ayarlar ekranındadır. Kayıtlı/yayın alan
 sayıları, son bağlantı zamanı, ad değiştirme ve erişimi kaldırma işlemleri

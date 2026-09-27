@@ -27,6 +27,18 @@ String _localizedFallback(
 }
 
 const _deUiText = <String, String>{
+  'pairingCodeTitle': 'Kopplungscode',
+  'pairingCodeRoomHelp':
+      'Für die Verbindung per IP oder lokaler Suche. Beim QR-Scan brauchst du diesen Code nicht.',
+  'pairingCodeValidity':
+      '10 Minuten gültig. Ändert sich beim Erneuern des QR-Codes oder nach Verwendung.',
+  'enterPairingCodeHelp':
+      'Gib den sechsstelligen Code vom QR/IP-Bildschirm des Raumtelefons ein.',
+  'pairingCodeLabel': '6-stelliger Code',
+  'pairingCodeInvalidFormat': 'Gib sechs Ziffern ein.',
+  'confirmPairingCode': 'Koppeln',
+  'pairingCodeInvalidOrExpired':
+      'Der Code ist falsch oder abgelaufen. Versuche den aktuellen Code auf dem Raumtelefon.',
   'systemNotificationSettingsTitle': 'Mitteilungen des Telefons',
   'systemNotificationSettingsDescription':
       'Verwalte die Berechtigung und den Ton für MiuCam-Mitteilungen in den Telefoneinstellungen.',
@@ -558,6 +570,18 @@ const _deUiText = <String, String>{
 };
 
 const _arUiText = <String, String>{
+  'pairingCodeTitle': 'رمز الاقتران',
+  'pairingCodeRoomHelp':
+      'للاتصال عبر عنوان IP أو البحث المحلي. لا تحتاج إلى هذا الرمز عند مسح QR.',
+  'pairingCodeValidity':
+      'صالح لمدة 10 دقائق. يتغير عند تحديث QR أو استخدام الرمز.',
+  'enterPairingCodeHelp':
+      'أدخل الرمز المكون من ستة أرقام الظاهر في شاشة QR/IP على هاتف الغرفة.',
+  'pairingCodeLabel': 'رمز من 6 أرقام',
+  'pairingCodeInvalidFormat': 'أدخل ستة أرقام.',
+  'confirmPairingCode': 'اقتران',
+  'pairingCodeInvalidOrExpired':
+      'الرمز غير صحيح أو انتهت صلاحيته. حاول باستخدام الرمز الحالي على شاشة هاتف الغرفة.',
   'systemNotificationSettingsTitle': 'إعدادات إشعارات الهاتف',
   'systemNotificationSettingsDescription':
       'عدّل إذن إشعارات MiuCam وصوتها من إعدادات الهاتف.',

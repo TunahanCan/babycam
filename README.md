@@ -38,7 +38,8 @@ yanındaki telefon **Client** olur.
 
 - Server kamera, mikrofon, hareket ve ses analizini yönetir.
 - Client canlı görüntüyü ve oda sesini oynatır, uyarıları gösterir.
-- Cihazlar QR kod, otomatik yerel ağ keşfi veya manuel IP ile eşleşir.
+- Cihazlar QR kodla eşleşir; otomatik keşif ve manuel IP'de ilk bağlantı,
+  oda telefonundaki geçici 6 haneli kodla doğrulanır.
 - Video, ses ve kontrol trafiği doğrudan aynı Wi-Fi üzerinde taşınır.
 
 > [!NOTE]
@@ -105,6 +106,8 @@ flowchart TB
 
 - Kullanıcı hesabı veya zorunlu backend yok
 - Tek kullanımlık pairing nonce ve kısa ömürlü eşleşme bileti
+- Keşif/IP eşleştirmesinde 10 dakika geçerli 6 haneli kod; kayıtlı cihazlarda
+  tekrar kod girmeden bağlantı
 - Güvenilir Client tokenı ve ayrı stream tokenı
 - Medya için cloud relay veya TURN zorunluluğu yok
 
@@ -167,7 +170,9 @@ flutter run -d <client-device-id>
 
 Server telefonda **Bebek odasına kur**, Client telefonda **Yanımda kullan**
 seçeneğine dokun. İlk eşleşme için QR kodu okut; otomatik keşif çalışmıyorsa
-Server ekranındaki IP ve portu kullan.
+Server ekranındaki IP ve portu kullan. Keşif veya IP ile ilk bağlantıda oda
+telefonunda gösterilen 6 haneli kodu gir. Kod, eşleştirme yeniden başlatıldığında
+veya yenilendiğinde değişir; 10 dakika sonra geçersiz olur.
 
 ### Sık karşılaşılan bağlantı sorunları
 
@@ -179,6 +184,14 @@ Server ekranındaki IP ve portu kullan.
 - iOS Server'da canlı kamera için uygulamayı ön planda tut.
 
 ## Ürün raporu
+
+[Üretim hazırlığı ve özellik kabulü](docs/reports/production_readiness_2026-09-27.md),
+son otomatik testleri, gerçek Android ölçümlerini ve mağaza yayını öncesindeki
+açık kabul adımlarını içerir.
+
+[Kod incelemesi ve regresyon raporu](docs/reports/full_code_review_2026-09-27.md),
+eşleştirme, yayın yaşam döngüsü ve kaynak temizliğinde yapılan son düzeltmeleri
+ve test sonuçlarını içerir.
 
 Son [uygulama, medya ve mağaza kabulü](docs/reports/full_app_acceptance_2026-09-27.md)
 1381 Flutter testi, 92 backend testi ve
@@ -211,13 +224,17 @@ Fransızca, Almanca, Arapça–Suudi Arabistan ve Arapça–Katar.
 | Varsayılan medya | MJPEG video + PCM16LE/WAV ses |
 | WebRTC pilotu | Tek peer H.264 + Opus, otomatik fallback |
 | Keşif | QR, DNS-SD/NSD ve manuel IP |
-| Yetkilendirme | Pairing nonce, trusted bearer token ve stream token |
+| Yetkilendirme | QR nonce veya keşif/IP için 6 haneli kod; trusted bearer token ve stream token |
 
 > [!IMPORTANT]
 > Local-first, uçtan uca şifreleme anlamına gelmez. Mevcut medya ve kontrol
 > taşıması aynı LAN üzerinde HTTP/WS kullanır ve tokenlarla yetkilendirilir;
 > TLS/E2E şifreleme sağlamaz. MiuCam tıbbi cihaz değildir ve yetişkin
 > gözetiminin yerini almaz.
+
+6 haneli kod yalnızca ilk erişimi doğrular; görüntü veya ses üzerinde ek
+şifreleme işlemi çalıştırmaz. Kod denemeleri tüm IP adresleri için toplam
+dakikada 5 ile sınırlıdır. Kayıtlı cihazlar mevcut erişim anahtarını kullanır.
 
 <details>
 <summary><strong>Proje yapısı</strong></summary>
@@ -254,10 +271,13 @@ Eşzamanlı 5 ebeveyn cihazı sınırı satın alma sonrasında da geçerlidir.
 Bu kural normal derlemelerde açıktır. Gerçek ödeme için mağaza ürünü ve güvenilir
 HTTPS satın alma doğrulaması yapılandırılmalıdır:
 
+Gerçek değerleri `tool/release/production.example.json` şablonundan oluşturulan,
+git'e eklenmeyen `tool/release/production.json` dosyasına yazın. İmzalama ayarları
+ve canlı backend preflight doğrulamasından sonra production paketi oluşturulur:
+
 ```bash
-flutter build appbundle \
-  --dart-define=MIUCAM_PURCHASE_VERIFIER_URL=https://YOUR-BACKEND/verify \
-  --dart-define=MIUCAM_LICENSE_PUBLIC_KEY=YOUR_BASE64URL_PUBLIC_KEY
+python3 tool/release/build_production.py --platform android \
+  --defines-file tool/release/production.json
 ```
 
 Doğrulama yapılandırılmamışsa ödeme ekranı açılmaz. Ayrıntılar:
@@ -268,8 +288,11 @@ Doğrulama yapılandırılmamışsa ödeme ekranı açılmaz. Ayrıntılar:
 
 ## Kalite kapısı
 
-GitHub Actions; format, analiz, test, Android App Bundle ve unsigned iOS build
-adımlarını çalıştırır. Yerelde aynı temel kontroller:
+GitHub Actions; format, analiz, Flutter/backend/production kapısı testleri,
+Android native testleri, iOS XCTest, backend container yaşam döngüsü ve imzasız
+Android/iOS derleme kontrollerini çalıştırır. İmzasız CI çıktıları mağaza paketi
+değildir; [production paket yönergesi](docs/RELEASE_CHECKLIST.md) gerçek ayarlarla
+ayrı bir kapı uygular. Yerelde aynı temel kontroller:
 
 ```bash
 dart format --output=none --set-exit-if-changed lib test

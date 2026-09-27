@@ -15,6 +15,8 @@ class PairingPayload {
       required this.pairingNonce,
       required this.expiresAtMs,
       this.transport = 'http_ws',
+      this.requiresPairingCode = false,
+      this.pairingCode,
       required this.capabilities});
   final int schemaVersion;
   final String scheme;
@@ -25,11 +27,30 @@ class PairingPayload {
   final String pairingNonce;
   final int expiresAtMs;
   final String transport;
+  final bool requiresPairingCode;
+
+  /// Entered only for the current pairing attempt; never stored or encoded.
+  final String? pairingCode;
   final Map<String, Object?> capabilities;
 
   bool get isExpired => DateTime.now().millisecondsSinceEpoch >= expiresAtMs;
   String get httpScheme => 'http';
   String get wsScheme => 'ws';
+
+  PairingPayload withPairingCode(String? code) => PairingPayload(
+        schemaVersion: schemaVersion,
+        scheme: scheme,
+        host: host,
+        port: port,
+        deviceId: deviceId,
+        deviceName: deviceName,
+        pairingNonce: pairingNonce,
+        expiresAtMs: expiresAtMs,
+        transport: transport,
+        requiresPairingCode: requiresPairingCode,
+        pairingCode: code,
+        capabilities: capabilities,
+      );
 
   Map<String, Object?> toJson() => {
         'schemaVersion': schemaVersion,
@@ -41,6 +62,7 @@ class PairingPayload {
         'pairingNonce': pairingNonce,
         'expiresAtMs': expiresAtMs,
         'transport': transport,
+        if (requiresPairingCode) 'requiresPairingCode': true,
         'capabilities': capabilities
       };
 
@@ -54,6 +76,7 @@ class PairingPayload {
     final pairingNonce = json['pairingNonce'];
     final expiresAtMs = json['expiresAtMs'];
     final transport = json['transport'] ?? 'http_ws';
+    final requiresPairingCode = json['requiresPairingCode'] ?? false;
     final capabilities = json['capabilities'];
     if (schemaVersion is! int ||
         schemaVersion != MiuCamProtocolV2.schemaVersion ||
@@ -65,6 +88,7 @@ class PairingPayload {
         pairingNonce is! String ||
         expiresAtMs is! int ||
         transport != 'http_ws' ||
+        requiresPairingCode is! bool ||
         capabilities is! Map) {
       return null;
     }
@@ -98,6 +122,7 @@ class PairingPayload {
         pairingNonce: pairingNonce,
         expiresAtMs: expiresAtMs,
         transport: transport as String,
+        requiresPairingCode: requiresPairingCode,
         capabilities: Map<String, Object?>.from(capabilities));
   }
 

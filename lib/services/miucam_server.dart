@@ -510,6 +510,7 @@ class MiuCamServer {
     }
     _startStreamSessionReaper();
     _pairingModeActive = true;
+    tokenService.refreshPairingCode();
     final deviceId = await _serverDeviceIdentityResolver.resolve();
     if (_disposed) throw StateError('MiuCamServer is disposed.');
     final serviceAdvertiser = _serviceAdvertiser;

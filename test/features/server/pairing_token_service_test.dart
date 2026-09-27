@@ -117,7 +117,7 @@ void main() {
     for (var index = 0; index < 100; index++) {
       expect(
           service.validateAndConsumeNonce(service.createPublicPairingNonce()),
-          isTrue);
+          isFalse);
     }
 
     expect(service.isPairingNonceActive(displayNonce), isTrue);

@@ -11,6 +11,52 @@ import 'package:miucam/features/client/media/client_stream_health_state.dart';
 import 'package:miucam/features/client/media/network_quality_monitor.dart';
 
 void main() {
+  test('timed out status polls close old sockets before the next poll',
+      () async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final sockets = <Socket>{};
+    var maximumOpenSockets = 0;
+    var requests = 0;
+    server.listen((socket) {
+      sockets.add(socket);
+      maximumOpenSockets = maximumOpenSockets < sockets.length
+          ? sockets.length
+          : maximumOpenSockets;
+      var receivedHeaders = false;
+      var data = '';
+      socket.listen((chunk) {
+        data += utf8.decode(chunk);
+        if (!receivedHeaders && data.contains('\r\n\r\n')) {
+          receivedHeaders = true;
+          requests++;
+          // Keep the TCP connection alive without answering HTTP headers.
+        }
+      }, onDone: () {
+        sockets.remove(socket);
+        socket.destroy();
+      });
+    });
+    addTearDown(() async {
+      for (final socket in sockets.toList()) {
+        socket.destroy();
+      }
+      await server.close();
+    });
+    final monitor = NetworkQualityMonitor(
+      pollInterval: const Duration(milliseconds: 30),
+      timeout: const Duration(milliseconds: 80),
+    );
+
+    final updates = await monitor.watch(_session(server.port)).take(3).toList();
+
+    expect(updates.map((update) => update.snapshot.consecutiveFailures),
+        [1, 2, 3]);
+    expect(requests, 3);
+    expect(maximumOpenSockets, 1,
+        reason: 'A timeout must terminate its pending request, not leave it '
+            'alive alongside every later status poll.');
+  });
+
   test('NetworkQualityMonitor status ölçer ve kalite raporunu servera yollar',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -61,6 +107,34 @@ void main() {
     expect(reportReceived, isTrue);
     expect(update.snapshot.tier, NetworkQualityTier.excellent);
     expect(update.serverProfile?.audioFirst, isTrue);
+  });
+
+  test('polling recovers after a timeout and reuses healthy connections',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final clientPorts = <int>[];
+    server.listen((request) async {
+      clientPorts.add(request.connectionInfo!.remotePort);
+      if (clientPorts.length == 1) return;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({'ok': true}));
+      await request.response.close();
+    });
+    final monitor = NetworkQualityMonitor(
+      healthState: ClientStreamHealthState(),
+      pollInterval: const Duration(milliseconds: 10),
+      timeout: const Duration(milliseconds: 200),
+    );
+
+    final updates = await monitor.watch(_session(server.port)).take(3).toList();
+
+    expect(updates.map((update) => update.snapshot.consecutiveFailures),
+        [1, 0, 0]);
+    expect(clientPorts, hasLength(3));
+    expect(clientPorts[0], isNot(clientPorts[1]));
+    expect(clientPorts[1], clientPorts[2],
+        reason: 'Successful status polls retain their keep-alive socket.');
   });
 
   test('RTT iyi olsa bile video frame gap 5s ise critical rapor gönderir',

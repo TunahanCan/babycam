@@ -6,9 +6,17 @@ import 'dart:typed_data';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miucam/core/protocol/miucam_protocol.dart';
+import 'package:miucam/core/protocol/pairing_payload.dart';
 import 'package:miucam/features/client/media/mjpeg_stream_parser.dart';
+import 'package:miucam/features/client/media/stream_session_controller.dart';
 import 'package:miucam/features/client/media/wav_pcm_stream_parser.dart';
+import 'package:miucam/features/client/pairing/pairing_failure.dart';
+import 'package:miucam/features/client/pairing/pairing_payload_gateway.dart';
+import 'package:miucam/features/client/pairing/pairing_session_store.dart';
+import 'package:miucam/features/client/pairing/qr_pairing_client.dart';
+import 'package:miucam/features/client/pairing/trusted_token_renewal_client.dart';
 import 'package:miucam/features/server/pairing/pairing_token_service.dart';
+import 'package:miucam/features/server/pairing/server_qr_payload_builder.dart';
 import 'package:miucam/l10n/app_strings.dart';
 import 'package:miucam/services/configuration_service.dart';
 import 'package:miucam/services/miucam_server.dart';
@@ -17,6 +25,108 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../support/deterministic_server_media_source.dart';
 
 void main() {
+  for (final useCode in [true, false]) {
+    test(
+        '${useCode ? 'PIN' : 'QR'} pairing persists, streams without pairing mode, renews and revokes',
+        () async {
+      final tokens = PairingTokenService();
+      final server = await _testServer(tokens, analysisEnabled: false);
+      addTearDown(server.dispose);
+      final port = Uri.parse(await server.startPairingMode()).port;
+      final public = await const HttpPairingPayloadGateway().fetch(
+        host: '127.0.0.1',
+        port: port,
+      );
+      expect(public.requiresPairingCode, isTrue);
+      expect(public.pairingCode, isNull);
+      final pairing = QRPairingClient(
+        clientIdProvider: () async => 'acceptance-parent',
+      );
+      late final PairingPayload invitation;
+      if (useCode) {
+        await expectLater(
+          pairing.pair(public),
+          throwsA(isA<PairingFailure>().having(
+            (failure) => failure.code,
+            'code',
+            PairingFailureCode.pairingCodeInvalidOrExpired,
+          )),
+        );
+        expect(server.trustedClients, isEmpty);
+        invitation = public.withPairingCode(tokens.pairingCode);
+      } else {
+        // Exercise the shipped QR encoder/parser, not a handcrafted HTTP body.
+        final qr = ServerQrPayloadBuilder(
+          tokenService: tokens,
+          deviceId: public.deviceId,
+          deviceName: public.deviceName,
+        ).build(host: '127.0.0.1', port: port);
+        invitation = PairingPayload.parseUri(qr.toUriString())!;
+        expect(invitation.requiresPairingCode, isFalse);
+      }
+      final paired = await pairing.pair(invitation);
+      expect(paired.payload.pairingCode, isNull);
+      expect(server.trustedClients.single.clientId, paired.clientId);
+      expect(tokens.isPairingNonceActive(invitation.pairingNonce), isFalse);
+
+      final preferences = await SharedPreferences.getInstance();
+      final secureTokens = _MemorySecureTokenStore();
+      await PairingSessionStore(preferences, secureTokens: secureTokens)
+          .save(paired);
+      final storedMetadata =
+          jsonDecode(preferences.getString('pairing_session')!)
+              as Map<String, dynamic>;
+      expect(storedMetadata['payload'], isNot(contains('pairingCode')));
+      expect(storedMetadata, isNot(contains('token')));
+
+      // A fresh parent store reuses its persisted authority after the room
+      // closes invitations. Neither the expired invitation nor its code is
+      // needed to renew authorization or begin another watch session.
+      await server.stopPairingMode();
+      expect(tokens.pairingCode, isNull);
+      final restored = await PairingSessionStore(
+        preferences,
+        secureTokens: secureTokens,
+      ).load();
+      expect(restored, isNotNull);
+      expect(restored!.sessionToken, paired.sessionToken);
+      expect(restored.payload.pairingCode, isNull);
+      final streams = StreamSessionController();
+      addTearDown(streams.dispose);
+      final firstWatch = await streams.start(restored, audioEnabled: true);
+      expect(firstWatch, isNotNull);
+      final firstMedia = await Future.wait<Object>([
+        _readFirstMjpegFrame(port, firstWatch!.streamToken),
+        _readFirstPcmChunk(port, firstWatch.streamToken),
+      ]);
+      expect((firstMedia[0] as Uint8List).length, greaterThan(100));
+      final audio = firstMedia[1] as ParsedPcmAudio;
+      expect(audio.sampleRate, 16000);
+      expect(audio.pcm16le, isNotEmpty);
+      await streams.stop(restored);
+      expect(server.activeWatchClientIds, isEmpty);
+
+      final renewed = await TrustedTokenRenewalClient().renew(restored);
+      expect(renewed, isNotNull);
+      expect(renewed!.clientId, restored.clientId);
+      expect(renewed.sessionToken, isNot(restored.sessionToken));
+      final secondWatch = await streams.start(renewed, audioEnabled: true);
+      expect(await _readFirstMjpegFrame(port, secondWatch!.streamToken),
+          isNotEmpty);
+      expect(server.activeWatchClientIds, contains(renewed.clientId));
+
+      await server.revokeTrustedClient(renewed.clientId);
+      expect(server.activeWatchClientIds, isEmpty);
+      expect(await TrustedTokenRenewalClient().renew(renewed), isNull);
+      final revokedStream = await _requestRejectedMediaStream(
+        port,
+        MiuCamProtocolV2.video,
+        secondWatch.streamToken,
+      );
+      expect(revokedStream.statusCode, HttpStatus.unauthorized);
+    });
+  }
+
   test('streamToken ile gerçek video ve audio endpointleri medya üretir',
       () async {
     final tokenService = PairingTokenService();
@@ -339,6 +449,21 @@ void main() {
   });
 }
 
+class _MemorySecureTokenStore implements SecureTokenStore {
+  final _values = <String, String>{};
+
+  @override
+  Future<String?> read({required String key}) async => _values[key];
+
+  @override
+  Future<void> write({required String key, required String value}) async {
+    _values[key] = value;
+  }
+
+  @override
+  Future<void> delete({required String key}) async => _values.remove(key);
+}
+
 Future<MiuCamServer> _testServer(
   PairingTokenService tokenService, {
   bool startMediaOnSessionStart = true,
@@ -458,7 +583,9 @@ Future<({int statusCode, Map<String, Object?> body, String? retryAfter})>
     final body = await utf8.decoder.bind(response).join();
     return (
       statusCode: response.statusCode,
-      body: Map<String, Object?>.from(jsonDecode(body) as Map),
+      body: body.isEmpty
+          ? <String, Object?>{}
+          : Map<String, Object?>.from(jsonDecode(body) as Map),
       retryAfter: retryAfter,
     );
   } finally {

@@ -37,6 +37,24 @@ void main() {
     expect(parsed.wsScheme, 'ws');
   });
 
+  test('pairing codes are ephemeral and never enter QR or JSON metadata', () {
+    final withCode = payload().withPairingCode('000042');
+    expect(withCode.pairingCode, '000042');
+    expect(withCode.toJson(), isNot(contains('pairingCode')));
+    expect(
+        PairingPayload.parseUri(withCode.toUriString())?.pairingCode, isNull);
+    expect(withCode.withPairingCode(null).pairingCode, isNull);
+    final decoded = PairingPayload.fromJson({
+      ...withCode.toJson(),
+      'requiresPairingCode': true,
+      'pairingCode': '000042',
+    });
+    expect(decoded?.requiresPairingCode, isTrue);
+    expect(decoded?.pairingCode, isNull);
+    expect(PairingPayload.parseUri(decoded!.toUriString())?.requiresPairingCode,
+        isTrue);
+  });
+
   test('QR payload Türkçe ve İngilizce cihaz adlarını UTF-8 taşır', () {
     final turkish = payload();
     final english = PairingPayload(

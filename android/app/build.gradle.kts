@@ -33,6 +33,13 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
+    // In-app language changes also update native notifications while offline.
+    // Keep every language installed instead of relying on Play language splits.
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
     signingConfigs {
         if (releaseSigningConfigured) {
             create("release") {

@@ -104,6 +104,12 @@ Ekran turunun yeni metinleri `screens.*`, rol etiketleri `hero.*`, ebeveyn
 telefonundan lisans aktarımı `pricing.familyTitle` / `pricing.familyBody`
 alanlarındadır. Bunlar sekiz dilde birlikte korunmalıdır.
 
+`how.pairBody` ve `features.pairBody`, QR ile tek adımda eşleşmeyi ve ilk
+keşif/IP bağlantısında oda telefonundaki geçici 6 haneli kodun girilmesini
+anlatır. Kayıtlı cihazlar tekrar kod girmeden bağlanır. Bu erişim doğrulamasıdır;
+medya aktarımına şifreleme eklediği söylenmemelidir. Kod ve eşleştirme metinleri
+sekiz dilde ve Türkçe HTML yedeğinde birlikte güncellenmelidir.
+
 ## Doğrulama
 
 Ana sayfadaki `#fiyatlandirma` bölümü iki saatlik toplam denemeyi, Türkiye hedef

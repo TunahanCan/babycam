@@ -40,6 +40,7 @@ void main() {
     pairRequest.headers.contentType = ContentType.json;
     pairRequest.write(jsonEncode({
       'pairingNonce': status['pairingNonce'],
+      'pairingCode': tokenService.pairingCode,
       'clientName': 'Anne',
       'deviceId': 'client-1',
     }));
@@ -85,6 +86,7 @@ void main() {
     pairRequest.headers.contentType = ContentType.json;
     pairRequest.write(jsonEncode({
       'pairingNonce': status['pairingNonce'],
+      'pairingCode': tokenService.pairingCode,
       'clientName': 'Anne',
       'deviceId': 'client-1',
     }));

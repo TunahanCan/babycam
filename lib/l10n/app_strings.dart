@@ -574,6 +574,7 @@ class AppStrings {
   /// Pairing errors are deliberately phrased as recovery steps. Raw HTTP and
   /// nonce errors make a stressed caregiver repeat the same failing action.
   String pairingFailureMessage(String code) => switch (code) {
+        'pairingCodeInvalidOrExpired' => ui('pairingCodeInvalidOrExpired'),
         'payloadExpired' || 'nonceInvalidOrExpired' => _t(
             tr: 'Bu QR kodu kullanılmış ya da süresi dolmuş. Oda telefonunda yeni QR oluşturup tekrar deneyin.',
             en: 'This QR code was used or has expired. Show a new QR code on the room phone and try again.',

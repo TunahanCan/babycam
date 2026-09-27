@@ -90,7 +90,11 @@ class _ServerPairingSectionState extends State<ServerPairingSection>
         ? null
         : PairingPayload.parseUri(rawPayload, allowExpired: true);
     if (rawPayload == null || ticket == null) return;
-    final remaining = DateTime.fromMillisecondsSinceEpoch(ticket.expiresAtMs)
+    final codeExpiry = widget.runtime.pairingCodeExpiresAtMs;
+    final expiresAtMs = codeExpiry != null && codeExpiry < ticket.expiresAtMs
+        ? codeExpiry
+        : ticket.expiresAtMs;
+    final remaining = DateTime.fromMillisecondsSinceEpoch(expiresAtMs)
         .difference(DateTime.now());
     if (remaining <= Duration.zero ||
         !widget.runtime.isPairingNonceActive(ticket.pairingNonce)) {
@@ -141,6 +145,7 @@ class _ServerPairingSectionState extends State<ServerPairingSection>
         (ticket.isExpired ||
             !widget.runtime.isPairingNonceActive(ticket.pairingNonce));
     final visiblePayload = ticket != null && !ticketExpired ? payload : null;
+    final pairingCode = widget.runtime.pairingCode;
     final address = ticket == null || ticketExpired
         ? null
         : LanEndpoint(host: ticket.host, port: ticket.port).authority;
@@ -161,6 +166,10 @@ class _ServerPairingSectionState extends State<ServerPairingSection>
               (widget.state.errorMessage != null || invalidTicket),
         ),
         const SizedBox(height: 10),
+        if (visiblePayload != null && pairingCode != null) ...[
+          _PairingCodePanel(code: pairingCode),
+          const SizedBox(height: 10),
+        ],
         _QrIpActions(
           address: address,
           refreshing: _refreshing,
@@ -171,6 +180,55 @@ class _ServerPairingSectionState extends State<ServerPairingSection>
           ServerTrustedDevicesCard(runtime: widget.runtime),
         ],
       ],
+    );
+  }
+}
+
+class _PairingCodePanel extends StatelessWidget {
+  const _PairingCodePanel({required this.code});
+
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    return MiuCamCard(
+      dark: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(strings.ui('pairingCodeTitle'),
+              style: const TextStyle(
+                color: MiuCamDesignTokens.serverText,
+                fontWeight: FontWeight.w800,
+              )),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              code,
+              key: const ValueKey('room-pairing-code'),
+              textDirection: TextDirection.ltr,
+              style: const TextStyle(
+                color: MiuCamDesignTokens.serverText,
+                fontFamily: 'monospace',
+                fontSize: 32,
+                letterSpacing: 3,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(strings.ui('pairingCodeRoomHelp'),
+              style:
+                  const TextStyle(color: MiuCamDesignTokens.serverTextMuted)),
+          const SizedBox(height: 6),
+          Text(strings.ui('pairingCodeValidity'),
+              style:
+                  const TextStyle(color: MiuCamDesignTokens.serverTextMuted)),
+        ],
+      ),
     );
   }
 }

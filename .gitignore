@@ -33,3 +33,8 @@ ios/Runner/GeneratedPluginRegistrant.m
 # Local editor settings
 .vscode/*
 !.vscode/settings.json
+
+# Local production build inputs and Python release-tool cache
+/tool/release/production.json
+/tool/release/ExportOptions.plist
+__pycache__/

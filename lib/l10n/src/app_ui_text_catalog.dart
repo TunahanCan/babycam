@@ -2,6 +2,87 @@
 // Kept separate so AppStrings stays a small localization facade.
 
 const appUiTextCatalog = <String, Map<String, String>>{
+  'pairingCodeTitle': {
+    'tr': 'Eşleştirme kodu',
+    'en': 'Pairing code',
+    'zh': '配对码',
+    'hi': 'पेयरिंग कोड',
+    'es': 'Código de emparejamiento',
+    'fr': 'Code d’appairage',
+  },
+  'pairingCodeRoomHelp': {
+    'tr':
+        'IP veya ağdan bağlanan ebeveyn için. QR tararken bu kodu girmen gerekmez.',
+    'en':
+        'For parents connecting by IP or local discovery. Scanning the QR does not require this code.',
+    'zh': '通过 IP 或局域网发现连接时使用。扫描二维码无需输入此码。',
+    'hi':
+        'IP या स्थानीय खोज से जुड़ने के लिए। QR स्कैन करते समय यह कोड नहीं चाहिए।',
+    'es':
+        'Para conectar por IP o búsqueda local. Al escanear el QR no necesitas este código.',
+    'fr':
+        'Pour une connexion par IP ou recherche locale. Ce code n’est pas nécessaire avec le QR.',
+  },
+  'pairingCodeValidity': {
+    'tr':
+        '10 dakika geçerli. QR yenilendiğinde veya kod kullanıldığında değişir.',
+    'en':
+        'Valid for 10 minutes. Changes when the QR is refreshed or the code is used.',
+    'zh': '有效期为10分钟。刷新二维码或使用配对码后会更换。',
+    'hi':
+        '10 मिनट तक मान्य। QR रीफ़्रेश होने या कोड इस्तेमाल होने पर बदलता है।',
+    'es':
+        'Válido durante 10 minutos. Cambia al renovar el QR o usar el código.',
+    'fr':
+        'Valable 10 minutes. Il change quand le QR est renouvelé ou le code utilisé.',
+  },
+  'enterPairingCodeHelp': {
+    'tr': 'Oda telefonunun QR/IP ekranındaki altı haneli kodu gir.',
+    'en': 'Enter the six-digit code shown on the room phone’s QR/IP screen.',
+    'zh': '输入房间手机 QR/IP 屏幕上的六位配对码。',
+    'hi': 'कमरे के फ़ोन की QR/IP स्क्रीन पर दिखाया छह अंकों का कोड लिखें।',
+    'es':
+        'Introduce el código de seis dígitos de la pantalla QR/IP del teléfono de la habitación.',
+    'fr':
+        'Saisissez le code à six chiffres de l’écran QR/IP du téléphone de la chambre.',
+  },
+  'pairingCodeLabel': {
+    'tr': '6 haneli kod',
+    'en': '6-digit code',
+    'zh': '六位配对码',
+    'hi': '6 अंकों का कोड',
+    'es': 'Código de 6 dígitos',
+    'fr': 'Code à 6 chiffres',
+  },
+  'pairingCodeInvalidFormat': {
+    'tr': 'Altı rakam gir.',
+    'en': 'Enter six digits.',
+    'zh': '请输入六位数字。',
+    'hi': 'छह अंक लिखें।',
+    'es': 'Introduce seis dígitos.',
+    'fr': 'Saisissez six chiffres.',
+  },
+  'confirmPairingCode': {
+    'tr': 'Eşleştir',
+    'en': 'Pair',
+    'zh': '配对',
+    'hi': 'पेयर करें',
+    'es': 'Emparejar',
+    'fr': 'Appairer',
+  },
+  'pairingCodeInvalidOrExpired': {
+    'tr':
+        'Kod yanlış veya süresi dolmuş. Oda ekranındaki güncel kodla tekrar dene.',
+    'en':
+        'The code is incorrect or expired. Try the current code on the room screen.',
+    'zh': '配对码错误或已过期。请使用房间屏幕上的最新配对码重试。',
+    'hi':
+        'कोड गलत है या समाप्त हो गया है। कमरे की स्क्रीन का नया कोड डालकर फिर कोशिश करें।',
+    'es':
+        'El código es incorrecto o ha caducado. Prueba con el código actual de la pantalla de la habitación.',
+    'fr':
+        'Le code est incorrect ou expiré. Réessayez avec le code actuel sur l’écran de la chambre.',
+  },
   'systemNotificationSettingsTitle': {
     'tr': 'Telefon bildirim ayarları',
     'en': 'Phone notification settings',

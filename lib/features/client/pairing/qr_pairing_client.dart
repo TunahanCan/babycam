@@ -55,6 +55,7 @@ class QRPairingClient {
       request.headers.contentType = ContentType.json;
       request.write(jsonEncode({
         'pairingNonce': payload.pairingNonce,
+        if (payload.pairingCode != null) 'pairingCode': payload.pairingCode,
         'clientName': _clientName,
         'deviceId': deviceId,
         if (canProveIdentity)
@@ -96,7 +97,7 @@ class QRPairingClient {
         throw const PairingFailure(PairingFailureCode.invalidServerResponse);
       }
       return PairingSession(
-        payload: payload,
+        payload: payload.withPairingCode(null),
         sessionToken: token,
         clientId: map['clientId']?.toString() ?? deviceId,
         trustedClientTokenExpiresAtMs:
@@ -125,6 +126,8 @@ class QRPairingClient {
         'PAIRING_NOT_ACTIVE' => PairingFailureCode.pairingNotActive,
         'PAIRING_NONCE_INVALID_OR_EXPIRED' =>
           PairingFailureCode.nonceInvalidOrExpired,
+        'PAIRING_CODE_INVALID_OR_EXPIRED' =>
+          PairingFailureCode.pairingCodeInvalidOrExpired,
         'PAIR_CONFIRM_RATE_LIMITED' => PairingFailureCode.rateLimited,
         'SELF_PAIRING_NOT_ALLOWED' => PairingFailureCode.selfPairingNotAllowed,
         'MAX_TRUSTED_CLIENTS_REACHED' =>

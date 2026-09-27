@@ -360,6 +360,7 @@ void main() {
       {
         'pairingNonce': nonce,
         'clientName': 'Anne',
+        'pairingCode': tokenService.pairingCode,
         'deviceId': 'anne',
       },
     );
@@ -388,6 +389,7 @@ void main() {
       null,
       {
         'pairingNonce': nextPublicStatus['pairingNonce'],
+        'pairingCode': tokenService.pairingCode,
         'clientName': 'Expired',
         'deviceId': 'expired',
       },
@@ -436,6 +438,7 @@ void main() {
       {
         'pairingNonce': nonce,
         'clientName': 'Diğer telefon',
+        'pairingCode': tokenService.pairingCode,
         'deviceId': 'other-client',
       },
     );

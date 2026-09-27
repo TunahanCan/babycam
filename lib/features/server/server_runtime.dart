@@ -117,6 +117,8 @@ class ServerRuntime implements AppRuntime {
     Stream<void>? trustedClientsChanged,
     Set<String> Function()? activeWatchClientIds,
     bool Function(String nonce)? isPairingNonceActive,
+    String? Function()? pairingCode,
+    int? Function()? pairingCodeExpiresAtMs,
     Future<void> Function(String clientId, String clientName)?
         onRenameTrustedClient,
     this.maxTrustedClients = 5,
@@ -142,6 +144,8 @@ class ServerRuntime implements AppRuntime {
             trustedClientsChanged ?? const Stream<void>.empty(),
         _activeWatchClientIds = activeWatchClientIds,
         _isPairingNonceActive = isPairingNonceActive,
+        _pairingCode = pairingCode,
+        _pairingCodeExpiresAtMs = pairingCodeExpiresAtMs,
         _onRenameTrustedClient = onRenameTrustedClient,
         _onRevokeTrustedClient = onRevokeTrustedClient,
         _onRevokeAllTrustedClients = onRevokeAllTrustedClients {
@@ -179,6 +183,8 @@ class ServerRuntime implements AppRuntime {
   final Stream<void> trustedClientsChanged;
   final Set<String> Function()? _activeWatchClientIds;
   final bool Function(String nonce)? _isPairingNonceActive;
+  final String? Function()? _pairingCode;
+  final int? Function()? _pairingCodeExpiresAtMs;
   final Future<void> Function(String clientId, String clientName)?
       _onRenameTrustedClient;
   final int maxTrustedClients;
@@ -224,6 +230,9 @@ class ServerRuntime implements AppRuntime {
       Set.unmodifiable(_notificationClients.keys);
   bool isPairingNonceActive(String nonce) =>
       _isPairingNonceActive?.call(nonce) ?? true;
+  String? get pairingCode => _disposed ? null : _pairingCode?.call();
+  int? get pairingCodeExpiresAtMs =>
+      _disposed ? null : _pairingCodeExpiresAtMs?.call();
   bool get canRenameTrustedClients => _onRenameTrustedClient != null;
 
   Future<void> renameTrustedClient(String clientId, String clientName) async {

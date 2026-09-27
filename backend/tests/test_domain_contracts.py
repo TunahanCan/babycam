@@ -79,6 +79,7 @@ def test_http_notification_and_health_use_only_the_public_use_case_boundary():
     class Boundary:
         available_sources = ("app_store",)
         product_id = "configured-product"
+        store_environment = None
         notices = []
 
         def process_apple_notification(self, signed_payload):

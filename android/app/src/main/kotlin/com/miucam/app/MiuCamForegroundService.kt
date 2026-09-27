@@ -217,10 +217,12 @@ class MiuCamForegroundService : LifecycleService(),
         val notification = buildNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             var serviceType = 0
-            if (cameraDemand) {
+            // Android 10 supports explicit service types, but camera and
+            // microphone types were introduced in Android 11.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && cameraDemand) {
                 serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
             }
-            if (microphoneDemand) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && microphoneDemand) {
                 serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             }
             if (playbackDemand) {

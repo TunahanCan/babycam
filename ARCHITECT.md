@@ -614,7 +614,7 @@ state-changing routes cannot be authorized by a stream token alone.
 | Route | Method | Auth mode | Owner behavior |
 | --- | --- | --- | --- |
 | `/status/public` | GET | none | Pairing-only public descriptor |
-| `/pair/confirm` | POST | none | Nonce validation and trusted token issue |
+| `/pair/confirm` | POST | none | QR nonce or public nonce + pairing code validation; trusted token issue |
 | `/auth/renew` | POST | handler validates Bearer | Trusted token renewal |
 | `/session/start` | POST | bearer | Paywall, active slot, stream token |
 | `/session/stop` | POST | bearer | Active session cleanup |
@@ -647,6 +647,7 @@ ServerHomeScreen QR/IP tab
   -> MiuCamServer.startPairingMode
   -> NetworkAddressProvider chooses local address
   -> PairingTokenService.createPairingNonce
+  -> rotate temporary six-digit pairing code for manual IP/discovery
   -> ServerQrPayloadBuilder.build
   -> PairingPayload.toUriString
   -> QrImageView renders payload
@@ -656,8 +657,9 @@ Client pairing flow:
 
 ```text
 ClientHomeScreen
-  -> QR scanner or manual IP
+  -> QR scanner, local discovery, or manual IP
   -> PairingPayload.fromUriString OR /status/public
+  -> manual IP/discovery asks for room phone's six-digit pairing code
   -> QRPairingClient.pair
   -> POST /pair/confirm
   -> trusted token response
@@ -676,7 +678,8 @@ Pairing payload fields:
 - transport id
 - capabilities map
 
-Payload must not contain trusted token or stream token.
+Payload must not contain the six-digit pairing code, trusted token, or stream
+token. The QR carries its own strong single-use nonce and needs no code entry.
 
 Manual IP fallback:
 
@@ -684,7 +687,8 @@ Manual IP fallback:
 user enters host:port
   -> client fetches /status/public
   -> server returns pairing descriptor if pairing mode active
-  -> client posts /pair/confirm with nonce
+  -> user enters six-digit pairing code shown on room phone
+  -> client posts /pair/confirm with public nonce and pairingCode
 ```
 
 DNS-SD/NSD discovery:
@@ -699,19 +703,32 @@ ClientCompositionRoot
   -> MiuCamServiceBrowser.start
   -> auto-resolve with IPv4/IPv6 lookup
   -> discovered room card
-  -> existing /status/public + pairing flow
+  -> /status/public + six-digit code pairing flow
 ```
 
 Discovery is an optional address acquisition path. Failure is caught and QR or
 manual address pairing remains available. The advertiser is active only while
 pairing mode is active.
 
+The room phone generates a random six-digit code when pairing starts or is
+refreshed. It expires after 10 minutes and is kept only in memory. Public
+discovery requests neither expose nor rotate it. Incorrect codes do not consume
+the public nonce. Code checks are limited to five attempts per minute across all
+source IPs, in addition to the existing per-source confirmation limit; rotating
+the code does not reset the global attempt limit. The strong QR nonce path does
+not use the code-attempt budget. Remembered devices reconnect with their trusted
+token without entering the code again.
+
+This is access confirmation over existing HTTP, not transport encryption. It
+adds no media encryption dependency or per-frame cryptographic work.
+
 ## Token And Identity Model
 
 Pairing nonce:
 
 - created by `PairingTokenService`
-- included in QR/public status
+- strong private QR nonce authorizes a device directly
+- separate public status nonce requires the current six-digit pairing code
 - consumed by `/pair/confirm`
 - one-time use
 - time limited
@@ -1638,7 +1655,7 @@ debug, or developer-only values.
 - only available in pairing mode
 - returns pairing service descriptor
 - includes nonce and capabilities
-- does not return trusted token
+- does not return the pairing code or trusted token
 
 `/status`:
 
@@ -1756,13 +1773,14 @@ capability probes succeed.
 Current protections:
 
 - local network guard
-- nonce-based pairing
+- single-use QR pairing or public nonce plus temporary six-digit code
 - trusted token hashing
 - secure client token storage
 - short-lived media stream tokens
 - stream tokens rejected by control endpoints
 - WebSocket authentication accepts only the Bearer header, never URL tokens
 - pair confirm rate limiting
+- global six-digit code attempt limit across source IPs
 - nonce pruning
 - bounded JSON control-body reader (64 KiB normally, 16 KiB for license activation)
 - exact connection leases and operation-attempt ownership for media/talk cleanup
@@ -1774,11 +1792,11 @@ Known security limits:
 - no certificate pinning
 - no cloud identity/account system
 - local network attackers are not fully mitigated
-- public pairing-nonce redesign is intentionally not part of this work
+- pairing codes and bearer tokens use the same plaintext HTTP transport
 - no encrypted session-ticket protocol
 
-The shared body reader and in-memory socket leases are implemented. They do
-not encrypt local transport or replace the current pairing nonce design.
+The pairing code, shared body reader, and in-memory socket leases do not encrypt
+local transport. No media encryption dependency is added by code verification.
 
 ## Error Handling And Cleanup
 

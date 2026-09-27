@@ -63,6 +63,9 @@ jobs:
       - name: Test
         run: flutter test
 
+      - name: Test production build validation
+        run: python -m unittest discover -s tool/tests/release -v
+
       - name: Test billing backend
         working-directory: backend
         run: .venv/bin/python -m pytest -q
@@ -75,8 +78,11 @@ jobs:
       - name: Build billing backend container
         run: docker build -t miucam-billing:ci backend
 
+      - name: Test billing image persistence and refund lifecycle
+        run: python backend/tests/docker_smoke.py --image miucam-billing:ci --skip-build
+
   android-build:
-    name: Build Android App Bundle
+    name: Test Android Native and Compile Bundle
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: verify
@@ -102,8 +108,18 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Test native Android audio and alert lifecycle
+        working-directory: android
+        run: ./gradlew testDebugUnitTest
+
+      # This intentionally has no store configuration or upload key. The output
+      # proves compilation only; use tool/release/build_production.py to ship.
       - name: Build unsigned release bundle
         run: flutter build appbundle --release
+
+      - name: Lint Android release
+        working-directory: android
+        run: ./gradlew :app:lintRelease
 
       - name: Upload release bundle
         uses: actions/upload-artifact@v4
@@ -114,9 +130,9 @@ jobs:
           retention-days: 7
 
   ios-build:
-    name: Build iOS
+    name: Test iOS Native and Compile App
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     needs: verify
     steps:
       - name: Checkout
@@ -136,3 +152,18 @@ jobs:
 
       - name: Build unsigned iOS app
         run: flutter build ios --release --no-codesign
+
+      - name: Prepare iOS simulator test build
+        run: flutter build ios --debug --simulator
+
+      - name: Test native iOS PCM playback
+        run: bash tool/release/test_ios_native.sh
+
+      - name: Upload iOS native test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: miucam-ios-native-tests
+          path: build/ios/native-tests.xcresult
+          if-no-files-found: warn
+          retention-days: 7
