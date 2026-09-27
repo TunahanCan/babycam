@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="tr">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiuCam — Açılış ikonu incelemesi</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 36px; background: #f5f4fa; color: #162033; font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 1120px; margin: auto; }
+  header { margin-bottom: 24px; }
+  .eyebrow { color: #6257c8; font-size: 12px; font-weight: 750; letter-spacing: .1em; }
+  h1 { font-size: 32px; margin: 6px 0; letter-spacing: -.025em; }
+  h2 { font-size: 18px; margin: 0 0 16px; }
+  p { margin: 8px 0; }
+  .muted, figcaption { color: #687083; font-size: 13px; }
+  .grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 20px; }
+  section { background: white; border: 1px solid #e4e0ee; border-radius: 20px; padding: 24px; }
+  .hero { display: flex; gap: 20px; align-items: center; }
+  .hero > img { width: 184px; height: 184px; }
+  .samples { display: flex; gap: 30px; align-items: end; min-height: 110px; }
+  figure { margin: 0; text-align: center; }
+  figcaption { margin-top: 10px; }
+  .samples img { display: block; margin: auto; }
+  .label { font-size: 12px; margin-top: 4px; color: #162033; }
+  .row { display: flex; align-items: center; gap: 26px; }
+  .mask { width: 86px; height: 86px; position: relative; overflow: hidden; flex: none; background: #59d0c6; }
+  .mask img { position: absolute; width: 150%; height: 150%; max-width: none; top: -25%; left: -25%; }
+  .circle { border-radius: 50%; }
+  .rounded { border-radius: 26%; }
+  .square { border-radius: 0; }
+  .warning { margin-top: 16px; color: #81402f; font-size: 13px; }
+  .brand { width: 280px; max-width: 100%; display: block; margin: 6px 0 20px; }
+  .swatches { display: flex; gap: 9px; margin-top: 16px; }
+  .swatches span { display: inline-block; width: 30px; height: 30px; border-radius: 50%; border: 1px solid #ddd8e8; }
+  .verdict { margin-top: 20px; border-left: 5px solid #6257c8; padding: 18px 24px; }
+  .verdict h2 { margin-bottom: 4px; }
+  footer { font-size: 12px; color: #687083; margin-top: 18px; }
+  @media (max-width: 760px) { body { padding: 20px; } .grid { grid-template-columns: 1fr; } .hero { flex-wrap: wrap; } .row { gap: 16px; } }
+</style>
+<main>
+  <header>
+    <div class="eyebrow">MIUCAM / TASARIM İNCELEMESİ / 27 EYLÜL 2026</div>
+    <h1>Tek bir simge, daha net bir kimlik.</h1>
+    <p class="muted">Mevcut ürün dosyalarıyla ölçek ve maske incelemesi. Bu sayfa yeni ikon önerisinin görseli değildir.</p>
+  </header>
+  <div class="grid">
+    <section>
+      <h2>01 / Mevcut ikon</h2>
+      <div class="hero">
+        <img src="../../assets/branding/miucam_launcher_icon.png" alt="Mevcut ev, lens, Wi-Fi ve yazı içeren MiuCam ikonu">
+        <p>Ev, lens, Wi‑Fi, bulut, yıldız, kalp, devre izleri ve yazı aynı alanda.<br><strong>Bir ana fikir yerine çok sayıda ayrıntı.</strong></p>
+      </div>
+    </section>
+    <section>
+      <h2>02 / Küçük boyutta ne kalıyor?</h2>
+      <div class="samples">
+        <figure><img width="32" height="32" src="../../assets/branding/miucam_launcher_icon.png" alt="32 piksel ikon"><div class="label">MiuCam</div><figcaption>32 px</figcaption></figure>
+        <figure><img width="48" height="48" src="../../assets/branding/miucam_launcher_icon.png" alt="48 piksel ikon"><div class="label">MiuCam</div><figcaption>48 px</figcaption></figure>
+        <figure><img width="64" height="64" src="../../assets/branding/miucam_launcher_icon.png" alt="64 piksel ikon"><div class="label">MiuCam</div><figcaption>64 px</figcaption></figure>
+        <p class="muted">İsim zaten ikonun altında var.<br>İkon içindeki küçük yazı<br>ikinci kez yer kaplıyor.</p>
+      </div>
+      <p class="warning">Güçlü lens kalıyor; bebek bakımına ait sıcak kimlik geri planda kalıyor.</p>
+    </section>
+    <section>
+      <h2>03 / Android maske riski</h2>
+      <div class="row">
+        <figure><div class="mask circle"><img src="../../android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png" alt="Daire maskesi önizlemesi"></div><figcaption>Daire</figcaption></figure>
+        <figure><div class="mask rounded"><img src="../../android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png" alt="Yuvarlak kare maskesi önizlemesi"></div><figcaption>Yuvarlak kare</figcaption></figure>
+        <figure><div class="mask square"><img src="../../android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png" alt="Kare kırpma önizlemesi"></div><figcaption>Kare</figcaption></figure>
+      </div>
+      <p class="warning">Alttaki yazı ve çevre ayrıntıları güvenli alanın dışında.</p>
+      <p class="muted">108 birimlik foreground, 72 birimlik görünür alanda gösterildi. Geometrik önizlemedir; gerçek launcher ekran görüntüsü değildir. Üretici maskeleri değişebilir.</p>
+    </section>
+    <section>
+      <h2>04 / Uygulamanın içindeki kimlik</h2>
+      <img class="brand" src="../../assets/branding/miucam_wordmark_v3.png" alt="Uygulama içindeki mor, mint renkli ve ayıcık içeren MiuCam logosu">
+      <p>İçeride ayıcık, yumuşak biçimler ve mor–mint renkleri var.<br><strong>Dışarıdaki ikon başka bir ürün izlenimi veriyor.</strong></p>
+      <div class="swatches" aria-label="Uygulamada kullanılan renkler"><span style="background:#6257c8"></span><span style="background:#39a88b"></span><span style="background:#f2f0ff"></span><span style="background:#f8fafc"></span><span style="background:#162033"></span></div>
+    </section>
+  </div>
+  <section class="verdict">
+    <h2>Tasarım kararı</h2>
+    <p>Mevcut ayıcığı temel alan tek, sade bir marka işareti. Yazısız ikon, tek zemin, güçlü silüet. Kamera çağrışımı gerekiyorsa bir küçük lens ayrıntısı; Wi‑Fi, bulut, yıldız ve devre süsleri kaldırılmalı.</p>
+  </section>
+  <footer>İnceleme: kaynak varlıklar, gerçek PNG ölçüleri ve platform yapılandırmaları. Ürün varlıkları değiştirilmedi; telefona kurulum yapılmadı.</footer>
+</main>
+</html>
