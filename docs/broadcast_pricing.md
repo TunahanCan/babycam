@@ -1,4 +1,4 @@
-# Oda telefonunda deneme ve ömür boyu yayın
+# Deneme, aile lisansı ve ömür boyu yayın
 
 ## Ürün kuralı
 
@@ -12,25 +12,50 @@
   hazırlık süresi dahildir; hiç akış açılmayan oturum bileti beklemesi sayılmaz.
 - Süre bitince aktif aktarım kapanır; yeni aktarım isteği ödeme gerektiğini
   bildirir. Cihaz eşleştirmeleri silinmez.
-- Oda telefonunda tek seferlik ömür boyu satın alma; Türkiye hedef fiyatı 350 TL.
-  Abonelik veya her ebeveyn telefonu için ek ödeme yoktur. Beş eşzamanlı
-  ebeveyn cihazı sınırı devam eder.
+- Ebeveyn veya oda telefonundan tek seferlik aile lisansı satın alınır; Türkiye
+  hedef fiyatı 350 TL. Lisans eşleşmiş aile oda telefonlarında kullanılabilir.
+  Abonelik, her ebeveyn için ücret veya tek aktif oda transferi yoktur. Her oda
+  için beş eşzamanlı ebeveyn cihazı sınırı devam eder.
 - Kullanılmış süre yeniden başlatmada korunur. Sistem saati değişse de aktif
   kullanım monoton saatle ölçülür. Çökme sonrasında en fazla 15 saniyelik eksik
   bölüm kurtarılır; çevrimdışı geçirilen günler kullanım sayılmaz.
 
 ## Yerel uygulama ve mağaza arasındaki sınır
 
-Deneme ve ömür boyu erişim oda telefonunda denetlenir. Apple/Google makbuzu
-geçerli bir satın alma olarak doğrulanmadan erişim açılmaz. Ebeveyn telefonu
-oda telefonunun erişim durumunu gösterir ve satın almayı oda telefonuna yönlendirir.
+Deneme ve yayın erişimi oda telefonunda denetlenir. Satın alma uygulama ömründe
+tek servis tarafından yürütülür; rol değişimi mağaza dinleyicisini kapatmaz.
+Ebeveyn kendi mağaza hesabıyla ödeme yapar. Backend Apple/Google işlem kanıtını
+doğrular ve imzalı lisans üretir. Ebeveyn önce hakkı kalıcı kaydeder, ardından
+mağaza işlemini tamamlar ve lisansı eşleşmiş odaya LAN üzerinden aktarır.
+Odada kart, ödeme hesabı veya aktivasyon sırasında internet gerekmez.
+
+Ödeme başarılı olsa bile oda erişilemiyorsa “aktivasyon bekliyor” gösterilir;
+tekrar satın alma istenmez. Hedef oda ödeme başlamadan kalıcı kaydedilir. A odası
+için başlayan işlem sırasında B'ye geçmek hedefi değiştirmez. Uygulama ön planda
+bağlantı döndüğünde artan bekleme aralıklarıyla tekrar teslim eder. Pending mağaza
+onayı ve doğrulama beklemesi ayrı durumlardır; bekleyen işlemde ikinci checkout
+açılmaz.
+
+QR ile trusted eşleştirme aile cihazını davet etmek anlamına gelir. Aynı Wi-Fi'da
+olmak yeterli değildir. Lisanslı oda, eşleşmiş ebeveyne imzalı hakkı geri verebilir;
+bu ebeveyn farklı mağaza hesabında veya platformda olsa da başka aile odasını
+etkinleştirebilir. Sertifika public `/status` yanıtında bulunmaz. Eşleşmeyi silmek
+ödeme iadesi veya mevcut cihaz lisansını uzaktan silmek anlamına gelmez; aile dışına
+verilecek oda telefonunda uygulama verileri temizlenmelidir.
 
 Uygulama verilerini silme/kaldırıp yeniden yükleme yerel deneme kaydını siler.
 Mevcut uygulamada kullanıcı hesabına bağlı bir sunucu deneme kaydı yoktur;
 aynı telefonun yeniden kurulumlarla denemeyi tekrarlamasını kesin olarak
 engellediğimiz iddia edilmez. Satın alınmış ömür boyu hak, aynı mağaza hesabıyla
-satın almayı geri yükleyerek yeniden açılır; mağazalar arasında otomatik hak
-aktarımı uygulanmış değildir.
+satın almayı geri yükleyerek veya lisanslı eşleşmiş odadan hakkı alarak yeniden
+açılır. Bütün lisanslı cihazlar kayıpsa mağaza restore'u için alım sahibi hesap
+gerekir; mağazalar arasında kullanıcı hesabıyla bulut senkronizasyonu yoktur.
+
+Lisans ön plana dönüşte en fazla altı saatte bir backend üzerinden yenilenir.
+Geçici ağ hatası mevcut hakkı kapatmaz. Mağazadan doğrulanmış iade imzalı iptal
+kaydına dönüşür; oda bu kaydı aldığında yayını kilitler ve eski lisansla yeniden
+açılamaz. Tamamen çevrimdışı cihaz iadeyi anında öğrenemez. Yayın/ses/video
+döngüsünde lisans sorgulaması veya sürekli internet ihtiyacı yoktur.
 
 ## Gerçek ödeme için hazırlanacak yapılandırma
 
@@ -44,18 +69,20 @@ aktarımı uygulanmış değildir.
    yabancı para cinsinden fiyat uydurulmaz.
 3. Ürünün satılabilir durumda olması, uygulamayla eşleşmesi ve mağaza test
    hesaplarının hazırlanması. Bu depoda mağaza hesaplarına ait bu ayarlar yoktur.
-4. Güvenilir HTTPS makbuz doğrulama servisi. Adres
-   `MIUCAM_PURCHASE_VERIFIER_URL` derleme tanımıyla verilir. Servis mağazaya
-   danışarak ürün, uygulama/paket, satın alma durumu ve işlem kanıtını doğrulamalı;
-   geçerli işlem için `verified`, `productId`, `source`, `transactionFingerprint`
-   ve `entitlementId` döndürmelidir. Mağaza sırları uygulamaya gömülmez.
+4. Depodaki [doğrulama backend'ini](../backend/README.md) gerçek mağaza kimlik
+   bilgileri ve kalıcı DB/Ed25519 anahtarıyla HTTPS'e dağıtın. Flutter'a
+   `MIUCAM_PURCHASE_VERIFIER_URL` ve `MIUCAM_LICENSE_PUBLIC_KEY` verin.
+   Preflight ürün, kaynak ve imza anahtarı uyuşmasını kontrol eder. Yanıtta
+   `verified`, `productId`, `source`, `transactionFingerprint`, `entitlementId`
+   ve imzalı `licenseToken` gerekir. Mağaza/private signing key uygulamaya girmez.
 5. Sandbox'ta başarılı satın alma, geri yükleme, iptal, bekleme, ağ kesintisi,
    doğrulama reddi ve yinelenen işlem teslimatı kontrolü. Gerçek para harcayan
    işlem bu çalışma sırasında gerçekleştirilmedi.
 
-Bu depoda çalışan bir doğrulama sunucusu veya yapılandırılmış mağaza ürünü
-bulunmadığından, yapılan kod değişikliği gerçek tahsilatın açıldığı anlamına
-gelmez. Doğrulama yapılandırması yokken uygulama ödeme ekranını açmadan durur.
+Backend kaynakları, Docker paketi ve otomatik testleri depodadır. Mağaza ürünleri,
+gerçek kimlik bilgileri ve canlı HTTPS dağıtımı bu kodla kendiliğinden oluşmaz.
+Eksik/uyuşmayan doğrulama yapılandırmasında ödeme ekranı açılmaz. Gerçek mağaza
+kabul senaryoları [backend kurulum belgesinde](../backend/README.md) listelenmiştir.
 
 Tek seferlik kalıcı hak modeli [Google Play tek seferlik ürün belgelerinde](https://developer.android.com/google/play/billing/one-time-products)
 ve [Apple tüketilmeyen satın alma belgelerinde](https://developer.apple.com/help/app-store-connect/manage-in-app-purchases/create-consumable-or-non-consumable-in-app-purchases/)

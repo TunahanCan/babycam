@@ -4,9 +4,148 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:miucam/services/monetization/license_grant.dart';
 import 'package:miucam/services/monetization/purchase_verification.dart';
 
 void main() {
+  test('verified backend responses require a bounded transferable license',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    String? token;
+    server.listen((request) async {
+      await request.drain<void>();
+      request.response.write(jsonEncode({
+        ..._verifiedResponse,
+        'licenseToken': token,
+      }));
+      await request.response.close();
+    });
+    final verifier = TrustedBackendPurchaseVerifier(
+        endpoint: _endpoint(server), allowInsecureEndpointForTesting: true);
+    for (final invalid in <String?>[
+      null,
+      '',
+      'x' * (LicenseGrantVerifier.maxTokenBytes + 1),
+    ]) {
+      token = invalid;
+      final result =
+          await verifier.verify(_purchase(), expectedProductId: _productId);
+      expect(result.verified, isFalse);
+    }
+    token = 'signed-backend-license';
+    expect(
+        (await verifier.verify(_purchase(), expectedProductId: _productId))
+            .verified,
+        isTrue);
+  });
+
+  test('license refresh sends only the signed token and retains revoked claims',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final received = Completer<Map>();
+    server.listen((request) async {
+      received
+          .complete(jsonDecode(await utf8.decoder.bind(request).join()) as Map);
+      request.response.write(jsonEncode({
+        ..._verifiedResponse,
+        'verified': false,
+        'reasonCode': 'revoked',
+        'licenseToken': 'signed-revoked-license',
+      }));
+      await request.response.close();
+    });
+    final verifier = TrustedBackendPurchaseVerifier(
+        endpoint: _endpoint(server), allowInsecureEndpointForTesting: true);
+    final result = await verifier.refreshLicense('saved-license',
+        expectedProductId: _productId);
+    expect(await received.future, {'licenseToken': 'saved-license'});
+    expect(result.verified, isFalse);
+    expect(result.failureReason, BroadcastPurchaseFailureReason.revoked);
+    expect(result.licenseToken, 'signed-revoked-license');
+    expect(result.entitlementId, 'synthetic-household');
+    expect(result.fingerprint, 'a' * 64);
+  });
+
+  test(
+      'checkout preflight requires ready product, store, and matching signing key',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    var response = <String, Object?>{};
+    server.listen((request) async {
+      final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+      expect(body, {
+        'preflight': true,
+        'productId': _productId,
+        'source': 'google_play'
+      });
+      request.response.write(jsonEncode(response));
+      await request.response.close();
+    });
+    final verifier = TrustedBackendPurchaseVerifier(
+        endpoint: _endpoint(server), allowInsecureEndpointForTesting: true);
+    const ready = {
+      'ready': true,
+      'productId': _productId,
+      'source': 'google_play',
+      'licensePublicKey': 'pinned-key'
+    };
+    for (final overrides in [
+      {'ready': false},
+      {'productId': 'wrong'},
+      {'source': 'app_store'},
+      {'licensePublicKey': 'other-key'},
+    ]) {
+      response = {...ready, ...overrides};
+      expect(
+          await verifier.preflight(
+              productId: _productId,
+              source: 'google_play',
+              licensePublicKey: 'pinned-key'),
+          isFalse);
+    }
+    response = ready;
+    expect(
+        await verifier.preflight(
+            productId: _productId,
+            source: 'google_play',
+            licensePublicKey: 'pinned-key'),
+        isTrue);
+  });
+
+  test('canceling verification ends stalled headers without any later upload',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    var uploads = 0;
+    server.listen((request) async {
+      uploads++;
+      await request.drain<void>();
+      await request.response.close();
+    });
+    final entered = Completer<void>();
+    final headers = Completer<Map<String, String>>();
+    final verifier = TrustedBackendPurchaseVerifier(
+        endpoint: _endpoint(server),
+        allowInsecureEndpointForTesting: true,
+        timeout: const Duration(minutes: 1),
+        headersProvider: () {
+          entered.complete();
+          return headers.future;
+        });
+    final result = verifier.verify(_purchase(), expectedProductId: _productId);
+    await entered.future;
+    verifier.cancelPending();
+    expect(
+        (await result.timeout(const Duration(milliseconds: 200))).failureReason,
+        BroadcastPurchaseFailureReason.transient);
+    headers.complete(const {});
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(uploads, 0);
+  });
+
   test('stalled verification headers time out without a late receipt upload',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -92,6 +231,7 @@ final _verifiedResponse = {
   'source': 'google_play',
   'transactionFingerprint': 'a' * 64,
   'entitlementId': 'synthetic-household',
+  'licenseToken': 'signed-backend-license',
 };
 
 Uri _endpoint(HttpServer server) => Uri(

@@ -1236,6 +1236,8 @@ extension _MiuCamServerMediaPolicyController on MiuCamServer {
         },
         'talkVideo': false,
         'battery': true,
+        'supportsBroadcastLicenseActivation':
+            _supportsBroadcastLicenseActivation,
         'dnsSdDiscovery': true,
         'ipv6': _httpServer?.address.type == InternetAddressType.IPv6,
         'bleDiscovery': false,

@@ -15,11 +15,13 @@ kapatmaz.
 Her pull request ve `master/main` güncellemesinde GitHub Actions şunları
 çalıştırır:
 
-1. `dart format --output=none --set-exit-if-changed lib test`
+1. `dart format --output=none --set-exit-if-changed lib test tool/tests`
 2. `flutter analyze`
 3. `flutter test`
 4. `flutter build appbundle --release`
 5. `flutter build ios --release --no-codesign`
+6. Python backend testleri ve Docker build
+7. Gerçek Python HTTP → Dart lisans doğrulama → oda aktivasyon/iade sözleşme testi
 
 Yerel iOS release doğrulaması:
 
@@ -69,17 +71,22 @@ Normal derlemelerde oda telefonunda toplam 2 saatlik deneme sınırı açıktır
 değişikliğinde korunur: `miucam_lifetime_unlock_try_300`. Kimlikteki eski sayı
 fiyatı belirlemez; daha önce satın alanların hakkı ve geri yüklemesi korunur.
 
-Gerçek ödeme derlemesi güvenilir HTTPS doğrulama adresini gerektirir:
+Gerçek ödeme derlemesi güvenilir HTTPS doğrulama adresini ve o sunucunun Ed25519
+public key'ini gerektirir. Backend kaynakları ve kurulum adımları
+[backend/README.md](../backend/README.md) içinde bulunur:
 
 ```bash
---dart-define=MIUCAM_PURCHASE_VERIFIER_URL=https://YOUR-BACKEND/verify
+--dart-define=MIUCAM_PURCHASE_VERIFIER_URL=https://YOUR-BACKEND/verify \
+--dart-define=MIUCAM_LICENSE_PUBLIC_KEY=YOUR_BASE64URL_PUBLIC_KEY
 ```
 
 Mağaza fiyatı, ürünün satış durumu ve makbuz doğrulaması gerçek hesaplarda
-hazır olmadan bu derleme satışa sunulmamalıdır. Eksik doğrulama adresinde uygulama
-ödeme ekranını açmaz. Sandbox satın alma, geri yükleme, bekleyen/iptal işlem ve
-başarısız doğrulama senaryoları [fiyatlandırma notunda](broadcast_pricing.md)
-açıklanmıştır. Deneme kapatma bayrağı yalnız teşhis derlemeleri içindir:
+hazır olmadan bu derleme satışa sunulmamalıdır. Uygulama, doğrulama adresi eksik
+olduğunda veya imza anahtarı uyuşmadığında ödeme ekranını açmaz. Sandbox'ta ebeveyn
+ödemesi → internetsiz oda aktivasyonu, uygulama kapalıyken pending onayı,
+restore, ikinci aile cihazı, rol/oda değişimi, LAN kesintisi, iade bildirimi ve
+Google ack kurtarma gerçek mağaza hesabıyla doğrulanmalıdır. Otomatik testler bu
+kabulün yerine geçmez. Deneme kapatma bayrağı yalnız teşhis derlemeleri içindir:
 `--dart-define=MIUCAM_BROADCAST_PAYWALL_ENABLED=false`.
 
 ## Cihaz kabul testi
@@ -123,8 +130,9 @@ Aşağıdaki maddeler tamamlanmadan MiuCam, güvenilmeyen/ortak ağlar veya
 - Apple Developer Team ve Google Play Console sahipliği.
 - Android upload key ve iOS dağıtım sertifikaları.
 - HTTPS gizlilik/support URL'si ve destek e-postası.
-- İki saat deneme sonrasında satış için mağaza ürünleri ve trusted verifier
-  backend'i; sandbox satın alma/geri yükleme, iade ve iptal kabul testleri.
+- İki saat deneme sonrasında satış için mağaza ürünleri, depodaki verifier'ın
+  gerçek mağaza kimlik bilgileriyle HTTPS dağıtımı, kalıcı DB/anahtar yedeği ve
+  bildirim adresleri; sandbox satın alma/geri yükleme, iade ve iptal kabul testleri.
 
 ## Toolchain bakım notu
 

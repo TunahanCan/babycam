@@ -58,10 +58,112 @@ extension _MiuCamHttpEndpointController on MiuCamServer {
       'audioDetection': _audioDetectionStatus(),
       'nightLight': _features.nightLight.state.toJson(),
       'talk': _talkStatus(),
+      'supportsBroadcastLicenseActivation': _supportsBroadcastLicenseActivation,
       if (_broadcastAccess != null)
         'broadcastAccess': (await _broadcastAccess.snapshot()).toJson(),
       if (_analysisCoordinator != null) ..._analysisCoordinator!.diagnostics(),
     });
+  }
+
+  Future<void> _handleBroadcastAccessLicense(
+    HttpRequest request,
+    String? clientId,
+  ) async {
+    request.response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    final access = _broadcastAccess;
+    final token = access?.licenseToken;
+    if (_supportsBroadcastLicenseActivation &&
+        access != null &&
+        token != null) {
+      try {
+        final grant = await _licenseGrantVerifier.verify(
+          token,
+          expectedProductId: access.productId,
+        );
+        final snapshot = await access.snapshot();
+        final auth = await _requireTrustedAuth(request);
+        if (auth == null) return;
+        if (auth.clientId == clientId &&
+            grant.status == LicenseGrantStatus.active &&
+            snapshot.unlocked &&
+            access.licenseToken == token) {
+          // A trusted QR pairing is the household invitation. Only this
+          // authenticated recovery endpoint exports its transferable grant.
+          await _writeJson(request.response, {'licenseToken': token});
+          return;
+        }
+      } on LicenseGrantException {
+        // Damaged or obsolete records are not a recoverable signed right.
+      }
+    }
+    request.response.statusCode = HttpStatus.notFound;
+    await _writeJson(request.response, {
+      'ok': false,
+      'code': 'LICENSE_NOT_AVAILABLE',
+    });
+  }
+
+  Future<void> _handleBroadcastAccessActivate(
+    HttpRequest request,
+    String? clientId,
+  ) async {
+    final access = _broadcastAccess;
+    if (!_supportsBroadcastLicenseActivation || access == null) {
+      request.response.statusCode = HttpStatus.serviceUnavailable;
+      await _writeJson(request.response, {
+        'ok': false,
+        'code': 'LICENSE_VERIFICATION_UNAVAILABLE',
+      });
+      return;
+    }
+    Map<Object?, Object?>? body;
+    try {
+      body = await const BoundedJsonBodyReader(maxBytes: 16 * 1024)
+          .readObject(request);
+    } catch (error) {
+      await _rejectInvalidJsonBody(request, error);
+      return;
+    }
+    final token = body?['licenseToken'];
+    if (body?.length != 1 || token is! String) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await _writeJson(request.response, {
+        'ok': false,
+        'code': 'INVALID_LICENSE_TOKEN',
+      });
+      return;
+    }
+    try {
+      final grant = await _licenseGrantVerifier.verify(
+        token,
+        expectedProductId: access.productId,
+      );
+      // A body read or signature check can outlive trusted pairing authority.
+      final auth = await _requireTrustedAuth(request);
+      if (auth == null) return;
+      if (auth.clientId != clientId) {
+        request.response.statusCode = HttpStatus.unauthorized;
+        await request.response.close();
+        return;
+      }
+      final snapshot = await access.applyVerifiedLicenseGrant(grant);
+      _notifyBroadcastAccessChanged(snapshot);
+      _scheduleBroadcastAccessTimer(snapshot);
+      await _writeJson(request.response, {
+        'ok': true,
+        'broadcastAccess': snapshot.toJson(),
+      });
+    } on LicenseGrantException catch (error) {
+      request.response.statusCode = error.code == 'LICENSE_GRANT_STALE' ||
+              error.code == 'LICENSE_ENTITLEMENT_MISMATCH'
+          ? HttpStatus.conflict
+          : HttpStatus.badRequest;
+      await _writeJson(request.response, {
+        'ok': false,
+        'code': error.code,
+        'message': error.message,
+      });
+    }
   }
 
   Future<void> _handleComfortState(HttpRequest request) async {

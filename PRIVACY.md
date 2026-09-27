@@ -1,6 +1,6 @@
 # MiuCam Gizlilik Bildirimi
 
-Son güncelleme: 6 Eylül 2026
+Son güncelleme: 27 Eylül 2026
 
 > Bu metin mağaza yayını öncesi taslaktır. Nihai yayında geliştirici/veri
 > sorumlusu kimliği ve özel gizlilik başvuru kanalı eklenecektir.
@@ -19,7 +19,9 @@ reklam, analiz SDK'sı veya bulut medya aktarımı kullanılmaz.
   cihazda saklanır.
 - Oda telefonunun toplam ücretsiz yayın süresi ve doğrulanmış ömür boyu erişim
   bilgisi cihazda saklanır. Uygulama verileri silinirse yerel deneme kaydı da
-  silinir; satın alınmış hak aynı mağaza hesabından geri yüklenebilir.
+  silinir; satın alınmış hak aynı mağaza hesabından veya eşleşmiş lisanslı oda
+  telefonundan geri yüklenebilir. İmzalı aile lisansı eşleşmiş aile cihazlarına
+  yerel ağdan aktarılabilir.
 - Client erişim anahtarları işletim sisteminin güvenli anahtar deposunda
   saklanır. Server tarafında ham erişim anahtarı yerine doğrulama özeti tutulur.
 
@@ -31,7 +33,10 @@ uygulama içi satın alma gerekir. Ödeme ve geri yükleme Apple App Store veya
 Google Play üzerinden yapılır ve internet bağlantısı gerektirir. Satın alma
 doğrulama verisi yalnızca yapılandırılmış,
 güvenilir HTTPS doğrulama servisine gönderilebilir. Kamera ve mikrofon medyası bu
-servise gönderilmez.
+servise gönderilmez. Ebeveyn veya oda telefonundan yapılan satın alma için servis,
+mağaza işlem kimliğini/tokenını, lisans kimliği/durumunu ve doğrulama zamanını
+geri yükleme, mağaza işlemini tamamlama ve iade kontrolü için kalıcı saklar.
+Kart bilgileri MiuCam'e gönderilmez; ödeme mağaza tarafından yürütülür.
 
 ## Saklama ve silme
 
@@ -40,6 +45,9 @@ silinir. Bildirim geçmişi uygulama içinden temizlenebilir. Güvenli erişim
 anahtarları cihaz yedeklerine veya başka bir cihaza taşınacak şekilde
 yapılandırılmaz. iOS bir uygulama kaldırıldığında Keychain kayıtlarını korursa,
 MiuCam temiz kurulumun ilk açılışında önceki kuruluma ait kayıtları temizler.
+Uygulamayı kaldırmak doğrulama servisindeki satın alma kaydını silmez.
+Eşleştirmeyi kaldırmak mağaza satın alımını iade etmez veya oda telefonundaki
+lisansı silmez. Cihaz başka aileye verilecekse uygulama verileri temizlenmelidir.
 
 ## İzinler
 

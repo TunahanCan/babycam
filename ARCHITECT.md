@@ -109,6 +109,7 @@ Runtime acisindan onemli dependency'ler:
 | `battery_plus` | Battery snapshots |
 | `in_app_purchase` | One-time unlock purchase/restore |
 | `crypto` | Purchase evidence fingerprinting |
+| `cryptography` | Offline Ed25519 family-license verification |
 | `flutter_webrtc` | Opt-in H.264 + Opus local-LAN pilot |
 | `nsd` | Bonjour/NSD advertise, browse and resolve |
 | `just_audio` | Retained audio dependency; comfort currently uses generated PCM |
@@ -287,7 +288,7 @@ Server creation:
 ServerCompositionRoot.create
   -> SharedPreferencesTrustedClientRepository
   -> PairingTokenService
-  -> BroadcastAccessService
+  -> borrowed app-owned BroadcastAccessService (standalone fallback owns its service)
   -> FlutterWebRtcServerGateway
   -> MiuCamServiceAdvertiser
   -> MiuCamServer
@@ -309,7 +310,7 @@ ClientCompositionRoot.create
   -> StreamSessionController + FlutterWebRtcClientConnector
   -> NetworkQualityMonitor
   -> ClientAlertHistory
-  -> BroadcastAccessService
+  -> RemoteBroadcastAccessClient
   -> ClientRoomControls
   -> MiuCamServiceBrowser
   -> ClientNotificationService
@@ -432,10 +433,9 @@ Watch start flow:
 
 ```text
 ClientRuntime.startWatching(audioEnabled: true)
-  -> BroadcastAccessService.beginSession("client.watch")
   -> StreamSessionController.start(session, audioEnabled)
-  -> /session/start
-  -> ActiveStreamSession(streamToken, mediaTransport)
+  -> /session/start checks authoritative room access
+  -> ActiveStreamSession(streamToken, mediaTransport, broadcastAccess)
   -> WebRTC capability/negotiation if advertised
   -> RTCVideoView + native WebRTC audio on success
   -> otherwise a fresh MJPEG/WAV fallback session
@@ -721,67 +721,52 @@ multi-child monitoring.
 
 ## Monetization Architecture
 
-The complete paywall is build-gated by
-`MIUCAM_BROADCAST_PAYWALL_ENABLED`, which defaults to `false`. In the default
-test build, `ServerCompositionRoot` does not create a
-`BroadcastAccessService`; runtime state has no broadcast-access snapshot,
-capabilities omit price/product fields, stream sessions are not trial-limited,
-and neither Server nor Client renders purchase UI.
-
-An explicit store/paywall verification build enables it with:
-
-```bash
-flutter run --dart-define=MIUCAM_BROADCAST_PAYWALL_ENABLED=true
-```
-
-When enabled, `BroadcastAccessService` owns local usage and one-time unlock
-state.
+`MIUCAM_BROADCAST_PAYWALL_ENABLED` defaults to `true`.
+`AppBootstrap` creates one `BroadcastPurchaseCoordinator` and
+`BroadcastAccessService` for the application lifetime. The server runtime borrows
+the service for its cumulative trial ledger and license enforcement; role changes
+do not dispose billing. Standalone server composition can still own a service.
+Diagnostic builds
+can explicitly disable enforcement with
+`--dart-define=MIUCAM_BROADCAST_PAYWALL_ENABLED=false`.
 
 Config:
 
 ```text
 free limit: 2 hours
-price label: 300 TL
+Turkey target price: 350 TL; checkout uses the store's localized price
 product id: miucam_lifetime_unlock_try_300
-storage: SharedPreferences
+storage: atomic entitlement JSON in SharedPreferences; independent trial ledger
 store gateway: in_app_purchase
+license: Ed25519 signed family grant, pinned public key
+backend: Python/FastAPI, Apple official SDK + Google Android Publisher API, SQLite
 ```
 
-Client enforcement:
+Production client ownership:
 
 ```text
-ClientRuntime.startWatching
-  -> BroadcastAccessService.beginSession("client.watch")
-  -> if locked: BroadcastAccessLockedException
-  -> else: start stream session
+ClientCompositionRoot
+  -> shared BroadcastPurchaseCoordinator for checkout/restore/license delivery
+  -> no parent-local trial enforcement
+  -> stream start response provides the room's broadcast-access snapshot
+  -> RemoteBroadcastAccessClient reads authenticated GET /status
+     and trusted POST /broadcast-access/activate, GET /broadcast-access/license
+  -> room state is checked again before a client trial timer stops playback
 ```
 
-Server enforcement:
+The room enforces access when a parent starts media or alert monitoring. Its
+trial ledger charges elapsed active time once, even with several viewers.
+Disconnected time and local preview do not consume the trial. Expiry closes
+paid monitoring paths but preserves pairing and the control channel.
 
 ```text
-POST /session/start
-  -> BroadcastAccessService.beginSession("server.stream.<clientId>")
+Room media / alert request
+  -> authoritative room access check
   -> if locked: HTTP 402 + BROADCAST_ACCESS_LOCKED
-  -> else: ActiveClientRegistry.startSession
-  -> stream token response
+  -> otherwise activate demand and account for active monitoring
 ```
 
-Server local preview enforcement:
-
-```text
-ServerRuntime.startLocalPreview
-  -> beginSession("server.localPreview")
-  -> if locked: UI error/paywall card
-  -> else: media runtime start
-```
-
-Timer behavior:
-
-- Active free session schedules a timer for remaining free time.
-- Expiry clears active client registry, ends sessions and stops media runtime.
-- UI receives updated `BroadcastAccessSnapshot`.
-
-Purchase verification flow:
+Purchase verification and delivery (parent or room phone):
 
 ```text
 in_app_purchase PurchaseDetails
@@ -789,17 +774,41 @@ in_app_purchase PurchaseDetails
   -> app_store/google_play source check
   -> purchased/restored state check
   -> non-empty local + server verification envelope check
-  -> SHA-256 evidence fingerprint
-  -> completePurchase
-  -> persist verified source/fingerprint/time + entitlement
+  -> trusted HTTPS verifier validates the store transaction
+  -> backend durably stores entitlement and pending Google ack
+  -> verifier returns fingerprint + entitlement id + signed licenseToken
+  -> verify Ed25519 signature, product, source, fingerprint and revision
+  -> persist verified entitlement atomically
+  -> completePurchase (failed completion remains retryable)
+  -> deliver signed grant to originally selected paired room
+  -> room persists the grant before confirming activation
 ```
 
-Verification fails closed: an unverified purchase/restore cannot unlock or
-persist entitlement, and raw receipt/token data is not stored. This verifier
-checks the store-originated envelope locally; it does not contact Apple or
-Google to prove receipt authenticity. Production fraud resistance still needs
-a replaceable server-side verifier. Play Console/App Store Connect must also
-define the non-consumable product separately.
+`MIUCAM_PURCHASE_VERIFIER_URL` and matching `MIUCAM_LICENSE_PUBLIC_KEY` must
+configure the trusted verifier before checkout can open. Local store-envelope
+validation alone never grants access. The repository includes both client and
+backend source; deployment, store credentials and store-console configuration
+remain operational release requirements. Raw receipt/token data is not persisted
+by the Flutter client.
+
+The family grant can activate multiple trusted paired rooms. QR pairing is the
+family invitation; merely being on the same LAN is insufficient. An already
+licensed room can give its certificate to a trusted paired parent for recovery,
+including a different store account/platform. There is no cloud user account or
+single-active-room transfer rule. The five-viewer limit remains per room.
+
+Activation targets are persisted before checkout. Offline delivery uses bounded
+foreground retries and survives process restart. Switching rooms clears the old
+remote snapshot and cannot change an in-flight checkout's target. The license
+control routes remain usable after trial expiry. Public status never contains a
+license certificate. Media requests do not query billing servers.
+
+Signed revocations are refreshed on foreground with a six-hour throttle; network
+errors preserve a paid offline license. A confirmed revoke is delivered to rooms
+and its increasing revision prevents replay of an older active grant. An entirely
+offline device cannot receive an immediate refund update. Google ack recovery is
+durable in the backend. See [backend operations](backend/README.md) and
+[implementation evidence](docs/reports/purchase_implementation_2026-09-27.md).
 
 ## Active Client Registry
 
@@ -1751,13 +1760,16 @@ physical device/network lanes have produced archived results.
 Before shipping paid unlock:
 
 1. Configure non-consumable product `miucam_lifetime_unlock_try_300`.
-2. Set product price to 300 TL or matching local tier.
+2. Set the Turkey target price to 350 TL and configure other store regions.
 3. Test purchase and restore on sandbox accounts.
 4. Confirm unavailable store state is user-visible.
 5. Confirm unverified purchase/restore fails closed.
-6. Replace or back `StorePayloadPurchaseVerifier` with Apple/Google server-side
-   verification for fraud-resistant production entitlement.
+6. Deploy `backend/` with real store credentials; configure
+   `MIUCAM_PURCHASE_VERIFIER_URL` and matching `MIUCAM_LICENSE_PUBLIC_KEY`.
 7. Confirm unlock persists across app restarts.
+8. Complete the two-device real-store acceptance matrix, including pending
+   approval while terminated, parent-to-room delivery, restore, refund webhooks,
+   acknowledgement recovery, and cross-platform family recovery.
 
 Before shipping iOS:
 
@@ -1819,7 +1831,7 @@ contract, UI integration, diagnostics and tests:
 - account system
 - HTTPS/WSS
 - multi-peer WebRTC, TURN/relay and production NAT traversal
-- release-grade Apple/Google server-side purchase verification
+- live deployment and real-store acceptance of the included purchase backend
 - completed physical-device matrix evidence
 
 The safe rule is simple: if production-route scenario tests or physical-device

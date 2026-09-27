@@ -347,7 +347,8 @@ void main() {
     expect(runtime.currentState.activeStream, isNull);
     expect(runtime.currentState.broadcastAccess?.isLocked, isTrue);
     expect(runtime.currentState.error, isA<BroadcastAccessLockedException>());
-    expect(authorityReads, 1);
+    expect(
+        authorityReads, 2); // Pairing status, then the expiry authority check.
     await runtime.dispose();
   });
 
@@ -392,7 +393,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 35));
     await pumpEventQueue();
 
-    expect(reads, 1);
+    expect(reads, 2); // Pairing status, then the expiry authority check.
     expect(stops, 0);
     expect(runtime.currentState.activeStream, isNotNull);
     expect(runtime.currentState.broadcastAccess?.unlocked, isTrue);

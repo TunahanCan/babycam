@@ -17,6 +17,7 @@ import '../../shared/presentation/localized_time.dart';
 import '../../shared/presentation/localized_measurement_text.dart';
 import '../../shared/presentation/localized_room_name.dart';
 import '../client_runtime.dart';
+import '../presentation/client_broadcast_access_card.dart';
 import '../controls/client_room_controls.dart';
 import '../controls/room_controls_panel.dart';
 import '../controls/room_audio_detection_notice.dart';
@@ -432,7 +433,12 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
             ),
           ),
           const SizedBox(height: 14),
-          if (state.broadcastAccess != null) ...[
+          if (widget.runtime.canManageBroadcastPurchase)
+            ClientBroadcastAccessCard(
+              runtime: widget.runtime,
+              onActivated: _refreshStreamSession,
+            )
+          else if (state.broadcastAccess != null) ...[
             _BroadcastAccessCard(snapshot: state.broadcastAccess!),
           ],
           const SizedBox(height: 18),

@@ -106,6 +106,7 @@ class ServerRuntime implements AppRuntime {
     Object? Function()? previewSource,
     MediaQualityProfile Function()? mediaProfile,
     BroadcastAccessService? broadcastAccess,
+    this.ownsBroadcastAccess = true,
     Stream<BroadcastAccessSnapshot>? broadcastAccessChanges,
     PlatformMediaLifecycleCoordinator? platformLifecycle,
     Future<void> Function(MediaResourceDemand demand)? onMediaDemandChanged,
@@ -160,6 +161,7 @@ class ServerRuntime implements AppRuntime {
   }
 
   final MediaRuntimeController _mediaRuntime;
+  final bool ownsBroadcastAccess;
   final Future<String> Function()? _onStartPairing;
   final Future<void> Function()? _onStopPairing;
   final Future<void> Function()? _onStop;
@@ -988,7 +990,7 @@ class ServerRuntime implements AppRuntime {
       }
     } finally {
       try {
-        await _broadcastAccess?.dispose();
+        if (ownsBroadcastAccess) await _broadcastAccess?.dispose();
       } finally {
         await _states.close();
       }

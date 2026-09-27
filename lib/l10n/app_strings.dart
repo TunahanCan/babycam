@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../core/media/adaptive_media_profile.dart';
 import 'src/app_ui_text_catalog.dart';
 import 'src/app_ui_text_catalog_extra.dart';
+import 'src/app_purchase_text_catalog.dart';
 
 class AppStrings {
   AppStrings(this.locale) {
@@ -1287,6 +1288,10 @@ class AppStrings {
   }
 
   String ui(String key) {
+    final purchaseValues = appPurchaseTextCatalog[key];
+    if (purchaseValues != null) {
+      return purchaseValues[locale.languageCode] ?? purchaseValues['en']!;
+    }
     final values = appUiTextCatalog[key];
     if (values == null) return key;
     final languageCode = locale.languageCode;

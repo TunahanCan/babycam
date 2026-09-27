@@ -19,6 +19,7 @@ import '../shared/presentation/localized_room_name.dart';
 import 'client_runtime.dart';
 import 'controls/room_audio_detection_notice.dart';
 import 'media/watch_screen.dart';
+import 'presentation/client_broadcast_access_card.dart';
 import 'pairing/client_pairing_flow.dart';
 import 'pairing/pairing_failure.dart';
 import 'pairing/pairing_payload_gateway.dart';
@@ -201,6 +202,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen>
                 onWatch:
                     watchAvailable ? () => _openWatch(context, state) : null,
               ),
+              if (widget.runtime.canManageBroadcastPurchase) ...[
+                const SizedBox(height: 16),
+                ClientBroadcastAccessCard(runtime: widget.runtime),
+              ],
               if (widget.runtime.roomControls != null)
                 RoomAudioDetectionNotice(
                   controls: widget.runtime.roomControls!,

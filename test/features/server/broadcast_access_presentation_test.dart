@@ -25,6 +25,48 @@ const locked = BroadcastAccessSnapshot(
     productId: BroadcastAccessConfig.productId);
 
 void main() {
+  for (final outcome in [
+    (
+      const BroadcastPurchaseResult(
+          status: BroadcastPurchaseStatus.noPurchaseFound),
+      'familyNoPurchaseFound'
+    ),
+    (
+      const BroadcastPurchaseResult(
+          status: BroadcastPurchaseStatus.verificationFailed),
+      'familyVerificationPending'
+    ),
+    (
+      const BroadcastPurchaseResult(
+          status: BroadcastPurchaseStatus.verificationFailed,
+          failureReason: BroadcastPurchaseFailureReason.revoked),
+      'familyLicenseRevoked'
+    ),
+  ]) {
+    testWidgets('room restore explains ${outcome.$2}', (tester) async {
+      final runtime = _RestoreOutcomeRuntime(outcome.$1);
+      final strings = AppStrings(const Locale('tr'));
+      await tester.pumpWidget(_app(
+          'tr',
+          SingleChildScrollView(
+            child: ServerBroadcastAccessCard(
+                snapshot: locked,
+                runtime: runtime,
+                onUnlocked: () =>
+                    fail('An unsuccessful restore cannot unlock.')),
+          )));
+      await tester.pumpAndSettle();
+      final restore =
+          find.widgetWithText(OutlinedButton, strings.ui('restorePurchase'));
+      await tester.ensureVisible(restore);
+      await tester.tap(restore);
+      await tester.pumpAndSettle();
+      expect(find.text(strings.ui(outcome.$2)), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await runtime.dispose();
+    });
+  }
+
   for (final language in ['tr', 'en', 'zh', 'hi', 'es', 'fr', 'de', 'ar']) {
     testWidgets(
         'lifetime price and fallback are clear on a narrow $language screen',
@@ -137,6 +179,15 @@ void main() {
     await runtime.dispose();
     await changes.close();
   });
+}
+
+class _RestoreOutcomeRuntime extends ServerRuntime {
+  _RestoreOutcomeRuntime(this.outcome)
+      : super(mediaRuntime: MediaRuntimeController());
+  final BroadcastPurchaseResult outcome;
+  @override
+  Future<void> restoreBroadcastAccessPurchase() async =>
+      throw BroadcastPurchaseException(outcome);
 }
 
 Widget _app(String language, Widget child) => MaterialApp(

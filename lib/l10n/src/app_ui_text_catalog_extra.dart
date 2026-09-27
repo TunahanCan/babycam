@@ -33,9 +33,9 @@ const _deUiText = <String, String>{
   'broadcastAccessRemoteUnlockedBody':
       'Die Übertragung ist auf dem Zimmertelefon dauerhaft freigeschaltet. Auf diesem Elterntelefon ist kein Kauf nötig. Bis zu 5 Elterngeräte können gleichzeitig zusehen.',
   'broadcastAccessRemoteTrialBody':
-      'Auf dem Zimmertelefon sind noch {remaining} von insgesamt 2 kostenlosen Stunden für Ton, Bild oder Benachrichtigungen übrig. Die dauerhafte Nutzung wird einmalig auf dem Zimmertelefon gekauft. Kein Abo; bis zu 5 Zuschauer gleichzeitig.',
+      'Für Ton, Bild und Hinweise bleiben {remaining} von 2 kostenlosen Stunden. Kaufe einmal auf einem Elterntelefon eine Familienlizenz für gekoppelte Zimmer. Kein Abo; bis zu 5 Zuschauer pro Zimmer.',
   'broadcastAccessRemoteLockedBody':
-      'Das Zimmertelefon hat seine insgesamt 2 kostenlosen Stunden für Ton, Bild und Benachrichtigungen aufgebraucht. Kaufe die dauerhafte Nutzung einmalig auf dem Zimmertelefon. Auf diesem Elterntelefon ist kein Kauf nötig. Kein Abo; bis zu 5 Zuschauer gleichzeitig.',
+      'Die 2 kostenlosen Stunden dieses Zimmers sind verbraucht. Kaufe auf einem Elterntelefon eine Familienlizenz oder stelle deinen Kauf wieder her. Für gekoppelte Zimmer, mit bis zu 5 gleichzeitigen Zuschauern pro Zimmer.',
   'parentDeviceName': 'Elterntelefon',
   'rememberedDeviceCount': 'Gespeichert: {count}/{max}',
   'watchingDeviceCount': 'Empfangen: {count}/{max}',
@@ -555,9 +555,9 @@ const _arUiText = <String, String>{
   'broadcastAccessRemoteUnlockedBody':
       'البث مدى الحياة مفعّل على هاتف الغرفة. لا يلزم الشراء من هاتف الوالدين هذا. يمكن لما يصل إلى ٥ أجهزة للوالدين المشاهدة في الوقت نفسه.',
   'broadcastAccessRemoteTrialBody':
-      'بقي لهاتف الغرفة {remaining} من إجمالي الساعتين المجانيتين لمتابعة الصوت أو الفيديو أو التنبيهات. يُفعّل الاستخدام مدى الحياة بشراء واحد من هاتف الغرفة. بلا اشتراك؛ حتى ٥ مشاهدين في الوقت نفسه.',
+      'يتبقى {remaining} من ساعتين مجانيتين للصوت والفيديو والتنبيهات. اشترِ ترخيص العائلة مرة واحدة من هاتف الوالدين للغرف المقترنة. بلا اشتراك؛ حتى 5 مشاهدين لكل غرفة.',
   'broadcastAccessRemoteLockedBody':
-      'استهلك هاتف الغرفة إجمالي الساعتين المجانيتين لمتابعة الصوت والفيديو والتنبيهات. للمتابعة، اشترِ الاستخدام مدى الحياة مرة واحدة من هاتف الغرفة. لا يلزم الشراء من هاتف الوالدين هذا. بلا اشتراك؛ حتى ٥ مشاهدين في الوقت نفسه.',
+      'استهلكت هذه الغرفة ساعتيها المجانيتين. اشترِ ترخيص العائلة من هاتف الوالدين أو استعد عملية الشراء. استخدمه في الغرف المقترنة مع حتى 5 مشاهدين لكل غرفة.',
   'parentDeviceName': 'هاتف الوالدين',
   'rememberedDeviceCount': 'الأجهزة المحفوظة: {count}/{max}',
   'watchingDeviceCount': 'تستقبل البث: {count}/{max}',

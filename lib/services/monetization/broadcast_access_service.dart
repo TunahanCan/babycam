@@ -2,666 +2,19 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/async/serialized_async_executor.dart';
+import 'broadcast_access_models.dart';
+import 'in_app_broadcast_purchase_gateway.dart';
+import 'license_grant.dart';
 import 'purchase_verification.dart';
 
+// Keep the established import path compatible for application and test callers.
+export 'broadcast_access_models.dart';
+export 'in_app_broadcast_purchase_gateway.dart';
+export 'in_app_purchase_store.dart';
 export 'purchase_verification.dart';
-
-class BroadcastAccessConfig {
-  const BroadcastAccessConfig._();
-
-  static const freeLimit = Duration(hours: 2);
-  static const oneTimePriceTry = 350;
-  static const oneTimePriceLabel = '350 TL';
-  // Keep the original store identity so previous purchases remain restorable.
-  // The current price is configured in the stores, independently of this ID.
-  static const productId = 'miucam_lifetime_unlock_try_300';
-  static const entitlementAuthority = 'room_server';
-  static const checkpointInterval = Duration(seconds: 15);
-}
-
-class BroadcastProductOffer {
-  const BroadcastProductOffer({
-    required this.productId,
-    required this.localizedPrice,
-    required this.rawPrice,
-    required this.currencyCode,
-  });
-
-  final String productId;
-  final String localizedPrice;
-  final double rawPrice;
-  final String currencyCode;
-}
-
-class BroadcastAccessSnapshot {
-  const BroadcastAccessSnapshot({
-    required this.unlocked,
-    required this.active,
-    required this.freeLimitMs,
-    required this.usedMs,
-    required this.remainingMs,
-    required this.priceLabel,
-    required this.productId,
-    this.hasStorePrice = false,
-    this.entitlementAuthority = BroadcastAccessConfig.entitlementAuthority,
-    this.entitlementId,
-    this.purchaseVerifiedAtMs,
-    this.purchaseVerificationSource,
-    this.purchaseVerificationAuthority,
-    this.purchaseVerificationFingerprint,
-  });
-
-  final bool unlocked;
-  final bool active;
-  final int freeLimitMs;
-  final int usedMs;
-  final int remainingMs;
-  final String priceLabel;
-  final String productId;
-  final bool hasStorePrice;
-  final String entitlementAuthority;
-  final String? entitlementId;
-  final int? purchaseVerifiedAtMs;
-  final String? purchaseVerificationSource;
-  final String? purchaseVerificationAuthority;
-  final String? purchaseVerificationFingerprint;
-
-  factory BroadcastAccessSnapshot.fromJson(Map<Object?, Object?> json) {
-    int intValue(String key, [int fallback = 0]) {
-      final value = json[key];
-      if (value is int) return value;
-      if (value is num) return value.round();
-      return int.tryParse(value?.toString() ?? '') ?? fallback;
-    }
-
-    final freeLimitMs = max(
-      1,
-      intValue(
-        'freeLimitMs',
-        BroadcastAccessConfig.freeLimit.inMilliseconds,
-      ),
-    );
-    final usedMs = intValue('usedMs').clamp(0, freeLimitMs).toInt();
-    final remainingMs = intValue(
-      'remainingMs',
-      (freeLimitMs - usedMs).clamp(0, freeLimitMs),
-    ).clamp(0, freeLimitMs).toInt();
-    return BroadcastAccessSnapshot(
-      unlocked: json['unlocked'] == true,
-      active: json['active'] == true,
-      freeLimitMs: freeLimitMs,
-      usedMs: usedMs,
-      remainingMs: remainingMs,
-      priceLabel: json['priceLabel']?.toString().trim().isNotEmpty == true
-          ? json['priceLabel'].toString().trim()
-          : BroadcastAccessConfig.oneTimePriceLabel,
-      hasStorePrice: json['hasStorePrice'] == true,
-      productId: json['productId']?.toString().trim().isNotEmpty == true
-          ? json['productId'].toString().trim()
-          : BroadcastAccessConfig.productId,
-      entitlementAuthority: json['entitlementAuthority']?.toString() ??
-          BroadcastAccessConfig.entitlementAuthority,
-      entitlementId: json['entitlementId']?.toString(),
-      purchaseVerifiedAtMs: int.tryParse(
-        json['purchaseVerifiedAtMs']?.toString() ?? '',
-      ),
-      purchaseVerificationSource:
-          json['purchaseVerificationSource']?.toString(),
-      purchaseVerificationAuthority:
-          json['purchaseVerificationAuthority']?.toString(),
-      purchaseVerificationFingerprint:
-          json['purchaseVerificationFingerprint']?.toString(),
-    );
-  }
-
-  bool get isLocked => !unlocked && remainingMs <= 0;
-
-  double get usedRatio {
-    if (freeLimitMs <= 0) return 1;
-    return (usedMs / freeLimitMs).clamp(0, 1).toDouble();
-  }
-
-  Duration get remaining => Duration(milliseconds: remainingMs);
-
-  BroadcastAccessSnapshot copyWith({
-    bool? unlocked,
-    bool? active,
-    int? usedMs,
-    int? remainingMs,
-    String? priceLabel,
-    bool? hasStorePrice,
-  }) =>
-      BroadcastAccessSnapshot(
-        unlocked: unlocked ?? this.unlocked,
-        active: active ?? this.active,
-        freeLimitMs: freeLimitMs,
-        usedMs: usedMs ?? this.usedMs,
-        remainingMs: remainingMs ?? this.remainingMs,
-        priceLabel: priceLabel ?? this.priceLabel,
-        hasStorePrice: hasStorePrice ?? this.hasStorePrice,
-        productId: productId,
-        entitlementAuthority: entitlementAuthority,
-        entitlementId: entitlementId,
-        purchaseVerifiedAtMs: purchaseVerifiedAtMs,
-        purchaseVerificationSource: purchaseVerificationSource,
-        purchaseVerificationAuthority: purchaseVerificationAuthority,
-        purchaseVerificationFingerprint: purchaseVerificationFingerprint,
-      );
-
-  Map<String, Object?> toJson() => {
-        'unlocked': unlocked,
-        'active': active,
-        'freeLimitMs': freeLimitMs,
-        'usedMs': usedMs,
-        'remainingMs': remainingMs,
-        'priceLabel': priceLabel,
-        'hasStorePrice': hasStorePrice,
-        'productId': productId,
-        'locked': isLocked,
-        'entitlementAuthority': entitlementAuthority,
-        'entitlementId': entitlementId,
-        'purchaseVerifiedAtMs': purchaseVerifiedAtMs,
-        'purchaseVerificationSource': purchaseVerificationSource,
-        'purchaseVerificationAuthority': purchaseVerificationAuthority,
-        'purchaseVerificationFingerprint': purchaseVerificationFingerprint,
-      };
-}
-
-class BroadcastAccessLockedException implements Exception {
-  const BroadcastAccessLockedException(this.snapshot);
-
-  final BroadcastAccessSnapshot snapshot;
-
-  @override
-  String toString() =>
-      'BROADCAST_ACCESS_LOCKED: ${snapshot.priceLabel} one-time unlock required.';
-}
-
-class BroadcastPurchaseException implements Exception {
-  const BroadcastPurchaseException(this.result);
-
-  final BroadcastPurchaseResult result;
-
-  @override
-  String toString() =>
-      'BROADCAST_PURCHASE_FAILED: ${result.message ?? result.status.name}';
-}
-
-enum BroadcastPurchaseStatus {
-  purchased,
-  restored,
-  pending,
-  canceled,
-  unavailable,
-  verificationFailed,
-  error,
-}
-
-class BroadcastPurchaseResult {
-  const BroadcastPurchaseResult({
-    required this.status,
-    this.message,
-    this.verified = false,
-    this.verificationSource,
-    this.verificationFingerprint,
-    this.verificationAuthority = trustedBackendVerificationAuthority,
-    this.entitlementId = BroadcastAccessConfig.entitlementAuthority,
-    this.localizedPrice,
-  });
-
-  final BroadcastPurchaseStatus status;
-  final String? message;
-  final bool verified;
-  final String? verificationSource;
-  final String? verificationFingerprint;
-  final String verificationAuthority;
-  final String entitlementId;
-  final String? localizedPrice;
-
-  bool get unlocksAccess =>
-      verified &&
-      verificationAuthority == trustedBackendVerificationAuthority &&
-      entitlementId.trim().isNotEmpty &&
-      (status == BroadcastPurchaseStatus.purchased ||
-          status == BroadcastPurchaseStatus.restored);
-}
-
-abstract class BroadcastPurchaseGateway {
-  Future<BroadcastPurchaseResult> purchase({
-    required String productId,
-    required String priceLabel,
-  });
-
-  Future<BroadcastPurchaseResult> restore({required String productId});
-
-  Future<void> dispose() async {}
-}
-
-abstract interface class BroadcastPurchaseUpdateSource {
-  Stream<BroadcastPurchaseResult> get updates;
-}
-
-abstract interface class BroadcastProductOfferGateway {
-  BroadcastProductOffer? get cachedOffer;
-
-  Future<BroadcastProductOffer?> loadOffer({required String productId});
-}
-
-abstract interface class InAppPurchaseStore {
-  Stream<List<PurchaseDetails>> get purchaseStream;
-
-  Future<bool> isAvailable();
-
-  Future<ProductDetailsResponse> queryProductDetails(Set<String> productIds);
-
-  Future<bool> buyNonConsumable({required PurchaseParam purchaseParam});
-
-  Future<void> restorePurchases();
-
-  Future<void> completePurchase(PurchaseDetails purchase);
-}
-
-class FlutterInAppPurchaseStore implements InAppPurchaseStore {
-  FlutterInAppPurchaseStore([InAppPurchase? inAppPurchase])
-      : _iap = inAppPurchase ?? InAppPurchase.instance;
-
-  final InAppPurchase _iap;
-
-  @override
-  Stream<List<PurchaseDetails>> get purchaseStream => _iap.purchaseStream;
-
-  @override
-  Future<bool> isAvailable() => _iap.isAvailable();
-
-  @override
-  Future<ProductDetailsResponse> queryProductDetails(Set<String> productIds) =>
-      _iap.queryProductDetails(productIds);
-
-  @override
-  Future<bool> buyNonConsumable({required PurchaseParam purchaseParam}) =>
-      _iap.buyNonConsumable(purchaseParam: purchaseParam);
-
-  @override
-  Future<void> restorePurchases() => _iap.restorePurchases();
-
-  @override
-  Future<void> completePurchase(PurchaseDetails purchase) =>
-      _iap.completePurchase(purchase);
-}
-
-/// Owns the store stream for its whole lifetime, independently of any active
-/// purchase sheet. Late and restored transactions therefore still reach the
-/// authoritative [BroadcastAccessService].
-class InAppBroadcastPurchaseGateway
-    implements
-        BroadcastPurchaseGateway,
-        BroadcastPurchaseUpdateSource,
-        BroadcastProductOfferGateway {
-  InAppBroadcastPurchaseGateway({
-    InAppPurchase? inAppPurchase,
-    InAppPurchaseStore? store,
-    BroadcastPurchaseVerifier? verifier,
-    this.expectedProductId = BroadcastAccessConfig.productId,
-    this.timeout = const Duration(minutes: 2),
-    this.catalogTimeout = const Duration(seconds: 10),
-  })  : _store = store ?? FlutterInAppPurchaseStore(inAppPurchase),
-        _verifier = verifier ?? defaultBroadcastPurchaseVerifier() {
-    _subscription = _store.purchaseStream.listen(
-      _enqueuePurchases,
-      onError: (Object error, StackTrace stackTrace) {
-        _enqueueStreamError(error);
-      },
-    );
-  }
-
-  final InAppPurchaseStore _store;
-  final BroadcastPurchaseVerifier _verifier;
-  final String expectedProductId;
-  final Duration timeout;
-  final Duration catalogTimeout;
-  final _updates = StreamController<BroadcastPurchaseResult>.broadcast();
-  final _processedEvidence = <String, BroadcastPurchaseResult>{};
-  final _offers = <String, ProductDetails>{};
-  StreamSubscription<List<PurchaseDetails>>? _subscription;
-  Completer<BroadcastPurchaseResult>? _active;
-  final _events = SerializedAsyncExecutor();
-  final _closed = Completer<void>();
-  Future<BroadcastProductOffer?>? _offerLoad;
-  bool _disposed = false;
-
-  @override
-  Stream<BroadcastPurchaseResult> get updates => _updates.stream;
-
-  @override
-  BroadcastProductOffer? get cachedOffer {
-    if (_offers.isEmpty) return null;
-    return _toOffer(_offers.values.first);
-  }
-
-  @override
-  Future<BroadcastProductOffer?> loadOffer({required String productId}) {
-    if (_disposed || !isPurchaseVerifierConfigured(_verifier)) {
-      return Future.value(null);
-    }
-    final cached = _offers[productId];
-    if (cached != null) return Future.value(_toOffer(cached));
-    final loading = _offerLoad;
-    if (loading != null) return loading;
-    late final Future<BroadcastProductOffer?> operation;
-    operation = _loadOffer(productId).whenComplete(() {
-      if (identical(_offerLoad, operation)) _offerLoad = null;
-    });
-    _offerLoad = operation;
-    return operation;
-  }
-
-  Future<BroadcastProductOffer?> _loadOffer(String productId) async {
-    if (_disposed || !await _awaitStore(_store.isAvailable, catalogTimeout)) {
-      return null;
-    }
-    final response = await _awaitStore(
-      () => _store.queryProductDetails({productId}),
-      catalogTimeout,
-    );
-    if (_disposed) return null;
-    for (final product in response.productDetails) {
-      _offers[product.id] = product;
-    }
-    final product = _offers[productId];
-    return product == null ? null : _toOffer(product);
-  }
-
-  @override
-  Future<BroadcastPurchaseResult> purchase({
-    required String productId,
-    required String priceLabel,
-  }) async {
-    if (_disposed) return _disposedResult;
-    if (!isPurchaseVerifierConfigured(_verifier)) {
-      return const BroadcastPurchaseResult(
-        status: BroadcastPurchaseStatus.unavailable,
-        message:
-            'Purchase verification is not configured; checkout was not opened.',
-      );
-    }
-    if (productId != expectedProductId) {
-      return const BroadcastPurchaseResult(
-        status: BroadcastPurchaseStatus.unavailable,
-        message: 'Purchase product does not match the configured entitlement.',
-      );
-    }
-    if (_active != null) return _pendingResult;
-    final completer = _begin();
-    try {
-      final available = await _awaitStore(_store.isAvailable, catalogTimeout);
-      if (!available) {
-        _publishAndComplete(const BroadcastPurchaseResult(
-          status: BroadcastPurchaseStatus.unavailable,
-          message: 'Store is not available on this device.',
-        ));
-      } else {
-        final offer = await loadOffer(productId: productId);
-        final product = _offers[productId];
-        if (offer == null || product == null) {
-          _publishAndComplete(const BroadcastPurchaseResult(
-            status: BroadcastPurchaseStatus.unavailable,
-            message: 'Purchase product is not configured.',
-          ));
-        } else {
-          final launched = await _awaitStore(
-              () => _store.buyNonConsumable(
-                    purchaseParam: PurchaseParam(productDetails: product),
-                  ),
-              timeout);
-          if (!launched) {
-            _publishAndComplete(const BroadcastPurchaseResult(
-              status: BroadcastPurchaseStatus.error,
-              message: 'Purchase sheet could not be opened.',
-            ));
-          }
-        }
-      }
-    } catch (error) {
-      _publishAndComplete(BroadcastPurchaseResult(
-        status: BroadcastPurchaseStatus.error,
-        message: 'Purchase could not be started: $error',
-      ));
-    }
-    return _awaitActive(
-      completer,
-      onTimeout: _pendingResult,
-    );
-  }
-
-  @override
-  Future<BroadcastPurchaseResult> restore({required String productId}) async {
-    if (_disposed) return _disposedResult;
-    if (!isPurchaseVerifierConfigured(_verifier)) {
-      return const BroadcastPurchaseResult(
-        status: BroadcastPurchaseStatus.unavailable,
-        message: 'Purchase verification is not configured.',
-      );
-    }
-    if (productId != expectedProductId) {
-      return const BroadcastPurchaseResult(
-        status: BroadcastPurchaseStatus.unavailable,
-        message: 'Restore product does not match the configured entitlement.',
-      );
-    }
-    if (_active != null) return _pendingResult;
-    final completer = _begin();
-    try {
-      if (!await _awaitStore(_store.isAvailable, catalogTimeout)) {
-        _publishAndComplete(const BroadcastPurchaseResult(
-          status: BroadcastPurchaseStatus.unavailable,
-          message: 'Store is not available on this device.',
-        ));
-      } else {
-        await _awaitStore(_store.restorePurchases, timeout);
-      }
-    } catch (error) {
-      _publishAndComplete(BroadcastPurchaseResult(
-        status: BroadcastPurchaseStatus.error,
-        message: 'Purchases could not be restored: $error',
-      ));
-    }
-    return _awaitActive(
-      completer,
-      onTimeout: const BroadcastPurchaseResult(
-        status: BroadcastPurchaseStatus.unavailable,
-        message: 'No previous purchase was restored.',
-      ),
-    );
-  }
-
-  Completer<BroadcastPurchaseResult> _begin() {
-    return _active = Completer<BroadcastPurchaseResult>();
-  }
-
-  // Native store calls may never finish when the owner leaves the room screen.
-  // Complete their wrapper on disposal so catalog timers cannot keep running
-  // and a late store response cannot open checkout after the screen is gone.
-  Future<T> _awaitStore<T>(
-    Future<T> Function() operation,
-    Duration limit,
-  ) {
-    if (_disposed) {
-      return Future.error(StateError('Purchase gateway is disposed.'));
-    }
-    return Future.any<T>([
-      operation(),
-      _closed.future.then<T>(
-        (_) => throw StateError('Purchase gateway is disposed.'),
-      ),
-    ]).timeout(limit);
-  }
-
-  Future<BroadcastPurchaseResult> _awaitActive(
-    Completer<BroadcastPurchaseResult> completer, {
-    required BroadcastPurchaseResult onTimeout,
-  }) =>
-      completer.future.timeout(
-        timeout,
-        onTimeout: () {
-          if (identical(_active, completer)) {
-            _active = null;
-          }
-          return onTimeout;
-        },
-      );
-
-  void _enqueuePurchases(List<PurchaseDetails> purchases) {
-    unawaited(
-        _events.run(() => _handlePurchases(purchases)).catchError((_) {}));
-  }
-
-  void _enqueueStreamError(Object error) {
-    unawaited(_events.run(() async {
-      _publishAndComplete(BroadcastPurchaseResult(
-        status: BroadcastPurchaseStatus.error,
-        message: 'Purchase stream failed: $error',
-      ));
-    }).catchError((_) {}));
-  }
-
-  Future<void> _handlePurchases(List<PurchaseDetails> purchases) async {
-    if (_disposed) return;
-    for (final purchase in purchases) {
-      if (purchase.productID != expectedProductId) continue;
-      switch (purchase.status) {
-        case PurchaseStatus.purchased:
-          await _verifyAcknowledgeAndPublish(
-            purchase,
-            BroadcastPurchaseStatus.purchased,
-          );
-        case PurchaseStatus.restored:
-          await _verifyAcknowledgeAndPublish(
-            purchase,
-            BroadcastPurchaseStatus.restored,
-          );
-        case PurchaseStatus.pending:
-          _publish(const BroadcastPurchaseResult(
-            status: BroadcastPurchaseStatus.pending,
-            message: 'Purchase is pending store approval.',
-          ));
-        case PurchaseStatus.canceled:
-          _publishAndComplete(const BroadcastPurchaseResult(
-            status: BroadcastPurchaseStatus.canceled,
-            message: 'Purchase was canceled.',
-          ));
-        case PurchaseStatus.error:
-          _publishAndComplete(BroadcastPurchaseResult(
-            status: BroadcastPurchaseStatus.error,
-            message: purchase.error?.message ?? 'Purchase failed.',
-          ));
-      }
-    }
-  }
-
-  Future<void> _verifyAcknowledgeAndPublish(
-    PurchaseDetails purchase,
-    BroadcastPurchaseStatus status,
-  ) async {
-    final evidenceKey = purchaseEvidenceFingerprint(purchase);
-    final processed = _processedEvidence[evidenceKey];
-    if (processed != null) {
-      _publishAndComplete(processed);
-      return;
-    }
-    try {
-      final verification = await _verifier.verify(
-        purchase,
-        expectedProductId: expectedProductId,
-      );
-      final fingerprint = verification.fingerprint;
-      final entitlementId = verification.entitlementId;
-      if (!verification.verified ||
-          verification.authority != trustedBackendVerificationAuthority ||
-          fingerprint == null ||
-          fingerprint.isEmpty ||
-          entitlementId == null ||
-          entitlementId.isEmpty) {
-        _publishAndComplete(BroadcastPurchaseResult(
-          status: BroadcastPurchaseStatus.verificationFailed,
-          message: verification.reason ?? 'Purchase verification failed.',
-          verificationSource: verification.source,
-          verificationAuthority: verification.authority,
-        ));
-        return;
-      }
-      // A transaction is acknowledged only after the trusted verifier accepts
-      // it. If acknowledgement fails, no entitlement result is published and a
-      // later store redelivery can retry the operation.
-      if (purchase.pendingCompletePurchase) {
-        await _store.completePurchase(purchase);
-      }
-      final result = BroadcastPurchaseResult(
-        status: status,
-        verified: true,
-        verificationSource: verification.source,
-        verificationFingerprint: fingerprint,
-        verificationAuthority: verification.authority,
-        entitlementId: entitlementId,
-        localizedPrice: _offers[purchase.productID]?.price,
-      );
-      _processedEvidence[evidenceKey] = result;
-      _publishAndComplete(result);
-    } catch (error) {
-      _publishAndComplete(BroadcastPurchaseResult(
-        status: BroadcastPurchaseStatus.verificationFailed,
-        message: 'Purchase verification could not be completed: $error',
-      ));
-    }
-  }
-
-  void _publish(BroadcastPurchaseResult result) {
-    if (!_disposed && !_updates.isClosed) _updates.add(result);
-  }
-
-  void _publishAndComplete(BroadcastPurchaseResult result) {
-    _publish(result);
-    final completer = _active;
-    _active = null;
-    if (completer != null && !completer.isCompleted) {
-      completer.complete(result);
-    }
-  }
-
-  @override
-  Future<void> dispose() async {
-    if (_disposed) return;
-    _disposed = true;
-    _closed.complete();
-    final active = _active;
-    _active = null;
-    if (active != null && !active.isCompleted) active.complete(_disposedResult);
-    await _subscription?.cancel();
-    _subscription = null;
-    await _events.drain();
-    await _updates.close();
-  }
-
-  static BroadcastProductOffer _toOffer(ProductDetails product) =>
-      BroadcastProductOffer(
-        productId: product.id,
-        localizedPrice: product.price,
-        rawPrice: product.rawPrice,
-        currencyCode: product.currencyCode,
-      );
-
-  static const _pendingResult = BroadcastPurchaseResult(
-    status: BroadcastPurchaseStatus.pending,
-    message: 'A purchase is already in progress or awaiting store approval.',
-  );
-  static const _disposedResult = BroadcastPurchaseResult(
-    status: BroadcastPurchaseStatus.error,
-    message: 'Purchase gateway is disposed.',
-  );
-}
 
 /// Authoritative room-device entitlement and crash-resilient trial ledger.
 ///
@@ -677,17 +30,35 @@ class BroadcastAccessService {
     Duration checkpointInterval = BroadcastAccessConfig.checkpointInterval,
     String priceLabel = BroadcastAccessConfig.oneTimePriceLabel,
     String productId = BroadcastAccessConfig.productId,
+    LicenseGrantVerifier? licenseGrantVerifier,
+    this.ownsPurchaseGateway = true,
+    this.entitlementRefreshInterval = const Duration(hours: 6),
+    this.persistenceTimeout = const Duration(seconds: 5),
   })  : assert(checkpointInterval > Duration.zero),
         _purchaseGateway = purchaseGateway ??
-            InAppBroadcastPurchaseGateway(expectedProductId: productId),
+            InAppBroadcastPurchaseGateway(
+                expectedProductId: productId,
+                licenseGrantVerifier: licenseGrantVerifier),
         _now = now ?? DateTime.now,
         _monotonicNowOverride = monotonicNowMs,
         _freeLimit = freeLimit,
         _checkpointInterval = checkpointInterval,
         _fallbackPriceLabel = priceLabel,
         _productId = productId,
+        _licenseGrantVerifier = licenseGrantVerifier ?? LicenseGrantVerifier(),
         _stopwatch = Stopwatch()..start() {
-    _initialization = _initializeTrialLedger();
+    _initialization = _initializeTrialLedger().catchError((Object error) {
+      // A damaged trial ledger fails closed for free broadcasting, but cannot
+      // prevent a paid owner from recovering their entitlement through restore.
+      _trialInitializationError = error;
+      _storedUsedMs = _freeLimit.inMilliseconds;
+      _trialLedgerInitialized = true;
+    });
+    final gateway = _purchaseGateway;
+    if (gateway is BroadcastPurchaseDeliveryGateway) {
+      (gateway as BroadcastPurchaseDeliveryGateway)
+          .attachDeliveryHandler(_deliverVerifiedPurchase);
+    }
     final updateSource = _purchaseGateway is BroadcastPurchaseUpdateSource
         ? _purchaseGateway as BroadcastPurchaseUpdateSource
         : null;
@@ -714,6 +85,7 @@ class BroadcastAccessService {
       '${_prefix}active_checkpoint_wall_ms';
   static const _lastObservedWallMsKey = '${_prefix}last_observed_wall_ms';
   static const _trialLedgerKey = '${_prefix}trial_ledger_v1';
+  static const _entitlementRecordKey = '${_prefix}entitlement_v1';
 
   final SharedPreferences _preferences;
   final BroadcastPurchaseGateway _purchaseGateway;
@@ -724,6 +96,10 @@ class BroadcastAccessService {
   final String _fallbackPriceLabel;
   final String _productId;
   final Stopwatch _stopwatch;
+  final LicenseGrantVerifier _licenseGrantVerifier;
+  final bool ownsPurchaseGateway;
+  final Duration entitlementRefreshInterval;
+  final Duration persistenceTimeout;
   final _activeSessions = <String, int>{};
   final _changes = StreamController<BroadcastAccessSnapshot>.broadcast();
   late final Future<void> _initialization;
@@ -740,10 +116,21 @@ class BroadcastAccessService {
   String? _localizedPriceLabel;
   BroadcastPurchaseResult? _lastPurchaseResult;
   bool _disposed = false;
+  Object? _trialInitializationError;
+  int? _lastRefreshMonoMs;
+  Future<BroadcastAccessSnapshot>? _refreshOperation;
+  Future<BroadcastAccessSnapshot>? _reconcileOperation;
 
   Stream<BroadcastAccessSnapshot> get changes => _changes.stream;
   BroadcastPurchaseResult? get lastPurchaseResult => _lastPurchaseResult;
   Object? get lastPersistenceError => _lastPersistenceError;
+  String get productId => _productId;
+  String? get licenseToken => _entitlementRecord()['licenseToken'] as String?;
+  bool get checkoutConfigured =>
+      _purchaseGateway is BroadcastEntitlementRefreshGateway
+          ? (_purchaseGateway as BroadcastEntitlementRefreshGateway)
+              .checkoutConfigured
+          : true;
 
   Future<BroadcastAccessSnapshot> snapshot() async {
     await _initialization;
@@ -756,6 +143,7 @@ class BroadcastAccessService {
   Future<BroadcastAccessSnapshot> beginSession(String sessionId) async {
     await _initialization;
     return _serialize(() async {
+      _requireTrialOrEntitlement();
       final before = _snapshot();
       if (before.isLocked) throw BroadcastAccessLockedException(before);
       final normalized = _normalizeSessionId(sessionId);
@@ -798,6 +186,7 @@ class BroadcastAccessService {
   Future<BroadcastAccessSnapshot> endAllSessions() async {
     await _initialization;
     return _serialize(() async {
+      _requireTrialOrEntitlement();
       _activeSessions.clear();
       _checkpointTimer?.cancel();
       _checkpointTimer = null;
@@ -825,6 +214,87 @@ class BroadcastAccessService {
     return _serialize(() => _persistVerifiedUnlock(result));
   }
 
+  Future<void> _deliverVerifiedPurchase(BroadcastPurchaseResult result) async {
+    if (_disposed) throw StateError('Entitlement owner is disposed.');
+    await _initialization;
+    await _serialize(() => _persistVerifiedUnlock(result));
+  }
+
+  Future<BroadcastAccessSnapshot> applyVerifiedLicenseGrant(
+    VerifiedLicenseGrant grant,
+  ) async {
+    if (_disposed) throw StateError('Entitlement owner is disposed.');
+    await _initialization;
+    return _serialize(() => _persistLicenseGrant(grant));
+  }
+
+  Future<BroadcastAccessSnapshot> refreshEntitlement() {
+    final current = _refreshOperation;
+    if (current != null) return current;
+    late final Future<BroadcastAccessSnapshot> operation;
+    operation = _refreshEntitlement().whenComplete(() {
+      if (identical(_refreshOperation, operation)) _refreshOperation = null;
+    });
+    _refreshOperation = operation;
+    return operation;
+  }
+
+  /// Recovers store events missed while this app was stopped, then refreshes
+  /// any signed grant. This performs no interactive store restore/sync.
+  Future<BroadcastAccessSnapshot> reconcilePurchases() {
+    final ongoing = _reconcileOperation;
+    if (ongoing != null) return ongoing;
+    late final Future<BroadcastAccessSnapshot> operation;
+    operation = (() async {
+      await _initialization;
+      if (!_disposed) unawaited(_loadOfferBestEffort());
+      final gateway = _purchaseGateway;
+      if (!_disposed && gateway is BroadcastOwnedPurchaseGateway) {
+        try {
+          await (gateway as BroadcastOwnedPurchaseGateway)
+              .reconcilePurchases(includeFinished: licenseToken == null);
+        } catch (_) {
+          // Store/network absence cannot remove an already delivered right.
+        }
+      }
+      return refreshEntitlement();
+    })()
+        .whenComplete(() {
+      if (identical(_reconcileOperation, operation)) _reconcileOperation = null;
+    });
+    _reconcileOperation = operation;
+    return operation;
+  }
+
+  Future<BroadcastAccessSnapshot> _refreshEntitlement() async {
+    await _initialization;
+    final token = licenseToken;
+    final gateway = _purchaseGateway;
+    final nowMs = _monoNowMs();
+    final lastRefresh = _lastRefreshMonoMs;
+    if (_disposed ||
+        token == null ||
+        gateway is! BroadcastEntitlementRefreshGateway ||
+        (lastRefresh != null &&
+            nowMs - lastRefresh < entitlementRefreshInterval.inMilliseconds)) {
+      return _snapshot();
+    }
+    _lastRefreshMonoMs = nowMs;
+    try {
+      final result = await (gateway as BroadcastEntitlementRefreshGateway)
+          .refreshLicense(token);
+      if (!_disposed &&
+          result.licenseToken != null &&
+          (result.unlocksAccess ||
+              result.failureReason == BroadcastPurchaseFailureReason.revoked)) {
+        return await _serialize(() => _persistVerifiedUnlock(result));
+      }
+    } catch (_) {
+      // Temporary network/verification failures do not revoke a paid right.
+    }
+    return _snapshot();
+  }
+
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
@@ -837,7 +307,12 @@ class BroadcastAccessService {
       // Storage failure must not leave billing listeners or queued writes
       // alive after the owner has disposed this service.
       await _purchaseUpdates.cancel();
-      await _purchaseGateway.dispose();
+      final gateway = _purchaseGateway;
+      if (gateway is BroadcastPurchaseDeliveryGateway) {
+        (gateway as BroadcastPurchaseDeliveryGateway)
+            .detachDeliveryHandler(_deliverVerifiedPurchase);
+      }
+      if (ownsPurchaseGateway) await _purchaseGateway.dispose();
       await _mutations.close();
       await _changes.close();
     }
@@ -847,6 +322,11 @@ class BroadcastAccessService {
     // A durable, verified lifetime grant no longer depends on the trial file.
     // Corruption or a full disk must not revoke a previously purchased right.
     if (_hasValidPersistedEntitlement()) {
+      _trialLedgerInitialized = true;
+      return;
+    }
+    if (_entitlementRecord()['status'] == LicenseGrantStatus.revoked.name) {
+      _storedUsedMs = _freeLimit.inMilliseconds;
       _trialLedgerInitialized = true;
       return;
     }
@@ -920,6 +400,7 @@ class BroadcastAccessService {
     _lastPurchaseResult = result;
     final price = result.localizedPrice?.trim();
     if (price != null && price.isNotEmpty) _localizedPriceLabel = price;
+    if (_purchaseGateway is BroadcastPurchaseDeliveryGateway) return;
     if (!result.unlocksAccess || _disposed) return;
     unawaited(_initialization
         .then((_) => _serialize(() async {
@@ -931,6 +412,24 @@ class BroadcastAccessService {
   Future<BroadcastAccessSnapshot> _persistVerifiedUnlock(
     BroadcastPurchaseResult result,
   ) async {
+    final token = result.licenseToken;
+    if (token != null && token.isNotEmpty) {
+      final grant = await _licenseGrantVerifier.verify(token,
+          expectedProductId: _productId);
+      if (grant.entitlementId != result.entitlementId ||
+          grant.transactionFingerprint != result.verificationFingerprint ||
+          grant.source != result.verificationSource ||
+          (grant.status == LicenseGrantStatus.active &&
+              !result.unlocksAccess) ||
+          (grant.status == LicenseGrantStatus.revoked &&
+              result.failureReason != BroadcastPurchaseFailureReason.revoked)) {
+        throw const LicenseGrantException(
+            code: 'LICENSE_ENTITLEMENT_MISMATCH',
+            message:
+                'Signed license does not match the verified store response.');
+      }
+      return _persistLicenseGrant(grant);
+    }
     final source = result.verificationSource?.trim();
     final fingerprint = result.verificationFingerprint?.trim();
     final entitlementId = result.entitlementId.trim();
@@ -945,12 +444,22 @@ class BroadcastAccessService {
         message: 'Trusted purchase evidence is missing.',
       ));
     }
-    if (_preferences.getString(_verificationFingerprintKey) == fingerprint &&
+    if (_entitlementRecord()['fingerprint'] == fingerprint &&
         _hasValidPersistedEntitlement()) {
       return _snapshot();
     }
+    if (_entitlementRecord()['issuedAtMs'] != null) {
+      throw const LicenseGrantException(
+          code: 'LICENSE_VERIFICATION_UNAVAILABLE',
+          message: 'A signed entitlement requires a signed update.');
+    }
     final previouslyUnlocked = _hasValidPersistedEntitlement();
     try {
+      // Establish an atomic old state before updating compatibility keys. A
+      // crash halfway through those writes must never create mixed evidence.
+      if (_preferences.getString(_entitlementRecordKey) == null) {
+        await _saveEntitlementRecord(_entitlementRecord());
+      }
       await _requireSaved(
           _preferences.setString(_verificationSourceKey, source));
       await _requireSaved(
@@ -964,6 +473,14 @@ class BroadcastAccessService {
       await _requireSaved(_preferences.setInt(_verifiedAtMsKey, _nowMs()));
       // Write the grant last, after every piece of trusted evidence is durable.
       await _requireSaved(_preferences.setBool(_unlockedKey, true));
+      await _saveEntitlementRecord({
+        'unlocked': true,
+        'source': source,
+        'fingerprint': fingerprint,
+        'authority': result.verificationAuthority,
+        'entitlementId': entitlementId,
+        'verifiedAtMs': _nowMs(),
+      });
       _entitlementPersistenceFailed = false;
       _stopLifetimeTrialMeter();
     } catch (_) {
@@ -972,7 +489,9 @@ class BroadcastAccessService {
       // Undo a failed grant in that cache as well, so service recreation cannot
       // mistake an unsaved true value for a lifetime entitlement.
       try {
-        await _preferences.setBool(_unlockedKey, previouslyUnlocked);
+        await _preferences
+            .setBool(_unlockedKey, previouslyUnlocked)
+            .timeout(persistenceTimeout);
       } catch (_) {}
       rethrow;
     }
@@ -980,6 +499,7 @@ class BroadcastAccessService {
   }
 
   BroadcastAccessSnapshot _snapshot() {
+    final entitlement = _entitlementRecord();
     final unlocked = _hasValidPersistedEntitlement();
     final usedMs = _effectiveUsedMs();
     final freeLimitMs = _freeLimit.inMilliseconds;
@@ -994,27 +514,135 @@ class BroadcastAccessService {
       priceLabel: _localizedPriceLabel ?? _fallbackPriceLabel,
       hasStorePrice: _localizedPriceLabel != null,
       productId: _productId,
-      entitlementId: _preferences.getString(_entitlementIdKey),
-      purchaseVerifiedAtMs: _preferences.getInt(_verifiedAtMsKey),
-      purchaseVerificationSource:
-          _preferences.getString(_verificationSourceKey),
-      purchaseVerificationAuthority:
-          _preferences.getString(_verificationAuthorityKey),
-      purchaseVerificationFingerprint:
-          _preferences.getString(_verificationFingerprintKey),
+      entitlementId: entitlement['entitlementId'] as String?,
+      purchaseVerifiedAtMs: entitlement['verifiedAtMs'] as int?,
+      purchaseVerificationSource: entitlement['source'] as String?,
+      purchaseVerificationAuthority: entitlement['authority'] as String?,
+      purchaseVerificationFingerprint: entitlement['fingerprint'] as String?,
     );
   }
 
-  bool _hasValidPersistedEntitlement() =>
-      !_entitlementPersistenceFailed &&
-      (_preferences.getBool(_unlockedKey) ?? false) &&
-      _preferences.getString(_verificationAuthorityKey) ==
-          trustedBackendVerificationAuthority &&
-      (_preferences.getString(_verificationSourceKey)?.isNotEmpty ?? false) &&
-      (_preferences.getString(_verificationFingerprintKey)?.isNotEmpty ??
-          false) &&
-      (_preferences.getString(_entitlementIdKey)?.isNotEmpty ?? false) &&
-      (_preferences.getInt(_verifiedAtMsKey) ?? 0) > 0;
+  bool _hasValidPersistedEntitlement() {
+    final record = _entitlementRecord();
+    return !_entitlementPersistenceFailed &&
+        record['unlocked'] == true &&
+        record['authority'] == trustedBackendVerificationAuthority &&
+        (record['source'] as String? ?? '').isNotEmpty &&
+        (record['fingerprint'] as String? ?? '').isNotEmpty &&
+        (record['entitlementId'] as String? ?? '').isNotEmpty &&
+        (record['verifiedAtMs'] as int? ?? 0) > 0;
+  }
+
+  Map<String, Object?> _entitlementRecord() {
+    final encoded = _preferences.getString(_entitlementRecordKey);
+    if (encoded != null) {
+      try {
+        final decoded = Map<String, Object?>.from(jsonDecode(encoded) as Map);
+        if (decoded['unlocked'] is! bool ||
+            [
+              'source',
+              'fingerprint',
+              'authority',
+              'entitlementId',
+              'licenseToken',
+              'status'
+            ].any((key) => decoded[key] != null && decoded[key] is! String) ||
+            ['verifiedAtMs', 'issuedAtMs']
+                .any((key) => decoded[key] != null && decoded[key] is! int)) {
+          throw const FormatException('Invalid entitlement record.');
+        }
+        return decoded;
+      } catch (_) {
+        return {'unlocked': false};
+      }
+    }
+    return {
+      'unlocked': _preferences.getBool(_unlockedKey) ?? false,
+      'source': _preferences.getString(_verificationSourceKey),
+      'fingerprint': _preferences.getString(_verificationFingerprintKey),
+      'authority': _preferences.getString(_verificationAuthorityKey),
+      'entitlementId': _preferences.getString(_entitlementIdKey),
+      'verifiedAtMs': _preferences.getInt(_verifiedAtMsKey),
+    };
+  }
+
+  Future<void> _saveEntitlementRecord(Map<String, Object?> record) async {
+    final previous = _preferences.getString(_entitlementRecordKey);
+    try {
+      await _requireSaved(
+          _preferences.setString(_entitlementRecordKey, jsonEncode(record)));
+    } catch (_) {
+      try {
+        if (previous == null) {
+          await _preferences
+              .remove(_entitlementRecordKey)
+              .timeout(persistenceTimeout);
+        } else {
+          await _preferences
+              .setString(_entitlementRecordKey, previous)
+              .timeout(persistenceTimeout);
+        }
+      } catch (_) {}
+      rethrow;
+    }
+  }
+
+  Future<BroadcastAccessSnapshot> _persistLicenseGrant(
+      VerifiedLicenseGrant grant) async {
+    if (grant.productId != _productId) {
+      throw const LicenseGrantException(
+          code: 'LICENSE_PRODUCT_MISMATCH',
+          message: 'License product does not match.');
+    }
+    final previous = _entitlementRecord();
+    final lastIssuedAt = previous['issuedAtMs'] as int?;
+    if (lastIssuedAt != null &&
+        (grant.issuedAtMs < lastIssuedAt ||
+            (grant.issuedAtMs == lastIssuedAt &&
+                (previous['status'] != grant.status.name ||
+                    previous['entitlementId'] != grant.entitlementId ||
+                    previous['fingerprint'] != grant.transactionFingerprint ||
+                    previous['source'] != grant.source)))) {
+      throw const LicenseGrantException(
+          code: 'LICENSE_GRANT_STALE',
+          message: 'License is older than the saved entitlement state.');
+    }
+    if (grant.status == LicenseGrantStatus.revoked &&
+        (previous['entitlementId'] != grant.entitlementId ||
+            previous['fingerprint'] != grant.transactionFingerprint)) {
+      throw const LicenseGrantException(
+          code: 'LICENSE_ENTITLEMENT_MISMATCH',
+          message: 'Revocation does not match this entitlement.');
+    }
+    if (previous['licenseToken'] == grant.token) return _snapshot();
+    await _saveEntitlementRecord({
+      'unlocked': grant.status == LicenseGrantStatus.active,
+      'source': grant.source,
+      'fingerprint': grant.transactionFingerprint,
+      'authority': trustedBackendVerificationAuthority,
+      'entitlementId': grant.entitlementId,
+      'verifiedAtMs': _nowMs(),
+      'licenseToken': grant.token,
+      'issuedAtMs': grant.issuedAtMs,
+      'status': grant.status.name,
+    });
+    _entitlementPersistenceFailed = false;
+    if (grant.status == LicenseGrantStatus.active) {
+      _stopLifetimeTrialMeter();
+    } else {
+      // A refunded lifetime grant does not create a fresh free trial.
+      _storedUsedMs = _freeLimit.inMilliseconds;
+      _activeStartedAtMonoMs = null;
+      _checkpointTimer?.cancel();
+      _checkpointTimer = null;
+    }
+    return _snapshot();
+  }
+
+  void _requireTrialOrEntitlement() {
+    final error = _trialInitializationError;
+    if (error != null && !_hasValidPersistedEntitlement()) throw error;
+  }
 
   int _effectiveUsedMs() {
     final startedAt = _activeStartedAtMonoMs;
@@ -1078,9 +706,13 @@ class BroadcastAccessService {
       // for the next checkpoint or start retry.
       try {
         if (previous == null) {
-          await _preferences.remove(_trialLedgerKey);
+          await _preferences
+              .remove(_trialLedgerKey)
+              .timeout(persistenceTimeout);
         } else {
-          await _preferences.setString(_trialLedgerKey, previous);
+          await _preferences
+              .setString(_trialLedgerKey, previous)
+              .timeout(persistenceTimeout);
         }
       } catch (_) {}
       rethrow;
@@ -1089,7 +721,7 @@ class BroadcastAccessService {
 
   Future<void> _requireSaved(Future<bool> write) async {
     try {
-      if (!await write) {
+      if (!await write.timeout(persistenceTimeout)) {
         throw StateError('Broadcast access could not be saved.');
       }
       _lastPersistenceError = null;
@@ -1136,13 +768,4 @@ class BroadcastAccessService {
     final trimmed = sessionId.trim();
     return trimmed.isEmpty ? 'broadcast' : trimmed;
   }
-}
-
-class BroadcastAccessPersistenceException implements Exception {
-  const BroadcastAccessPersistenceException(this.cause);
-
-  final Object cause;
-
-  @override
-  String toString() => 'BROADCAST_ACCESS_PERSISTENCE_FAILED: $cause';
 }

@@ -44,6 +44,7 @@ import '../features/server/media/webrtc/webrtc_server_gateway.dart';
 import '../l10n/app_strings.dart';
 import 'configuration_service.dart';
 import 'monetization/broadcast_access_service.dart';
+import 'monetization/license_grant.dart';
 import 'discovery/miucam_service_discovery.dart';
 import 'server/active_client_registry.dart';
 import 'server/alert_protocol_adapter.dart';
@@ -120,6 +121,7 @@ class MiuCamServer {
     MiuCamDiscoveryDeviceIdProvider? serverDeviceIdProvider,
     BatterySnapshotProvider? batteryProvider,
     BroadcastAccessService? broadcastAccess,
+    LicenseGrantVerifier? licenseGrantVerifier,
     DeviceResourceSnapshotProvider? deviceResourceProvider,
     MediaResourceGovernor? mediaResourceGovernor,
     MediaSessionTelemetry? mediaTelemetry,
@@ -156,6 +158,7 @@ class MiuCamServer {
           batteryProvider ?? BatteryPlusSnapshotProvider(),
         ),
         _broadcastAccess = broadcastAccess,
+        _licenseGrantVerifier = licenseGrantVerifier ?? LicenseGrantVerifier(),
         _deviceResourceProvider = CachedDeviceResourceSnapshotProvider(
           deviceResourceProvider ??
               const MethodChannelDeviceResourceSnapshotProvider(),
@@ -324,6 +327,9 @@ class MiuCamServer {
   final ServerDeviceIdentityResolver _serverDeviceIdentityResolver;
   final BatterySnapshotProvider _batteryProvider;
   final BroadcastAccessService? _broadcastAccess;
+  final LicenseGrantVerifier _licenseGrantVerifier;
+  bool get _supportsBroadcastLicenseActivation =>
+      _broadcastAccess != null && _licenseGrantVerifier.isConfigured;
   final DeviceResourceSnapshotProvider _deviceResourceProvider;
   late final ServerResourcePolicyCoordinator _resourcePolicyCoordinator;
   final MediaSessionTelemetry _mediaTelemetry;

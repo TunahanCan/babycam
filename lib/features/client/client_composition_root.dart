@@ -22,6 +22,7 @@ import 'pairing/qr_pairing_client.dart';
 import 'pairing/trusted_token_renewal_client.dart';
 import '../../l10n/app_strings.dart';
 import '../../services/discovery/miucam_service_discovery.dart';
+import '../../app/broadcast_purchase_coordinator.dart';
 
 class ClientCompositionRoot {
   static int createCount = 0;
@@ -31,6 +32,7 @@ class ClientCompositionRoot {
     SecureTokenStore? secureTokens,
     ClientNotificationService? notificationService,
     ClientAlertListener? alertListener,
+    BroadcastPurchaseCoordinator? purchases,
   }) {
     createCount++;
     final identity = ClientIdentityStore(secureTokens: secureTokens);
@@ -134,6 +136,7 @@ class ClientCompositionRoot {
       watchSessionEndpoints: endpointResolver.watch,
       persistReboundSession: store.save,
       refreshRemoteBroadcastAccess: remoteBroadcastAccess.snapshot,
+      purchases: purchases,
       alertHistory: alertHistory,
       streamHealthState: streamHealth,
       roomControls: roomControls,

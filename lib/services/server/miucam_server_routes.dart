@@ -116,6 +116,18 @@ List<_RouteSpec> _buildMiuCamRoutes(MiuCamServer server) => [
         server._handleAudioRoute,
       ),
       _RouteSpec(
+        protocol_v2.MiuCamProtocolV2.broadcastAccessLicense,
+        _AuthMode.bearer,
+        const {HttpMethod.get},
+        server._handleBroadcastAccessLicense,
+      ),
+      _RouteSpec(
+        protocol_v2.MiuCamProtocolV2.broadcastAccessActivate,
+        _AuthMode.bearer,
+        const {HttpMethod.post},
+        server._handleBroadcastAccessActivate,
+      ),
+      _RouteSpec(
         protocol_v2.MiuCamProtocolV2.status,
         _AuthMode.bearer,
         const {HttpMethod.get},

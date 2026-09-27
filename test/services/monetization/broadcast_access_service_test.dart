@@ -8,6 +8,54 @@ import 'package:miucam/services/monetization/broadcast_access_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  for (final restore in [false, true]) {
+    test(
+        'damaged trial does not block paid ${restore ? 'restore' : 'purchase'}',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'broadcast_access.trial_ledger_v1': '{damaged',
+      });
+      final service = BroadcastAccessService(
+          await SharedPreferences.getInstance(),
+          purchaseGateway: _FakePurchaseGateway());
+      addTearDown(service.dispose);
+      expect((await service.snapshot()).isLocked, isTrue);
+      await expectLater(service.beginSession('trial'), throwsFormatException);
+      final paid = restore
+          ? await service.restorePurchase()
+          : await service.unlockWithOneTimePurchase();
+      expect(paid.unlocked, isTrue);
+      expect((await service.beginSession('paid')).unlocked, isTrue);
+    });
+  }
+
+  test('failed durable delivery cannot acknowledge a store transaction',
+      () async {
+    final preferences = _FaultInjectingPreferences();
+    final store = _FakeInAppPurchaseStore();
+    final gateway = InAppBroadcastPurchaseGateway(
+        store: store, verifier: const _AcceptingVerifier());
+    final service =
+        BroadcastAccessService(preferences, purchaseGateway: gateway);
+    await service.snapshot();
+    preferences.rejectValue =
+        (key, _) => key == 'broadcast_access.entitlement_v1';
+    final update = gateway.updates.first;
+    store.emit(
+        [_purchase(status: PurchaseStatus.purchased, pendingComplete: true)]);
+    expect((await update).unlocksAccess, isFalse);
+    expect(store.completedPurchases, 0);
+    expect((await service.snapshot()).unlocked, isFalse);
+    preferences.rejectValue = null;
+    final retry = gateway.updates.first;
+    store.emit(
+        [_purchase(status: PurchaseStatus.purchased, pendingComplete: true)]);
+    expect((await retry).unlocksAccess, isTrue);
+    expect(store.completedPurchases, 1);
+    await service.dispose();
+    await store.dispose();
+  });
+
   test(
       'verified lifetime broadcasting does not depend on writable trial storage',
       () async {
@@ -522,6 +570,7 @@ void main() {
     final store = _FakeInAppPurchaseStore();
     addTearDown(store.dispose);
     final gateway = InAppBroadcastPurchaseGateway(
+      deliverPurchase: (_) async {},
       store: store,
       verifier: const _AcceptingVerifier(),
       timeout: const Duration(milliseconds: 20),
@@ -559,6 +608,7 @@ void main() {
     final store = _FakeInAppPurchaseStore();
     addTearDown(store.dispose);
     final gateway = InAppBroadcastPurchaseGateway(
+      deliverPurchase: (_) async {},
       store: store,
       verifier: const _AcceptingVerifier(),
     );
@@ -580,6 +630,7 @@ void main() {
     final store = _FakeInAppPurchaseStore();
     addTearDown(store.dispose);
     final gateway = InAppBroadcastPurchaseGateway(
+      deliverPurchase: (_) async {},
       store: store,
       verifier: const _AcceptingVerifier(),
     );
@@ -598,6 +649,7 @@ void main() {
     final store = _FakeInAppPurchaseStore();
     addTearDown(store.dispose);
     final gateway = InAppBroadcastPurchaseGateway(
+      deliverPurchase: (_) async {},
       store: store,
       verifier: const StorePayloadPurchaseVerifier(),
     );
@@ -617,17 +669,18 @@ void main() {
     expect(store.completedPurchases, 0);
   });
 
-  test('ack failure does not cache entitlement and store redelivery retries',
+  test('ack failure retains durable delivery and store redelivery retries',
       () async {
     final store = _FakeInAppPurchaseStore()..completeFailuresRemaining = 1;
     addTearDown(store.dispose);
     final gateway = InAppBroadcastPurchaseGateway(
+      deliverPurchase: (_) async {},
       store: store,
       verifier: const _AcceptingVerifier(),
     );
     addTearDown(gateway.dispose);
-    final failed = gateway.updates.firstWhere(
-      (result) => result.status == BroadcastPurchaseStatus.verificationFailed,
+    final delivered = gateway.updates.firstWhere(
+      (result) => result.unlocksAccess,
     );
     final purchase = _purchase(
       status: PurchaseStatus.purchased,
@@ -635,7 +688,7 @@ void main() {
     );
 
     store.emit([purchase]);
-    await failed;
+    await delivered;
     final retried =
         gateway.updates.firstWhere((result) => result.unlocksAccess);
     store.emit([purchase]);
@@ -662,6 +715,7 @@ void main() {
         'source': 'google_play',
         'transactionFingerprint': 'a' * 64,
         'entitlementId': 'household-42',
+        'licenseToken': 'signed-backend-license',
       }));
       await request.response.close();
     }));

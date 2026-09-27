@@ -239,8 +239,9 @@ grafiğiyle başlatılır.
 <summary><strong>Ücretsiz deneme ve ömür boyu yayın</strong></summary>
 
 Her oda telefonu ses, görüntü ve bildirim takibi için toplam 2 saat ücretsiz
-kullanılır. Birden fazla izleyici süreyi katlamaz. Ardından oda telefonundan
-tek seferlik satın alma ile ömür boyu yayın açılır; abonelik yoktur. Türkiye
+kullanılır. Birden fazla izleyici süreyi katlamaz. Ebeveyn kendi telefonundan
+tek seferlik aile lisansı alıp eşleşmiş oda telefonlarında ömür boyu yayını
+açabilir; odada ödeme hesabı veya kart gerekmez. Abonelik yoktur. Türkiye
 hedef fiyatı 350 TL'dir, ödeme ekranındaki tutar mağazanın yerel ürün fiyatıdır.
 Eşzamanlı 5 ebeveyn cihazı sınırı satın alma sonrasında da geçerlidir.
 
@@ -249,11 +250,13 @@ HTTPS satın alma doğrulaması yapılandırılmalıdır:
 
 ```bash
 flutter build appbundle \
-  --dart-define=MIUCAM_PURCHASE_VERIFIER_URL=https://YOUR-BACKEND/verify
+  --dart-define=MIUCAM_PURCHASE_VERIFIER_URL=https://YOUR-BACKEND/verify \
+  --dart-define=MIUCAM_LICENSE_PUBLIC_KEY=YOUR_BASE64URL_PUBLIC_KEY
 ```
 
 Doğrulama yapılandırılmamışsa ödeme ekranı açılmaz. Ayrıntılar:
-[mağaza hazırlığı ve deneme kuralları](docs/broadcast_pricing.md).
+[mağaza hazırlığı ve deneme kuralları](docs/broadcast_pricing.md),
+[doğrulama servisi kurulumu](backend/README.md).
 
 </details>
 

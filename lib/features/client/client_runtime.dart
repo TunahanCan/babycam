@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../app/app_runtime.dart';
+import '../../app/broadcast_purchase_coordinator.dart';
 import '../../core/async/serialized_async_executor.dart';
 import '../../core/media/adaptive_media_profile.dart';
 import '../../core/protocol/alert_event_dto.dart';
@@ -78,6 +79,7 @@ class ClientRuntime implements AppRuntime {
     this.roomControls,
     this.serviceBrowser,
     BroadcastAccessService? broadcastAccess,
+    this.purchases,
     void Function(AppStrings strings)? updateAlertStrings,
   })  : _pair = pair,
         _renew = renew,
@@ -94,6 +96,22 @@ class ClientRuntime implements AppRuntime {
         _broadcastAccess = broadcastAccess,
         _updateAlertStrings = updateAlertStrings,
         alertHistory = alertHistory ?? ClientAlertHistory() {
+    _purchaseSubscription = purchases?.changes.listen((_) {
+      if (_disposed) return;
+      final session = _state.session;
+      final snapshot =
+          session == null ? null : purchases!.stateFor(session.deviceId).access;
+      final fresh = snapshot != null &&
+          session != null &&
+          !identical(_appliedPurchaseAccess[session.deviceId], snapshot);
+      if (fresh) _appliedPurchaseAccess[session.deviceId] = snapshot;
+      _emit(_copyState(
+        broadcastAccess: fresh ? snapshot : null,
+        clearError: fresh &&
+            snapshot.unlocked &&
+            _state.error is BroadcastAccessLockedException,
+      ));
+    });
     _alertConnectionSubscription = alertConnectionStates?.distinct().listen(
       _setAlertTransportConnected,
       onError: (Object error) {
@@ -125,6 +143,9 @@ class ClientRuntime implements AppRuntime {
   final Future<BroadcastAccessSnapshot?> Function(PairingSession session)?
       _refreshRemoteBroadcastAccess;
   final BroadcastAccessService? _broadcastAccess;
+  final BroadcastPurchaseCoordinator? purchases;
+  StreamSubscription<void>? _purchaseSubscription;
+  final _appliedPurchaseAccess = <String, BroadcastAccessSnapshot>{};
   final void Function(AppStrings strings)? _updateAlertStrings;
   final ClientAlertHistory alertHistory;
   final ClientStreamHealthState? streamHealthState;
@@ -174,7 +195,11 @@ class ClientRuntime implements AppRuntime {
       serviceBrowser?.services ?? const [];
   Stream<List<MiuCamDiscoveredService>> get discoveryUpdates =>
       serviceBrowser?.updates ?? const Stream.empty();
-  bool get canManageBroadcastPurchase => _broadcastAccess != null;
+  bool get canManageBroadcastPurchase => purchases != null;
+
+  ParentPurchaseState get purchaseState =>
+      purchases?.stateFor(_state.session?.deviceId ?? '') ??
+      const ParentPurchaseState();
 
   void updateAlertStrings(AppStrings strings) =>
       _updateAlertStrings?.call(strings);
@@ -223,13 +248,35 @@ class ClientRuntime implements AppRuntime {
 
   Future<void> refreshBroadcastAccess() async {
     final access = _broadcastAccess;
-    if (access == null || _disposed) return;
-    final snapshot = await access.snapshot();
-    _emit(_copyState(broadcastAccess: snapshot));
+    if (_disposed) return;
+    final session = _state.session;
+    final snapshot = access != null
+        ? await access.snapshot()
+        : session == null
+            ? null
+            : await _refreshRemoteBroadcastAccess?.call(session);
+    if (_disposed || (session != null && !_ownsAlertAccessResult(session))) {
+      return;
+    }
+    if (snapshot == null) return;
+    _emit(_copyState(
+      broadcastAccess: snapshot,
+      clearError:
+          snapshot.unlocked && _state.error is BroadcastAccessLockedException,
+    ));
     if (_state.activeStream != null) _scheduleBroadcastAccessTimer(snapshot);
   }
 
   Future<void> unlockBroadcastAccess() async {
+    if (purchases != null) {
+      final session = _state.session;
+      if (session == null || _disposed) return;
+      final snapshot = await purchases!.purchaseForRoom(session);
+      if (snapshot != null && _ownsAlertAccessResult(session)) {
+        _emit(_copyState(broadcastAccess: snapshot, clearError: true));
+      }
+      return;
+    }
     final access = _broadcastAccess;
     if (access == null || _disposed) return;
     _cancelBroadcastAccessTimer();
@@ -246,6 +293,15 @@ class ClientRuntime implements AppRuntime {
   }
 
   Future<void> restoreBroadcastAccessPurchase() async {
+    if (purchases != null) {
+      final session = _state.session;
+      if (session == null || _disposed) return;
+      final snapshot = await purchases!.purchaseForRoom(session, restore: true);
+      if (snapshot != null && _ownsAlertAccessResult(session)) {
+        _emit(_copyState(broadcastAccess: snapshot, clearError: true));
+      }
+      return;
+    }
     final access = _broadcastAccess;
     if (access == null || _disposed) return;
     _cancelBroadcastAccessTimer();
@@ -270,8 +326,12 @@ class ClientRuntime implements AppRuntime {
       phase: ClientRuntimePhase.pairedIdle,
       session: session,
       mediaProfile: mediaProfile,
-      broadcastAccess: _state.broadcastAccess,
+      broadcastAccess: _state.session?.deviceId == session.deviceId
+          ? _state.broadcastAccess
+          : null,
     ));
+    purchases?.attachSession(session);
+    unawaited(refreshBroadcastAccess().catchError((_) {}));
     _startNetworkQuality(session);
     await _startEndpointResolution(session);
     final now = DateTime.now();
@@ -347,8 +407,12 @@ class ClientRuntime implements AppRuntime {
       phase: ClientRuntimePhase.pairedIdle,
       session: session,
       mediaProfile: mediaProfile,
-      broadcastAccess: _state.broadcastAccess,
+      broadcastAccess: previousState.session?.deviceId == session.deviceId
+          ? previousState.broadcastAccess
+          : null,
     ));
+    purchases?.attachSession(session);
+    unawaited(refreshBroadcastAccess().catchError((_) {}));
     _startNetworkQuality(session);
     await _startEndpointResolution(session);
   }
@@ -434,6 +498,7 @@ class ClientRuntime implements AppRuntime {
       broadcastAccess: _state.broadcastAccess,
     ));
     _startNetworkQuality(renewedSession);
+    purchases?.attachSession(renewedSession);
     await _startEndpointResolution(renewedSession);
     if (!_disposed) {
       await _alertOperations.run(
@@ -899,9 +964,8 @@ class ClientRuntime implements AppRuntime {
     await _cancelEndpointResolution();
     await _clearStore?.call();
     await alertHistory.clear();
-    _emit(ClientRuntimeState(
+    _emit(const ClientRuntimeState(
       phase: ClientRuntimePhase.unpaired,
-      broadcastAccess: _state.broadcastAccess,
     ));
   }
 
@@ -962,6 +1026,7 @@ class ClientRuntime implements AppRuntime {
     await attempt(_alertOperations.close);
     await attempt(() async => _networkQualitySubscription?.cancel());
     await attempt(() async => _alertConnectionSubscription?.cancel());
+    await attempt(() async => _purchaseSubscription?.cancel());
     await attempt(_cancelEndpointResolution);
     final session = _state.session;
     if (session != null && _state.activeStream != null) {
@@ -989,6 +1054,9 @@ class ClientRuntime implements AppRuntime {
   void _setAlertTransportConnected(bool connected) {
     if (_disposed || _alertTransportConnected == connected) return;
     _alertTransportConnected = connected;
+    if (connected) {
+      unawaited(purchases?.retryPending().catchError((_) {}));
+    }
     // Connection health is orthogonal to the user's armed preference. Emit
     // the current immutable state again so presentation can show reconnecting
     // without rewriting every runtime transition.
@@ -1005,6 +1073,7 @@ class ClientRuntime implements AppRuntime {
     final current = _state.session;
     return !_disposed &&
         current != null &&
+        current.deviceId == session.deviceId &&
         current.clientId == session.clientId &&
         current.sessionToken == session.sessionToken &&
         current.payload.host == session.payload.host &&
@@ -1165,6 +1234,7 @@ class ClientRuntime implements AppRuntime {
       broadcastAccess: _state.broadcastAccess,
     ));
     _startNetworkQuality(resolved);
+    purchases?.attachSession(resolved);
     if (!alertsWereActive) return;
     try {
       await _alertOperations.run(

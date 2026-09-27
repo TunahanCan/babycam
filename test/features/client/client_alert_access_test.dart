@@ -96,7 +96,8 @@ void main() {
       expect(runtime.canManageBroadcastPurchase, isFalse);
       expect(listener.isListening, isFalse);
       expect(alertStops, 1);
-      expect(statusReads, 1);
+      // Initial pairing reads room authority, then denial confirms it again.
+      expect(statusReads, 2);
       expect(upgrades, 1);
       await Future<void>.delayed(const Duration(milliseconds: 75));
       expect(upgrades, 1);

@@ -40,14 +40,40 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Set up billing backend Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements*.txt
+            backend/constraints.txt
+
+      - name: Install billing backend dependencies
+        run: |
+          python -m venv backend/.venv
+          backend/.venv/bin/pip install -r backend/requirements-test.txt
+
       - name: Check formatting
-        run: dart format --output=none --set-exit-if-changed lib test
+        run: dart format --output=none --set-exit-if-changed lib test tool/tests
 
       - name: Analyze
         run: flutter analyze
 
       - name: Test
         run: flutter test
+
+      - name: Test billing backend
+        working-directory: backend
+        run: .venv/bin/python -m pytest -q
+
+      - name: Test backend to room purchase delivery
+        env:
+          MIUCAM_BACKEND_TEST_PYTHON: ${{ github.workspace }}/backend/.venv/bin/python
+        run: flutter test tool/tests/purchase_backend_contract_test.dart
+
+      - name: Build billing backend container
+        run: docker build -t miucam-billing:ci backend
 
   android-build:
     name: Build Android App Bundle

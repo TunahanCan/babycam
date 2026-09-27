@@ -1,8 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_platform_interface/in_app_purchase_platform_interface.dart';
 import 'package:miucam/app/app_bootstrap.dart';
 import 'package:miucam/app/app_role.dart';
 import 'package:miucam/app/install_integrity_guard.dart';
@@ -12,6 +15,21 @@ import 'package:miucam/l10n/app_strings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() {
+    // These tests exercise bootstrap, not native billing connection retries.
+    // The app now owns billing even while the welcome screen is visible.
+    final originalTarget = debugDefaultTargetPlatformOverride;
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      InAppPurchasePlatform.instance = _UnavailableStore();
+      final _ = InAppPurchase.instance;
+    } finally {
+      debugDefaultTargetPlatformOverride = originalTarget;
+    }
+  });
+  setUp(() => InAppPurchasePlatform.instance = _UnavailableStore());
+
   testWidgets(
       'fresh install shows welcome before secure preparation and gates actions',
       (tester) async {
@@ -84,6 +102,9 @@ void main() {
       isTrue,
     );
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.runAsync(() async {});
+    await tester.pumpAndSettle();
   });
 
   testWidgets('bootstrap hatayı gösterir ve yeniden denenebilir',
@@ -129,6 +150,9 @@ void main() {
     expect(attempts, 2);
     expect(find.text('MiuCam’i nasıl kullanacaksınız?'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.runAsync(() async {});
+    await tester.pumpAndSettle();
   });
 
   testWidgets(
@@ -187,6 +211,7 @@ void main() {
     expect(find.byType(MiuCamRoleBadge), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
+    await tester.runAsync(() async {});
     await tester.pumpAndSettle();
   });
 
@@ -255,6 +280,13 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+}
+
+class _UnavailableStore extends InAppPurchasePlatform {
+  @override
+  Stream<List<PurchaseDetails>> get purchaseStream => const Stream.empty();
+  @override
+  Future<bool> isAvailable() async => false;
 }
 
 Widget _responsiveTestApp({

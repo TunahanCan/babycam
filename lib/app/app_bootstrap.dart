@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/theme/miucam_theme.dart';
+import '../core/feature_flags.dart';
 import '../features/client/client_app_shell.dart';
 import '../features/client/client_composition_root.dart';
 import '../features/client/client_runtime.dart';
@@ -15,6 +16,8 @@ import '../features/server/server_runtime.dart';
 import '../l10n/app_strings.dart';
 import '../services/configuration_service.dart';
 import '../services/client_preferences_service.dart';
+import '../services/monetization/broadcast_access_service.dart';
+import 'broadcast_purchase_coordinator.dart';
 import 'app_role.dart';
 import 'app_runtime.dart';
 import 'install_integrity_guard.dart';
@@ -39,11 +42,13 @@ class AppBootstrap extends StatefulWidget {
   State<AppBootstrap> createState() => _AppBootstrapState();
 }
 
-class _AppBootstrapState extends State<AppBootstrap> {
+class _AppBootstrapState extends State<AppBootstrap>
+    with WidgetsBindingObserver {
   SharedPreferences? _prefs;
   RoleRepository? _roles;
   AppRole? _role;
   AppRuntime? _runtime;
+  BroadcastPurchaseCoordinator? _purchases;
   bool _loaded = false;
   bool _loading = true;
   bool _installPreparationPending = false;
@@ -56,6 +61,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_load());
   }
 
@@ -91,6 +97,13 @@ class _AppBootstrapState extends State<AppBootstrap> {
       );
       final role = await RoleResolver(roles).resolve();
       if (!mounted) return;
+      if (MiuCamFeatureFlags.broadcastPaywallEnabled) {
+        _purchases ??= BroadcastPurchaseCoordinator(
+          preferences: prefs,
+          access: BroadcastAccessService(prefs),
+        );
+        unawaited(_purchases!.onForeground().catchError((_) {}));
+      }
       widget.onLocaleChanged?.call(ClientPreferencesService(prefs).locale);
       setState(() {
         _prefs = prefs;
@@ -264,11 +277,27 @@ class _AppBootstrapState extends State<AppBootstrap> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_purchases?.onForeground().catchError((_) {}));
+    } else {
+      _purchases?.onBackground();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _roleSwitchGeneration++;
     final runtime = _runtime;
     _runtime = null;
-    unawaited(runtime?.dispose());
+    unawaited(() async {
+      try {
+        await runtime?.dispose();
+      } finally {
+        await _purchases?.dispose();
+      }
+    }());
     super.dispose();
   }
 
@@ -292,6 +321,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
           runtime: (_runtime ??= ServerCompositionRoot.create(
             config: config,
             strings: AppStrings.of(context),
+            sharedBroadcastAccess: _purchases?.access,
           )) as ServerRuntime,
           config: config,
           activeRole: AppRole.server,
@@ -383,6 +413,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
     final runtime = (_runtime ??= ClientCompositionRoot.create(
       preferences: prefs,
       strings: strings,
+      purchases: _purchases,
     )) as ClientRuntime;
     runtime.updateAlertStrings(strings);
     return ClientAppShell(

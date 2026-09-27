@@ -33,5 +33,7 @@ class MiuCamProtocolV2 {
   static const alertAckId = 'alertId';
   static const alertDetachType = 'alertDetach';
   static const status = '/status';
+  static const broadcastAccessActivate = '/broadcast-access/activate';
+  static const broadcastAccessLicense = '/broadcast-access/license';
   static const statusPublic = '/status/public';
 }

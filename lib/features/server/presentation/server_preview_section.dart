@@ -378,11 +378,19 @@ class _ServerBroadcastAccessCardState extends State<ServerBroadcastAccessCard> {
 
   String _purchaseMessage(AppStrings strings, Object error) {
     if (error is BroadcastPurchaseException) {
+      if (error.result.failureReason ==
+          BroadcastPurchaseFailureReason.revoked) {
+        return strings.ui('familyLicenseRevoked');
+      }
       return switch (error.result.status) {
         BroadcastPurchaseStatus.pending => strings.ui('purchasePending'),
         BroadcastPurchaseStatus.canceled => strings.ui('purchaseCanceled'),
         BroadcastPurchaseStatus.unavailable =>
           strings.ui('purchaseUnavailable'),
+        BroadcastPurchaseStatus.noPurchaseFound =>
+          strings.ui('familyNoPurchaseFound'),
+        BroadcastPurchaseStatus.verificationFailed =>
+          strings.ui('familyVerificationPending'),
         _ => strings.ui('purchaseFailed'),
       };
     }

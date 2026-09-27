@@ -38,31 +38,30 @@ const appUiTextCatalog = <String, Map<String, String>>{
   },
   'broadcastAccessRemoteTrialBody': {
     'tr':
-        'Oda telefonunun ses, görüntü veya bildirim takibi için toplam 2 saatlik ücretsiz hakkından kalan: {remaining}. Ömür boyu kullanım oda telefonundan tek seferlik satın alınır. Abonelik yok; aynı anda en fazla 5 izleyici.',
+        'Oda telefonunun toplam 2 saatlik ücretsiz ses, görüntü ve bildirim takibinden kalan: {remaining}. Ebeveyn telefonundan bir kez aile lisansı alarak eşleştirdiğin odalarda kullanabilirsin. Abonelik yok; oda başına en fazla 5 izleyici.',
     'en':
-        'The room phone has {remaining} left from its total 2 free hours of audio, video, or alert monitoring. Lifetime use is a one-time purchase on the room phone. No subscription; up to 5 viewers at once.',
+        'The room has {remaining} left from its total 2 free hours of audio, video and alerts. Buy a family license once on a parent phone for paired rooms. No subscription; up to 5 viewers per room.',
     'zh':
-        '房间手机用于声音、视频或提醒监测的共 2 小时免费时间还剩 {remaining}。在房间手机上一次性购买即可永久使用。无需订阅，最多支持 5 台设备同时观看。',
+        '房间的声音、视频和提醒监测共2小时免费时间还剩{remaining}。在家长手机购买一次家庭许可，即可用于已配对的房间。无需订阅，每个房间最多5位观看者。',
     'hi':
-        'कमरे के फ़ोन पर आवाज़, वीडियो या अलर्ट की निगरानी के कुल 2 मुफ़्त घंटों में {remaining} बाकी है। आजीवन इस्तेमाल के लिए कमरे के फ़ोन पर एक बार खरीदारी करें। कोई सब्सक्रिप्शन नहीं; एक साथ अधिकतम 5 दर्शक।',
+        'कमरे के कुल 2 मुफ़्त घंटों की आवाज़, वीडियो और अलर्ट में {remaining} बाकी है। अभिभावक फ़ोन पर एक बार परिवार लाइसेंस लेकर जुड़े कमरों में इस्तेमाल करें। कोई सदस्यता नहीं; हर कमरे में अधिकतम 5 दर्शक।',
     'es':
-        'Al móvil de la habitación le quedan {remaining} de sus 2 horas gratuitas en total de audio, vídeo o seguimiento de avisos. El uso de por vida se compra una sola vez desde ese móvil. Sin suscripción; hasta 5 espectadores a la vez.',
+        'Quedan {remaining} de las 2 horas gratuitas de audio, vídeo y avisos. Compra una licencia familiar desde un móvil de los padres para las habitaciones vinculadas. Sin suscripción; hasta 5 espectadores por habitación.',
     'fr':
-        'Il reste {remaining} sur les 2 heures gratuites au total d’audio, de vidéo ou de suivi des alertes du téléphone de la chambre. L’utilisation à vie s’achète en une fois sur ce téléphone. Sans abonnement ; jusqu’à 5 spectateurs en même temps.',
+        'Il reste {remaining} sur les 2 heures gratuites d’audio, vidéo et alertes. Achetez une licence familiale sur un téléphone parent pour les chambres associées. Sans abonnement ; jusqu’à 5 spectateurs par chambre.',
   },
   'broadcastAccessRemoteLockedBody': {
     'tr':
-        'Oda telefonunun ses, görüntü ve bildirim takibi için toplam 2 saatlik ücretsiz süresi doldu. Devam etmek için ömür boyu kullanımı oda telefonundan tek seferlik satın alın. Bu ebeveyn telefonundan satın alma gerekmez. Abonelik yok; en fazla 5 eşzamanlı izleyici.',
+        'Bu odanın toplam 2 saatlik ücretsiz süresi doldu. Ebeveyn telefonundan aile lisansı satın al veya mevcut satın almanı geri yükle. Lisans eşleştirdiğin odalarda kullanılabilir; oda başına en fazla 5 eşzamanlı izleyici.',
     'en':
-        'The room phone has used its total 2 free hours of audio, video, and alert monitoring. To continue, buy lifetime use once on the room phone. No purchase is needed on this parent phone. No subscription; up to 5 simultaneous viewers.',
-    'zh':
-        '房间手机用于声音、视频和提醒监测的共 2 小时免费时间已用完。要继续，请在房间手机上一次性购买永久使用权限。这部家长手机无需购买。无需订阅，最多支持 5 台设备同时观看。',
+        'This room has used its total 2 free hours. Buy a family license on a parent phone or restore your purchase. Use it on paired rooms, with up to 5 simultaneous viewers per room.',
+    'zh': '此房间的2小时免费时间已用完。请在家长手机购买家庭许可或恢复购买。可用于已配对的房间，每个房间最多同时支持5位观看者。',
     'hi':
-        'कमरे के फ़ोन पर आवाज़, वीडियो और अलर्ट की निगरानी के कुल 2 मुफ़्त घंटे समाप्त हो गए हैं। जारी रखने के लिए कमरे के फ़ोन पर एक बार आजीवन इस्तेमाल खरीदें। इस अभिभावक फ़ोन पर खरीदारी ज़रूरी नहीं है। कोई सब्सक्रिप्शन नहीं; एक साथ अधिकतम 5 दर्शक।',
+        'इस कमरे के कुल 2 मुफ़्त घंटे समाप्त हो गए। अभिभावक फ़ोन पर परिवार लाइसेंस खरीदें या खरीदारी बहाल करें। जुड़े कमरों में उपयोग करें; हर कमरे में एक साथ अधिकतम 5 दर्शक।',
     'es':
-        'El móvil de la habitación ha agotado sus 2 horas gratuitas en total de audio, vídeo y seguimiento de avisos. Para continuar, compra el uso de por vida una sola vez desde ese móvil. Este móvil del cuidador no necesita comprar nada. Sin suscripción; hasta 5 espectadores simultáneos.',
+        'Esta habitación ha agotado sus 2 horas gratuitas. Compra una licencia familiar en un móvil de los padres o restaura la compra. Úsala en habitaciones vinculadas, con hasta 5 espectadores simultáneos por habitación.',
     'fr':
-        'Le téléphone de la chambre a utilisé ses 2 heures gratuites au total d’audio, de vidéo et de suivi des alertes. Pour continuer, achetez l’utilisation à vie en une fois sur ce téléphone. Aucun achat n’est nécessaire sur ce téléphone parent. Sans abonnement ; jusqu’à 5 spectateurs simultanés.',
+        'Cette chambre a utilisé ses 2 heures gratuites. Achetez une licence familiale sur un téléphone parent ou restaurez votre achat. Utilisez-la dans les chambres associées, avec jusqu’à 5 spectateurs par chambre.',
   },
   'parentDeviceName': {
     'tr': 'Ebeveyn telefonu',

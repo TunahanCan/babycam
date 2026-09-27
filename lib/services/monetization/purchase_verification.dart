@@ -6,7 +6,38 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 
+import 'license_grant.dart';
+
 const trustedBackendVerificationAuthority = 'trusted_backend';
+
+enum BroadcastPurchaseFailureReason {
+  transient,
+  rejected,
+  revoked,
+  configuration;
+
+  static BroadcastPurchaseFailureReason fromCode(Object? code) =>
+      values.where((value) => value.name == code).firstOrNull ?? rejected;
+}
+
+abstract interface class BroadcastLicenseRefresher {
+  Future<BroadcastPurchaseVerification> refreshLicense(
+    String licenseToken, {
+    required String expectedProductId,
+  });
+}
+
+abstract interface class BroadcastCheckoutPreflight {
+  Future<bool> preflight({
+    required String productId,
+    required String source,
+    required String licensePublicKey,
+  });
+}
+
+abstract interface class CancellableBroadcastPurchaseVerifier {
+  void cancelPending();
+}
 
 class BroadcastPurchaseVerification {
   const BroadcastPurchaseVerification._({
@@ -16,6 +47,8 @@ class BroadcastPurchaseVerification {
     this.fingerprint,
     this.entitlementId,
     this.reason,
+    this.failureReason,
+    this.licenseToken,
   });
 
   const BroadcastPurchaseVerification.verified({
@@ -23,23 +56,34 @@ class BroadcastPurchaseVerification {
     required String fingerprint,
     required String entitlementId,
     String authority = trustedBackendVerificationAuthority,
+    String? licenseToken,
   }) : this._(
           verified: true,
           source: source,
           authority: authority,
           fingerprint: fingerprint,
           entitlementId: entitlementId,
+          licenseToken: licenseToken,
         );
 
   const BroadcastPurchaseVerification.rejected({
     required String source,
     required String reason,
     String authority = trustedBackendVerificationAuthority,
+    BroadcastPurchaseFailureReason failureReason =
+        BroadcastPurchaseFailureReason.rejected,
+    String? fingerprint,
+    String? entitlementId,
+    String? licenseToken,
   }) : this._(
           verified: false,
           source: source,
           authority: authority,
           reason: reason,
+          failureReason: failureReason,
+          fingerprint: fingerprint,
+          entitlementId: entitlementId,
+          licenseToken: licenseToken,
         );
 
   final bool verified;
@@ -48,6 +92,8 @@ class BroadcastPurchaseVerification {
   final String? fingerprint;
   final String? entitlementId;
   final String? reason;
+  final BroadcastPurchaseFailureReason? failureReason;
+  final String? licenseToken;
 }
 
 abstract class BroadcastPurchaseVerifier {
@@ -79,6 +125,7 @@ class StorePayloadPurchaseVerifier implements BroadcastPurchaseVerifier {
     return BroadcastPurchaseVerification.rejected(
       source: purchase.verificationData.source.trim(),
       reason: 'Trusted backend purchase verification is not configured.',
+      failureReason: BroadcastPurchaseFailureReason.configuration,
     );
   }
 }
@@ -102,6 +149,7 @@ class UnavailableBroadcastPurchaseVerifier
     return BroadcastPurchaseVerification.rejected(
       source: purchase.verificationData.source.trim(),
       reason: reason,
+      failureReason: BroadcastPurchaseFailureReason.configuration,
     );
   }
 }
@@ -114,7 +162,12 @@ typedef PurchaseVerificationHeadersProvider = Future<Map<String, String>>
 /// The backend, not the app, must validate the transaction with the relevant
 /// store and return a stable transaction fingerprint plus the entitlement id
 /// shared by the paired devices. No store secret is embedded in the app.
-class TrustedBackendPurchaseVerifier implements BroadcastPurchaseVerifier {
+class TrustedBackendPurchaseVerifier
+    implements
+        BroadcastPurchaseVerifier,
+        BroadcastLicenseRefresher,
+        BroadcastCheckoutPreflight,
+        CancellableBroadcastPurchaseVerifier {
   TrustedBackendPurchaseVerifier({
     required this.endpoint,
     HttpClient Function()? clientFactory,
@@ -130,6 +183,56 @@ class TrustedBackendPurchaseVerifier implements BroadcastPurchaseVerifier {
   final Duration timeout;
   final int maxResponseBytes;
   final bool allowInsecureEndpointForTesting;
+  final _requests = <_PurchaseVerificationOperation>{};
+
+  @override
+  void cancelPending() {
+    for (final request in _requests.toList()) {
+      request.close();
+    }
+  }
+
+  @override
+  Future<bool> preflight({
+    required String productId,
+    required String source,
+    required String licensePublicKey,
+  }) async {
+    if (licensePublicKey.isEmpty ||
+        !endpoint.hasAuthority ||
+        (!allowInsecureEndpointForTesting && endpoint.scheme != 'https')) {
+      return false;
+    }
+    final operation = _PurchaseVerificationOperation(_clientFactory(), timeout);
+    _requests.add(operation);
+    final client = operation.client;
+    try {
+      final request = await operation.wait(client.postUrl(endpoint));
+      request.followRedirects = false;
+      request.headers.contentType = ContentType.json;
+      final headers = await operation.wait(
+          headersProvider?.call() ?? Future.value(const <String, String>{}));
+      for (final entry in headers.entries) {
+        request.headers.set(entry.key, entry.value);
+      }
+      request.write(jsonEncode(
+          {'preflight': true, 'productId': productId, 'source': source}));
+      final response = await operation.wait(request.close());
+      final body = await operation.wait(_readBoundedBody(response));
+      if (response.statusCode != HttpStatus.ok) return false;
+      final decoded = jsonDecode(utf8.decode(body));
+      return decoded is Map &&
+          decoded['ready'] == true &&
+          decoded['productId'] == productId &&
+          decoded['source'] == source &&
+          decoded['licensePublicKey'] == licensePublicKey;
+    } catch (_) {
+      return false;
+    } finally {
+      operation.close();
+      _requests.remove(operation);
+    }
+  }
 
   @override
   Future<BroadcastPurchaseVerification> verify(
@@ -142,32 +245,8 @@ class TrustedBackendPurchaseVerifier implements BroadcastPurchaseVerifier {
     );
     if (preflight != null) return preflight;
     final source = purchase.verificationData.source.trim();
-    if (!allowInsecureEndpointForTesting && endpoint.scheme != 'https') {
-      return BroadcastPurchaseVerification.rejected(
-        source: source,
-        reason: 'Purchase verification endpoint must use HTTPS.',
-      );
-    }
-    if (!endpoint.hasAuthority) {
-      return BroadcastPurchaseVerification.rejected(
-        source: source,
-        reason: 'Purchase verification endpoint is invalid.',
-      );
-    }
-
-    final client = _clientFactory()..connectionTimeout = timeout;
-    try {
-      final request = await client.postUrl(endpoint).timeout(timeout);
-      request.followRedirects = false;
-      request.headers
-        ..contentType = ContentType.json
-        ..set(HttpHeaders.acceptHeader, ContentType.json.mimeType);
-      final headers = await headersProvider?.call().timeout(timeout) ??
-          const <String, String>{};
-      for (final entry in headers.entries) {
-        request.headers.set(entry.key, entry.value);
-      }
-      request.write(jsonEncode({
+    return _request(
+      {
         'productId': purchase.productID,
         'source': source,
         'purchaseId': purchase.purchaseID,
@@ -176,14 +255,67 @@ class TrustedBackendPurchaseVerifier implements BroadcastPurchaseVerifier {
             purchase.verificationData.serverVerificationData,
         'localVerificationData':
             purchase.verificationData.localVerificationData,
-      }));
-      final response = await request.close().timeout(timeout);
-      final body = await _readBoundedBody(response).timeout(timeout);
+      },
+      expectedProductId: expectedProductId,
+      expectedSource: source,
+    );
+  }
+
+  @override
+  Future<BroadcastPurchaseVerification> refreshLicense(
+    String licenseToken, {
+    required String expectedProductId,
+  }) =>
+      _request({'licenseToken': licenseToken},
+          expectedProductId: expectedProductId);
+
+  Future<BroadcastPurchaseVerification> _request(
+    Map<String, Object?> payload, {
+    required String expectedProductId,
+    String? expectedSource,
+  }) async {
+    final source = expectedSource ?? '';
+    if (!allowInsecureEndpointForTesting && endpoint.scheme != 'https') {
+      return BroadcastPurchaseVerification.rejected(
+        source: source,
+        reason: 'Purchase verification endpoint must use HTTPS.',
+        failureReason: BroadcastPurchaseFailureReason.configuration,
+      );
+    }
+    if (!endpoint.hasAuthority) {
+      return BroadcastPurchaseVerification.rejected(
+        source: source,
+        reason: 'Purchase verification endpoint is invalid.',
+        failureReason: BroadcastPurchaseFailureReason.configuration,
+      );
+    }
+
+    final operation = _PurchaseVerificationOperation(_clientFactory(), timeout);
+    _requests.add(operation);
+    final client = operation.client;
+    try {
+      final request = await operation.wait(client.postUrl(endpoint));
+      request.followRedirects = false;
+      request.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.acceptHeader, ContentType.json.mimeType);
+      final headers = await operation.wait(
+          headersProvider?.call() ?? Future.value(const <String, String>{}));
+      for (final entry in headers.entries) {
+        request.headers.set(entry.key, entry.value);
+      }
+      request.write(jsonEncode(payload));
+      final response = await operation.wait(request.close());
+      final body = await operation.wait(_readBoundedBody(response));
       if (response.statusCode < 200 || response.statusCode >= 300) {
         return BroadcastPurchaseVerification.rejected(
           source: source,
           reason:
               'Trusted purchase verifier returned HTTP ${response.statusCode}.',
+          failureReason:
+              response.statusCode >= 500 || response.statusCode == 429
+                  ? BroadcastPurchaseFailureReason.transient
+                  : BroadcastPurchaseFailureReason.rejected,
         );
       }
       final decoded = jsonDecode(utf8.decode(body));
@@ -191,16 +323,27 @@ class TrustedBackendPurchaseVerifier implements BroadcastPurchaseVerifier {
         throw const FormatException('Verifier response must be a JSON object.');
       }
       final json = Map<String, Object?>.from(decoded);
+      final responseSource = json['source']?.toString() ?? source;
+      final licenseToken = json['licenseToken'] is String
+          ? (json['licenseToken'] as String).trim()
+          : null;
       if (json['verified'] != true) {
         return BroadcastPurchaseVerification.rejected(
-          source: source,
+          source: responseSource,
           reason: json['reason']?.toString().trim().isNotEmpty == true
               ? json['reason'].toString().trim()
               : 'The store transaction was rejected by the trusted verifier.',
+          failureReason:
+              BroadcastPurchaseFailureReason.fromCode(json['reasonCode']),
+          fingerprint: json['transactionFingerprint']?.toString(),
+          entitlementId: json['entitlementId']?.toString(),
+          licenseToken: licenseToken,
         );
       }
       if (json['productId']?.toString() != expectedProductId ||
-          json['source']?.toString() != source) {
+          !StorePayloadPurchaseVerifier.supportedSources
+              .contains(responseSource) ||
+          (expectedSource != null && responseSource != expectedSource)) {
         return BroadcastPurchaseVerification.rejected(
           source: source,
           reason: 'Verifier response does not match the submitted transaction.',
@@ -209,29 +352,37 @@ class TrustedBackendPurchaseVerifier implements BroadcastPurchaseVerifier {
       final fingerprint =
           json['transactionFingerprint']?.toString().trim() ?? '';
       final entitlementId = json['entitlementId']?.toString().trim() ?? '';
-      if (fingerprint.length < 32 || entitlementId.isEmpty) {
+      if (fingerprint.length < 32 ||
+          entitlementId.isEmpty ||
+          licenseToken == null ||
+          licenseToken.isEmpty ||
+          licenseToken.length > LicenseGrantVerifier.maxTokenBytes) {
         return BroadcastPurchaseVerification.rejected(
           source: source,
           reason: 'Verifier response is missing trusted entitlement evidence.',
         );
       }
       return BroadcastPurchaseVerification.verified(
-        source: source,
+        source: responseSource,
         fingerprint: fingerprint,
         entitlementId: entitlementId,
+        licenseToken: licenseToken,
       );
     } on TimeoutException {
       return BroadcastPurchaseVerification.rejected(
         source: source,
         reason: 'Trusted purchase verification timed out.',
+        failureReason: BroadcastPurchaseFailureReason.transient,
       );
     } catch (error) {
       return BroadcastPurchaseVerification.rejected(
         source: source,
         reason: 'Trusted purchase verification failed: $error',
+        failureReason: BroadcastPurchaseFailureReason.transient,
       );
     } finally {
-      client.close(force: true);
+      operation.close();
+      _requests.remove(operation);
     }
   }
 
@@ -244,6 +395,27 @@ class TrustedBackendPurchaseVerifier implements BroadcastPurchaseVerifier {
       builder.add(chunk);
     }
     return builder.takeBytes();
+  }
+}
+
+class _PurchaseVerificationOperation {
+  _PurchaseVerificationOperation(this.client, this.timeout) {
+    client.connectionTimeout = timeout;
+  }
+
+  final HttpClient client;
+  final Duration timeout;
+  final _closed = Completer<void>();
+
+  Future<T> wait<T>(Future<T> future) => Future.any<T>([
+        future,
+        _closed.future
+            .then<T>((_) => throw StateError('Verification canceled.')),
+      ]).timeout(timeout);
+
+  void close() {
+    if (!_closed.isCompleted) _closed.complete();
+    client.close(force: true);
   }
 }
 

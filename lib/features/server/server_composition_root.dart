@@ -30,6 +30,7 @@ class ServerCompositionRoot {
       Future<void> Function()? startMediaOverride,
       Future<void> Function()? stopOverride,
       bool broadcastPaywallEnabled = MiuCamFeatureFlags.broadcastPaywallEnabled,
+      BroadcastAccessService? sharedBroadcastAccess,
       TransportConfig transportConfig = TransportConfig.local,
       Duration mediaOperationTimeout = const Duration(seconds: 8)}) {
     createCount++;
@@ -39,7 +40,7 @@ class ServerCompositionRoot {
       ),
     );
     final BroadcastAccessService? broadcastAccess = broadcastPaywallEnabled
-        ? BroadcastAccessService(config.preferences)
+        ? sharedBroadcastAccess ?? BroadcastAccessService(config.preferences)
         : null;
     final discoveryIdentity =
         PersistentMiuCamDiscoveryIdentity(config.preferences);
@@ -183,6 +184,7 @@ class ServerCompositionRoot {
       onSettingsChanged: server.reloadAnalysisConfig,
       broadcastAccess: broadcastAccess,
       broadcastAccessChanges: broadcastAccess?.changes,
+      ownsBroadcastAccess: sharedBroadcastAccess == null,
       onMediaDemandChanged: publishRuntimeDemand,
       onVideoEncodingDemandChanged: nativeMediaSource == null
           ? null
