@@ -31,6 +31,46 @@
   });
   openLinkedDetails();
 
+  // Progressive enhancement: all four stories are readable without JavaScript.
+  // No timer or automatic slide changes compete with reading or keyboard focus.
+  const screenTabs = document.querySelector("[data-screen-tabs]");
+  const tabs = [...document.querySelectorAll("[data-screen-tab]")];
+  const panels = tabs.map((tab) => document.getElementById(tab.getAttribute("aria-controls")));
+  if (screenTabs && tabs.length && panels.every(Boolean)) {
+    const selectScreen = (index, focus = false) => {
+      tabs.forEach((tab, position) => {
+        const selected = position === index;
+        tab.setAttribute("aria-selected", String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+        panels[position].hidden = !selected;
+      });
+      if (focus) tabs[index].focus({ preventScroll: true });
+    };
+    screenTabs.setAttribute("role", "tablist");
+    tabs.forEach((tab, index) => {
+      tab.setAttribute("role", "tab");
+      panels[index].setAttribute("role", "tabpanel");
+      panels[index].setAttribute("aria-labelledby", tab.id);
+      panels[index].tabIndex = 0;
+      tab.addEventListener("click", () => selectScreen(index));
+      tab.addEventListener("keydown", (event) => {
+        const rtl = document.documentElement.dir === "rtl";
+        const forward = rtl ? "ArrowLeft" : "ArrowRight";
+        const backward = rtl ? "ArrowRight" : "ArrowLeft";
+        let next;
+        if (event.key === forward) next = (index + 1) % tabs.length;
+        else if (event.key === backward) next = (index - 1 + tabs.length) % tabs.length;
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = tabs.length - 1;
+        else return;
+        event.preventDefault();
+        selectScreen(next, true);
+      });
+    });
+    selectScreen(0);
+    screenTabs.hidden = false;
+  }
+
   const menuLabel = (isOpen) => {
     const key = isOpen ? "menu.close" : "menu.open";
     const fallback = isOpen ? "Menüyü kapat" : "Menüyü aç";

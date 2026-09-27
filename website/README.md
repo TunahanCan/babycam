@@ -73,6 +73,37 @@ belirteçleri çevirilerde aynen koruyun. Dil listesi veya kodları değişirse
 `i18n.js`, `language-init.js`, `scripts/build.mjs`, iki sayfadaki dil
 seçiciler, kataloglar, sitemap ve doğrulayıcı birlikte güncellenmelidir.
 
+## Güncel ürün tanıtımı
+
+İlk ekran oda ve ebeveyn rollerini iki güncel uygulama ekranıyla anlatır.
+`#ekranlar` bölümü canlı takip, oda telefonu, bas-konuş ve uyarı geçmişini dört
+sekmede gösterir. Klavyede ok tuşları, Home ve End desteklenir; Arapçada ok yönü
+RTL düzenine uyar. Otomatik slayt veya sürekli çalışan zamanlayıcı yoktur.
+JavaScript kapalıysa dört hikâye sırayla görünür; kullanılamayan sekmeler gizlidir.
+
+Ekranlar gerçek Flutter widget'larının Türkçe kabul görüntüleridir. Kamera
+alanında örnek yayın kullanıldığı ilk ekranda ve galeride belirtilir. Altı
+WebP kaynağı toplam yaklaşık 171 KiB'dır; görünüm 390×844 olarak korunur.
+Görsellerin kaynağı ve hashleri `assets/screens/manifest.json` içindedir.
+`node website/scripts/refresh-screens.mjs` komutu depo kökünden Node.js ve
+`ffmpeg`/`libwebp` ile görselleri yeniden üretir.
+Ayrıntı: [ekran kaynakları](assets/screens/README.md).
+
+Sosyal paylaşım kartının düzenlenebilir HTML kaynağı `scripts/social-card.html`,
+1200×630 çıktısı `assets/og-cover.png` dosyasıdır. Kartı Chrome ile yeniden
+üretmek için depo kökünden (Linux):
+
+```bash
+google-chrome --headless --disable-gpu --hide-scrollbars \
+  --force-device-scale-factor=1 --window-size=1200,630 --virtual-time-budget=1500 \
+  --screenshot="$PWD/website/assets/og-cover.png" \
+  "file://$PWD/website/scripts/social-card.html"
+```
+
+Ekran turunun yeni metinleri `screens.*`, rol etiketleri `hero.*`, ebeveyn
+telefonundan lisans aktarımı `pricing.familyTitle` / `pricing.familyBody`
+alanlarındadır. Bunlar sekiz dilde birlikte korunmalıdır.
+
 ## Doğrulama
 
 Ana sayfadaki `#fiyatlandirma` bölümü iki saatlik toplam denemeyi, Türkiye hedef
@@ -110,6 +141,11 @@ ve Almanca/Arapça gizlilik sayfası senaryolarında kırık görsel, JavaScript
 hatası, yatay taşma, görünmeden kalan animasyon öğesi, dil rotası ve mobil menü
 davranışını denetler; tam sayfa ekran görüntülerini
 `/tmp/miucam-browser-smoke` altına yazar.
+
+Ekran turunda dört seçeneği açar, görsellerin güncel boyutlarını ve metinlerini
+kontrol eder; LTR/RTL ok tuşları, Home/End, odak ve ARIA eşleşmelerini sınar.
+JavaScript kapalıyken dört ekranın da okunabilir kaldığını doğrular. Masaüstü ve
+RTL mobil için her ekran hikâyesinin ayrı görüntüsünü de kaydeder.
 
 Ayrıca 16 dil/sayfa girişinden dil değişimini; title, menü, erişilebilirlik
 etiketleri, açıklamalar ve RTL durumu üzerinden kontrol eder. Bölüm bağlantısı

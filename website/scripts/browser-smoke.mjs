@@ -331,6 +331,75 @@ const runScenario = async ({
     );
   }
 
+  const tourErrors = await evaluate(`(async () => {
+    const tour = document.querySelector('[data-screen-showcase]');
+    if (!tour) return [];
+    const errors = [];
+    const tabs = [...tour.querySelectorAll('[data-screen-tab]')];
+    const panels = [...tour.querySelectorAll('[data-screen-panel]')];
+    const tablist = tour.querySelector('[data-screen-tabs]');
+    if (tabs.length !== 4 || panels.length !== 4 || tablist.hidden
+      || tablist.getAttribute('role') !== 'tablist') return ['tablist structure'];
+    const selected = (index) => tabs.every((tab, position) =>
+      tab.getAttribute('aria-selected') === String(position === index)
+      && tab.tabIndex === (position === index ? 0 : -1)
+      && panels[position].hidden === (position !== index)
+      && tab.getAttribute('aria-controls') === panels[position].id
+      && panels[position].getAttribute('aria-labelledby') === tab.id
+      && panels[position].getAttribute('role') === 'tabpanel');
+    if (!selected(0)) errors.push('initial selection');
+    const previousScroll = document.documentElement.style.scrollBehavior;
+    document.documentElement.style.scrollBehavior = 'auto';
+    try {
+      for (let index = 0; index < tabs.length; index++) {
+        tabs[index].click();
+        panels[index].scrollIntoView({ behavior: 'instant', block: 'center' });
+        const img = panels[index].querySelector('img');
+        try { await img.decode(); } catch (_) { errors.push('image decode ' + index); }
+        if (!selected(index)) errors.push('selection ' + index);
+        const rect = panels[index].getBoundingClientRect();
+        if (rect.width < 1 || rect.left < -1 || rect.right > innerWidth + 1) errors.push('panel overflow ' + index);
+        if (img.naturalWidth !== 390 || img.naturalHeight !== 844) errors.push('outdated capture ' + index);
+        if (!img.alt || !panels[index].querySelector('h3')?.textContent.trim()) errors.push('missing description ' + index);
+      }
+      tabs[0].click();
+      tabs[0].focus({ preventScroll: true });
+      const rtl = document.documentElement.dir === 'rtl';
+      const press = (key) => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+      const expectSelection = (index, label) => {
+        if (!selected(index) || document.activeElement !== tabs[index]) errors.push(label);
+      };
+      press(rtl ? 'ArrowLeft' : 'ArrowRight'); expectSelection(1, 'forward arrow');
+      press(rtl ? 'ArrowRight' : 'ArrowLeft'); expectSelection(0, 'backward arrow');
+      press(rtl ? 'ArrowRight' : 'ArrowLeft'); expectSelection(3, 'wrap arrow');
+      press('Home'); expectSelection(0, 'home key');
+      press('End'); expectSelection(3, 'end key');
+      tabs[0].click();
+      document.activeElement.blur();
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    } finally {
+      document.documentElement.style.scrollBehavior = previousScroll;
+    }
+    return errors;
+  })()`, true);
+  for (const error of tourErrors) failures.push(`${name}: ekran turu (${error})`);
+
+  if (name === "desktop-home" || name === "mobile-home") {
+    for (const story of ["watch", "room", "comfort", "alerts"]) {
+      const clip = await evaluate(`(() => {
+        document.getElementById('screen-tab-${story}').click();
+        const section = document.getElementById('ekranlar');
+        const rect = section.getBoundingClientRect();
+        return { x: 0, y: rect.top + scrollY, width: innerWidth, height: rect.height, scale: 1 };
+      })()`);
+      const capture = await client.command("Page.captureScreenshot", {
+        format: "png", captureBeyondViewport: true, fromSurface: true, clip,
+      });
+      writeFileSync(resolve(outputDirectory, `${name}-${story}.png`), Buffer.from(capture.data, "base64"));
+    }
+    await evaluate("document.getElementById('screen-tab-watch').click()");
+  }
+
   if (testMenu) {
     const menuResult = await evaluate(`(() => {
       const toggle = document.querySelector('[data-menu-toggle]');
@@ -522,6 +591,12 @@ const runScenario = async ({
             pricingLocalized: ['trialLabel', 'title', 'details', 'region', 'amount', 'payment', 'availability', 'faqLink']
               .every((key) => document.querySelector('[data-i18n="pricing.' + key + '"]')?.textContent
                 === catalog['pricing.' + key]),
+            screenTourLocalized: [...document.querySelectorAll('[data-screen-showcase] [data-i18n], .family-license [data-i18n]')]
+              .every((element) => {
+                const target = element.dataset.i18nTarget;
+                const value = target ? element.getAttribute(target) : element.textContent;
+                return value === catalog[element.dataset.i18n];
+              }),
             pricingOverflow: (() => {
               const card = document.querySelector('.pricing-summary');
               const cardRect = card.getBoundingClientRect();
@@ -563,6 +638,7 @@ const runScenario = async ({
         !result.structuredDataMatches ||
         !result.pathMatches ||
         !result.pricingLocalized ||
+        !result.screenTourLocalized ||
         result.pricingOverflow ||
         result.hasHorizontalOverflow
       ) {
@@ -805,6 +881,9 @@ const runStandardScenarios = async () => {
       headerOverlapsMain: header.getBoundingClientRect().bottom > main.getBoundingClientRect().top + 1,
       hasHorizontalOverflow:
         document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      allScreenStoriesVisible: [...document.querySelectorAll('[data-screen-panel]')]
+        .filter((panel) => getComputedStyle(panel).display !== 'none').length === 4,
+      inactiveTabsHidden: getComputedStyle(document.querySelector('[data-screen-tabs]')).display === 'none',
     };
   })()`);
   if (
@@ -817,6 +896,8 @@ const runStandardScenarios = async () => {
     || !noScriptResult.heading?.includes("Turn your old phone")
     || noScriptResult.headerOverlapsMain
     || noScriptResult.hasHorizontalOverflow
+    || !noScriptResult.allScreenStoriesVisible
+    || !noScriptResult.inactiveTabsHidden
   ) {
     failures.push("mobile-no-script: yerelleştirilmiş JS kapalı mobil yedek düzeni bozuk");
   } else {

@@ -1,0 +1,63 @@
+{
+  "sourceReport": "docs/reports/app_acceptance_2026-09-27/manifest.json",
+  "renderer": "Flutter host widget renderer",
+  "locale": "tr",
+  "fixtures": "Generated loopback media; mocked native output and store states; no real charges.",
+  "conversion": "ffmpeg libwebp; text preset; quality 90; compression level 6; no resizing or content edits",
+  "items": [
+    {
+      "file": "role-selection.webp",
+      "source": "docs/reports/app_acceptance_2026-09-27/screens/01_role.png",
+      "sourceSha256": "7b46bd75f07783642b3ec16df7a062cddb20a90439b08e20de507f30340a1715",
+      "sha256": "e6e146c63ae8fffb50b584d95b1f5aed2bf37d6ab3190306b15c76f1273f36f6",
+      "width": 390,
+      "height": 844,
+      "bytes": 27492
+    },
+    {
+      "file": "client-live.webp",
+      "source": "docs/reports/app_acceptance_2026-09-27/screens/08_watch_live.png",
+      "sourceSha256": "1c652c8b53915e584b741a85ec5966c9bbb79aa4a558fc3e3918619d744f19a2",
+      "sha256": "37d3e7191f65687143f93216c0680b4f19ca1af52b341e9ce44b4f8f437ba7ca",
+      "width": 390,
+      "height": 844,
+      "bytes": 34330
+    },
+    {
+      "file": "room-controls.webp",
+      "source": "docs/reports/app_acceptance_2026-09-27/screens/11_room_controls_bottom.png",
+      "sourceSha256": "71bdfd32ba02f93380d3e896b02f37743aafcf2f9730f5ca46713a10c6aeaf79",
+      "sha256": "f621e81d899aec93ede7ea1767f9bcfcd994d6825d6f4d1c7f7e1df6c31a1971",
+      "width": 390,
+      "height": 844,
+      "bytes": 18274
+    },
+    {
+      "file": "connection-recovery.webp",
+      "source": "docs/reports/app_acceptance_2026-09-27/screens/12_watch_connection_error.png",
+      "sourceSha256": "a9796669605b6d9dff0a04894c93d80d86927b0837dceb094b27a4236fe1ee77",
+      "sha256": "e1b9f1ce295120de77116dbe6cbe12ac2c1ce4c0515623e747ce9ec336e4047b",
+      "width": 390,
+      "height": 844,
+      "bytes": 24802
+    },
+    {
+      "file": "server-preview.webp",
+      "source": "docs/reports/app_acceptance_2026-09-27/screens/14_server_preview_on.png",
+      "sourceSha256": "8fc6dffeef52a70811d78b89cd3e5762e69fcaece20895589289fd2feeb1fb1a",
+      "sha256": "881aa77fe4e7dce5d48b6b98930335f201db8d448afa4d61584151b9f5f3e38e",
+      "width": 390,
+      "height": 844,
+      "bytes": 36834
+    },
+    {
+      "file": "notifications.webp",
+      "source": "docs/reports/app_acceptance_2026-09-27/screens/09_watch_history.png",
+      "sourceSha256": "d6b8975a4ca9ba95de707de010086f05f34d6d78f5ccadf2283d0a9d4ea8f02e",
+      "sha256": "af1999a8d0655c47bd717bb6ad5b1dd3480c63509ad44cc7689fffcab5e19d91",
+      "width": 390,
+      "height": 844,
+      "bytes": 33106
+    }
+  ]
+}
