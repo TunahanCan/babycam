@@ -13,9 +13,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
+from .domain import StoreAdapter, StoreFailure, StoreFailureReason
 from .licenses import LicenseRepository, LicenseSigner, PRODUCT_ID
 from .service import BillingService
-from .stores import AppStore, GooglePlayStore, StoreConfig, StoreFailure
+from .stores import AppStore, GooglePlayStore, StoreConfig
 
 MAX_REQUEST_BYTES = 128 * 1024
 
@@ -24,7 +25,7 @@ def configured_service() -> BillingService:
     key_file = os.environ["MIUCAM_LICENSE_PRIVATE_KEY_FILE"]
     signer = LicenseSigner.from_file(key_file)
     repository = LicenseRepository(os.environ.get("MIUCAM_LICENSE_DATABASE", "/data/licenses.sqlite3"))
-    stores = {}
+    stores: dict[str, StoreAdapter] = {}
     environment = os.environ.get("MIUCAM_STORE_ENVIRONMENT", "production")
     if environment not in ("production", "sandbox"):
         raise ValueError("MIUCAM_STORE_ENVIRONMENT must be production or sandbox")
@@ -122,7 +123,7 @@ def create_app(service: BillingService | None = None, *, run_recovery: bool = Tr
 
     @app.exception_handler(StoreFailure)
     async def store_failure(_, error):
-        status = 503 if error.reason in ("transient", "configuration") else 200
+        status = 503 if error.reason in (StoreFailureReason.TRANSIENT, StoreFailureReason.CONFIGURATION) else 200
         return JSONResponse({"verified": False, "reasonCode": error.reason,
                              "reason": "Purchase verification is unavailable." if status == 503 else "The store did not verify this purchase."},
                             status_code=status)
@@ -140,7 +141,8 @@ def create_app(service: BillingService | None = None, *, run_recovery: bool = Tr
 
     @app.get("/health")
     async def health(request: Request):
-        return {"ok": True, "sources": sorted(request.app.state.billing.stores), "productId": PRODUCT_ID}
+        billing = request.app.state.billing
+        return {"ok": True, "sources": billing.available_sources, "productId": billing.product_id}
 
     @app.post("/verify")
     async def verify(request: Request):
@@ -156,11 +158,7 @@ def create_app(service: BillingService | None = None, *, run_recovery: bool = Tr
         payload = body.get("signedPayload")
         if not isinstance(payload, str):
             raise StoreFailure("rejected")
-        billing = request.app.state.billing
-        store = billing._store("app_store")
-        reference = await run_in_threadpool(store.notification_reference, payload)
-        if reference:
-            await run_in_threadpool(billing.reconcile, "app_store", reference)
+        await run_in_threadpool(request.app.state.billing.process_apple_notification, payload)
         return {"ok": True}
 
     @app.post("/notifications/google")

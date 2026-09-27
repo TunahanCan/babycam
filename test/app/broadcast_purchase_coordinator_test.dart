@@ -5,17 +5,142 @@ import 'package:miucam/app/broadcast_purchase_coordinator.dart';
 import 'package:miucam/core/protocol/pairing_payload.dart';
 import 'package:miucam/core/protocol/pairing_session.dart';
 import 'package:miucam/features/client/client_runtime.dart';
-import 'package:miucam/features/client/media/remote_broadcast_access_client.dart';
 import 'package:miucam/features/server/media/media_runtime_controller.dart';
 import 'package:miucam/features/server/server_runtime.dart';
 import 'package:miucam/services/monetization/broadcast_access_service.dart';
 import 'package:miucam/services/monetization/license_grant.dart';
+import 'package:miucam/services/monetization/pending_room_activation_repository.dart';
+import 'package:miucam/services/monetization/room_broadcast_access_gateway.dart';
+import 'package:miucam/services/monetization/shared_preferences_pending_room_activation_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/license_token_fixture.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('forgetting a room during preflight prevents checkout', () async {
+    final h = await _Harness.create();
+    h.remote.holdSupport = Completer<void>();
+    try {
+      final purchase = h.coordinator.purchaseForRoom(_session('A'));
+      await h.remote.supportEntered.future;
+      await h.coordinator.forgetRoom('A');
+      h.remote.holdSupport!.complete();
+      expect(await purchase, isNull);
+      expect(h.gateway.purchases, 0);
+      expect(h.remote.snapshotReads, 0);
+      expect(h.coordinator.stateFor('A').phase, ParentPurchasePhase.ready);
+    } finally {
+      await h.coordinator.dispose();
+    }
+  });
+
+  test(
+      'unpair during checkout preserves payment without delivering to old room',
+      () async {
+    final h = await _Harness.create();
+    h.gateway.hold = Completer<void>();
+    try {
+      final purchase = h.coordinator.purchaseForRoom(_session('A'));
+      await h.gateway.entered.future;
+      await h.coordinator.forgetRoom('A');
+      h.gateway.hold!.complete();
+      expect(await purchase, isNull);
+      await _until(() => !h.coordinator.operationInProgress);
+      expect(h.access.licenseToken, h.token);
+      expect(h.remote.activated, isEmpty);
+      expect(h.gateway.purchases, 1);
+      expect(h.coordinator.stateFor('A').phase, ParentPurchasePhase.ready);
+      expect(h.preferences.getStringList('broadcast_purchase.pending_rooms'),
+          isEmpty);
+      await h.coordinator.purchaseForRoom(_session('B'));
+      expect(h.remote.activated.single.deviceId, 'B');
+      expect(h.gateway.purchases, 1);
+    } finally {
+      await h.coordinator.dispose();
+    }
+  });
+
+  test('re-pairing the same room invalidates its old in-flight activation',
+      () async {
+    final h = await _Harness.create();
+    h.remote.holdFirstSnapshot = Completer<void>();
+    try {
+      await h.access.applyVerifiedLicenseGrant(await h.verifier
+          .verify(h.token, expectedProductId: BroadcastAccessConfig.productId));
+      h.coordinator.attachSession(_session('A', token: 'old-session'));
+      await h.remote.snapshotEntered.future;
+      await h.coordinator.forgetRoom('A');
+      h.coordinator.attachSession(_session('A', token: 'new-session'));
+      h.remote.holdFirstSnapshot!.complete();
+      await _until(() => !h.coordinator.operationInProgress);
+      await h.coordinator.retryPending();
+      expect(h.remote.activated.single.sessionToken, 'new-session');
+      expect(h.coordinator.stateFor('A').phase, ParentPurchasePhase.activated);
+      expect(h.gateway.purchases, 0);
+    } finally {
+      await h.coordinator.dispose();
+    }
+  });
+
+  test('late activation response cannot restore a forgotten room state',
+      () async {
+    final h = await _Harness.create();
+    h.remote.holdFirstActivation = Completer<void>();
+    try {
+      final purchase = h.coordinator.purchaseForRoom(_session('A'));
+      await h.remote.activationEntered.future;
+      await h.coordinator.forgetRoom('A');
+      h.remote.holdFirstActivation!.complete();
+      expect(await purchase, isNull);
+      expect(h.coordinator.stateFor('A').phase, ParentPurchasePhase.ready);
+      expect(h.preferences.getStringList('broadcast_purchase.pending_rooms'),
+          isEmpty);
+      expect(h.access.licenseToken, h.token);
+    } finally {
+      await h.coordinator.dispose();
+    }
+  });
+
+  test('destination storage failure prevents a chargeable checkout', () async {
+    final h = await _Harness.create(pendingActivations: _FailingDestinations());
+    try {
+      expect(await h.coordinator.purchaseForRoom(_session('A')), isNull);
+      expect(h.gateway.purchases, 0);
+      expect(h.remote.activated, isEmpty);
+      expect(h.coordinator.stateFor('A').phase, ParentPurchasePhase.failed);
+    } finally {
+      await h.coordinator.dispose();
+    }
+  });
+
+  test('cleanup failure keeps delivered access visible and retries the cleanup',
+      () async {
+    final destinations = _CleanupFailingDestinations();
+    final h = await _Harness.create(pendingActivations: destinations);
+    h.coordinator.onBackground();
+    try {
+      final delivered = await h.coordinator.purchaseForRoom(_session('A'));
+      expect(delivered?.unlocked, isTrue);
+      expect(h.coordinator.stateFor('A').phase, ParentPurchasePhase.activated);
+      expect(destinations.load(), {'A'});
+      expect(h.remote.activated.length, 1);
+
+      destinations.failCleanup = false;
+      // A real room now reports the delivered entitlement as active; retrying
+      // disk cleanup must not open checkout or send another activation token.
+      h.remote.roomSnapshots['A'] = delivered!;
+      await h.coordinator.onForeground();
+      await _until(() => !h.coordinator.operationInProgress);
+      expect(destinations.load(), isEmpty);
+      expect(h.remote.activated.length, 1);
+      expect(h.gateway.purchases, 1);
+      expect(h.coordinator.stateFor('A').phase, ParentPurchasePhase.activated);
+    } finally {
+      await h.coordinator.dispose();
+    }
+  });
 
   test('checkout remains bound to A while the parent changes to room B',
       () async {
@@ -67,7 +192,8 @@ void main() {
         purchaseGateway: gateway, licenseGrantVerifier: h.verifier);
     final remote = _Remote();
     final reopened = BroadcastPurchaseCoordinator(
-      preferences: h.preferences,
+      pendingActivations:
+          SharedPreferencesPendingRoomActivationRepository(h.preferences),
       access: service,
       remote: remote,
       licenseVerifier: h.verifier,
@@ -333,7 +459,9 @@ class _Harness {
   final BroadcastPurchaseCoordinator coordinator;
 
   static Future<_Harness> create(
-      {bool keyConfigured = true, bool legacy = false}) async {
+      {bool keyConfigured = true,
+      bool legacy = false,
+      PendingRoomActivationRepository? pendingActivations}) async {
     SharedPreferences.setMockInitialValues(legacy
         ? {
             'broadcast_access.unlocked': true,
@@ -354,7 +482,8 @@ class _Harness {
         purchaseGateway: gateway, licenseGrantVerifier: verifier);
     final remote = _Remote();
     final coordinator = BroadcastPurchaseCoordinator(
-      preferences: preferences,
+      pendingActivations: pendingActivations ??
+          SharedPreferencesPendingRoomActivationRepository(preferences),
       access: access,
       remote: remote,
       licenseVerifier: verifier,
@@ -414,7 +543,7 @@ class _Gateway extends BroadcastPurchaseGateway
   Future<void> dispose() async => disposed = true;
 }
 
-class _Remote extends RemoteBroadcastAccessClient {
+class _Remote implements RoomBroadcastAccessGateway {
   bool supported = true;
   bool offline = false;
   final activated = <PairingSession>[];
@@ -428,8 +557,15 @@ class _Remote extends RemoteBroadcastAccessClient {
   Completer<void>? holdFirstSnapshot;
   final roomSnapshots = <String, BroadcastAccessSnapshot>{};
   final roomTokens = <String, String>{};
+  Completer<void>? holdSupport;
+  final supportEntered = Completer<void>();
   @override
-  Future<bool> supportsActivation(PairingSession session) async => supported;
+  Future<bool> supportsActivation(PairingSession session) async {
+    if (!supportEntered.isCompleted) supportEntered.complete();
+    await holdSupport?.future;
+    return supported;
+  }
+
   @override
   Future<BroadcastAccessSnapshot?> snapshot(PairingSession session) async {
     snapshotReads++;
@@ -452,6 +588,29 @@ class _Remote extends RemoteBroadcastAccessClient {
     if (!activationEntered.isCompleted) activationEntered.complete();
     if (activationTokens.length == 1) await holdFirstActivation?.future;
     return _locked.copyWith(unlocked: licenseToken != revokedToken);
+  }
+}
+
+class _FailingDestinations implements PendingRoomActivationRepository {
+  @override
+  Set<String> load() => {};
+
+  @override
+  Future<void> save(Set<String> roomIds) async =>
+      throw StateError('Storage unavailable');
+}
+
+class _CleanupFailingDestinations implements PendingRoomActivationRepository {
+  bool failCleanup = true;
+  Set<String> _saved = {};
+
+  @override
+  Set<String> load() => Set.of(_saved);
+
+  @override
+  Future<void> save(Set<String> roomIds) async {
+    if (roomIds.isEmpty && failCleanup) throw StateError('Disk unavailable');
+    _saved = Set.of(roomIds);
   }
 }
 

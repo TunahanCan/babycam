@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miucam/core/network/retry_policy.dart';
 
@@ -72,4 +74,61 @@ void main() {
 
     expect(policy.delayForAttempt(3), const Duration(seconds: 2));
   });
+
+  for (final scenario in [
+    (
+      name: 'multiplier one',
+      initial: const Duration(milliseconds: 250),
+      multiplier: 1.0
+    ),
+    (name: 'zero delay', initial: Duration.zero, multiplier: 1.7),
+    (
+      name: 'rounded stationary delay',
+      initial: const Duration(milliseconds: 1),
+      multiplier: 1.1
+    ),
+  ]) {
+    test(
+        '${scenario.name} resolves huge attempts without iterating per attempt',
+        () async {
+      expect(
+        await _delayWithDeadline(scenario.initial, const Duration(days: 1),
+            scenario.multiplier, 1 << 60),
+        scenario.initial,
+      );
+    });
+  }
+
+  test('finite multiplier whose product overflows reaches the cap safely',
+      () async {
+    expect(
+      await _delayWithDeadline(const Duration(seconds: 1),
+          const Duration(seconds: 10), double.maxFinite, 1 << 60),
+      const Duration(seconds: 10),
+    );
+  });
+}
+
+// Run potentially unbounded regressions in a killable worker. A broken policy
+// fails within the deadline instead of freezing the entire test runner.
+Future<Duration> _delayWithDeadline(
+    Duration initial, Duration maximum, double multiplier, int attempt) async {
+  final results = ReceivePort();
+  final worker = await Isolate.spawn(_calculateDelay,
+      (results.sendPort, initial, maximum, multiplier, attempt));
+  try {
+    return await results.first.timeout(const Duration(seconds: 2)) as Duration;
+  } finally {
+    worker.kill(priority: Isolate.immediate);
+    results.close();
+  }
+}
+
+void _calculateDelay((SendPort, Duration, Duration, double, int) request) {
+  final (reply, initial, maximum, multiplier, attempt) = request;
+  reply.send(ExponentialBackoffPolicy(
+    initialDelay: initial,
+    maxDelay: maximum,
+    multiplier: multiplier,
+  ).delayForAttempt(attempt));
 }

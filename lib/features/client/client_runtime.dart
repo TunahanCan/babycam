@@ -957,6 +957,7 @@ class ClientRuntime implements AppRuntime {
 
   Future<void> clearPairing() async {
     if (_disposed) return;
+    final forgettingRoom = _forgetPurchaseRoom(_state.session?.deviceId);
     await stopWatching();
     await stopAlertListening();
     await _networkQualitySubscription?.cancel();
@@ -964,12 +965,15 @@ class ClientRuntime implements AppRuntime {
     await _cancelEndpointResolution();
     await _clearStore?.call();
     await alertHistory.clear();
-    _emit(const ClientRuntimeState(
+    final forgetError = await forgettingRoom;
+    _emit(ClientRuntimeState(
       phase: ClientRuntimePhase.unpaired,
+      error: forgetError,
     ));
   }
 
   Future<void> _handleRevokedSession(PairingSession session) async {
+    final forgettingRoom = _forgetPurchaseRoom(session.deviceId);
     await _networkQualitySubscription?.cancel();
     _networkQualitySubscription = null;
     await _cancelEndpointResolution();
@@ -990,15 +994,30 @@ class ClientRuntime implements AppRuntime {
       });
     } catch (_) {}
     await _clearStore?.call();
+    final forgetError = await forgettingRoom;
     if (_disposed) return;
     _emit(ClientRuntimeState(
       phase: ClientRuntimePhase.revoked,
       session: session,
+      error: forgetError,
       networkQuality: _state.networkQuality,
       mediaProfile: _state.mediaProfile,
       alertsActive: false,
       broadcastAccess: _state.broadcastAccess,
     ));
+  }
+
+  Future<Object?> _forgetPurchaseRoom(String? roomId) async {
+    if (roomId == null) return null;
+    _appliedPurchaseAccess.remove(roomId);
+    try {
+      // Invalidate borrowed room credentials immediately. Storage failure must
+      // not interrupt stream/alert teardown or retain a revoked pairing state.
+      await purchases?.forgetRoom(roomId);
+      return null;
+    } catch (error) {
+      return error;
+    }
   }
 
   @override

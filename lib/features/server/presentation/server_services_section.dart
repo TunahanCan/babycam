@@ -127,15 +127,30 @@ class _PlatformRuntimeContractCard extends StatefulWidget {
 }
 
 class _PlatformRuntimeContractCardState
-    extends State<_PlatformRuntimeContractCard> {
+    extends State<_PlatformRuntimeContractCard> with WidgetsBindingObserver {
   static const _contract = PlatformRuntimeContract();
   Timer? _refreshTimer;
   PlatformRuntimeSnapshot? _snapshot;
   bool _refreshInFlight = false;
+  int _refreshGeneration = 0;
+
+  bool get _foreground {
+    final state = WidgetsBinding.instance.lifecycleState;
+    return state == null || state == AppLifecycleState.resumed;
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _configurePolling();
+  }
+
+  void _configurePolling() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
+    _refreshGeneration++;
+    if (!_foreground) return;
     unawaited(_refresh());
     // ServerRuntime is the sole native EventChannel owner. This read-only
     // method-channel snapshot avoids replacing its event sink on iOS/Android.
@@ -146,7 +161,12 @@ class _PlatformRuntimeContractCardState
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) =>
+      _configurePolling();
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     super.dispose();
   }
@@ -223,11 +243,14 @@ class _PlatformRuntimeContractCardState
   }
 
   Future<void> _refresh() async {
-    if (_refreshInFlight) return;
+    if (!mounted || !_foreground || _refreshInFlight) return;
+    final generation = _refreshGeneration;
     _refreshInFlight = true;
     try {
       final snapshot = await _contract.snapshot();
-      if (mounted) setState(() => _snapshot = snapshot);
+      if (mounted && _foreground && generation == _refreshGeneration) {
+        setState(() => _snapshot = snapshot);
+      }
     } catch (_) {
       // Keep the last known snapshot. The next poll retries without creating
       // overlapping method-channel calls or disturbing the server runtime.

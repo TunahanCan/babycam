@@ -4,11 +4,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import '../../../core/media/media_session_telemetry.dart';
+import '../../../services/server/http_media_response_lifecycle.dart';
 import '../../../services/server/stream_backpressure_gate.dart';
 
-typedef MjpegResponseFlusher = Future<void> Function(HttpResponse response);
-
-Future<void> _flushMjpegResponse(HttpResponse response) => response.flush();
+typedef MjpegResponseFlusher = HttpMediaResponseFlusher;
 
 class MjpegStreamService {
   static final _keepAlivePart =
@@ -19,12 +18,15 @@ class MjpegStreamService {
     MjpegResponseFlusher? responseFlusher,
     void Function(String clientId)? onClientDetached,
     MediaSessionTelemetry? telemetry,
-  })  : _responseFlusher = responseFlusher ?? _flushMjpegResponse,
+  })  : _responseLifecycle = HttpMediaResponseLifecycle(
+          timeout: flushTimeout,
+          flusher: responseFlusher,
+        ),
         _onClientDetached = onClientDetached,
         _telemetry = telemetry ?? MediaSessionTelemetry.shared;
 
   final Duration flushTimeout;
-  final MjpegResponseFlusher _responseFlusher;
+  final HttpMediaResponseLifecycle _responseLifecycle;
   final void Function(String clientId)? _onClientDetached;
   final MediaSessionTelemetry _telemetry;
   final _clients = <HttpResponse>{};
@@ -78,15 +80,15 @@ class MjpegStreamService {
       _backpressure.tryMarkBusy(response);
       try {
         response.add(_keepAlivePart);
-        await _flushWithTimeout(response);
+        await _responseLifecycle.flush(response);
       } on TimeoutException {
         _backpressure.recordFailure(response);
         removeClient(response);
-        await _closeResponseBestEffort(response);
+        await _responseLifecycle.close(response);
       } catch (_) {
         _backpressure.recordFailure(response);
         removeClient(response);
-        await _closeResponseBestEffort(response);
+        await _responseLifecycle.close(response);
         rethrow;
       } finally {
         _backpressure.markIdle(response);
@@ -110,11 +112,11 @@ class MjpegStreamService {
     } on TimeoutException {
       _backpressure.recordFailure(response);
       removeClient(response);
-      await _closeResponseBestEffort(response);
+      await _responseLifecycle.close(response);
     } catch (_) {
       _backpressure.recordFailure(response);
       removeClient(response);
-      await _closeResponseBestEffort(response);
+      await _responseLifecycle.close(response);
       rethrow;
     } finally {
       _backpressure.markIdle(response);
@@ -195,7 +197,7 @@ class MjpegStreamService {
         _backpressure.recordFailure(client);
         removeClient(client);
       }
-      await _closeResponseBestEffort(client);
+      await _responseLifecycle.close(client);
     } finally {
       _backpressure.markIdle(client);
       final pending = _pendingFrames.remove(client);
@@ -227,14 +229,14 @@ class MjpegStreamService {
         .toList(growable: false);
     for (final response in responses) {
       removeClient(response);
-      await _closeResponseBestEffort(response);
+      await _responseLifecycle.close(response);
     }
   }
 
   Future<void> closeAll() async {
     for (final response in _clients.toList()) {
       removeClient(response);
-      await _closeResponseBestEffort(response);
+      await _responseLifecycle.close(response);
     }
     _clients.clear();
     _clientIds.clear();
@@ -248,26 +250,6 @@ class MjpegStreamService {
     _lastSequence = 0;
     _lastClientWriteAtMs = null;
     _backpressure.clear();
-  }
-
-  Future<void> _flushWithTimeout(HttpResponse response) async {
-    await _responseFlusher(response).timeout(flushTimeout);
-    // dart:io may swallow a peer SocketException while flushing a server
-    // response. Its done future then stays pending until explicitly closed.
-    // Retire that transport now so a disconnected viewer is not billed.
-    if (response.connectionInfo == null) {
-      throw const HttpException('Media connection closed.');
-    }
-  }
-
-  Future<void> _closeResponseBestEffort(HttpResponse response) async {
-    try {
-      // Future.timeout only stops waiting; an output-stalled socket otherwise
-      // stays alive after its client/demand has been removed. The response
-      // deadline also terminates that underlying connection.
-      response.deadline = flushTimeout;
-      await response.close().timeout(flushTimeout);
-    } catch (_) {}
   }
 
   void _recordSuccess(HttpResponse response, {required Duration duration}) {
@@ -299,7 +281,7 @@ class MjpegStreamService {
     ));
     response.add(jpeg);
     response.add(utf8.encode('\r\n'));
-    await _flushWithTimeout(response);
+    await _responseLifecycle.flush(response);
   }
 }
 

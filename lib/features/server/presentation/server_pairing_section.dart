@@ -27,15 +27,22 @@ class ServerPairingSection extends StatefulWidget {
   State<ServerPairingSection> createState() => _ServerPairingSectionState();
 }
 
-class _ServerPairingSectionState extends State<ServerPairingSection> {
+class _ServerPairingSectionState extends State<ServerPairingSection>
+    with WidgetsBindingObserver {
   bool _refreshing = false;
   Timer? _ticketExpiryTimer;
   StreamSubscription<void>? _trustedDevicesSubscription;
   String? _autoRefreshAttemptedPayload;
 
+  bool get _foreground {
+    final state = WidgetsBinding.instance.lifecycleState;
+    return state == null || state == AppLifecycleState.resumed;
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _listenForPairingChanges();
     _scheduleTicketRefresh();
   }
@@ -63,13 +70,21 @@ class _ServerPairingSectionState extends State<ServerPairingSection> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ticketExpiryTimer?.cancel();
     unawaited(_trustedDevicesSubscription?.cancel());
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _scheduleTicketRefresh();
+  }
+
   void _scheduleTicketRefresh() {
     _ticketExpiryTimer?.cancel();
+    _ticketExpiryTimer = null;
+    if (!_foreground) return;
     final rawPayload = widget.state.qrPayload;
     final ticket = rawPayload == null
         ? null
@@ -80,24 +95,30 @@ class _ServerPairingSectionState extends State<ServerPairingSection> {
     if (remaining <= Duration.zero ||
         !widget.runtime.isPairingNonceActive(ticket.pairingNonce)) {
       if (_autoRefreshAttemptedPayload == rawPayload) return;
-      _autoRefreshAttemptedPayload = rawPayload;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_refreshPairingTicket());
+        _autoRefreshTicket(rawPayload);
       });
       return;
     }
     _ticketExpiryTimer = Timer(
       remaining + const Duration(milliseconds: 250),
-      () {
-        if (!mounted || _autoRefreshAttemptedPayload == rawPayload) return;
-        _autoRefreshAttemptedPayload = rawPayload;
-        unawaited(_refreshPairingTicket());
-      },
+      () => _autoRefreshTicket(rawPayload),
     );
   }
 
+  void _autoRefreshTicket(String rawPayload) {
+    if (!mounted ||
+        !_foreground ||
+        widget.state.qrPayload != rawPayload ||
+        _autoRefreshAttemptedPayload == rawPayload) {
+      return;
+    }
+    _autoRefreshAttemptedPayload = rawPayload;
+    unawaited(_refreshPairingTicket());
+  }
+
   Future<bool> _refreshPairingTicket() async {
-    if (_refreshing || !mounted) return false;
+    if (_refreshing || !mounted || !_foreground) return false;
     setState(() => _refreshing = true);
     try {
       await widget.runtime.startPairingMode();

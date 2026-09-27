@@ -9,14 +9,7 @@ from urllib.parse import quote
 import requests
 from appstoreserverlibrary.signed_data_verifier import VerificationException, VerificationStatus
 
-from .licenses import PRODUCT_ID, StorePurchase, fingerprint
-
-
-class StoreFailure(Exception):
-    def __init__(self, reason: str = "transient"):
-        # Never retain/log an upstream exception: its URL can contain a receipt.
-        super().__init__(reason)
-        self.reason = reason
+from .domain import PRODUCT_ID, PurchaseStatus, StoreFailure, StorePurchase, StoreSource, fingerprint
 
 
 @dataclass(frozen=True)
@@ -27,7 +20,7 @@ class StoreConfig:
 
 
 class GooglePlayStore:
-    source = "google_play"
+    source = StoreSource.GOOGLE_PLAY
     base_url = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications"
 
     def __init__(self, config: StoreConfig, credentials=None, session_factory=None):
@@ -99,16 +92,16 @@ class GooglePlayStore:
         return StorePurchase(
             self.source, reference,
             fingerprint(self.source, self.config.application_id, self.config.product_id, reference),
-            "revoked" if revoked else "active",
+            PurchaseStatus.REVOKED if revoked else PurchaseStatus.ACTIVE,
             data.get("acknowledgementState") == "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED",
         )
 
-    def acknowledge(self, reference: str):
+    def acknowledge(self, reference: str) -> None:
         self._request("POST", f"purchases/products/{quote(self.config.product_id, safe='')}/tokens/{quote(reference, safe='')}:acknowledge", json={})
 
 
 class AppStore:
-    source = "app_store"
+    source = StoreSource.APP_STORE
 
     def __init__(self, config: StoreConfig, client, verifier, receipt_utility=None):
         self.config = config
@@ -199,7 +192,7 @@ class AppStore:
             self.source, transaction.originalTransactionId,
             fingerprint(self.source, self.config.application_id, self.config.product_id,
                         transaction.originalTransactionId),
-            "revoked" if transaction.revocationDate is not None else "active",
+            PurchaseStatus.REVOKED if transaction.revocationDate is not None else PurchaseStatus.ACTIVE,
         )
 
     def notification_reference(self, signed_payload: str) -> str | None:

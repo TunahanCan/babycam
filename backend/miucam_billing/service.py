@@ -1,17 +1,29 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Mapping
 from contextlib import contextmanager
+from types import MappingProxyType
 
+from .domain import (AcknowledgingStore, PurchaseStatus, SignedNotificationStore,
+                     StoreAdapter, StoreFailure, StoreFailureReason, StoreSource)
 from .licenses import LicenseRepository, LicenseSigner
-from .stores import StoreFailure
 
 
 class BillingService:
-    def __init__(self, repository: LicenseRepository, signer: LicenseSigner, stores: dict):
+    def __init__(self, repository: LicenseRepository, signer: LicenseSigner,
+                 stores: Mapping[str, StoreAdapter]):
         self.repository = repository
         self.signer = signer
-        self.stores = stores
+        # Composition owns adapter selection; request handlers cannot mutate it
+        # midway through a checkout or background acknowledgement.
+        registry: dict[str, StoreAdapter] = {}
+        for source, store in stores.items():
+            normalized = StoreSource(source)
+            if StoreSource(store.source) != normalized:
+                raise ValueError("Store adapter does not match its registered source")
+            registry[normalized.value] = store
+        self.stores: Mapping[str, StoreAdapter] = MappingProxyType(registry)
         self._mutex = threading.Lock()
         self._operations = {}
 
@@ -38,13 +50,38 @@ class BillingService:
                 else:
                     self._operations[key] = (lock, users - 1)
 
-    def _store(self, source):
-        if not isinstance(source, str) or source not in ("google_play", "app_store"):
-            raise StoreFailure("rejected")
-        store = self.stores.get(source)
+    @property
+    def available_sources(self) -> tuple[str, ...]:
+        return tuple(sorted(self.stores))
+
+    @property
+    def product_id(self) -> str:
+        return self.signer.product_id
+
+    def _store(self, source: object) -> StoreAdapter:
+        if not isinstance(source, str):
+            raise StoreFailure(StoreFailureReason.REJECTED)
+        try:
+            normalized = StoreSource(source)
+        except ValueError:
+            raise StoreFailure(StoreFailureReason.REJECTED) from None
+        store = self.stores.get(normalized)
         if store is None:
-            raise StoreFailure("configuration")
+            raise StoreFailure(StoreFailureReason.CONFIGURATION)
         return store
+
+    def process_apple_notification(self, signed_payload: str) -> None:
+        """Verify the notification, then reconcile its canonical purchase.
+
+        The HTTP adapter owns request/authentication concerns, while this use
+        case owns store selection and the reconciliation/transaction boundary.
+        """
+        store = self._store(StoreSource.APP_STORE)
+        if not isinstance(store, SignedNotificationStore):
+            raise StoreFailure(StoreFailureReason.CONFIGURATION)
+        reference = store.notification_reference(signed_payload)
+        if reference is not None:
+            self.reconcile(StoreSource.APP_STORE, reference)
 
     def verify(self, body: dict) -> dict:
         token = body.get("licenseToken")
@@ -77,7 +114,9 @@ class BillingService:
             # SQLite commit precedes both the signed response and any fallback
             # store acknowledgement. A process crash cannot lose delivery.
             record = self.repository.save(purchase)
-            if acknowledge and purchase.status == "active" and not purchase.acknowledged:
+            if acknowledge and purchase.status == PurchaseStatus.ACTIVE and not purchase.acknowledged:
+                if not isinstance(store, AcknowledgingStore):
+                    raise StoreFailure(StoreFailureReason.CONFIGURATION)
                 store.acknowledge(reference)
                 # Confirm the final state rather than assuming the POST won its
                 # race with a cancellation. Uncertain results remain retryable.
@@ -85,7 +124,7 @@ class BillingService:
             return self.response(record)
 
     def response(self, record: dict) -> dict:
-        active = record["status"] == "active"
+        active = record["status"] == PurchaseStatus.ACTIVE
         result = {
             "verified": active, "source": record["source"], "productId": self.signer.product_id,
             "entitlementId": record["entitlement_id"], "transactionFingerprint": record["fingerprint"],

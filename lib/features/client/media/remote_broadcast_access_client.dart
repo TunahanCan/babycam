@@ -5,12 +5,13 @@ import 'dart:typed_data';
 import '../../../core/protocol/miucam_protocol.dart';
 import '../../../core/protocol/pairing_session.dart';
 import '../../../core/protocol/server_endpoint_builder.dart';
-import '../../../services/monetization/broadcast_access_service.dart';
+import '../../../services/monetization/broadcast_access_models.dart';
 import '../../../services/monetization/license_grant.dart';
+import '../../../services/monetization/room_broadcast_access_gateway.dart';
 
 /// Reads the room server's authoritative trial/entitlement state before a
 /// client-side deadline is allowed to stop a live stream.
-class RemoteBroadcastAccessClient {
+class RemoteBroadcastAccessClient implements RoomBroadcastAccessGateway {
   RemoteBroadcastAccessClient({
     this.timeout = const Duration(milliseconds: 1200),
     this.maxResponseBytes = 64 * 1024,
@@ -21,16 +22,19 @@ class RemoteBroadcastAccessClient {
   final int maxResponseBytes;
   final HttpClient Function() _clientFactory;
 
+  @override
   Future<BroadcastAccessSnapshot?> snapshot(PairingSession session) async {
     final decoded = await _request(session, MiuCamProtocolV2.status);
     return _snapshotFrom(decoded);
   }
 
+  @override
   Future<bool> supportsActivation(PairingSession session) async {
     final decoded = await _request(session, MiuCamProtocolV2.status);
     return decoded['supportsBroadcastLicenseActivation'] == true;
   }
 
+  @override
   Future<String?> readLicense(PairingSession session) async {
     final decoded = await _request(
       session,
@@ -47,6 +51,7 @@ class RemoteBroadcastAccessClient {
     return token;
   }
 
+  @override
   Future<BroadcastAccessSnapshot> activate(
     PairingSession session,
     String licenseToken,

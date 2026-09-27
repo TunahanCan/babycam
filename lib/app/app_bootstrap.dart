@@ -16,7 +16,7 @@ import '../features/server/server_runtime.dart';
 import '../l10n/app_strings.dart';
 import '../services/configuration_service.dart';
 import '../services/client_preferences_service.dart';
-import '../services/monetization/broadcast_access_service.dart';
+import 'broadcast_purchase_composition_root.dart';
 import 'broadcast_purchase_coordinator.dart';
 import 'app_role.dart';
 import 'app_runtime.dart';
@@ -98,10 +98,7 @@ class _AppBootstrapState extends State<AppBootstrap>
       final role = await RoleResolver(roles).resolve();
       if (!mounted) return;
       if (MiuCamFeatureFlags.broadcastPaywallEnabled) {
-        _purchases ??= BroadcastPurchaseCoordinator(
-          preferences: prefs,
-          access: BroadcastAccessService(prefs),
-        );
+        _purchases ??= BroadcastPurchaseCompositionRoot.create(prefs);
         unawaited(_purchases!.onForeground().catchError((_) {}));
       }
       widget.onLocaleChanged?.call(ClientPreferencesService(prefs).locale);

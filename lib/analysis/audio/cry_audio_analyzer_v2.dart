@@ -42,6 +42,10 @@ class CryAudioAnalyzerV2 {
   final AudioAnalysisConfig config;
   final AudioRingBuffer _ring;
   final GoertzelBandAnalyzer _goertzel;
+  // Synchronous analysis owns these buffers. They never escape in results
+  // and are allocated lazily, so disabled analysis does not pay their cost.
+  late final Int16List _windowSamples = Int16List(_ring.windowSamples);
+  late final Float64List _normalizedSamples = Float64List(_ring.windowSamples);
   AudioCalibrationState _state = AudioCalibrationState.uncalibrated;
   int? _calibrationStartMs;
   final List<double> _calibrationDbfs = [];
@@ -176,7 +180,8 @@ class CryAudioAnalyzerV2 {
           chunkStartMs + (end * 1000 / max(1, chunk.sampleRate)).round();
       _ring.addSamples(part, timestampMs: partTimestampMs);
       if (_ring.shouldAnalyze(partTimestampMs)) {
-        results.add(_analyzeWindow(_ring.readLatestWindow(), partTimestampMs));
+        _ring.copyLatestWindow(_windowSamples);
+        results.add(_analyzeWindow(_windowSamples, partTimestampMs));
       }
       offset = end;
     }
@@ -196,7 +201,7 @@ class CryAudioAnalyzerV2 {
   AudioAnalysisResult _analyzeWindow(Int16List samples, int timestampMs) {
     final sw = Stopwatch()..start();
     if (samples.isEmpty) return _invalidResult(timestampMs);
-    final normalized = List<double>.filled(samples.length, 0);
+    final normalized = _normalizedSamples;
     var sumSq = 0.0;
     var peak = 0.0;
     var crossings = 0;

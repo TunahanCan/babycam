@@ -14,11 +14,14 @@ MiuCam tek Flutter uygulamasi icinde iki rol tasir:
   cikisa yazar, alert dinler, local notification uretir ve server'a kalite
   raporu gonderir.
 
-Aktif runtime modeli local-first'tur. Bulut relay, hesap sistemi, internetten
-sinirsiz erisim, Apple Watch, HTTPS/WSS ve dogrudan Bluetooth video/ses tasima
+Aktif medya runtime modeli local-first'tur. Bulut relay, hesap sistemi, internetten
+sinirsiz erisim, Apple Watch, yerel medya icin HTTPS/WSS ve dogrudan Bluetooth video/ses tasima
 bu mimarinin aktif parcasi degildir. Varsayilan media yolu MJPEG/WAV'dir;
 WebRTC H.264 + Opus ise capability probe ile acilan, tek peer'li ve otomatik
 MJPEG/WAV fallback'i olan opt-in bir pilot olarak bulunur.
+Satin alma dogrulamasi ayri HTTPS backend'ine gider; medya bu backend'den gecmez.
+Yeni ozelliklerin gercek kod sinirlari ve testleri icin
+[mimari genisletme rehberine](docs/architecture_extension_guide.md) bakin.
 
 ## Architectural Truths
 
@@ -40,8 +43,9 @@ MJPEG/WAV fallback'i olan opt-in bir pilot olarak bulunur.
 7. **Dogrulama production yollarini kullanir.** Test-only HTTP rotasi yoktur;
    `/session/start`, `/video`, `/audio`, `/ws/events` ve authenticated `/status`
    senaryo testlerinde dogrudan calistirilir.
-8. **Ucretli erisim UI'dan ibaret degildir.** 2 saat ucretsiz yayin/izleme
-   siniri hem Client runtime hem Server `/session/start` katmaninda uygulanir.
+8. **Ucretli erisim UI'dan ibaret degildir.** 2 saatlik yayin hakkinin otoritesi
+   oda sunucusudur. Server medya/alert girislerini ve sure bitimini uygular;
+   Client runtime oda snapshot'ini kullanir, ayri ebeveyn denemesi saymaz.
 9. **Media hardware demand'e aittir.** Kamera ve mikrofon birbirinden bagimsiz,
    serialized demand transition'lariyla edinilir ve birakilir.
 10. **Platform background sozlesmesi aciktir.** Android aktif process icinde
@@ -85,9 +89,8 @@ production davranisi olarak yazilmamalidir:
 - WebRTC relay/TURN or internet NAT traversal
 - parent talk video overlay
 
-`bluetooth_low_energy` dependency'si vardir, fakat mevcut media akisinda
-Bluetooth video/ses tasimaz. Media hala local IP network veya kullanicinin/OS'in
-olusturdugu hotspot network uzerinden HTTP/WS ile akar.
+Pubspec'te Bluetooth paketi yoktur. Media local IP network veya
+kullanicinin/OS'in olusturdugu hotspot network uzerinden HTTP/WS ile akar.
 
 ## Dependency Map
 
@@ -95,10 +98,9 @@ Runtime acisindan onemli dependency'ler:
 
 | Package | Ownership |
 | --- | --- |
-| `camera` | Server camera preview/image stream |
-| `record` | Server microphone PCM16 stream |
+| `camera`, `camera_platform_interface` | Plugin camera path, preview and injectable platform tests; Android default capture uses the native service bridge |
+| `record` | Plugin microphone PCM16 path; Android default capture uses native AudioRecord |
 | `image` | Camera image to JPEG encoding support |
-| `web_socket_channel` | Client/event tests and WS support |
 | `flutter_local_notifications` | Client local notification |
 | `shared_preferences` | Role, config, alert history, child metadata, paid usage |
 | `flutter_secure_storage` | Trusted token storage |
@@ -108,17 +110,24 @@ Runtime acisindan onemli dependency'ler:
 | `wakelock_plus` | Server runtime keep-awake |
 | `battery_plus` | Battery snapshots |
 | `in_app_purchase` | One-time unlock purchase/restore |
+| `in_app_purchase_android`, `in_app_purchase_platform_interface` | Silent owned-purchase queries and Android acknowledgement result handling |
+| `in_app_purchase_storekit` | StoreKit 2 transaction recovery and explicit account sync; pinned to `0.4.10+1` |
 | `crypto` | Purchase evidence fingerprinting |
 | `cryptography` | Offline Ed25519 family-license verification |
 | `flutter_webrtc` | Opt-in H.264 + Opus local-LAN pilot |
 | `nsd` | Bonjour/NSD advertise, browse and resolve |
-| `just_audio` | Retained audio dependency; comfort currently uses generated PCM |
-| `bluetooth_low_energy` | BLE capability dependency, media transport not active |
+
+HTTP/WebSocket transport uses `dart:io`. Native PCM output uses the app's
+`PcmAudioOutput` platform adapter. `web_socket_channel`, `just_audio` and
+`bluetooth_low_energy` are not dependencies in the current `pubspec.yaml`.
 
 Flutter assets:
 
 - `assets/branding/miucam_launcher_icon.png`
+- `assets/branding/miucam_bear_mascot.png`
 - `assets/branding/miucam_wordmark.png`
+- `assets/branding/miucam_wordmark_v2.png`
+- `assets/branding/miucam_wordmark_v3.png`
 
 ## Source Tree Ownership
 
@@ -127,6 +136,8 @@ lib/
 ├── main.dart
 ├── app/
 │   ├── app_bootstrap.dart
+│   ├── broadcast_purchase_composition_root.dart
+│   ├── broadcast_purchase_coordinator.dart
 │   ├── app_lifecycle_observer.dart
 │   ├── app_role.dart
 │   ├── miucam_app.dart
@@ -154,6 +165,7 @@ lib/
 ├── l10n/
 └── services/
     ├── miucam_server.dart
+    ├── discovery/
     ├── monetization/
     ├── platform/
     └── server/
@@ -161,7 +173,8 @@ lib/
 
 Package ownership:
 
-- `app/`: App bootstrap, role resolution, role switching, permission entry.
+- `app/`: App bootstrap, role resolution, role switching, permission entry and
+  application-lifetime purchase coordination.
 - `analysis/`: Pure-ish motion/audio/alert scoring logic.
 - `core/`: DTOs, protocol constants, security helpers, theme, transport values.
 - `features/client/`: Client UI, Client runtime, pairing, media receive path,
@@ -170,6 +183,8 @@ Package ownership:
   stream services near UI/runtime boundaries.
 - `services/`: HTTP server, platform facades, monetization, media-quality
   selectors and backpressure utilities.
+- `backend/miucam_billing/`: Store adapters, purchase reconciliation, signed
+  licenses and durable SQLite records. It is separate from the LAN media server.
 
 ## Shared Policy And Value Ownership
 
@@ -239,6 +254,8 @@ main.dart
 `AppBootstrap` owns:
 
 - loading `SharedPreferences`
+- creating the application-lifetime billing graph through
+  `BroadcastPurchaseCompositionRoot` when paid access is enabled
 - resolving stored `AppRole`
 - requesting permissions for selected role
 - creating one runtime graph per active role
@@ -260,7 +277,8 @@ _switchRole
 ```
 
 This prevents a Server HTTP runtime and a Client media runtime from remaining
-alive at the same time.
+alive at the same time. The purchase coordinator survives role changes and is
+disposed only with `AppBootstrap`, so late store transactions retain their owner.
 
 ## Role Permission Policy
 
@@ -282,6 +300,21 @@ Important permission boundaries:
 
 The app uses small composition roots instead of global singletons.
 
+Application purchase creation:
+
+```text
+BroadcastPurchaseCompositionRoot.create
+  -> SharedPreferencesPendingRoomActivationRepository
+  -> RemoteBroadcastAccessClient implements RoomBroadcastAccessGateway
+  -> BroadcastAccessService
+  -> BroadcastPurchaseCoordinator
+```
+
+The coordinator depends on `PendingRoomActivationRepository` and
+`RoomBroadcastAccessGateway`; preference writes and HTTP requests remain in
+their adapters. The service owns local entitlement/trial persistence, while
+the coordinator owns delivery to the originally selected room.
+
 Server creation:
 
 ```text
@@ -290,6 +323,7 @@ ServerCompositionRoot.create
   -> PairingTokenService
   -> borrowed app-owned BroadcastAccessService (standalone fallback owns its service)
   -> FlutterWebRtcServerGateway
+  -> AndroidServiceMediaSource on Android (native CameraX/AudioRecord bridge)
   -> MiuCamServiceAdvertiser
   -> MiuCamServer
   -> ServerQrPayloadBuilder
@@ -488,6 +522,8 @@ Token renewal:
 | `events` | `/ws/events` |
 | `status` | `/status` |
 | `statusPublic` | `/status/public` |
+| `broadcastAccessActivate` | `/broadcast-access/activate` |
+| `broadcastAccessLicense` | `/broadcast-access/license` |
 
 `ServerEndpointBuilder` builds HTTP and WS URIs from `PairingSession` and keeps
 path/query normalization centralized on the client.
@@ -524,8 +560,13 @@ longer all lives in one implementation body:
 - demand reconciliation remains in `ServerRuntime` + `MediaRuntimeController`
 - thermal/power decisions delegate to `MediaResourceGovernor`
 
-This is incremental decomposition, not a claim that the 2,000+ line route host
-has been fully split into independent controllers.
+`miucam_server_routes.dart`, `miucam_server_http_controllers.dart`,
+`miucam_server_session_http_controller.dart` and
+`miucam_server_media_controllers.dart` are still `part`/extension files in the
+same library. They share the host's private state; a file boundary does not
+enforce an independent controller contract. Extracted objects such as
+`MiuCamHttpDispatcher`, `MiuCamEventSocketController`, `ServerSessionRegistry`
+and `ServerResourcePolicyCoordinator` have narrower explicit responsibilities.
 
 Request flow:
 
@@ -567,6 +608,8 @@ state-changing routes cannot be authorized by a stream token alone.
 | `/session/stop` | POST | bearer | Active session cleanup |
 | `/quality/report` | POST | bearer | Client quality/battery/audio metrics |
 | `/status` | GET | bearer | Private server runtime status |
+| `/broadcast-access/activate` | POST | bearer | Verify and persist a signed family grant before replying |
+| `/broadcast-access/license` | GET | bearer | Recover an active room grant for a trusted paired parent |
 | `/video` | GET | streamToken | MJPEG stream attach |
 | `/audio` | GET | streamToken | WAV/PCM stream attach |
 | `/webrtc/offer` | POST | bearer + streamToken | Pilot offer/answer and peer creation |
@@ -722,7 +765,7 @@ multi-child monitoring.
 ## Monetization Architecture
 
 `MIUCAM_BROADCAST_PAYWALL_ENABLED` defaults to `true`.
-`AppBootstrap` creates one `BroadcastPurchaseCoordinator` and
+`AppBootstrap`, through `BroadcastPurchaseCompositionRoot`, creates one `BroadcastPurchaseCoordinator` and
 `BroadcastAccessService` for the application lifetime. The server runtime borrows
 the service for its cumulative trial ledger and license enforcement; role changes
 do not dispose billing. Standalone server composition can still own a service.
@@ -799,9 +842,36 @@ single-active-room transfer rule. The five-viewer limit remains per room.
 
 Activation targets are persisted before checkout. Offline delivery uses bounded
 foreground retries and survives process restart. Switching rooms clears the old
-remote snapshot and cannot change an in-flight checkout's target. The license
+remote snapshot and cannot change an in-flight checkout's target. Explicit unpairing invalidates pending work for that room before the first
+await, including old work completing after the same room is paired again. The
+family purchase remains owned by the app. Failed cleanup after a successful
+activation preserves the room result and retries persistence. The license
 control routes remain usable after trial expiry. Public status never contains a
 license certificate. Media requests do not query billing servers.
+
+The coordinator's `PendingRoomActivationRepository` must reject unconfirmed
+writes. Its SharedPreferences adapter reloads after a failed write and retains
+its last confirmed snapshot if that reload also fails.
+`RoomBroadcastAccessGateway` isolates room lookup/activation from the HTTP
+adapter. `RetryPolicy` supplies foreground activation backoff without owning
+timers. `InAppBroadcastPurchaseGateway` owns the store stream and serializes
+verification, durable delivery and acknowledgement; `FlutterInAppPurchaseStore`
+contains platform calls. The service's old import path re-exports the split
+models and gateway for compatibility.
+
+Foreground reconciliation queries owned transactions without interactive sync.
+Android uses `queryPastPurchases`; StoreKit 2 uses unfinished/history queries,
+with a current-entitlements receipt fallback tied to pinned plugin `0.4.10+1`.
+Only an explicit iOS Restore action calls `AppStore.sync`. Queries coalesce and
+normally throttle for one minute; a new checkout force-checks ownership.
+Catalog prices expire after 15 minutes. Known store-pending approval remains
+separate from an expired UI await.
+
+The Python backend's `domain.py` defines `StoreAdapter`, `AcknowledgingStore`
+and `SignedNotificationStore` protocols plus typed store source/status/failure
+values. `BillingService` reconciles through these capabilities. Google and Apple
+implementations live in `stores.py`; `LicenseRepository` and `LicenseSigner`
+own persistence and signing in `licenses.py`.
 
 Signed revocations are refreshed on foreground with a six-hour throttle; network
 errors preserve a paid offline license. A confirmed revoke is delivered to rooms
@@ -853,8 +923,11 @@ Why this matters:
 `startAudioRuntime` / `stopAudioRuntime` boundaries. `startMediaRuntime` remains
 as a compatibility convenience that requests both. There are two source modes:
 
-1. **Injected media source branch:** used by tests with `ServerMediaSource`.
-2. **Hardware branch:** uses camera and microphone plugins.
+1. **Media source branch:** `ServerMediaSource` is the adapter boundary for
+   Android's production `AndroidServiceMediaSource` and deterministic test
+   sources. Android hardware belongs to the native foreground-service engine.
+2. **Plugin branch:** uses camera and microphone plugins, including the default
+   iOS path and injected camera/recorder platform tests.
 
 Demand-owned hardware branch:
 
@@ -917,7 +990,7 @@ MJPEG/WAV fallback session.
 
 ## Video Pipeline
 
-Server path:
+Plugin camera path:
 
 ```text
 CameraImage
@@ -930,6 +1003,10 @@ CameraImage
   -> per-client capacity-one MjpegStreamService mailbox
   -> HttpResponse multipart MJPEG clients
 ```
+
+Android's default path uses the service-owned CameraX encoder and feeds JPEG
+and luma through `AndroidServiceMediaSource` into the same Dart fan-out and
+analysis boundaries. `CameraJpegWorker` belongs to the plugin camera path.
 
 Injected test path (`test/support/deterministic_server_media_source.dart`):
 
@@ -975,7 +1052,7 @@ Video invariants:
 
 ## Audio Pipeline
 
-Server microphone path:
+Plugin microphone path:
 
 ```text
 MicrophoneCaptureService
@@ -987,6 +1064,10 @@ MicrophoneCaptureService
   -> per-client bounded 160 ms queue / detach on overflow or flush timeout
   -> WavAudioStreamService.broadcast
 ```
+
+Android's native AudioRecord chunks arrive through `AndroidServiceMediaSource`.
+The injected-source handler currently passes the same PCM to analysis and WAV;
+the separate `AudioStreamLeveler` path above belongs to plugin capture.
 
 Server injected source path:
 
@@ -1170,9 +1251,16 @@ Alert generation owns:
 - JSON DTO conversion
 - WebSocket fan-out
 
-Audio analysis uses raw microphone PCM. Client playback uses leveled stream PCM.
-That separation keeps cry scoring closer to the actual captured room signal
-while still making live monitor audio easier to hear.
+Plugin audio analysis uses raw microphone PCM while client playback uses leveled
+stream PCM. The Android source handler currently supplies the same native PCM
+to both destinations. Room-generated comfort/talk audio suppresses analysis
+without interrupting the parent stream.
+
+The coordinator checks current audio/video analysis demand before feature work
+and clears temporal evidence on discontinuity. `AudioRingBuffer` uses fixed
+capacity and bulk copies; `CryAudioAnalyzerV2` lazily owns reusable PCM/normalized
+window buffers. Analysis timing must contain at least one sample. These resource
+rules preserve thresholds and do not establish accuracy on real baby recordings.
 
 ## Alert And Event Architecture
 
@@ -1213,12 +1301,17 @@ ClientAlertListener
 - optional `childId`
 - `metadata`
 
-Current limitation:
+Current delivery behavior:
 
-- There is no full ACK/retry protocol for critical events yet.
-- Event ids exist as DTO ids, but monotonically ordered reliable delivery is
-  not complete.
-- Duplicate suppression on client is not a complete reliable-delivery system.
+- `ClientAlertListener` negotiates `alertReplayV=1`, reconnects with
+  `afterAlertId`, and ACKs an event only after its delivery callback succeeds.
+- `MiuCamEventSocketController` keeps an ordered in-memory replay window:
+  at most 128 alerts, two minutes of age and 64 client cursors by default.
+- `ClientAlertDeliveryCoordinator` serializes history/notification delivery and
+  deduplicates IDs. A transient delivery failure reconnects from the last
+  contiguous ACK; permanently denied notifications can use durable history.
+- Replay is bounded and is lost when the server process stops. It is not a
+  durable push service or a guarantee of exactly-once delivery across devices.
 
 ## Quality And Adaptation
 
@@ -1326,12 +1419,10 @@ Critical pressure is audio-first when audio demand exists; legacy video keeps a
 1 fps liveness frame rather than tearing the TCP stream down. Degrade is
 immediate, while existing selector hysteresis controls upgrade.
 
-Important current limitation:
-
-- There is no separate `MediaProfileController` class with Max/Ultra levels yet.
-- Current selectors are `MediaQualitySelector` and `UtilityBasedProfileSelector`.
-- Existing model is adaptive, but not the full Max/Ultra algorithm requested as
-  future work.
+The implemented policies are `MediaQualitySelector`,
+`UtilityBasedProfileSelector` and `MediaResourceGovernor`, with profile changes
+serialized through `MediaProfileApplyQueue`. No Max/Ultra mode is exposed by
+these contracts.
 
 ## Backpressure
 
@@ -1355,10 +1446,13 @@ selection.
 
 Backpressure rules:
 
-- if a client response is busy, the next payload for that response is skipped
-- skip is metric, not queued work
+- busy video responses retain only the latest pending frame; replacement is
+  counted as a skip
+- audio responses retain a bounded PCM queue and detach on overflow
 - failed flush removes the client
-- closing all clients has short timeouts to avoid hanging tests
+- `HttpMediaResponseLifecycle` shares flush timeout/connection checks and
+  teardown deadlines between MJPEG and WAV; the deadline also ends stalled TCP
+  output, rather than merely ending the Dart await
 
 ## End-To-End Session Telemetry
 
@@ -1519,6 +1613,7 @@ Text source files:
 
 - `lib/l10n/src/app_ui_text_catalog.dart`
 - `lib/l10n/src/app_ui_text_catalog_extra.dart`
+- `lib/l10n/src/app_purchase_text_catalog.dart`
 
 Supported locales are declared by `AppStrings.supportedLocales`. UI should use
 localized keys instead of hard-coded user-visible strings except for protocol,
@@ -1570,7 +1665,7 @@ Proof criteria for audio and alerts:
 
 The strongest non-device media tests use:
 
-- the `test/support/DeterministicServerMediaSource` fixture
+- the `test/support/deterministic_server_media_source.dart` fixture
 - real `MiuCamServer`
 - real `/session/start`
 - real `/video`
@@ -1592,11 +1687,14 @@ This proves runtime wiring without relying on camera/microphone hardware in CI.
 - `PlatformRuntimeContract`
 - `PlatformMediaLifecycleCoordinator`
 - `PcmAudioOutput`
+- `AndroidServiceMediaSource` and its platform bridge ports
 
 Platform/native paths:
 
 - Android caches the existing Flutter engine and lets
   `MiuCamForegroundService` claim it while media demand is active.
+- Default Android capture is service-owned CameraX/AudioRecord;
+  `AndroidServiceMediaSource` adapts it to the shared Dart media contracts.
 - Android service notification and Wi-Fi lock reflect exact camera/microphone
   demand. The service is `START_NOT_STICKY`; process death requires a visible
   user restart and does not fabricate recovered capture.
@@ -1629,7 +1727,8 @@ Important settings:
 - `webRtcPilotEnabled`, defaulting to
   `--dart-define=MIUCAM_WEBRTC_PILOT=true` only when no stored override exists
 - build-only broadcast paywall flag:
-  `--dart-define=MIUCAM_BROADCAST_PAYWALL_ENABLED=true`; default `false`
+  `--dart-define=MIUCAM_BROADCAST_PAYWALL_ENABLED`; default `true` in
+  `core/feature_flags.dart`; diagnostic builds can set it to `false`
 
 Server settings screen updates `ConfigurationService`, then calls
 `MiuCamServer.reloadAnalysisConfig` through `ServerRuntime`.
@@ -1653,6 +1752,8 @@ Current protections:
 - WebSocket authentication accepts only the Bearer header, never URL tokens
 - pair confirm rate limiting
 - nonce pruning
+- bounded JSON control-body reader (64 KiB normally, 16 KiB for license activation)
+- exact connection leases and operation-attempt ownership for media/talk cleanup
 
 Known security limits:
 
@@ -1662,13 +1763,10 @@ Known security limits:
 - no cloud identity/account system
 - local network attackers are not fully mitigated
 - public pairing-nonce redesign is intentionally not part of this work
-- JSON request bodies do not yet share one central byte limit
-- socket lease/revoke and secure session-ticket designs are intentionally not
-  implemented
+- no encrypted session-ticket protocol
 
-The public nonce/body-limit/socket-lease/session-ticket bundle was explicitly
-excluded for the local-LAN scope. This is a recorded scope decision, not a
-claim that the risks do not exist.
+The shared body reader and in-memory socket leases are implemented. They do
+not encrypt local transport or replace the current pairing nonce design.
 
 ## Error Handling And Cleanup
 
@@ -1695,7 +1793,10 @@ Important cleanup owners:
 - `ClientRuntime`: network subscription and watch state
 - `ClientMediaStreamSupervisor`: video client and audio pipeline
 - `ClientAlertListener`: WebSocket and reconnect timer
-- `BroadcastAccessService`: purchase stream subscription
+- `BroadcastPurchaseCoordinator`: application-lifetime purchase graph,
+  foreground room-delivery retries and access subscription
+- `BroadcastAccessService`: entitlement/trial persistence and gateway ownership
+- `InAppBroadcastPurchaseGateway`: native purchase subscription and queued delivery
 
 ## Testing Strategy
 
@@ -1821,9 +1922,7 @@ When touching docs:
 Do not mark these as complete until they have runtime implementation, wire
 contract, UI integration, diagnostics and tests:
 
-- Max/Ultra `MediaProfileController`
-- alert ACK/retry protocol
-- duplicate event suppression and reliable critical delivery
+- durable alert replay across server process loss and guaranteed remote delivery
 - production BLE discovery/control
 - parent video overlay on server
 - mastered comfort-audio assets and echo-controlled talk productization

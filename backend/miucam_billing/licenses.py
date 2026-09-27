@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import os
 import sqlite3
 import time
 import uuid
 from contextlib import contextmanager
-from dataclasses import dataclass
 from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-PRODUCT_ID = "miucam_lifetime_unlock_try_300"
+from .domain import PRODUCT_ID, PurchaseStatus, StorePurchase, StoreSource
+# Preserve the former public import path while the domain owns fingerprinting.
+from .domain import fingerprint as fingerprint
+
 MAX_TOKEN_BYTES = 12 * 1024
 CLAIMS = frozenset(("aud", "version", "productId", "entitlementId", "source",
                     "transactionFingerprint", "issuedAtMs", "status"))
@@ -32,19 +33,6 @@ def unb64(value: str) -> bytes:
     if b64(result) != value:
         raise ValueError("Non-canonical base64url")
     return result
-
-
-def fingerprint(source: str, application: str, product: str, reference: str) -> str:
-    return hashlib.sha256("\0".join((source, application, product, reference)).encode()).hexdigest()
-
-
-@dataclass(frozen=True)
-class StorePurchase:
-    source: str
-    reference: str
-    fingerprint: str
-    status: str
-    acknowledged: bool = True
 
 
 class LicenseSigner:
@@ -88,8 +76,8 @@ class LicenseSigner:
                 raise ValueError("Invalid license claims")
             if (claims["aud"] != "miucam" or type(claims["version"]) is not int
                     or claims["version"] != 1 or claims["productId"] != self.product_id
-                    or claims["source"] not in ("google_play", "app_store")
-                    or claims["status"] not in ("active", "revoked")
+                    or claims["source"] not in (StoreSource.GOOGLE_PLAY, StoreSource.APP_STORE)
+                    or claims["status"] not in (PurchaseStatus.ACTIVE, PurchaseStatus.REVOKED)
                     or type(claims["issuedAtMs"]) is not int
                     or not 0 < claims["issuedAtMs"] <= 9007199254740991
                     or not isinstance(claims["entitlementId"], str)
@@ -137,7 +125,7 @@ class LicenseRepository:
             db.close()
 
     def save(self, purchase: StorePurchase) -> dict:
-        if purchase.status not in ("active", "revoked"):
+        if purchase.status not in (PurchaseStatus.ACTIVE, PurchaseStatus.REVOKED):
             raise ValueError("Only confirmed store states may be persisted")
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -153,7 +141,8 @@ class LicenseRepository:
                 ack_pending=excluded.ack_pending""", (
                 purchase.fingerprint, entitlement, purchase.source, purchase.reference,
                 purchase.status, issued, now,
-                int(purchase.source == "google_play" and purchase.status == "active" and not purchase.acknowledged),
+                int(purchase.source == StoreSource.GOOGLE_PLAY
+                    and purchase.status == PurchaseStatus.ACTIVE and not purchase.acknowledged),
             ))
             db.execute("COMMIT")
             return dict(db.execute("SELECT * FROM licenses WHERE fingerprint=?", (purchase.fingerprint,)).fetchone())

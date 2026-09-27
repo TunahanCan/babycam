@@ -53,7 +53,12 @@ class ExponentialBackoffPolicy implements RetryPolicy {
     final maxDelayMs = maxDelay.inMilliseconds;
     var delayMs = initialDelay.inMilliseconds.clamp(0, maxDelayMs).toInt();
     for (var index = 0; index < attempt && delayMs < maxDelayMs; index++) {
-      delayMs = (delayMs * multiplier).round().clamp(0, maxDelayMs).toInt();
+      final scaled = delayMs * multiplier;
+      final next = scaled >= maxDelayMs ? maxDelayMs : scaled.round();
+      // A zero/fixed/rounded-stationary delay will never grow. Do not spend
+      // O(attempt) work re-computing it in a long-lived reconnect loop.
+      if (next == delayMs) break;
+      delayMs = next;
     }
     if (jitterRatio == 0 || delayMs == 0) {
       return Duration(milliseconds: delayMs);

@@ -8,7 +8,27 @@ import 'package:in_app_purchase_platform_interface/in_app_purchase_platform_inte
 import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:in_app_purchase_storekit/store_kit_2_wrappers.dart';
 
-import 'broadcast_access_models.dart';
+abstract interface class InAppPurchaseStore {
+  Stream<List<PurchaseDetails>> get purchaseStream;
+
+  Future<bool> isAvailable();
+
+  Future<ProductDetailsResponse> queryProductDetails(Set<String> productIds);
+
+  Future<bool> buyNonConsumable({required PurchaseParam purchaseParam});
+
+  Future<void> restorePurchases();
+
+  Future<void> completePurchase(PurchaseDetails purchase);
+}
+
+/// Read-only store reconciliation; unlike explicit restore it must never open
+/// an account sign-in/sync sheet in response to an app lifecycle event.
+abstract interface class InAppPurchaseOwnedQueryStore {
+  bool get ownedQueryIncludesPending;
+  Future<List<PurchaseDetails>> queryOwnedPurchases(
+      {bool includeFinished = true});
+}
 
 class FlutterInAppPurchaseStore
     implements InAppPurchaseStore, InAppPurchaseOwnedQueryStore {

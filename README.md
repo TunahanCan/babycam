@@ -281,6 +281,8 @@ flutter build ios --release --no-codesign
 ## Dokümantasyon
 
 - [Canlı kodla eşleşen mimari ve runtime sözleşmesi](ARCHITECT.md)
+- [Geliştirme sınırları, tasarım desenleri ve genişletme rehberi](docs/architecture_extension_guide.md)
+- [27 Eylül kapsamlı kod incelemesi ve doğrulama kaydı](docs/reports/code_review_2026-09-27.md)
 - [Production release checklist](docs/RELEASE_CHECKLIST.md)
 - [Medya taşıma ve analiz algoritmaları](docs/media_transport_algorithms.md)
 - [Fiziksel cihaz test matrisi](docs/physical_device_test_matrix.md)

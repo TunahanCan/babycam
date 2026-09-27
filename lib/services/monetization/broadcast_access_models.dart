@@ -1,8 +1,6 @@
 import 'dart:math';
 
-import 'package:in_app_purchase/in_app_purchase.dart';
-
-import 'purchase_verification.dart';
+import 'purchase_verification_result.dart';
 
 class BroadcastAccessConfig {
   const BroadcastAccessConfig._();
@@ -268,28 +266,6 @@ abstract interface class BroadcastProductOfferGateway {
   BroadcastProductOffer? get cachedOffer;
 
   Future<BroadcastProductOffer?> loadOffer({required String productId});
-}
-
-abstract interface class InAppPurchaseStore {
-  Stream<List<PurchaseDetails>> get purchaseStream;
-
-  Future<bool> isAvailable();
-
-  Future<ProductDetailsResponse> queryProductDetails(Set<String> productIds);
-
-  Future<bool> buyNonConsumable({required PurchaseParam purchaseParam});
-
-  Future<void> restorePurchases();
-
-  Future<void> completePurchase(PurchaseDetails purchase);
-}
-
-/// Read-only store reconciliation; unlike explicit restore it must never open
-/// an account sign-in/sync sheet in response to an app lifecycle event.
-abstract interface class InAppPurchaseOwnedQueryStore {
-  bool get ownedQueryIncludesPending;
-  Future<List<PurchaseDetails>> queryOwnedPurchases(
-      {bool includeFinished = true});
 }
 
 class BroadcastAccessPersistenceException implements Exception {

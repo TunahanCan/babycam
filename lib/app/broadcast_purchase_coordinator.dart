@@ -1,12 +1,12 @@
 import 'dart:async';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../core/async/serialized_async_executor.dart';
+import '../core/network/retry_policy.dart';
 import '../core/protocol/pairing_session.dart';
-import '../features/client/media/remote_broadcast_access_client.dart';
 import '../services/monetization/broadcast_access_service.dart';
 import '../services/monetization/license_grant.dart';
+import '../services/monetization/pending_room_activation_repository.dart';
+import '../services/monetization/room_broadcast_access_gateway.dart';
 
 enum ParentPurchasePhase {
   ready,
@@ -46,31 +46,38 @@ class ParentPurchaseState {
 /// Parent runtimes never use this service's local trial as room authority.
 class BroadcastPurchaseCoordinator {
   BroadcastPurchaseCoordinator({
-    required SharedPreferences preferences,
+    required PendingRoomActivationRepository pendingActivations,
     required this.access,
-    RemoteBroadcastAccessClient? remote,
+    required RoomBroadcastAccessGateway remote,
     LicenseGrantVerifier? licenseVerifier,
     bool? licenseVerificationConfigured,
-  })  : _preferences = preferences,
-        _remote = remote ?? RemoteBroadcastAccessClient(),
+    RetryPolicy? activationRetryPolicy,
+  })  : _pendingActivations = pendingActivations,
+        _remote = remote,
+        _activationRetryPolicy = activationRetryPolicy ??
+            ExponentialBackoffPolicy(
+              initialDelay: const Duration(seconds: 5),
+              maxDelay: const Duration(seconds: 60),
+              multiplier: 2,
+            ),
         _licenseVerifier = licenseVerifier ?? LicenseGrantVerifier(),
         _licenseVerificationConfigured = licenseVerificationConfigured ??
             (licenseVerifier ?? LicenseGrantVerifier()).isConfigured {
-    _pendingRooms.addAll(
-        preferences.getStringList(_pendingRoomsKey) ?? const <String>[]);
+    _pendingRooms.addAll(_pendingActivations.load());
     _subscription = access.changes.listen(_onAccessChanged);
     unawaited(_load().catchError((_) {}));
   }
 
-  static const _pendingRoomsKey = 'broadcast_purchase.pending_rooms';
-  final SharedPreferences _preferences;
+  final PendingRoomActivationRepository _pendingActivations;
+  final RetryPolicy _activationRetryPolicy;
   final BroadcastAccessService access;
-  final RemoteBroadcastAccessClient _remote;
+  final RoomBroadcastAccessGateway _remote;
   final LicenseGrantVerifier _licenseVerifier;
   final bool _licenseVerificationConfigured;
   final _changes = StreamController<void>.broadcast();
   final _pendingRooms = <String>{};
   final _sessions = <String, PairingSession>{};
+  final _roomGenerations = <String, int>{};
   final _states = <String, ParentPurchaseState>{};
   final _storage = SerializedAsyncExecutor();
   late final StreamSubscription<BroadcastAccessSnapshot> _subscription;
@@ -79,7 +86,7 @@ class BroadcastPurchaseCoordinator {
   bool _tokenChangedDuringOperation = false;
   Timer? _retryTimer;
   bool _foreground = true;
-  int _retryDelaySeconds = 5;
+  int _retryAttempt = 0;
   String? _lastToken;
   bool _disposed = false;
 
@@ -137,17 +144,46 @@ class BroadcastPurchaseCoordinator {
     }
   }
 
+  /// Explicit unpairing cancels delivery to this room, not the family purchase.
+  /// Invalidate synchronously so late responses cannot resurrect its state.
+  Future<void> forgetRoom(String roomId) async {
+    if (_disposed) return;
+    _roomGenerations[roomId] = (_roomGenerations[roomId] ?? 0) + 1;
+    _sessions.remove(roomId);
+    _pendingRooms.remove(roomId);
+    _states.remove(roomId);
+    if (!_pendingRooms.any(_sessions.containsKey)) {
+      _retryTimer?.cancel();
+      _retryTimer = null;
+    }
+    _notify();
+    await _savePending();
+  }
+
+  int _generation(PairingSession session) =>
+      _roomGenerations[session.deviceId] ?? 0;
+
+  bool _isCurrent(PairingSession session, int generation) =>
+      !_disposed && _generation(session) == generation;
+
   Future<BroadcastAccessSnapshot?> _inheritRoomLicense(
       PairingSession session) async {
+    final generation = _generation(session);
     final snapshot = await _remote.snapshot(session);
-    if (_disposed || snapshot?.unlocked != true) return null;
+    if (!_isCurrent(session, generation) || snapshot?.unlocked != true) {
+      return null;
+    }
     final token = hasLicense ? null : await _remote.readLicense(session);
+    if (!_isCurrent(session, generation)) return null;
     if (token != null) {
       final grant = await _licenseVerifier.verify(token,
           expectedProductId: access.productId);
-      if (_disposed) return null;
+      if (!_isCurrent(session, generation)) return null;
       await access.applyVerifiedLicenseGrant(grant);
-      if (grant.status != LicenseGrantStatus.active) return null;
+      if (!_isCurrent(session, generation) ||
+          grant.status != LicenseGrantStatus.active) {
+        return null;
+      }
     }
     _set(session, ParentPurchasePhase.activated, snapshot);
     return snapshot;
@@ -181,21 +217,26 @@ class BroadcastPurchaseCoordinator {
     required bool restore,
   }) async {
     _sessions[target.deviceId] = target;
+    final generation = _generation(target);
     try {
       if (!activationConfigured ||
           ((!hasLicense || restore) && !checkoutConfigured)) {
         _set(target, ParentPurchasePhase.unavailable);
         return null;
       }
-      if (!await _remote.supportsActivation(target)) {
+      final supported = await _remote.supportsActivation(target);
+      if (!_isCurrent(target, generation)) return null;
+      if (!supported) {
         _set(target, ParentPurchasePhase.roomUpdateRequired);
         return null;
       }
       final existing = await _inheritRoomLicense(target);
+      if (!_isCurrent(target, generation)) return null;
       if (existing != null) return existing;
       // Persist the destination before opening the chargeable store sheet.
       _pendingRooms.add(target.deviceId);
       await _savePending();
+      if (!_isCurrent(target, generation)) return null;
       if (!hasLicense || restore) {
         _set(target, ParentPurchasePhase.purchasing);
         if (restore || requiresRestore) {
@@ -204,13 +245,16 @@ class BroadcastPurchaseCoordinator {
           await access.unlockWithOneTimePurchase();
         }
       }
+      if (!_isCurrent(target, generation)) return null;
       _localAccess = await access.snapshot();
+      if (!_isCurrent(target, generation)) return null;
       if (!hasLicense) {
         _set(target, ParentPurchasePhase.verificationPending);
         return null;
       }
-      return await _activate(target);
+      return await _activate(target, generation: generation);
     } on BroadcastPurchaseException catch (error) {
+      if (!_isCurrent(target, generation)) return null;
       final phase =
           error.result.failureReason == BroadcastPurchaseFailureReason.revoked
               ? ParentPurchasePhase.revoked
@@ -236,6 +280,7 @@ class BroadcastPurchaseCoordinator {
       }
       return null;
     } catch (_) {
+      if (!_isCurrent(target, generation)) return null;
       _set(
           target,
           hasLicense
@@ -245,12 +290,14 @@ class BroadcastPurchaseCoordinator {
     }
   }
 
-  Future<BroadcastAccessSnapshot?> _activate(PairingSession target) async {
+  Future<BroadcastAccessSnapshot?> _activate(PairingSession target,
+      {required int generation}) async {
     final token = access.licenseToken;
-    if (_disposed || token == null) return null;
+    if (!_isCurrent(target, generation) || token == null) return null;
     _set(target, ParentPurchasePhase.activating);
     try {
       final local = await access.snapshot();
+      if (!_isCurrent(target, generation)) return null;
       if (token != access.licenseToken) {
         _set(target, ParentPurchasePhase.activationPending);
         return null;
@@ -259,6 +306,7 @@ class BroadcastPurchaseCoordinator {
       // unlocked state satisfies active delivery without replaying an older
       // token forever. Revocations must always reach the activation endpoint.
       final current = local.unlocked ? await _remote.snapshot(target) : null;
+      if (!_isCurrent(target, generation)) return null;
       if (token != access.licenseToken) {
         _set(target, ParentPurchasePhase.activationPending);
         return null;
@@ -266,13 +314,24 @@ class BroadcastPurchaseCoordinator {
       final snapshot = current?.unlocked == true
           ? current!
           : await _remote.activate(target, token);
+      if (!_isCurrent(target, generation)) return null;
       if (token != access.licenseToken) {
         _set(target, ParentPurchasePhase.activationPending);
         return null;
       }
       _pendingRooms.remove(target.deviceId);
-      await _savePending();
-      _retryDelaySeconds = 5;
+      var cleanupSaved = false;
+      try {
+        await _savePending();
+        cleanupSaved = true;
+      } catch (_) {
+        if (!_isCurrent(target, generation)) return null;
+        // Delivery succeeded. Keep its authoritative result visible, but retry
+        // the durable cleanup so a disk failure cannot strand this destination.
+        _pendingRooms.add(target.deviceId);
+      }
+      if (!_isCurrent(target, generation)) return null;
+      if (cleanupSaved) _retryAttempt = 0;
       _set(
           target,
           snapshot.unlocked
@@ -281,6 +340,7 @@ class BroadcastPurchaseCoordinator {
           snapshot);
       return snapshot;
     } catch (_) {
+      if (!_isCurrent(target, generation)) return null;
       _set(target, ParentPurchasePhase.activationPending);
       return null;
     }
@@ -298,14 +358,15 @@ class BroadcastPurchaseCoordinator {
     _retryTimer = null;
     final targets = [
       for (final id in _pendingRooms)
-        if (_sessions[id] case final session?) session,
+        if (_sessions[id] case final session?)
+          (session: session, generation: _generation(session)),
     ];
     if (targets.isEmpty) return;
     _tokenChangedDuringOperation = false;
     final operation = () async {
       for (final target in targets) {
         if (_disposed) break;
-        await _activate(target);
+        await _activate(target.session, generation: target.generation);
       }
     }();
     _operation = operation;
@@ -332,11 +393,11 @@ class BroadcastPurchaseCoordinator {
         !_pendingRooms.any(_sessions.containsKey)) {
       return;
     }
-    _retryTimer = Timer(Duration(seconds: _retryDelaySeconds), () {
+    final delay = _activationRetryPolicy.delayForAttempt(_retryAttempt++);
+    _retryTimer = Timer(delay, () {
       _retryTimer = null;
       unawaited(retryPending().catchError((_) {}));
     });
-    _retryDelaySeconds = (_retryDelaySeconds * 2).clamp(5, 60);
   }
 
   void onBackground() {
@@ -353,12 +414,10 @@ class BroadcastPurchaseCoordinator {
     await retryPending();
   }
 
-  Future<void> _savePending() => _storage.run(() async {
-        if (!await _preferences.setStringList(
-            _pendingRoomsKey, _pendingRooms.toList(growable: false))) {
-          throw StateError('Could not save room activation destination.');
-        }
-      });
+  Future<void> _savePending() {
+    final destinations = Set<String>.unmodifiable(_pendingRooms);
+    return _storage.run(() => _pendingActivations.save(destinations));
+  }
 
   void _set(PairingSession session, ParentPurchasePhase phase,
       [BroadcastAccessSnapshot? snapshot]) {

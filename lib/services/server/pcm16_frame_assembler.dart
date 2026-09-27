@@ -8,37 +8,60 @@ import 'dart:typed_data';
 /// flushed when the request ends.
 class Pcm16FrameAssembler {
   Pcm16FrameAssembler({required this.frameBytes})
-      : assert(frameBytes > 0 && frameBytes.isEven);
+      : _pending = Uint8List(_validateFrameBytes(frameBytes));
 
   final int frameBytes;
-  final _pending = <int>[];
+  final Uint8List _pending;
+  int _pendingLength = 0;
 
-  int get pendingBytes => _pending.length;
-  bool get hasPartialSample => _pending.length.isOdd;
+  int get pendingBytes => _pendingLength;
+  bool get hasPartialSample => _pendingLength.isOdd;
 
   List<Uint8List> add(List<int> bytes) {
     if (bytes.isEmpty) return const [];
-    _pending.addAll(bytes);
-    return _drainFullFrames();
+    final frames = <Uint8List>[];
+    var offset = 0;
+    if (_pendingLength > 0) {
+      final missing = frameBytes - _pendingLength;
+      final available = bytes.length < missing ? bytes.length : missing;
+      _pending.setRange(_pendingLength, _pendingLength + available, bytes);
+      _pendingLength += available;
+      offset = available;
+      if (_pendingLength < frameBytes) return frames;
+      frames.add(Uint8List.fromList(_pending));
+      _pendingLength = 0;
+    }
+
+    // Copy each complete frame once. Removing prefixes from a growing list
+    // shifts every remaining byte repeatedly for large HTTP chunks.
+    while (bytes.length - offset >= frameBytes) {
+      frames.add(Uint8List(frameBytes)..setRange(0, frameBytes, bytes, offset));
+      offset += frameBytes;
+    }
+    _pendingLength = bytes.length - offset;
+    if (_pendingLength > 0) {
+      _pending.setRange(0, _pendingLength, bytes, offset);
+    }
+    return frames;
   }
 
   Uint8List? flushAlignedTail() {
-    final alignedLength = _pending.length - (_pending.length % 2);
+    final alignedLength = _pendingLength - (_pendingLength % 2);
     if (alignedLength == 0) return null;
-    final result = Uint8List.fromList(_pending.take(alignedLength).toList());
-    _pending.removeRange(0, alignedLength);
+    final result = Uint8List(alignedLength)
+      ..setRange(0, alignedLength, _pending);
+    _pendingLength -= alignedLength;
+    if (_pendingLength > 0) _pending[0] = _pending[alignedLength];
     return result;
   }
 
-  void clear() => _pending.clear();
+  void clear() => _pendingLength = 0;
 
-  List<Uint8List> _drainFullFrames() {
-    if (_pending.length < frameBytes) return const [];
-    final frames = <Uint8List>[];
-    while (_pending.length >= frameBytes) {
-      frames.add(Uint8List.fromList(_pending.take(frameBytes).toList()));
-      _pending.removeRange(0, frameBytes);
+  static int _validateFrameBytes(int value) {
+    if (value <= 0 || value.isOdd) {
+      throw ArgumentError.value(
+          value, 'frameBytes', 'must be positive and even');
     }
-    return frames;
+    return value;
   }
 }

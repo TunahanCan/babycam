@@ -16,6 +16,7 @@ void main() {
   testWidgets(
     'watch gece saati landscape ve büyük metinde taşma üretmez',
     (tester) async {
+      final semantics = tester.ensureSemantics();
       await tester.binding.setSurfaceSize(const Size(844, 320));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final runtime = await _pairedRuntime();
@@ -59,6 +60,15 @@ void main() {
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
+      final exitNode = tester
+          .getSemantics(find.bySemanticsLabel(strings.ui('exitNightClock')));
+      expect(exitNode.getSemanticsData().hasAction(ui.SemanticsAction.tap),
+          isTrue);
+      exitNode.owner!.performAction(exitNode.id, ui.SemanticsAction.tap);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip(strings.ui('exitNightClock')), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      semantics.dispose();
     },
   );
 

@@ -6,12 +6,11 @@ import 'dart:typed_data';
 
 import '../../../core/media/media_session_telemetry.dart';
 import '../../../core/media/pcm_audio_format.dart';
+import '../../../services/server/http_media_response_lifecycle.dart';
 import '../../../services/server/stream_backpressure_gate.dart';
 import '../../../services/server/wav_pcm16.dart';
 
-typedef AudioResponseFlusher = Future<void> Function(HttpResponse response);
-
-Future<void> _flushAudioResponse(HttpResponse response) => response.flush();
+typedef AudioResponseFlusher = HttpMediaResponseFlusher;
 
 class WavAudioStreamService {
   WavAudioStreamService({
@@ -25,7 +24,10 @@ class WavAudioStreamService {
     void Function(String clientId)? onClientDetached,
     MediaSessionTelemetry? telemetry,
   })  : _onClientDetached = onClientDetached,
-        _responseFlusher = responseFlusher ?? _flushAudioResponse,
+        _responseLifecycle = HttpMediaResponseLifecycle(
+          timeout: flushTimeout,
+          flusher: responseFlusher,
+        ),
         _telemetry = telemetry ?? MediaSessionTelemetry.shared,
         _framePacketizer = PcmAudioFramePacketizer(
           sampleRate: sampleRate,
@@ -41,7 +43,7 @@ class WavAudioStreamService {
   final Duration maxQueuedAudio;
   final Duration flushTimeout;
   final void Function(String clientId)? _onClientDetached;
-  final AudioResponseFlusher _responseFlusher;
+  final HttpMediaResponseLifecycle _responseLifecycle;
   final MediaSessionTelemetry _telemetry;
   final PcmAudioFramePacketizer _framePacketizer;
 
@@ -121,14 +123,14 @@ class WavAudioStreamService {
       removeClient(response);
     });
     try {
-      await _flushWithTimeout(response);
+      await _responseLifecycle.flush(response);
     } on TimeoutException {
       _backpressure.recordFailure(response);
       removeClient(response);
-      await _closeResponseBestEffort(response);
+      await _responseLifecycle.close(response);
     } catch (_) {
       removeClient(response);
-      await _closeResponseBestEffort(response);
+      await _responseLifecycle.close(response);
       rethrow;
     } finally {
       _backpressure.markIdle(response);
@@ -184,7 +186,7 @@ class WavAudioStreamService {
         if (frame == null) break;
         final startedAt = DateTime.now();
         client.add(frame);
-        await _flushWithTimeout(client);
+        await _responseLifecycle.flush(client);
         if (!_clients.contains(client)) break;
         _chunksStreamed++;
         _bytesStreamed += frame.length;
@@ -204,7 +206,7 @@ class WavAudioStreamService {
         _backpressure.recordFailure(client);
         removeClient(client);
       }
-      await _closeResponseBestEffort(client);
+      await _responseLifecycle.close(client);
     } finally {
       _backpressure.markIdle(client);
       if (clientId != null) _busyClientIds.remove(clientId);
@@ -221,27 +223,9 @@ class WavAudioStreamService {
     }
   }
 
-  Future<void> _flushWithTimeout(HttpResponse response) async {
-    await _responseFlusher(response).timeout(flushTimeout);
-    // Server response flushing can swallow the socket error after a peer
-    // disconnect. Check the connection as well as the flush future.
-    if (response.connectionInfo == null) {
-      throw const HttpException('Media connection closed.');
-    }
-  }
-
   void _detachSlowClient(HttpResponse response) {
     removeClient(response);
-    unawaited(_closeResponseBestEffort(response));
-  }
-
-  Future<void> _closeResponseBestEffort(HttpResponse response) async {
-    try {
-      // A timed-out close future does not cancel socket output. Bound the
-      // actual connection lifetime as well as the teardown await.
-      response.deadline = flushTimeout;
-      await response.close().timeout(flushTimeout);
-    } catch (_) {}
+    unawaited(_responseLifecycle.close(response));
   }
 
   void removeClient(HttpResponse response) {
@@ -267,14 +251,14 @@ class WavAudioStreamService {
         .toList(growable: false);
     for (final response in responses) {
       removeClient(response);
-      await _closeResponseBestEffort(response);
+      await _responseLifecycle.close(response);
     }
   }
 
   Future<void> closeAll() async {
     for (final response in _clients.toList()) {
       removeClient(response);
-      await _closeResponseBestEffort(response);
+      await _responseLifecycle.close(response);
     }
     _clients.clear();
     _clientIds.clear();

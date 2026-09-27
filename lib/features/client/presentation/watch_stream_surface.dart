@@ -422,6 +422,7 @@ class _RoundIconButton extends StatelessWidget {
       button: true,
       toggled: toggled,
       label: tooltip,
+      onTap: onTap,
       excludeSemantics: true,
       child: Tooltip(
         message: tooltip,
