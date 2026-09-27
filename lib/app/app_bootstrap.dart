@@ -21,10 +21,22 @@ import 'broadcast_purchase_coordinator.dart';
 import 'app_role.dart';
 import 'app_runtime.dart';
 import 'install_integrity_guard.dart';
+import 'platform_role_shutdown_barrier.dart';
 import 'role_permission_coordinator.dart';
 import 'role_repository.dart';
 import 'role_resolver.dart';
 import 'role_switch_transaction.dart';
+
+typedef ServerRuntimeFactory = ServerRuntime Function(
+  ConfigurationService config,
+  AppStrings strings,
+  BroadcastPurchaseCoordinator? purchases,
+);
+typedef ClientRuntimeFactory = ClientRuntime Function(
+  SharedPreferences preferences,
+  AppStrings strings,
+  BroadcastPurchaseCoordinator? purchases,
+);
 
 class AppBootstrap extends StatefulWidget {
   const AppBootstrap({
@@ -32,11 +44,15 @@ class AppBootstrap extends StatefulWidget {
     this.onLocaleChanged,
     this.preferencesLoader,
     this.secureStorageClearer,
+    this.serverRuntimeFactory,
+    this.clientRuntimeFactory,
   });
 
   final ValueChanged<Locale?>? onLocaleChanged;
   final Future<SharedPreferences> Function()? preferencesLoader;
   final Future<void> Function()? secureStorageClearer;
+  final ServerRuntimeFactory? serverRuntimeFactory;
+  final ClientRuntimeFactory? clientRuntimeFactory;
 
   @override
   State<AppBootstrap> createState() => _AppBootstrapState();
@@ -55,8 +71,12 @@ class _AppBootstrapState extends State<AppBootstrap>
   Object? _loadError;
   bool _switchingRole = false;
   int _roleSwitchGeneration = 0;
+  RoleShutdownException? _shutdownFailure;
+  AppRole? _blockedPreviousRole;
+  AppRole? _blockedNextRole;
   final _permissionCoordinator = const RolePermissionCoordinator();
   final _roleSwitchTransaction = const RoleSwitchTransaction();
+  final _shutdownBarrier = PlatformRoleShutdownBarrier();
 
   @override
   void initState() {
@@ -99,6 +119,7 @@ class _AppBootstrapState extends State<AppBootstrap>
       if (!mounted) return;
       if (MiuCamFeatureFlags.broadcastPaywallEnabled) {
         _purchases ??= BroadcastPurchaseCompositionRoot.create(prefs);
+        _purchases!.setClientActive(role == AppRole.client);
         unawaited(_purchases!.onForeground().catchError((_) {}));
       }
       widget.onLocaleChanged?.call(ClientPreferencesService(prefs).locale);
@@ -133,7 +154,7 @@ class _AppBootstrapState extends State<AppBootstrap>
   Future<void> _select(AppRole role) async {
     if (_installPreparationPending) return;
     await _permissionCoordinator.requestFor(role);
-    if (!mounted) return;
+    if (!mounted || _role == role || _switchingRole) return;
     await _switchRole(role);
   }
 
@@ -144,7 +165,7 @@ class _AppBootstrapState extends State<AppBootstrap>
       if (confirmed != true) return;
     }
     await _permissionCoordinator.requestFor(role);
-    if (!mounted) return;
+    if (!mounted || _role == role || _switchingRole) return;
     await _switchRole(role);
   }
 
@@ -224,11 +245,15 @@ class _AppBootstrapState extends State<AppBootstrap>
 
     final generation = ++_roleSwitchGeneration;
     final runtime = _runtime;
-    final previousRole = _role;
+    final previousRole =
+        _shutdownFailure == null ? _role : _blockedPreviousRole;
+    _purchases?.setClientActive(false);
     setState(() {
       _switchingRole = true;
       _role = null;
-      _runtime = null;
+      _shutdownFailure = null;
+      // Retain the closing owner: widget disposal must await the same teardown,
+      // and a failed teardown must never create a replacement over live work.
     });
 
     Object? switchError;
@@ -239,6 +264,12 @@ class _AppBootstrapState extends State<AppBootstrap>
         previousRole: previousRole,
         nextRole: role,
         roles: _roles!,
+        confirmStopped: () async {
+          // Commit the transition surface first so the old watch/preview
+          // widgets release their own subscriptions before the next role builds.
+          await WidgetsBinding.instance.endOfFrame;
+          await _shutdownBarrier.waitUntilStopped();
+        },
         clearPairingSession: () async {
           final prefs = _prefs;
           if (prefs != null) await PairingSessionStore(prefs).clear();
@@ -250,8 +281,17 @@ class _AppBootstrapState extends State<AppBootstrap>
     }
 
     if (!mounted || generation != _roleSwitchGeneration) return;
+    final shutdownFailed = switchError is RoleShutdownException;
     setState(() {
-      _role = switchError == null ? role : previousRole;
+      if (shutdownFailed) {
+        _shutdownFailure = switchError as RoleShutdownException;
+        _blockedPreviousRole = previousRole;
+        _blockedNextRole = role;
+      } else {
+        _runtime = null;
+        _role = switchError == null ? role : previousRole;
+        _purchases?.setClientActive(_role == AppRole.client);
+      }
       _switchingRole = false;
     });
     if (switchError != null) {
@@ -263,6 +303,7 @@ class _AppBootstrapState extends State<AppBootstrap>
           context: ErrorDescription('while switching application roles'),
         ),
       );
+      if (shutdownFailed) return;
       final messenger = ScaffoldMessenger.maybeOf(context);
       messenger
         ?..clearSnackBars()
@@ -286,11 +327,19 @@ class _AppBootstrapState extends State<AppBootstrap>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _roleSwitchGeneration++;
+    _purchases?.setClientActive(false);
     final runtime = _runtime;
     _runtime = null;
     unawaited(() async {
       try {
         await runtime?.dispose();
+      } catch (error, stackTrace) {
+        FlutterError.reportError(FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'MiuCam bootstrap',
+          context: ErrorDescription('while closing the active role'),
+        ));
       } finally {
         await _purchases?.dispose();
       }
@@ -310,16 +359,25 @@ class _AppBootstrapState extends State<AppBootstrap>
     if (_switchingRole) {
       return _BootstrapProgress(message: strings.ui('roleSwitching'));
     }
+    if (_shutdownFailure != null) {
+      return _BootstrapError(
+        titleKey: 'roleShutdownFailedTitle',
+        bodyKey: 'roleShutdownFailedBody',
+        onRetry: () => unawaited(_switchRole(_blockedNextRole)),
+      );
+    }
     final prefs = _prefs!;
     final config = ConfigurationService(prefs);
     final clientPreferences = ClientPreferencesService(prefs);
     return switch (_role) {
       AppRole.server => ServerAppShell(
-          runtime: (_runtime ??= ServerCompositionRoot.create(
-            config: config,
-            strings: AppStrings.of(context),
-            sharedBroadcastAccess: _purchases?.access,
-          )) as ServerRuntime,
+          runtime: (_runtime ??=
+              widget.serverRuntimeFactory?.call(config, strings, _purchases) ??
+                  ServerCompositionRoot.create(
+                    config: config,
+                    strings: strings,
+                    sharedBroadcastAccess: _purchases?.access,
+                  )) as ServerRuntime,
           config: config,
           activeRole: AppRole.server,
           switchingRole: _switchingRole,
@@ -407,11 +465,13 @@ class _AppBootstrapState extends State<AppBootstrap>
     required ClientPreferencesService preferences,
     required AppStrings strings,
   }) {
-    final runtime = (_runtime ??= ClientCompositionRoot.create(
-      preferences: prefs,
-      strings: strings,
-      purchases: _purchases,
-    )) as ClientRuntime;
+    final runtime = (_runtime ??=
+        widget.clientRuntimeFactory?.call(prefs, strings, _purchases) ??
+            ClientCompositionRoot.create(
+              preferences: prefs,
+              strings: strings,
+              purchases: _purchases,
+            )) as ClientRuntime;
     runtime.updateAlertStrings(strings);
     return ClientAppShell(
       runtime: runtime,
@@ -426,9 +486,15 @@ class _AppBootstrapState extends State<AppBootstrap>
 }
 
 class _BootstrapError extends StatelessWidget {
-  const _BootstrapError({required this.onRetry});
+  const _BootstrapError({
+    required this.onRetry,
+    this.titleKey = 'bootstrapFailedTitle',
+    this.bodyKey = 'bootstrapFailedText',
+  });
 
   final VoidCallback onRetry;
+  final String titleKey;
+  final String bodyKey;
 
   @override
   Widget build(BuildContext context) {
@@ -443,7 +509,7 @@ class _BootstrapError extends StatelessWidget {
               const Icon(Icons.sync_problem_rounded, size: 54),
               const SizedBox(height: 18),
               Text(
-                strings.ui('bootstrapFailedTitle'),
+                strings.ui(titleKey),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 23,
@@ -452,7 +518,7 @@ class _BootstrapError extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                strings.ui('bootstrapFailedText'),
+                strings.ui(bodyKey),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 22),

@@ -15,5 +15,6 @@ class BroadcastPurchaseCompositionRoot {
             SharedPreferencesPendingRoomActivationRepository(preferences),
         remote: RemoteBroadcastAccessClient(),
         access: BroadcastAccessService(preferences),
+        clientActive: false,
       );
 }

@@ -378,6 +378,8 @@ class MiuCamServer {
   bool _httpServerListening = false;
   bool _pairingModeActive = false;
   bool _disposed = false;
+  bool _shutdownComplete = false;
+  Future<void>? _disposeOperation;
   bool _wakelockEnabled = false;
   Future<void>? _mediaStart;
   int? _mediaStartGeneration;
@@ -501,6 +503,7 @@ class MiuCamServer {
     } catch (error) {
       onLog('Local IPv6 prefix context could not be loaded: $error');
     }
+    if (_disposed) throw StateError('MiuCamServer is disposed.');
     if (!_httpServerListening) {
       _httpServerListening = true;
       _httpServer!.listen(_handleRequest);
@@ -508,6 +511,7 @@ class MiuCamServer {
     _startStreamSessionReaper();
     _pairingModeActive = true;
     final deviceId = await _serverDeviceIdentityResolver.resolve();
+    if (_disposed) throw StateError('MiuCamServer is disposed.');
     final serviceAdvertiser = _serviceAdvertiser;
     if (serviceAdvertiser != null) {
       try {
@@ -1249,14 +1253,44 @@ class MiuCamServer {
 
   int _broadcastText(String data) => _eventSockets.broadcastText(data);
 
-  Future<void> dispose() async {
-    if (_disposed) return;
+  Future<void> dispose() {
+    final current = _disposeOperation;
+    if (current != null) return current;
+    if (_shutdownComplete) return Future<void>.value();
     _disposed = true;
+    late final Future<void> operation;
+    operation = _disposeServer().whenComplete(() {
+      if (identical(_disposeOperation, operation)) _disposeOperation = null;
+    });
+    return _disposeOperation = operation;
+  }
+
+  Future<void> _disposeServer() async {
+    _videoCaptureDesired = false;
+    _injectedVideoDemand = false;
+    _injectedAudioDemand = false;
+    _videoCaptureIntentGeneration++;
+    _cameraOperationToken++;
+    for (final timer in _cameraControllerDisposalRetries.values) {
+      timer.cancel();
+    }
+    _cameraControllerDisposalRetries.clear();
+    _cameraControllerDisposalAttempts.clear();
     _streamSessionReaperTimer?.cancel();
     _streamSessionReaperTimer = null;
     _activeClientRegistry.bindExpiredSessionReadyCallback(null);
     _cancelBroadcastAccessTimer();
     final cleanup = BestEffortOperationCollector();
+
+    await cleanup.attempt('pairing startup', () async {
+      final starting = _pairingStartOperation;
+      if (starting == null) return;
+      // Shutdown invalidates this operation; its expected disposal error is
+      // harmless, but unfinished native discovery/HTTP acquisition is not.
+      await starting
+          .then<void>((_) {}, onError: (Object _, StackTrace __) {})
+          .timeout(mediaLifecycleOperationTimeout);
+    });
 
     await cleanup.attempt('WebRTC lifecycle subscription', () async {
       await _webRtcPeerSubscription?.cancel();
@@ -1325,12 +1359,28 @@ class MiuCamServer {
     mediaSource?.resetDiagnostics();
     _jpegByteBudgetController.reset();
     tokenService.clearEphemeralState();
-    await cleanup.attempt('token persistence', tokenService.flushPersistence);
-    final controller = cameraController;
-    cameraController = null;
+    try {
+      await tokenService.flushPersistence();
+    } catch (error) {
+      // Pairing reports persistence failure at the request boundary. This
+      // bookkeeping error does not retain sockets or media hardware.
+      onLog('Token persistence during shutdown failed: $error');
+    }
     await cleanup.attempt(
-      'camera controller',
-      () async => controller?.dispose(),
+      'camera controllers',
+      () async {
+        final controllers = {
+          ..._pendingCameraControllers.keys,
+          ..._cameraControllersPendingDisposal,
+          if (cameraController case final controller?) controller,
+        };
+        final results = await Future.wait(
+          controllers.map(_disposeCameraControllerLease),
+        );
+        if (results.any((confirmed) => !confirmed)) {
+          throw StateError('Native camera lease release is unconfirmed.');
+        }
+      },
     );
     await cleanup.attempt('HTTP server', () async {
       await _httpServer?.close(force: true);
@@ -1347,7 +1397,11 @@ class MiuCamServer {
         'Server disposed with cleanup errors: '
         '${cleanup.failureMessages.join(' | ')}',
       );
+      throw StateError(
+        'Server shutdown is incomplete: ${cleanup.failureMessages.join(' | ')}',
+      );
     }
+    _shutdownComplete = true;
   }
 }
 

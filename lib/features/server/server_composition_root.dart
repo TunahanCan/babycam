@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/async/serialized_async_executor.dart';
 import '../../core/feature_flags.dart';
@@ -51,12 +52,13 @@ class ServerCompositionRoot {
     const platformContract = PlatformRuntimeContract();
     var nativeMediaDemand = MediaResourceDemand.none;
     var nativePlaybackDemand = false;
+    var closing = false;
     final nativeDemandOperations = SerializedAsyncExecutor();
 
     Future<void> publishNativeDemand() {
       return nativeDemandOperations.run(() async {
-        final demand = nativeMediaDemand;
-        final playback = nativePlaybackDemand;
+        final demand = closing ? MediaResourceDemand.none : nativeMediaDemand;
+        final playback = !closing && nativePlaybackDemand;
         try {
           await platformContract
               .setMediaDemand(
@@ -68,7 +70,7 @@ class ServerCompositionRoot {
                 nativeMicrophoneCapture: demand.serviceAudioCapture,
               )
               .timeout(mediaOperationTimeout);
-        } catch (_) {
+        } on MissingPluginException {
           // Unsupported/test targets intentionally have no native channel.
         }
       });
@@ -85,13 +87,23 @@ class ServerCompositionRoot {
     }
 
     Future<void> stopServerRuntime(MiuCamServer server) async {
+      closing = true;
+      nativeMediaDemand = MediaResourceDemand.none;
+      nativePlaybackDemand = false;
       try {
         await server.dispose();
       } finally {
         tokenService.dispose();
-        // Media demand may already be empty. Release the independent HTTP/WS
-        // host lease only after the Dart server has closed its sockets.
-        await platformContract.setServerDemand(active: false);
+        try {
+          // Drain earlier native publications before the next role can own the
+          // service. Late playback/media callbacks are clamped to no demand.
+          await publishNativeDemand();
+        } finally {
+          // Release the independent host lease after Dart sockets close.
+          await platformContract
+              .setServerDemand(active: false)
+              .timeout(mediaOperationTimeout);
+        }
       }
     }
 

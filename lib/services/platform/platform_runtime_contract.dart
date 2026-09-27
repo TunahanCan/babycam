@@ -21,6 +21,7 @@ class PlatformRuntimeSnapshot {
     required this.serviceOwnsEngine,
     required this.engineAvailable,
     this.playbackDemand = false,
+    this.alertDemand = false,
     this.serverDemand = false,
     this.audioOutputActive = false,
     this.supportsServerInBackground = false,
@@ -61,6 +62,7 @@ class PlatformRuntimeSnapshot {
       cameraDemand: map['cameraDemand'] as bool? ?? false,
       microphoneDemand: map['microphoneDemand'] as bool? ?? false,
       playbackDemand: map['playbackDemand'] as bool? ?? false,
+      alertDemand: map['alertDemand'] as bool? ?? false,
       serverDemand: map['serverDemand'] as bool? ?? false,
       audioOutputActive: map['audioOutputActive'] as bool? ?? false,
       supportsServerInBackground:
@@ -105,6 +107,7 @@ class PlatformRuntimeSnapshot {
   final bool cameraDemand;
   final bool microphoneDemand;
   final bool playbackDemand;
+  final bool alertDemand;
   final bool serverDemand;
   final bool audioOutputActive;
   final bool supportsServerInBackground;
@@ -127,6 +130,26 @@ class PlatformRuntimeSnapshot {
   final bool engineAvailable;
   final String? lastServiceStopReason;
   final String? contractMessage;
+
+  /// Role handoff is allowed only after all native leases and hardware stop.
+  /// An available/shared Flutter engine is not an active role resource.
+  bool get hasActiveRoleResources =>
+      serverDemand ||
+      alertDemand ||
+      cameraDemand ||
+      microphoneDemand ||
+      playbackDemand ||
+      audioOutputActive ||
+      nativeCameraRequested ||
+      nativeMicrophoneRequested ||
+      nativeCameraActive ||
+      nativeMicrophoneActive ||
+      externalCameraCaptureDemand ||
+      externalMicrophoneCaptureDemand ||
+      externalMediaCaptureDemand ||
+      serviceOwnsMediaHardware ||
+      serviceOwnsNativeMediaHardware ||
+      foregroundServiceActive;
 
   bool get cameraMustPauseWhenBackgrounded =>
       platform == PlatformRuntimeKind.ios && !supportsCameraInBackground;
@@ -212,14 +235,25 @@ class PlatformRuntimeContract {
   final MethodChannel _methodChannel;
   final EventChannel _eventChannel;
 
-  Future<PlatformRuntimeSnapshot> snapshot() async {
+  Future<PlatformRuntimeSnapshot> snapshot({bool requireNative = false}) async {
     try {
       final map = await _methodChannel.invokeMapMethod<Object?, Object?>(
         'snapshot',
       );
-      if (map != null) return PlatformRuntimeSnapshot.fromMap(map);
+      if (map != null) {
+        if (requireNative &&
+            map['platform'] != 'android' &&
+            map['platform'] != 'ios') {
+          throw StateError('Native runtime returned an unknown platform.');
+        }
+        return PlatformRuntimeSnapshot.fromMap(map);
+      }
     } on MissingPluginException {
+      if (requireNative) rethrow;
       // Unit tests and unsupported desktop targets use a conservative snapshot.
+    }
+    if (requireNative) {
+      throw StateError('Native runtime did not confirm its resource state.');
     }
     return _fallbackSnapshot();
   }

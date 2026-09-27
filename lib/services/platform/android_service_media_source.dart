@@ -557,6 +557,28 @@ class AndroidServiceMediaSource extends ServerMediaSource
     _resetAudioContinuity();
     _errorSink = null;
     _lastNativeStateErrorKey = null;
+    final subscription = _eventSubscription;
+    if (subscription != null) {
+      // Native consumer detachment does not cancel Flutter's EventChannel
+      // listener. Release it too so an inactive server owns no background
+      // subscriptions; a later capture attaches a fresh generation.
+      ++_eventStreamGeneration;
+      try {
+        final cancellation = subscription.cancel().then<void>((_) {
+          if (identical(_eventSubscription, subscription)) {
+            _eventSubscription = null;
+          }
+        });
+        await _boundedNative(
+          cancellation,
+          'cancel native media events',
+          deadline: deadline,
+        );
+      } catch (error, stack) {
+        firstError ??= error;
+        firstStack ??= stack;
+      }
+    }
     if (firstError != null) {
       if (_nativeConsumerAttached) _scheduleNativeRepairRetry();
       Error.throwWithStackTrace(firstError, firstStack ?? StackTrace.current);

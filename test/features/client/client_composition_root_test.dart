@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miucam/core/protocol/miucam_protocol.dart';
@@ -15,6 +17,58 @@ import 'package:miucam/l10n/app_strings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('late native alert service start cannot rearm the departed client role',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    const channel = MethodChannel('miucam/platform_runtime');
+    final nativeStart = Completer<void>();
+    final releaseNativeStart = Completer<void>();
+    final demands = <bool>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'setAlertDemand') {
+        final active = (call.arguments as Map)['active'] as bool;
+        demands.add(active);
+        if (active) {
+          nativeStart.complete();
+          await releaseNativeStart.future;
+        }
+      }
+      return null;
+    });
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final listener = _RecordingAlertListener();
+    final runtime = ClientCompositionRoot.create(
+      preferences: preferences,
+      strings: AppStrings(const Locale('tr')),
+      secureTokens: _FakeSecureTokenStore(),
+      notificationService: _RecordingNotificationService(),
+      alertListener: listener,
+    );
+    await runtime.restoreSession(
+      PairingSession(payload: _payload(), sessionToken: 'trusted-token'),
+    );
+    final starting = runtime.startAlertListening();
+    await nativeStart.future;
+
+    final disposing = runtime.dispose();
+    await pumpEventQueue();
+    expect(demands, [true, false]);
+    releaseNativeStart.complete();
+    expect(await starting, isFalse);
+    await disposing;
+    expect(listener.startCalls, 0);
+    expect(listener.isListening, isFalse);
+    expect(demands.last, isFalse);
+  });
+
   test('saved pairing session client runtime icine restore edilir', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -36,6 +90,7 @@ void main() {
       preferences: preferences,
       strings: AppStrings(const Locale('tr')),
       secureTokens: secure,
+      alertListener: _RecordingAlertListener(),
     );
 
     await expectLater(

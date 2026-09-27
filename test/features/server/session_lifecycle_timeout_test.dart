@@ -15,6 +15,39 @@ import 'package:miucam/services/miucam_server.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('terminal per-resource stops never revive the other injected channel',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final source = _HangingFirstMediaSource()..releaseFirst();
+    final server = MiuCamServer(
+      config: ConfigurationService(await SharedPreferences.getInstance()),
+      strings: AppStrings(const Locale('tr')),
+      onLog: (_) {},
+      onAlert: (_) {},
+      mediaSource: source,
+    );
+    final runtime = ServerRuntime(
+      mediaRuntime: MediaRuntimeController(
+        onStartVideo: server.startVideoRuntime,
+        onStopVideo: server.stopVideoRuntime,
+        onStartAudio: server.startAudioRuntime,
+        onStopAudio: server.stopAudioRuntime,
+      ),
+      onStop: server.dispose,
+    );
+    await runtime.startStreamSession(
+        'device', const StreamSessionOptions(video: true, audio: true));
+    expect(source.demands.last, MediaResourceDemand.all);
+
+    await runtime.dispose();
+
+    expect(source.stopIndex, isNotNull);
+    expect(source.demands.skip(source.stopIndex!),
+        everyElement(MediaResourceDemand.none));
+    expect(source.isActive, isFalse);
+    expect(runtime.currentState.phase, ServerRuntimePhase.stopped);
+  });
+
   test('hanging runtime start cannot retain the global session queue',
       () async {
     SharedPreferences.setMockInitialValues({});
@@ -280,6 +313,8 @@ class _HangingFirstMediaSource extends ServerMediaSource {
   final _firstRelease = Completer<void>();
   var calls = 0;
   var active = false;
+  final demands = <MediaResourceDemand>[];
+  int? stopIndex;
 
   void releaseFirst() {
     if (!_firstRelease.isCompleted) _firstRelease.complete();
@@ -293,6 +328,7 @@ class _HangingFirstMediaSource extends ServerMediaSource {
     required ServerAudioChunkSink onAudioChunk,
     ServerMediaErrorSink? onError,
   }) async {
+    demands.add(MediaResourceDemand(video: video, audio: audio));
     calls++;
     if (calls == 1) {
       firstEntered.complete();
@@ -321,6 +357,7 @@ class _HangingFirstMediaSource extends ServerMediaSource {
 
   @override
   Future<void> stop() async {
+    stopIndex ??= demands.length;
     active = false;
   }
 }

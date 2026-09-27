@@ -240,6 +240,27 @@ const appUiTextCatalog = <String, Map<String, String>>{
     'es': 'No se pudo cambiar el rol. Se restauró la pantalla anterior.',
     'fr': 'Impossible de changer de rôle. L’écran précédent a été restauré.',
   },
+  'roleShutdownFailedTitle': {
+    'tr': 'Önceki mod kapatılamadı',
+    'en': 'The previous mode could not stop',
+    'zh': '无法停止上一个模式',
+    'hi': 'पिछला मोड बंद नहीं हो सका',
+    'es': 'No se pudo detener el modo anterior',
+    'fr': 'Le mode précédent n’a pas pu être arrêté',
+  },
+  'roleShutdownFailedBody': {
+    'tr':
+        'Yeni mod başlatılmadı. Tekrar deneyin. Sorun sürerse MiuCam’i tamamen kapatıp yeniden açın.',
+    'en':
+        'The new mode has not started. Try again. If this continues, fully close and reopen MiuCam.',
+    'zh': '新模式尚未启动。请重试。如果问题仍然存在，请完全关闭 MiuCam 后重新打开。',
+    'hi':
+        'नया मोड शुरू नहीं हुआ है। फिर कोशिश करें। समस्या बनी रहे तो MiuCam को पूरी तरह बंद करके दोबारा खोलें।',
+    'es':
+        'El nuevo modo no se ha iniciado. Inténtalo de nuevo. Si el problema continúa, cierra MiuCam por completo y vuelve a abrirlo.',
+    'fr':
+        'Le nouveau mode n’a pas démarré. Réessayez. Si le problème persiste, fermez complètement MiuCam et rouvrez l’application.',
+  },
   'confirmLeaveServerTitle': {
     'tr': 'Server modundan çıkılsın mı?',
     'en': 'Leave Server mode?',

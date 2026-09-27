@@ -11,7 +11,10 @@ import '../../../services/monetization/room_broadcast_access_gateway.dart';
 
 /// Reads the room server's authoritative trial/entitlement state before a
 /// client-side deadline is allowed to stop a live stream.
-class RemoteBroadcastAccessClient implements RoomBroadcastAccessGateway {
+class RemoteBroadcastAccessClient
+    implements
+        RoomBroadcastAccessGateway,
+        CancelableRoomBroadcastAccessGateway {
   RemoteBroadcastAccessClient({
     this.timeout = const Duration(milliseconds: 1200),
     this.maxResponseBytes = 64 * 1024,
@@ -21,6 +24,23 @@ class RemoteBroadcastAccessClient implements RoomBroadcastAccessGateway {
   final Duration timeout;
   final int maxResponseBytes;
   final HttpClient Function() _clientFactory;
+  final _activeClients = <HttpClient>{};
+  int _requestGeneration = 0;
+
+  @override
+  void cancelPendingRequests() {
+    _requestGeneration++;
+    for (final client in _activeClients) {
+      client.close(force: true);
+    }
+    _activeClients.clear();
+  }
+
+  void _requireCurrentRequest(int generation) {
+    if (generation != _requestGeneration) {
+      throw StateError('Room request was canceled.');
+    }
+  }
 
   @override
   Future<BroadcastAccessSnapshot?> snapshot(PairingSession session) async {
@@ -84,7 +104,9 @@ class RemoteBroadcastAccessClient implements RoomBroadcastAccessGateway {
     Map<String, Object?>? body,
     bool allowNotFound = false,
   }) async {
+    final generation = _requestGeneration;
     final client = _clientFactory()..connectionTimeout = timeout;
+    _activeClients.add(client);
     try {
       final request = await client
           .openUrl(
@@ -92,6 +114,7 @@ class RemoteBroadcastAccessClient implements RoomBroadcastAccessGateway {
             ServerEndpointBuilder(session).http(path),
           )
           .timeout(timeout);
+      _requireCurrentRequest(generation);
       // A paired room may not redirect credentials or activation to a new peer.
       request.followRedirects = false;
       request.headers.set(
@@ -103,7 +126,9 @@ class RemoteBroadcastAccessClient implements RoomBroadcastAccessGateway {
         request.write(jsonEncode(body));
       }
       final response = await request.close().timeout(timeout);
+      _requireCurrentRequest(generation);
       final responseBytes = await _readBoundedBody(response).timeout(timeout);
+      _requireCurrentRequest(generation);
       if (allowNotFound && response.statusCode == HttpStatus.notFound) {
         return const {};
       }
@@ -119,6 +144,7 @@ class RemoteBroadcastAccessClient implements RoomBroadcastAccessGateway {
       }
       return Map<Object?, Object?>.from(decoded);
     } finally {
+      _activeClients.remove(client);
       client.close(force: true);
     }
   }

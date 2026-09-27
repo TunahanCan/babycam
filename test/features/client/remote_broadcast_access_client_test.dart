@@ -9,6 +9,60 @@ import 'package:miucam/core/protocol/pairing_session.dart';
 import 'package:miucam/features/client/media/remote_broadcast_access_client.dart';
 
 void main() {
+  for (final responseStarted in [false, true]) {
+    test(
+        'canceling room requests closes ${responseStarted ? 'body' : 'header'} waits and permits a fresh role',
+        () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      final entered = Completer<void>();
+      var requests = 0;
+      server.listen((request) async {
+        requests++;
+        if (requests == 1) {
+          unawaited(request.response.done.catchError((_) {}));
+          if (responseStarted) {
+            request.response
+              ..headers.contentType = ContentType.json
+              ..write('{"broadcastAccess":');
+            await request.response.flush();
+          }
+          entered.complete();
+          return;
+        }
+        request.response.write(jsonEncode({
+          'broadcastAccess': {
+            'unlocked': true,
+            'active': false,
+            'freeLimitMs': 100,
+            'usedMs': 0,
+            'remainingMs': 100,
+            'priceLabel': r'$9.99',
+            'productId': 'miucam.broadcast.lifetime',
+          },
+        }));
+        await request.response.close();
+      });
+      final remote = RemoteBroadcastAccessClient(
+        timeout: const Duration(seconds: 5),
+      );
+      final pending = remote.snapshot(_sessionFor(server));
+      final canceled = expectLater(
+        pending.timeout(const Duration(seconds: 1)),
+        throwsA(anyOf(
+          isA<HttpException>(),
+          isA<SocketException>(),
+          isA<StateError>(),
+        )),
+      );
+      await entered.future;
+      remote.cancelPendingRequests();
+      await canceled;
+      expect((await remote.snapshot(_sessionFor(server)))?.unlocked, isTrue);
+      expect(requests, 2);
+    });
+  }
+
   test('status and family grants cannot redirect to another endpoint',
       () async {
     final origin = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

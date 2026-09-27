@@ -18,6 +18,8 @@ import 'package:miucam/services/client_preferences_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../support/runtime_widget_cleanup.dart';
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -30,27 +32,29 @@ void main() {
     final runtime = ClientRuntime(
       pair: (_) => throw UnimplementedError(),
     );
-    addTearDown(runtime.dispose);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('tr'),
-        supportedLocales: AppStrings.supportedLocales,
-        localizationsDelegates: _localizationsDelegates,
-        home: ClientHomeScreen(
-          runtime: runtime,
-          activeRole: AppRole.client,
-          onRoleSelected: (_) {},
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('tr'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: _localizationsDelegates,
+          home: ClientHomeScreen(
+            runtime: runtime,
+            activeRole: AppRole.client,
+            onRoleSelected: (_) {},
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    _expectNoFlutterException(tester);
-
-    for (final label in ['Bul', 'Bildirim', 'Ayarlar', 'İzle']) {
-      await tester.tap(find.text(label).last);
+      );
       await tester.pumpAndSettle();
       _expectNoFlutterException(tester);
+
+      for (final label in ['Bul', 'Bildirim', 'Ayarlar', 'İzle']) {
+        await tester.tap(find.text(label).last);
+        await tester.pumpAndSettle();
+        _expectNoFlutterException(tester);
+      }
+    } finally {
+      await disposeClientRuntime(tester, runtime);
     }
   });
 
@@ -59,38 +63,40 @@ void main() {
     final runtime = ClientRuntime(
       pair: (_) => throw UnimplementedError(),
     );
-    addTearDown(runtime.dispose);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('tr'),
-        supportedLocales: AppStrings.supportedLocales,
-        localizationsDelegates: _localizationsDelegates,
-        home: ClientHomeScreen(
-          runtime: runtime,
-          activeRole: AppRole.client,
-          onRoleSelected: (_) {},
-          initialTab: 2,
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('tr'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: _localizationsDelegates,
+          home: ClientHomeScreen(
+            runtime: runtime,
+            activeRole: AppRole.client,
+            onRoleSelected: (_) {},
+            initialTab: 2,
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    final navigationBefore = tester.widget<MiuCamBottomNav>(
-      find.byType(MiuCamBottomNav),
-    );
-    await tester.tap(find.text('Ses'));
-    await tester.pump();
-    final navigationAfter = tester.widget<MiuCamBottomNav>(
-      find.byType(MiuCamBottomNav),
-    );
+      final navigationBefore = tester.widget<MiuCamBottomNav>(
+        find.byType(MiuCamBottomNav),
+      );
+      await tester.tap(find.text('Ses'));
+      await tester.pump();
+      final navigationAfter = tester.widget<MiuCamBottomNav>(
+        find.byType(MiuCamBottomNav),
+      );
 
-    expect(
-      identical(navigationBefore, navigationAfter),
-      isTrue,
-      reason: 'Notification filter state must stay inside its section.',
-    );
-    _expectNoFlutterException(tester);
+      expect(
+        identical(navigationBefore, navigationAfter),
+        isTrue,
+        reason: 'Notification filter state must stay inside its section.',
+      );
+      _expectNoFlutterException(tester);
+    } finally {
+      await disposeClientRuntime(tester, runtime);
+    }
   });
 
   testWidgets('paired client ve canlı izleme dar ekranda overflow üretmez',
@@ -98,38 +104,40 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.binding.setSurfaceSize(const Size(320, 844));
     final runtime = await _pairedRuntime();
-    addTearDown(runtime.dispose);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('tr'),
-        supportedLocales: AppStrings.supportedLocales,
-        localizationsDelegates: _localizationsDelegates,
-        home: ClientHomeScreen(
-          runtime: runtime,
-          activeRole: AppRole.client,
-          onRoleSelected: (_) {},
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('tr'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: _localizationsDelegates,
+          home: ClientHomeScreen(
+            runtime: runtime,
+            activeRole: AppRole.client,
+            onRoleSelected: (_) {},
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    _expectNoFlutterException(tester);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('tr'),
-        supportedLocales: AppStrings.supportedLocales,
-        localizationsDelegates: _localizationsDelegates,
-        home: WatchScreen(runtime: runtime),
-      ),
-    );
-    await tester.pumpAndSettle();
-    _expectNoFlutterException(tester);
-
-    for (final label in ['Geçmiş', 'Ayarlar', 'İzle']) {
-      await tester.tap(find.text(label).last);
+      );
       await tester.pumpAndSettle();
       _expectNoFlutterException(tester);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('tr'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: _localizationsDelegates,
+          home: WatchScreen(runtime: runtime),
+        ),
+      );
+      await tester.pumpAndSettle();
+      _expectNoFlutterException(tester);
+
+      for (final label in ['Geçmiş', 'Ayarlar', 'İzle']) {
+        await tester.tap(find.text(label).last);
+        await tester.pumpAndSettle();
+        _expectNoFlutterException(tester);
+      }
+    } finally {
+      await disposeClientRuntime(tester, runtime);
     }
   });
 
@@ -138,33 +146,35 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.binding.setSurfaceSize(const Size(320, 844));
     final runtime = await _pairedRuntime();
-    addTearDown(runtime.dispose);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('tr'),
-        supportedLocales: AppStrings.supportedLocales,
-        localizationsDelegates: _localizationsDelegates,
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            textScaler: const TextScaler.linear(1.5),
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('tr'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: _localizationsDelegates,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: const TextScaler.linear(1.5),
+            ),
+            child: child!,
           ),
-          child: child!,
+          home: WatchScreen(runtime: runtime),
         ),
-        home: WatchScreen(runtime: runtime),
-      ),
-    );
-    await tester.pumpAndSettle();
-    _expectNoFlutterException(tester);
-
-    runtime.reportStreamFailure(StateError('render budget failure'));
-    await tester.pumpAndSettle();
-    _expectNoFlutterException(tester);
-
-    for (final label in ['Geçmiş', 'Ayarlar', 'İzle']) {
-      await tester.tap(find.text(label).last);
+      );
       await tester.pumpAndSettle();
       _expectNoFlutterException(tester);
+
+      runtime.reportStreamFailure(StateError('render budget failure'));
+      await tester.pumpAndSettle();
+      _expectNoFlutterException(tester);
+
+      for (final label in ['Geçmiş', 'Ayarlar', 'İzle']) {
+        await tester.tap(find.text(label).last);
+        await tester.pumpAndSettle();
+        _expectNoFlutterException(tester);
+      }
+    } finally {
+      await disposeClientRuntime(tester, runtime);
     }
   });
 

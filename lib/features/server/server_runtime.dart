@@ -203,6 +203,8 @@ class ServerRuntime implements AppRuntime {
   final _sessionIntentGenerations = <String, int>{};
   int _nextSessionIntentGeneration = 0;
   bool _disposed = false;
+  bool _shutdownComplete = false;
+  Future<void>? _disposeOperation;
   bool _platformAudioOnly = false;
 
   Stream<ServerRuntimeState> get states => _states.stream;
@@ -641,9 +643,27 @@ class ServerRuntime implements AppRuntime {
     _platformAudioOnly = false;
     _resources.localPreviewActive = false;
     _refreshResourceCounts();
-    await _broadcastAccess?.endAllSessions();
-    await _mediaRuntime.reconcile(MediaResourceDemand.none);
-    await _publishMediaDemand();
+    Object? firstError;
+    StackTrace? firstStack;
+    Future<void> release(Future<void> Function() operation) async {
+      try {
+        await operation();
+      } catch (error, stackTrace) {
+        firstError ??= error;
+        firstStack ??= stackTrace;
+      }
+    }
+
+    // Billing persistence and one failing resource must not prevent the
+    // independent camera, microphone and native service leases from stopping.
+    await release(() async => _broadcastAccess?.endAllSessions());
+    await release(() => _disposed
+        ? _mediaRuntime.dispose()
+        : _mediaRuntime.reconcile(MediaResourceDemand.none));
+    await release(() => _publishMediaDemand(forceNone: true));
+    if (firstError != null) {
+      Error.throwWithStackTrace(firstError!, firstStack!);
+    }
     _emit(ServerRuntimeState(
       phase: ServerRuntimePhase.stopped,
       broadcastAccess: _state.broadcastAccess,
@@ -977,24 +997,51 @@ class ServerRuntime implements AppRuntime {
   }
 
   @override
-  Future<void> dispose() async {
-    if (_disposed) return;
+  Future<void> dispose() {
+    final current = _disposeOperation;
+    if (current != null) return current;
+    if (_shutdownComplete) return Future<void>.value();
     _disposed = true;
-    await _broadcastAccessChanges?.cancel();
-    _broadcastAccessChanges = null;
-    try {
+    _cancelBroadcastAccessTimer();
+    late final Future<void> operation;
+    operation = _disposeRuntime().whenComplete(() {
+      if (identical(_disposeOperation, operation)) _disposeOperation = null;
+    });
+    return _disposeOperation = operation;
+  }
+
+  Future<void> _disposeRuntime() async {
+    Object? firstError;
+    StackTrace? firstStack;
+    Future<void> release(Future<void> Function() operation) async {
       try {
-        await _platformLifecycle?.dispose();
-      } finally {
-        await stop();
-      }
-    } finally {
-      try {
-        if (ownsBroadcastAccess) await _broadcastAccess?.dispose();
-      } finally {
-        await _states.close();
+        await operation();
+      } catch (error, stackTrace) {
+        firstError ??= error;
+        firstStack ??= stackTrace;
       }
     }
+
+    await release(() async {
+      await _broadcastAccessChanges?.cancel();
+      _broadcastAccessChanges = null;
+    });
+    await release(() async => _platformLifecycle?.dispose());
+    // Pairing owns HTTP/discovery/native host acquisition independently of the
+    // media queue. Its final callback must precede terminal server cleanup.
+    await release(
+      () => _pairingMutations.close().timeout(mediaOperationTimeout),
+    );
+    await release(stop);
+    if (ownsBroadcastAccess) {
+      await release(() async => _broadcastAccess?.dispose());
+    }
+    await release(_states.close);
+    if (firstError != null) {
+      Error.throwWithStackTrace(firstError!, firstStack!);
+    }
+    await _mutations.close();
+    _shutdownComplete = true;
   }
 
   Future<void> _publishMediaDemand({

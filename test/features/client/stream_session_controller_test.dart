@@ -13,6 +13,41 @@ import 'package:miucam/features/client/media/webrtc/webrtc_client_connector.dart
 import 'package:miucam/services/monetization/broadcast_access_service.dart';
 
 void main() {
+  test('offline room cleanup does not block a locally completed role exit',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+      await _json(request.response, {
+        'ok': true,
+        'streamToken': 'stream',
+        MiuCamProtocolV2.streamAttemptId:
+            body[MiuCamProtocolV2.streamAttemptId],
+      });
+    });
+    final controller = StreamSessionController();
+    addTearDown(controller.dispose);
+    final session = _session(server.port);
+    await controller.start(session);
+    await server.close(force: true);
+
+    await controller.stopForRoleExit(session);
+    expect(controller.isActive, isFalse);
+    expect(controller.lastStreamToken, isNull);
+  });
+
+  test('native cancellation failure still blocks a role exit', () async {
+    final controller = StreamSessionController(
+      webRtcConnector: _FailingCancelConnector(),
+    );
+    addTearDown(controller.dispose);
+
+    await expectLater(
+      controller.stopForRoleExit(_session(9)),
+      throwsStateError,
+    );
+  });
+
   test('health state session start sonrası ayrı video/audio request açmaz',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -737,6 +772,12 @@ class _FakeWebRtcConnector implements WebRtcClientConnector {
 
   @override
   Future<bool> initialize() async => true;
+}
+
+class _FailingCancelConnector extends _FakeWebRtcConnector {
+  @override
+  Future<void> cancelPendingConnections() async =>
+      throw StateError('native peer is still active');
 }
 
 class _FakeWebRtcHandle implements WebRtcClientMediaHandle {

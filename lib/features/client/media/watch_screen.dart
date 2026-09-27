@@ -337,6 +337,7 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
         fit: StackFit.expand,
         children: [
           _StreamSurface(
+            runtime: widget.runtime,
             session: state.session,
             activeStream: state.activeStream,
             audioEnabled: _audioEnabled,
@@ -443,6 +444,7 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
           ],
           const SizedBox(height: 18),
           _VideoPanel(
+            runtime: widget.runtime,
             session: state.session,
             activeStream: state.activeStream,
             error: state.error,

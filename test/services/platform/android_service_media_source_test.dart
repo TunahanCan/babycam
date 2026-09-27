@@ -710,6 +710,31 @@ void main() {
     await bridge.close();
   });
 
+  test('stop releases native events and each restart owns only one listener',
+      () async {
+    final bridge = _FakeBridge();
+    final source = AndroidServiceMediaSource(bridge: bridge);
+    addTearDown(bridge.close);
+    addTearDown(source.stop);
+
+    for (var cycle = 0; cycle < 2; cycle++) {
+      await source.reconcile(
+        video: true,
+        audio: true,
+        onVideoFrame: (_) {},
+        onAudioChunk: (_) {},
+      );
+      expect(bridge._eventControllers.where((stream) => stream.hasListener),
+          hasLength(1));
+
+      await source.stop();
+
+      expect(bridge._eventControllers.where((stream) => stream.hasListener),
+          isEmpty);
+    }
+    expect(bridge._eventControllers, hasLength(2));
+  });
+
   test('constructor rejects transport settings outside native bounds', () {
     final bridge = _FakeBridge();
     expect(

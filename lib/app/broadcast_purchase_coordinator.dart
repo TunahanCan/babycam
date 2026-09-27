@@ -52,8 +52,10 @@ class BroadcastPurchaseCoordinator {
     LicenseGrantVerifier? licenseVerifier,
     bool? licenseVerificationConfigured,
     RetryPolicy? activationRetryPolicy,
+    bool clientActive = true,
   })  : _pendingActivations = pendingActivations,
         _remote = remote,
+        _clientActive = clientActive,
         _activationRetryPolicy = activationRetryPolicy ??
             ExponentialBackoffPolicy(
               initialDelay: const Duration(seconds: 5),
@@ -86,6 +88,7 @@ class BroadcastPurchaseCoordinator {
   bool _tokenChangedDuringOperation = false;
   Timer? _retryTimer;
   bool _foreground = true;
+  bool _clientActive;
   int _retryAttempt = 0;
   String? _lastToken;
   bool _disposed = false;
@@ -134,7 +137,7 @@ class BroadcastPurchaseCoordinator {
   }
 
   void attachSession(PairingSession session) {
-    if (_disposed) return;
+    if (_disposed || !_clientActive) return;
     _sessions[session.deviceId] = session;
     if (access.licenseToken != null) {
       _pendingRooms.add(session.deviceId);
@@ -142,6 +145,29 @@ class BroadcastPurchaseCoordinator {
     } else if (_licenseVerificationConfigured) {
       unawaited(_inheritRoomLicense(session).catchError((_) => null));
     }
+  }
+
+  /// Store ownership survives a role switch, while room delivery belongs only
+  /// to the active parent role. Cancel its sockets synchronously; an in-flight
+  /// store payment can still persist safely without reviving the old room.
+  void setClientActive(bool active) {
+    if (_disposed || _clientActive == active) return;
+    _clientActive = active;
+    if (!active) {
+      _retryTimer?.cancel();
+      _retryTimer = null;
+      for (final roomId in _sessions.keys) {
+        _roomGenerations[roomId] = (_roomGenerations[roomId] ?? 0) + 1;
+      }
+      _sessions.clear();
+      _states.clear();
+      final remote = _remote;
+      if (remote is CancelableRoomBroadcastAccessGateway) {
+        (remote as CancelableRoomBroadcastAccessGateway)
+            .cancelPendingRequests();
+      }
+    }
+    _notify();
   }
 
   /// Explicit unpairing cancels delivery to this room, not the family purchase.
@@ -164,7 +190,7 @@ class BroadcastPurchaseCoordinator {
       _roomGenerations[session.deviceId] ?? 0;
 
   bool _isCurrent(PairingSession session, int generation) =>
-      !_disposed && _generation(session) == generation;
+      !_disposed && _clientActive && _generation(session) == generation;
 
   Future<BroadcastAccessSnapshot?> _inheritRoomLicense(
       PairingSession session) async {
@@ -193,7 +219,7 @@ class BroadcastPurchaseCoordinator {
     PairingSession session, {
     bool restore = false,
   }) async {
-    if (_disposed || _operation != null) return null;
+    if (_disposed || !_clientActive || _operation != null) return null;
     BroadcastAccessSnapshot? result;
     // Capture this session before any await: navigation cannot redirect payment.
     final target = session;
@@ -349,6 +375,7 @@ class BroadcastPurchaseCoordinator {
   /// Retries only signed-grant delivery, never opens another checkout.
   Future<void> retryPending() async {
     if (_disposed ||
+        !_clientActive ||
         !_foreground ||
         _operation != null ||
         access.licenseToken == null) {
@@ -387,6 +414,7 @@ class BroadcastPurchaseCoordinator {
 
   void _scheduleRetry() {
     if (_disposed ||
+        !_clientActive ||
         !_foreground ||
         _retryTimer != null ||
         access.licenseToken == null ||
@@ -421,7 +449,7 @@ class BroadcastPurchaseCoordinator {
 
   void _set(PairingSession session, ParentPurchasePhase phase,
       [BroadcastAccessSnapshot? snapshot]) {
-    if (_disposed) return;
+    if (_disposed || !_clientActive) return;
     _states[session.deviceId] = ParentPurchaseState(
       roomId: session.deviceId,
       roomName: session.payload.deviceName,
@@ -437,6 +465,7 @@ class BroadcastPurchaseCoordinator {
 
   Future<void> dispose() async {
     if (_disposed) return;
+    setClientActive(false);
     _disposed = true;
     _retryTimer?.cancel();
     await _subscription.cancel();

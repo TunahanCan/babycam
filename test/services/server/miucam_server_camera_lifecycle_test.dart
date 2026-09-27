@@ -146,6 +146,23 @@ void main() {
     expect(cameraPlatform.disposeCalls, callsAfterCleanup);
     expect(cameraPlatform.disposedCameraIds, contains(1));
   });
+
+  test('terminal dispose blocks handoff until exact native camera is released',
+      () async {
+    await server.startVideoRuntime();
+    cameraPlatform.failEveryDispose = true;
+
+    await expectLater(server.dispose(), throwsStateError);
+    expect(cameraPlatform.disposedCameraIds, isNot(contains(1)));
+    final callsAfterFailure = cameraPlatform.disposeCalls;
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(cameraPlatform.disposeCalls, callsAfterFailure);
+
+    cameraPlatform.failEveryDispose = false;
+    await server.dispose();
+    expect(cameraPlatform.disposedCameraIds, contains(1));
+    expect(cameraPlatform.disposeCalls, callsAfterFailure + 1);
+  });
 }
 
 Future<Object?> _errorOf(Future<void> operation) async {

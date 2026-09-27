@@ -29,8 +29,15 @@ class FlutterWebRtcServerGateway
   final _peers = <String, _ServerPeer>{};
   final _reservations = <String>{};
   final _pendingOffers = <String, _PendingServerOffer>{};
+  final _nativeAcquisitions = <Future<void>>{};
+  final _offerSettlements = <Future<void>>{};
+  final _cleanupTasks = <Future<void> Function(), String>{};
+  final _cleanupOperations = <Future<void> Function(), Future<void>>{};
+  Future<void>? _disposeOperation;
+  bool _shutdownComplete = false;
   final _peerEvents = StreamController<WebRtcPeerLifecycleEvent>.broadcast();
   Future<bool>? _initializeOperation;
+  Future<void>? _probeOperation;
   bool _initialized = false;
   bool _available = false;
   bool _disposed = false;
@@ -71,10 +78,15 @@ class FlutterWebRtcServerGateway
       _available =
           _hasCodec(video, 'video/h264') && _hasCodec(audio, 'audio/opus');
       if (_available) {
-        await _probeOfferAnswer(
+        late final Future<void> probe;
+        probe = _probeOfferAnswer(
           video: video,
           audio: audio,
-        ).timeout(nativeOperationTimeout);
+        ).whenComplete(() {
+          if (identical(_probeOperation, probe)) _probeOperation = null;
+        });
+        _probeOperation = probe;
+        await probe.timeout(nativeOperationTimeout);
       }
       _initialized = true;
     } catch (error) {
@@ -101,6 +113,7 @@ class FlutterWebRtcServerGateway
       clientId: clientId,
       peerId: peerId,
     );
+    _offerSettlements.add(pending.finished.future);
     final previous = _pendingOffers[clientId];
     if (previous != null) {
       previous.cancel();
@@ -225,6 +238,8 @@ class FlutterWebRtcServerGateway
       await _cleanupPendingOffer(pending);
       rethrow;
     } finally {
+      if (!pending.finished.isCompleted) pending.finished.complete();
+      _offerSettlements.remove(pending.finished.future);
       if (identical(_pendingOffers[clientId], pending)) {
         _pendingOffers.remove(clientId);
       }
@@ -346,11 +361,20 @@ class FlutterWebRtcServerGateway
   }
 
   @override
-  Future<void> dispose() async {
-    if (_disposed) return;
+  Future<void> dispose() {
+    final current = _disposeOperation;
+    if (current != null) return current;
+    if (_shutdownComplete) return Future<void>.value();
     _disposed = true;
+    late final Future<void> operation;
+    operation = _disposeGateway().whenComplete(() {
+      if (identical(_disposeOperation, operation)) _disposeOperation = null;
+    });
+    return _disposeOperation = operation;
+  }
+
+  Future<void> _disposeGateway() async {
     final pendingOffers = _pendingOffers.values.toList(growable: false);
-    _pendingOffers.clear();
     for (final pending in pendingOffers) {
       pending.cancel();
       _reservations.remove(pending.peerId);
@@ -362,12 +386,35 @@ class FlutterWebRtcServerGateway
       for (final pending in pendingOffers) _cleanupPendingOffer(pending),
       for (final peer in peers) _disposePeer(peer),
     ]);
+    Object? pendingError;
+    try {
+      await Future.wait([
+        if (_initializeOperation case final initialization?) initialization,
+        if (_probeOperation case final probe?)
+          probe.then<void>((_) {}, onError: (Object _, StackTrace __) {}),
+        ..._offerSettlements,
+        ..._nativeAcquisitions,
+      ]).timeout(cleanupTimeout);
+    } catch (error) {
+      pendingError = error;
+    }
+    // Retain exact cleanup closures until native release succeeds. Muting a
+    // track or logging a plugin timeout alone does not release its hardware.
+    await Future.wait([
+      for (final entry in _cleanupTasks.entries.toList(growable: false))
+        _boundedCleanup(entry.value, entry.key),
+    ]);
     _available = false;
     try {
       await _peerEvents.close().timeout(cleanupTimeout);
     } catch (error) {
       onLog?.call('WebRTC lifecycle stream close failed: $error');
     }
+    if (pendingError != null) throw pendingError;
+    if (_cleanupTasks.isNotEmpty || _nativeAcquisitions.isNotEmpty) {
+      throw StateError('WebRTC native resource shutdown is incomplete.');
+    }
+    _shutdownComplete = true;
   }
 
   _ServerPeer _peerFor(String clientId, String peerId) {
@@ -456,8 +503,20 @@ class FlutterWebRtcServerGateway
     String label,
     Future<void> Function() operation,
   ) async {
+    _cleanupTasks[operation] = label;
+    final pending = _cleanupOperations[operation];
+    late final Future<void> cleanup;
+    cleanup = pending ??
+        Future<void>.sync(operation).then<void>((_) {
+          _cleanupTasks.remove(operation);
+        }).whenComplete(() {
+          if (identical(_cleanupOperations[operation], cleanup)) {
+            _cleanupOperations.remove(operation);
+          }
+        });
+    _cleanupOperations[operation] = cleanup;
     try {
-      await Future<void>.sync(operation).timeout(cleanupTimeout);
+      await cleanup.timeout(cleanupTimeout);
     } catch (error) {
       onLog?.call('WebRTC $label failed: $error');
     }
@@ -467,6 +526,9 @@ class FlutterWebRtcServerGateway
     Map<String, dynamic> configuration, [
     Map<String, dynamic> constraints = const <String, dynamic>{},
   ]) {
+    if (_disposed) {
+      return Future.error(StateError('WebRTC gateway is disposed.'));
+    }
     final operation = createPeerConnection(configuration, constraints);
     return _awaitNativeResource(
       operation,
@@ -477,6 +539,9 @@ class FlutterWebRtcServerGateway
   Future<MediaStream> _getUserMedia(
     Map<String, dynamic> constraints,
   ) {
+    if (_disposed) {
+      return Future.error(StateError('WebRTC gateway is disposed.'));
+    }
     final operation = navigator.mediaDevices.getUserMedia(constraints);
     return _awaitNativeResource(
       operation,
@@ -488,13 +553,19 @@ class FlutterWebRtcServerGateway
     Future<T> operation,
     Future<void> Function(T value) disposeLate,
   ) async {
+    var timedOut = false;
+    late final Future<void> settled;
+    settled = operation.then<void>(
+      (value) async {
+        if (timedOut) await disposeLate(value);
+      },
+      onError: (Object _, StackTrace __) {},
+    ).whenComplete(() => _nativeAcquisitions.remove(settled));
+    _nativeAcquisitions.add(settled);
     try {
       return await operation.timeout(nativeOperationTimeout);
     } on TimeoutException {
-      unawaited(operation.then<void>(
-        (value) => disposeLate(value),
-        onError: (Object _, StackTrace __) {},
-      ));
+      timedOut = true;
       rethrow;
     }
   }
@@ -621,6 +692,7 @@ class _PendingServerOffer {
 
   final String clientId;
   final String peerId;
+  final finished = Completer<void>();
   RTCPeerConnection? connection;
   MediaStream? localStream;
   bool cancelled = false;

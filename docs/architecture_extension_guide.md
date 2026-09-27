@@ -134,6 +134,12 @@ testindedir; gerçek font ve cihaz ekranları ayrıca gözden geçirilir.
 
 ## Mevcut sınırlar
 
+Client/Server handoff'u bir kaynak sahipliği bariyeridir. Eski runtime'ın
+`dispose()` Future'ı gerçek kapanışı temsil etmeli; native hatayı/timeout'u
+başarılı kapanış gibi yutmamalıdır. AppBootstrap ekran kapanışını ve
+`PlatformRoleShutdownBarrier` sonucunu bekler; belirsiz kapanışta yeni runtime
+oluşturmaz. Detay ve regresyonlar [rol izolasyonu kaydında](reports/role_isolation_2026-09-27.md).
+
 `MiuCamServer` route/media/session `part` dosyaları aynı private durumu paylaşır;
 dosyaya ayırmak burada bağımlılık izolasyonu sağlamaz. Watch presentation'da da
 `part` dosyaları vardır. Mevcut davranışı değiştirmeden yeni bir sorumluluğu

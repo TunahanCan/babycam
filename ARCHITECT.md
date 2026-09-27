@@ -269,16 +269,28 @@ roles change:
 ```text
 _switchRole
   -> increment role switch generation
+  -> disable parent room delivery and cancel its open LAN requests
   -> remove active runtime from widget tree
-  -> dispose ServerRuntime or ClientRuntime
+  -> seal and await ServerRuntime or ClientRuntime disposal
+  -> await widget-owned media teardown and the transition frame
+  -> confirm native capture/output/service ownership is idle
   -> clear PairingSessionStore
   -> save or clear AppRole
   -> mount the new composition root
 ```
 
-This prevents a Server HTTP runtime and a Client media runtime from remaining
-alive at the same time. The purchase coordinator survives role changes and is
-disposed only with `AppBootstrap`, so late store transactions retain their owner.
+Only after these barriers succeed can the next composition root run. A failed
+or timed-out resource shutdown keeps both role surfaces inactive and retains the
+closing owner for retry; it must not reconstruct the previous runtime over work
+that may still be alive. Persistence failure after confirmed shutdown may restore
+the previous role. Native confirmation runs only during handoff, not as a new
+continuous background poll.
+
+The purchase coordinator survives role changes and is disposed only with
+`AppBootstrap`, so late store transactions retain their owner. Its room network
+work is separately gated by `setClientActive`: server/selection/transition states
+cannot issue parent room requests. A later client needs a fresh attached session.
+See [role isolation verification](docs/reports/role_isolation_2026-09-27.md).
 
 ## Role Permission Policy
 

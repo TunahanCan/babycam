@@ -213,6 +213,7 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
   }
 
   void _scheduleCameraControllerDisposalRetry(CameraController controller) {
+    if (_disposed) return;
     // Both the raw native future and its timeout observer can report one
     // failure. Coalesce them into one timer for this camera lease so repeated
     // failures cannot multiply teardown attempts and wakeups.
@@ -233,6 +234,15 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
     bool? video,
     bool? audio,
   }) {
+    if (_disposed) {
+      // Terminal server cleanup stops the combined source before the resource
+      // controller releases video and audio separately. Neither callback may
+      // revive the other channel from its former demand.
+      _injectedVideoDemand = false;
+      _injectedAudioDemand = false;
+      video = false;
+      audio = false;
+    }
     final videoDemandChanged = video != null && video != _injectedVideoDemand;
     final audioDemandChanged = audio != null && audio != _injectedAudioDemand;
     if (videoDemandChanged) {
@@ -255,6 +265,10 @@ extension MiuCamServerMediaCaptureController on MiuCamServer {
   }
 
   Future<void> _applyInjectedMediaDemand(ServerMediaSource source) async {
+    if (_disposed) {
+      _injectedVideoDemand = false;
+      _injectedAudioDemand = false;
+    }
     if (_injectedVideoDemand || _injectedAudioDemand) {
       _initializeAnalysisPipeline();
     }

@@ -27,6 +27,9 @@ String _localizedFallback(
 }
 
 const _deUiText = <String, String>{
+  'roleShutdownFailedTitle': 'Der vorherige Modus konnte nicht beendet werden',
+  'roleShutdownFailedBody':
+      'Der neue Modus wurde nicht gestartet. Versuche es erneut. Wenn das Problem bestehen bleibt, schließe MiuCam vollständig und öffne die App erneut.',
   'broadcastAccessPriceFallback':
       'Preis in der Türkei: {price}. Beim Bezahlen wird der aktuelle Preis deines Stores angezeigt.',
   'unlockLifetime': 'Übertragung dauerhaft freischalten',
@@ -549,6 +552,9 @@ const _deUiText = <String, String>{
 };
 
 const _arUiText = <String, String>{
+  'roleShutdownFailedTitle': 'تعذر إيقاف الوضع السابق',
+  'roleShutdownFailedBody':
+      'لم يبدأ الوضع الجديد. حاول مرة أخرى. إذا استمرت المشكلة، أغلق MiuCam بالكامل ثم أعد فتحه.',
   'broadcastAccessPriceFallback':
       'السعر في تركيا: {price}. يظهر السعر الحالي في متجرك عند الدفع.',
   'unlockLifetime': 'تفعيل البث مدى الحياة',

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miucam/app/app_role.dart';
 import 'package:miucam/app/app_runtime.dart';
@@ -43,6 +45,61 @@ void main() {
     );
     expect(roles.role, AppRole.server);
   });
+
+  test('holds persistence until runtime and native stop barriers both finish',
+      () async {
+    final operations = <String>[];
+    final roles = _FakeRoleRepository(operations)..role = AppRole.server;
+    final stopped = Completer<void>();
+    final nativeStopped = Completer<void>();
+    final operation = const RoleSwitchTransaction().execute(
+      runtime: _FakeRuntime(() => stopped.future),
+      previousRole: AppRole.server,
+      nextRole: AppRole.client,
+      roles: roles,
+      confirmStopped: () {
+        operations.add('confirm-native');
+        return nativeStopped.future;
+      },
+      clearPairingSession: () async => operations.add('clear-session'),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(operations, isEmpty);
+    expect(roles.role, AppRole.server);
+    stopped.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(operations, ['confirm-native']);
+    expect(roles.role, AppRole.server);
+    nativeStopped.complete();
+    await operation;
+    expect(operations, ['confirm-native', 'clear-session', 'save-client']);
+  });
+
+  for (final failNative in [false, true]) {
+    test(
+        'shutdown failure does not persist or clear pairing (native=$failNative)',
+        () async {
+      final operations = <String>[];
+      final roles = _FakeRoleRepository(operations)..role = AppRole.server;
+      final failure = StateError('Still active');
+      await expectLater(
+        const RoleSwitchTransaction().execute(
+          runtime: _FakeRuntime(() async {
+            if (!failNative) throw failure;
+          }),
+          previousRole: AppRole.server,
+          nextRole: AppRole.client,
+          roles: roles,
+          confirmStopped: () async => throw failure,
+          clearPairingSession: () async => operations.add('clear-session'),
+        ),
+        throwsA(isA<RoleShutdownException>()
+            .having((error) => error.cause, 'cause', same(failure))),
+      );
+      expect(operations, isEmpty);
+      expect(roles.role, AppRole.server);
+    });
+  }
 }
 
 class _FakeRuntime implements AppRuntime {

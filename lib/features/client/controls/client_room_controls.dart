@@ -72,6 +72,8 @@ class ClientRoomControls {
   final Set<_TalkAttempt> _ownedTalkAttempts = {};
   Future<void>? _startInFlight;
   Future<void>? _stopInFlight;
+  Future<void>? _disposeOperation;
+  final _requestClients = <HttpClient>{};
   static const _maxPendingTalkChunks = 12;
   int _talkIntentGeneration = 0;
   bool _disposed = false;
@@ -82,6 +84,7 @@ class ClientRoomControls {
   Stream<ClientRoomControlSnapshot> get states => _states.stream;
 
   Future<ComfortAudioState?> refreshComfort(PairingSession session) async {
+    if (_disposed) return null;
     final generation = ++_comfortRefreshGeneration;
     final json = await _requestJson(
       session,
@@ -109,6 +112,7 @@ class ClientRoomControls {
     double? volume,
     bool? loop,
   }) async {
+    if (_disposed) return null;
     final generation = ++_comfortCommandGeneration;
     _comfortRefreshGeneration++;
     final json = await _requestJson(
@@ -162,6 +166,7 @@ class ClientRoomControls {
     try {
       await operation;
     } finally {
+      attempt.startSettled.complete();
       if (identical(_startInFlight, operation)) _startInFlight = null;
     }
   }
@@ -312,6 +317,7 @@ class ClientRoomControls {
         attempt.session,
         MiuCamProtocolV2.talkStop,
         method: 'POST',
+        allowDuringShutdown: true,
         body: {
           MiuCamProtocolV2.talkAttemptId: attempt.id,
           if (attempt.token != null) 'talkToken': attempt.token,
@@ -449,14 +455,33 @@ class ClientRoomControls {
   bool _isTalkIntentCurrent(int generation) =>
       !_disposed && generation == _talkIntentGeneration;
 
-  Future<void> dispose() async {
-    if (_disposed) return;
+  Future<void> dispose() => _disposeOperation ??= _dispose();
+
+  Future<void> _dispose() async {
     _disposed = true;
+    final issuedStarts = [
+      for (final attempt in _ownedTalkAttempts)
+        if (attempt.startRequestIssued) attempt.startSettled.future,
+    ];
+    for (final client in _requestClients.toList(growable: false)) {
+      client.close(force: true);
+    }
+    // Do not retain an upload while its final network flush waits for a room
+    // that may already be offline. The attempt-scoped stop still follows.
+    for (final attempt in _ownedTalkAttempts) {
+      attempt.audioClient?.close(force: true);
+    }
     try {
       await stopTalking();
     } catch (_) {}
-    await _microphone.dispose();
-    await _states.close();
+    try {
+      // A request interrupted above can still owe an attempt-scoped rollback.
+      // Finish that cleanup before the other role takes over this phone.
+      await Future.wait(issuedStarts);
+      await _microphone.dispose();
+    } finally {
+      await _states.close();
+    }
   }
 
   Future<Map<String, Object?>?> _requestJson(
@@ -464,8 +489,13 @@ class ClientRoomControls {
     String path, {
     required String method,
     Map<String, Object?>? body,
+    bool allowDuringShutdown = false,
   }) async {
+    if (_disposed && !allowDuringShutdown) {
+      throw StateError('Client room controls are disposed.');
+    }
     final client = _clientFactory()..connectionTimeout = timeout;
+    _requestClients.add(client);
     try {
       final uri = ServerEndpointBuilder(session).http(path);
       final request = method == 'GET'
@@ -491,6 +521,7 @@ class ClientRoomControls {
           ? Map<String, Object?>.from(decoded)
           : <String, Object?>{};
     } finally {
+      _requestClients.remove(client);
       client.close(force: true);
     }
   }
@@ -626,6 +657,7 @@ class _TalkAttempt {
   final PairingSession session;
   final String id;
   final int generation;
+  final startSettled = Completer<void>();
   String? token;
   HttpClient? audioClient;
   HttpClientRequest? audioRequest;

@@ -22,7 +22,12 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
   final void Function(String message)? onLog;
   final _handles = <_FlutterWebRtcClientMediaHandle>{};
   final _pendingConnections = <_PendingWebRtcConnection>{};
+  final _connecting = <Future<void>>{};
+  final _lateNativeCleanup = <Future<void>>{};
   Future<bool>? _initializeOperation;
+  Future<void>? _disposeOperation;
+  Object? _nativeCleanupError;
+  StackTrace? _nativeCleanupStack;
   bool _initialized = false;
   bool _available = false;
   bool _disposed = false;
@@ -71,6 +76,30 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
     required String streamToken,
     required bool video,
     required bool audio,
+  }) {
+    if (_disposed) {
+      return Future.error(
+        const WebRtcNegotiationException('WebRTC client is disposed.'),
+      );
+    }
+    final settled = Completer<void>();
+    _connecting.add(settled.future);
+    return _connect(
+      session: session,
+      streamToken: streamToken,
+      video: video,
+      audio: audio,
+    ).whenComplete(() {
+      _connecting.remove(settled.future);
+      settled.complete();
+    });
+  }
+
+  Future<WebRtcClientMediaHandle> _connect({
+    required PairingSession session,
+    required String streamToken,
+    required bool video,
+    required bool audio,
   }) async {
     if (!await initialize() || _disposed) {
       throw const WebRtcNegotiationException(
@@ -82,7 +111,10 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
     }
 
     final http = HttpClient()..connectionTimeout = negotiationTimeout;
-    final pending = _PendingWebRtcConnection(http: http);
+    final pending = _PendingWebRtcConnection(
+      http: http,
+      onCleanupFailure: _recordNativeCleanupFailure,
+    );
     _pendingConnections.add(pending);
     RTCPeerConnection? connection;
     RTCVideoRenderer? renderer;
@@ -97,10 +129,10 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
           'bundlePolicy': 'max-bundle',
           'rtcpMuxPolicy': 'require',
         }),
-        (lateConnection) async {
-          await _bestEffort(lateConnection.close, negotiationTimeout);
-          await _bestEffort(lateConnection.dispose, negotiationTimeout);
-        },
+        (lateConnection) => _closeNativeResources(
+          [lateConnection.close, lateConnection.dispose],
+          negotiationTimeout,
+        ),
       );
       pending
         ..connection = connection
@@ -110,7 +142,7 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
       // renderer can throw before peer cleanup and leave its late texture alive.
       renderer = await _awaitNativeResource<RTCVideoRenderer>(
         initializingRenderer.initialize().then((_) => initializingRenderer),
-        (lateRenderer) => _bestEffort(lateRenderer.dispose, negotiationTimeout),
+        (lateRenderer) => lateRenderer.dispose().timeout(negotiationTimeout),
       );
       pending.renderer = renderer;
       pending.ensureActive();
@@ -229,6 +261,10 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
               streamToken: streamToken,
               peerId: answer.peerId,
             );
+          } catch (error) {
+            // The former room may be offline. Its signaling response does
+            // not determine whether this phone released its native peer.
+            onLog?.call('WebRTC remote close failed: $error');
           } finally {
             http.close(force: true);
           }
@@ -299,10 +335,20 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
     } on TimeoutException {
       // Future.timeout does not cancel platform work. Always release native
       // resources that finish after the negotiation has already failed.
-      unawaited(operation.then<void>(
+      late final Future<void> cleanup;
+      cleanup = operation
+          .then<void>(
         disposeLate,
         onError: (Object _, StackTrace __) {},
-      ));
+      )
+          .then<void>(
+        (_) => _lateNativeCleanup.remove(cleanup),
+        onError: (Object error, StackTrace stack) {
+          _lateNativeCleanup.remove(cleanup);
+          _recordNativeCleanupFailure(error, stack);
+        },
+      );
+      _lateNativeCleanup.add(cleanup);
       rethrow;
     }
   }
@@ -440,20 +486,37 @@ class FlutterWebRtcClientConnector implements WebRtcClientConnector {
   }
 
   @override
-  Future<void> dispose() async {
-    if (_disposed) return;
+  Future<void> dispose() => _disposeOperation ??= _dispose();
+
+  Future<void> _dispose() async {
     _disposed = true;
-    await cancelPendingConnections();
-    final handles = _handles.toList(growable: false);
-    await Future.wait([
-      for (final handle in handles)
-        _bestEffort(
-          handle.close,
-          negotiationTimeout,
-        ),
-    ]);
-    _handles.clear();
     _available = false;
+    final handles = _handles.toList(growable: false);
+    await _closeNativeResources([
+      () async {
+        // Calling each operation cuts its signaling/peer ownership before
+        // waiting; failure of one must not defer independent resource stops.
+        await Future.wait([
+          cancelPendingConnections(),
+          for (final handle in handles)
+            handle.close().timeout(negotiationTimeout),
+        ]);
+      },
+      () => Future.wait(_connecting.toList()).timeout(negotiationTimeout),
+      () =>
+          Future.wait(_lateNativeCleanup.toList()).timeout(negotiationTimeout),
+      () async {
+        if (_nativeCleanupError != null) {
+          Error.throwWithStackTrace(_nativeCleanupError!, _nativeCleanupStack!);
+        }
+      },
+    ], negotiationTimeout);
+    _handles.clear();
+  }
+
+  void _recordNativeCleanupFailure(Object error, StackTrace stack) {
+    _nativeCleanupError ??= error;
+    _nativeCleanupStack ??= stack;
   }
 
   static RTCIceCandidate _toRtcCandidate(WebRtcIceCandidateSignal signal) =>
@@ -662,9 +725,13 @@ class _FlutterWebRtcClientMediaHandle
 }
 
 class _PendingWebRtcConnection {
-  _PendingWebRtcConnection({required this.http});
+  _PendingWebRtcConnection({
+    required this.http,
+    required this.onCleanupFailure,
+  });
 
   final HttpClient http;
+  final void Function(Object error, StackTrace stack) onCleanupFailure;
   RTCPeerConnection? connection;
   RTCVideoRenderer? renderer;
   _FlutterWebRtcClientMediaHandle? handle;
@@ -689,7 +756,10 @@ class _PendingWebRtcConnection {
     final current = _cleanupOperation;
     if (current != null) return current;
     late final Future<void> operation;
-    operation = _cleanup(timeout).whenComplete(() {
+    operation = _cleanup(timeout).catchError((Object error, StackTrace stack) {
+      onCleanupFailure(error, stack);
+      Error.throwWithStackTrace(error, stack);
+    }).whenComplete(() {
       if (identical(_cleanupOperation, operation)) {
         _cleanupOperation = null;
       }
@@ -708,7 +778,7 @@ class _PendingWebRtcConnection {
     renderer = null;
 
     if (pendingHandle != null) {
-      await _bestEffort(pendingHandle.close, timeout);
+      await pendingHandle.close().timeout(timeout);
       return;
     }
 
@@ -717,14 +787,12 @@ class _PendingWebRtcConnection {
       pendingConnection.onIceCandidate = null;
       pendingConnection.onConnectionState = null;
     }
-    if (pendingRenderer != null) pendingRenderer.srcObject = null;
-    if (pendingConnection != null) {
-      await _bestEffort(pendingConnection.close, timeout);
-      await _bestEffort(pendingConnection.dispose, timeout);
-    }
-    if (pendingRenderer != null) {
-      await _bestEffort(pendingRenderer.dispose, timeout);
-    }
+    await _closeNativeResources([
+      if (pendingRenderer != null) () async => pendingRenderer.srcObject = null,
+      if (pendingConnection != null) pendingConnection.close,
+      if (pendingConnection != null) pendingConnection.dispose,
+      if (pendingRenderer != null) pendingRenderer.dispose,
+    ], timeout);
   }
 
   void release() {
@@ -734,11 +802,21 @@ class _PendingWebRtcConnection {
   }
 }
 
-Future<void> _bestEffort(
-  Future<void> Function() operation,
+Future<void> _closeNativeResources(
+  List<Future<void> Function()> operations,
   Duration timeout,
 ) async {
-  try {
-    await Future<void>.sync(operation).timeout(timeout);
-  } catch (_) {}
+  Object? firstError;
+  StackTrace? firstStack;
+  for (final operation in operations) {
+    try {
+      await Future<void>.sync(operation).timeout(timeout);
+    } catch (error, stack) {
+      firstError ??= error;
+      firstStack ??= stack;
+    }
+  }
+  if (firstError != null) {
+    Error.throwWithStackTrace(firstError, firstStack!);
+  }
 }

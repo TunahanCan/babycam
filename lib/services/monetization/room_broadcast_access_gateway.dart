@@ -9,3 +9,9 @@ abstract interface class RoomBroadcastAccessGateway {
   Future<BroadcastAccessSnapshot> activate(
       PairingSession session, String licenseToken);
 }
+
+/// Optional transport capability for releasing a parent role's active sockets.
+/// The gateway remains reusable when that role is entered again.
+abstract interface class CancelableRoomBroadcastAccessGateway {
+  void cancelPendingRequests();
+}

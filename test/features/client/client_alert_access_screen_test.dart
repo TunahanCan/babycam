@@ -14,6 +14,8 @@ import 'package:miucam/features/client/client_runtime.dart';
 import 'package:miucam/l10n/app_strings.dart';
 import 'package:miucam/services/monetization/broadcast_access_service.dart';
 
+import '../../support/runtime_widget_cleanup.dart';
+
 void main() {
   testWidgets(
       'parent home explains the room trial lock in every supported locale',
@@ -26,40 +28,43 @@ void main() {
       stopAlerts: () async {},
       alertConnectionStates: connections.stream,
     );
-    addTearDown(runtime.dispose);
-    addTearDown(connections.close);
-    await runtime.pairWithServer(session.payload);
-    await runtime.startAlertListening();
-    connections.addError(
-        ClientAlertAccessLockedException(session: session, snapshot: _locked));
-    await tester.pump();
-    for (final locale in AppStrings.supportedLocales) {
-      await tester.pumpWidget(MaterialApp(
-        locale: locale,
-        supportedLocales: AppStrings.supportedLocales,
-        localizationsDelegates: const [
-          AppStrings.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        home: ClientHomeScreen(
-          runtime: runtime,
-          activeRole: AppRole.client,
-          onRoleSelected: (_) {},
-        ),
-      ));
+    try {
+      addTearDown(connections.close);
+      await runtime.pairWithServer(session.payload);
+      await runtime.startAlertListening();
+      connections.addError(ClientAlertAccessLockedException(
+          session: session, snapshot: _locked));
+      await tester.pump();
+      for (final locale in AppStrings.supportedLocales) {
+        await tester.pumpWidget(MaterialApp(
+          locale: locale,
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ClientHomeScreen(
+            runtime: runtime,
+            activeRole: AppRole.client,
+            onRoleSelected: (_) {},
+          ),
+        ));
+        await tester.pumpAndSettle();
+        final strings = AppStrings(locale);
+        expect(find.text(strings.ui('broadcastAccessLockedTitle')),
+            findsOneWidget);
+        expect(find.text(strings.ui('broadcastAccessRemoteLockedBody')),
+            findsOneWidget);
+        expect(find.text(strings.ui('clientTitleReconnecting')), findsNothing);
+        expect(tester.takeException(), isNull, reason: locale.toLanguageTag());
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
-      final strings = AppStrings(locale);
-      expect(
-          find.text(strings.ui('broadcastAccessLockedTitle')), findsOneWidget);
-      expect(find.text(strings.ui('broadcastAccessRemoteLockedBody')),
-          findsOneWidget);
-      expect(find.text(strings.ui('clientTitleReconnecting')), findsNothing);
-      expect(tester.takeException(), isNull, reason: locale.toLanguageTag());
+    } finally {
+      await disposeClientRuntime(tester, runtime);
     }
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pumpAndSettle();
   });
 }
 

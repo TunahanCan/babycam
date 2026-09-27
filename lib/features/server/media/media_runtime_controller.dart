@@ -89,6 +89,10 @@ class MediaRuntimeController {
   final Duration operationTimeout;
 
   final _operations = SerializedAsyncExecutor();
+  final _pendingResourceOperations = <Future<void>>{};
+  Future<void>? _disposeOperation;
+  bool _closing = false;
+  bool _shutdownComplete = false;
   MediaResourceDemand _activeDemand = MediaResourceDemand.none;
   MediaResourceDemand _requestedDemand = MediaResourceDemand.none;
   bool _suspended = false;
@@ -111,6 +115,9 @@ class MediaRuntimeController {
   Future<void> stop() => reconcile(MediaResourceDemand.none);
 
   Future<void> reconcile(MediaResourceDemand demand) {
+    if (_closing && !demand.isEmpty) {
+      return Future<void>.error(StateError('Media runtime is closing.'));
+    }
     _requestedDemand = demand;
     return _enqueue(
       _suspended ? MediaResourceDemand.none : demand,
@@ -124,8 +131,88 @@ class MediaRuntimeController {
   }
 
   Future<void> resume() {
+    if (_closing) {
+      return Future<void>.error(StateError('Media runtime is closing.'));
+    }
     _suspended = false;
     return _enqueue(_requestedDemand, ++_intentGeneration);
+  }
+
+  /// Terminal ownership barrier used before another application role starts.
+  ///
+  /// A timeout during normal operation does not cancel native acquisition.
+  /// Wait for those operations as well as the command queue, then release all
+  /// resources. Failure remains retryable, but never re-enables acquisition.
+  Future<void> dispose() {
+    final current = _disposeOperation;
+    if (current != null) return current;
+    if (_shutdownComplete) return Future<void>.value();
+    _closing = true;
+    _suspended = true;
+    _requestedDemand = MediaResourceDemand.none;
+    ++_intentGeneration;
+    for (final timer in _resourceRecoveryTimers.values) {
+      timer.cancel();
+    }
+    _resourceRecoveryTimers.clear();
+    _resourceRecoveryAttempts.clear();
+    late final Future<void> operation;
+    operation = _dispose().whenComplete(() {
+      if (identical(_disposeOperation, operation)) _disposeOperation = null;
+    });
+    return _disposeOperation = operation;
+  }
+
+  Future<void> _dispose() async {
+    await _operations.drain();
+    // These futures settle even if the original operation reported a timeout.
+    // A still-pending native operation makes shutdown unconfirmed, so callers
+    // must keep the next role inactive until a subsequent attempt succeeds.
+    await Future.wait(_pendingResourceOperations.toList())
+        .timeout(operationTimeout);
+    await _operations.run(() async {
+      Object? firstError;
+      StackTrace? firstStack;
+      final resources = _usesIndependentResources
+          ? [_MediaResource.video, _MediaResource.audio]
+          : [_MediaResource.combined];
+      for (final resource in resources) {
+        final mayBeActive = switch (resource) {
+          _MediaResource.video => _activeDemand.video || _videoMayBeActive,
+          _MediaResource.audio => _activeDemand.audio || _audioMayBeActive,
+          _MediaResource.combined =>
+            !_activeDemand.isEmpty || _combinedMayBeActive,
+        };
+        if (!mayBeActive) continue;
+        try {
+          await _invokeResourceOperation(
+            callback: switch (resource) {
+              _MediaResource.video => _onStopVideo,
+              _MediaResource.audio => _onStopAudio,
+              _MediaResource.combined => _onStop,
+            },
+            resource: resource,
+            starting: false,
+            generation: _intentGeneration,
+          );
+          _markResourceInactive(resource);
+        } catch (error, stackTrace) {
+          firstError ??= error;
+          firstStack ??= stackTrace;
+        }
+      }
+      try {
+        await _publishActiveDemand(_intentGeneration);
+      } catch (error, stackTrace) {
+        firstError ??= error;
+        firstStack ??= stackTrace;
+      }
+      if (firstError != null) {
+        Error.throwWithStackTrace(firstError, firstStack!);
+      }
+    });
+    await _operations.close();
+    _shutdownComplete = true;
   }
 
   Future<void> _enqueue(MediaResourceDemand demand, int generation) {
@@ -320,6 +407,7 @@ class MediaRuntimeController {
     final callback = _onDemandChanged;
     if (callback == null) return;
     final operation = Future<void>.sync(() => callback(_activeDemand));
+    _trackNativeOperation(operation);
     var timedOut = false;
     operation.then<void>(
       (_) {
@@ -349,6 +437,7 @@ class MediaRuntimeController {
   }) async {
     if (callback == null) return;
     final operation = Future<void>.sync(callback);
+    _trackNativeOperation(operation);
     var timedOut = false;
     operation.then<void>(
       (_) {
@@ -383,11 +472,20 @@ class MediaRuntimeController {
     );
   }
 
+  void _trackNativeOperation(Future<void> operation) {
+    late final Future<void> settled;
+    settled = operation
+        .then<void>((_) {}, onError: (Object _, StackTrace __) {})
+        .whenComplete(() => _pendingResourceOperations.remove(settled));
+    _pendingResourceOperations.add(settled);
+  }
+
   void _scheduleResourceRepair({
     required _MediaResource resource,
     required bool starting,
     required _LateResourceOutcome outcome,
   }) {
+    if (_closing) return;
     unawaited(_operations.run(() async {
       final target = _suspended ? MediaResourceDemand.none : _requestedDemand;
       final generation = _intentGeneration;
@@ -418,6 +516,7 @@ class MediaRuntimeController {
   }
 
   void _scheduleDemandRepair() {
+    if (_closing) return;
     final observedGeneration = _intentGeneration;
     unawaited(_operations.run(() async {
       if (observedGeneration != _intentGeneration) return;
@@ -426,6 +525,7 @@ class MediaRuntimeController {
   }
 
   void _scheduleResourceRecovery(_MediaResource resource) {
+    if (_closing) return;
     if (_resourceRecoveryTimers.containsKey(resource)) return;
     final attempt = _resourceRecoveryAttempts[resource] ?? 0;
     // Persistent native/permission failures must not wake the device and

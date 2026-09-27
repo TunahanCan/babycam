@@ -18,6 +18,8 @@ import 'package:miucam/services/configuration_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/runtime_widget_cleanup.dart';
+
 void main() {
   testWidgets('Client rol rozeti ve client bottom nav gösterilir',
       (tester) async {
@@ -26,41 +28,45 @@ void main() {
       pair: (payload) => throw UnimplementedError(),
     );
 
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('tr'),
-        supportedLocales: AppStrings.supportedLocales,
-        localizationsDelegates: _localizationsDelegates,
-        home: ClientHomeScreen(
-          runtime: runtime,
-          activeRole: AppRole.client,
-          onRoleSelected: (role) => selectedRole = role,
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('tr'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: _localizationsDelegates,
+          home: ClientHomeScreen(
+            runtime: runtime,
+            activeRole: AppRole.client,
+            onRoleSelected: (role) => selectedRole = role,
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text('CLIENT'), findsNothing);
-    expect(find.text('EBEVEYN'), findsOneWidget);
-    expect(find.text('İZLEME CİHAZI'), findsOneWidget);
-    expect(find.text('ANNE İÇİN ÖNCELİK'), findsOneWidget);
-    expect(find.text('Bildirim'), findsOneWidget);
-    expect(find.text('SUNUCU'), findsNothing);
-    expect(find.text('BEBEK ODASI'), findsNothing);
-    expect(find.text('İzle'), findsOneWidget);
-    expect(find.text('Bul'), findsOneWidget);
-    expect(find.text('Ayarlar'), findsOneWidget);
-    expect(find.text('Yayın'), findsNothing);
-    expect(find.text('QR/IP'), findsNothing);
-    expect(find.text('Servis'), findsNothing);
-    expect(find.textContaining('yayınını durdur'), findsNothing);
-    expect(find.text('QR üret'), findsNothing);
+      expect(find.text('CLIENT'), findsNothing);
+      expect(find.text('EBEVEYN'), findsOneWidget);
+      expect(find.text('İZLEME CİHAZI'), findsOneWidget);
+      expect(find.text('ANNE İÇİN ÖNCELİK'), findsOneWidget);
+      expect(find.text('Bildirim'), findsOneWidget);
+      expect(find.text('SUNUCU'), findsNothing);
+      expect(find.text('BEBEK ODASI'), findsNothing);
+      expect(find.text('İzle'), findsOneWidget);
+      expect(find.text('Bul'), findsOneWidget);
+      expect(find.text('Ayarlar'), findsOneWidget);
+      expect(find.text('Yayın'), findsNothing);
+      expect(find.text('QR/IP'), findsNothing);
+      expect(find.text('Servis'), findsNothing);
+      expect(find.textContaining('yayınını durdur'), findsNothing);
+      expect(find.text('QR üret'), findsNothing);
 
-    final badgeTopRight = tester.getTopRight(find.byType(MiuCamRoleBadge));
-    expect(badgeTopRight.dx, greaterThan(700));
-    expect(badgeTopRight.dy, lessThan(80));
+      final badgeTopRight = tester.getTopRight(find.byType(MiuCamRoleBadge));
+      expect(badgeTopRight.dx, greaterThan(700));
+      expect(badgeTopRight.dy, lessThan(80));
 
-    await tester.tap(find.byType(MiuCamRoleBadge));
-    expect(selectedRole, AppRole.server);
+      await tester.tap(find.byType(MiuCamRoleBadge));
+      expect(selectedRole, AppRole.server);
+    } finally {
+      await disposeClientRuntime(tester, runtime);
+    }
   });
 
   testWidgets('Client Bul sekmesi QR ve manual IP fallback gösterir',
@@ -69,26 +75,30 @@ void main() {
       pair: (payload) => throw UnimplementedError(),
     );
 
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('tr'),
-        supportedLocales: AppStrings.supportedLocales,
-        localizationsDelegates: _localizationsDelegates,
-        home: ClientHomeScreen(
-          runtime: runtime,
-          activeRole: AppRole.client,
-          onRoleSelected: (_) {},
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('tr'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: _localizationsDelegates,
+          home: ClientHomeScreen(
+            runtime: runtime,
+            activeRole: AppRole.client,
+            onRoleSelected: (_) {},
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.text('Bul'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Bul'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('QR Tara'), findsOneWidget);
-    expect(find.text('IP ile bağlan'), findsOneWidget);
-    expect(find.text('QR üret'), findsNothing);
-    expect(find.textContaining('yayınını durdur'), findsNothing);
+      expect(find.text('QR Tara'), findsOneWidget);
+      expect(find.text('IP ile bağlan'), findsOneWidget);
+      expect(find.text('QR üret'), findsNothing);
+      expect(find.textContaining('yayınını durdur'), findsNothing);
+    } finally {
+      await disposeClientRuntime(tester, runtime);
+    }
   });
 
   testWidgets('erişimi iptal edilen oda bağlı gibi gösterilmez',
@@ -115,27 +125,30 @@ void main() {
       pair: (_) async => expiring,
       renew: (_) async => null,
     );
-    addTearDown(runtime.dispose);
 
-    await runtime.restoreSession(expiring);
-    expect(runtime.currentState.phase, ClientRuntimePhase.revoked);
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('tr'),
-        supportedLocales: AppStrings.supportedLocales,
-        localizationsDelegates: _localizationsDelegates,
-        home: ClientHomeScreen(
-          runtime: runtime,
-          activeRole: AppRole.client,
-          onRoleSelected: (_) {},
+    try {
+      await runtime.restoreSession(expiring);
+      expect(runtime.currentState.phase, ClientRuntimePhase.revoked);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('tr'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: _localizationsDelegates,
+          home: ClientHomeScreen(
+            runtime: runtime,
+            activeRole: AppRole.client,
+            onRoleSelected: (_) {},
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Eşleşme iptal edildi'), findsWidgets);
-    expect(find.text('Bebek odasına bağlısın.'), findsNothing);
-    expect(find.text('Canlı izlemeyi aç'), findsNothing);
+      expect(find.text('Eşleşme iptal edildi'), findsWidgets);
+      expect(find.text('Bebek odasına bağlısın.'), findsNothing);
+      expect(find.text('Canlı izlemeyi aç'), findsNothing);
+    } finally {
+      await disposeClientRuntime(tester, runtime);
+    }
   });
 
   testWidgets('Server bottom nav server alanına kilitlidir', (tester) async {

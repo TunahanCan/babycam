@@ -66,6 +66,7 @@ class ClientRuntime implements AppRuntime {
         watchNetworkQuality,
     Future<bool> Function(PairingSession session)? startAlerts,
     Future<void> Function()? stopAlerts,
+    FutureOr<void> Function()? disposeTransports,
     Stream<bool>? alertConnectionStates,
     Future<bool> Function()? initializeSystemNotifications,
     Future<void> Function()? clearStore,
@@ -88,6 +89,7 @@ class ClientRuntime implements AppRuntime {
         _watchNetworkQuality = watchNetworkQuality,
         _startAlerts = startAlerts,
         _stopAlerts = stopAlerts,
+        _disposeTransports = disposeTransports,
         _initializeSystemNotifications = initializeSystemNotifications,
         _clearStore = clearStore,
         _watchSessionEndpoints = watchSessionEndpoints,
@@ -135,6 +137,7 @@ class ClientRuntime implements AppRuntime {
       _watchNetworkQuality;
   final Future<bool> Function(PairingSession session)? _startAlerts;
   final Future<void> Function()? _stopAlerts;
+  final FutureOr<void> Function()? _disposeTransports;
   final Future<bool> Function()? _initializeSystemNotifications;
   final Future<void> Function()? _clearStore;
   final Stream<PairingSession> Function(PairingSession session)?
@@ -171,11 +174,14 @@ class ClientRuntime implements AppRuntime {
   int _watchIntentGeneration = 0;
   bool _streamStartInFlight = false;
   bool _disposed = false;
+  Future<void>? _disposeOperation;
+  final _mediaTeardowns = <Future<void> Function(), Future<void>?>{};
   bool _alertTransportConnected = false;
   bool? _systemNotificationsEnabled;
   PairingSession? _alertOwnerSession;
 
   ClientRuntimeState get currentState => _state;
+  bool get isDisposed => _disposed;
   bool get alertTransportConnected => _alertTransportConnected;
   bool? get systemNotificationsEnabled => _systemNotificationsEnabled;
   Stream<ClientRuntimeState> get states => Stream<ClientRuntimeState>.multi(
@@ -204,6 +210,35 @@ class ClientRuntime implements AppRuntime {
   void updateAlertStrings(AppStrings strings) =>
       _updateAlertStrings?.call(strings);
 
+  /// A screen may render media, but the active role owns its lifetime. A late
+  /// screen must not start a transport after role teardown has begun.
+  bool registerMediaTeardown(Future<void> Function() teardown) {
+    if (_disposed) {
+      unawaited(Future<void>.sync(teardown).catchError((_) {}));
+      return false;
+    }
+    _mediaTeardowns.putIfAbsent(teardown, () => null);
+    return true;
+  }
+
+  /// Starts cleanup eagerly and retains ownership until it finishes. Widget
+  /// unmount cannot hide an unfinished media stop from a subsequent role exit.
+  Future<void> unregisterMediaTeardown(Future<void> Function() teardown) {
+    final pending = _mediaTeardowns[teardown];
+    if (pending != null) return pending;
+    if (!_mediaTeardowns.containsKey(teardown)) return Future<void>.value();
+    final completion = Completer<void>();
+    _mediaTeardowns[teardown] = completion.future;
+    unawaited(Future<void>.sync(teardown).then((_) {
+      _mediaTeardowns.remove(teardown);
+      completion.complete();
+    }, onError: (Object error, StackTrace stack) {
+      // Keep failed teardown observable by the runtime's handover barrier.
+      completion.completeError(error, stack);
+    }));
+    return completion.future;
+  }
+
   /// Claims ownership of watch/alert presentation transitions for one screen.
   /// A later screen claim invalidates delayed teardown work from the previous
   /// screen without canceling the new stream.
@@ -227,6 +262,7 @@ class ClientRuntime implements AppRuntime {
   }
 
   Future<void> startDiscovery() async {
+    if (_disposed) return;
     await serviceBrowser?.start();
   }
 
@@ -401,6 +437,7 @@ class ClientRuntime implements AppRuntime {
       // caregiver the previous room's history after switching devices.
       await alertHistory.clear();
     }
+    if (_disposed) return;
     final mediaProfile = MediaQualityProfile.fromJson(
         session.payload.capabilities['mediaProfile']);
     _emit(ClientRuntimeState(
@@ -838,6 +875,7 @@ class ClientRuntime implements AppRuntime {
         _alertOwnerSession = null;
         _setAlertTransportConnected(false);
       }
+      if (_disposed) return false;
       final started = await _startAlerts?.call(session) ?? false;
       if (!started) {
         _alertOwnerSession = null;
@@ -1021,53 +1059,71 @@ class ClientRuntime implements AppRuntime {
   }
 
   @override
-  Future<void> dispose() async {
-    if (_disposed) return;
-    const cleanupTimeout = Duration(seconds: 1);
+  Future<void> dispose() => _disposeOperation ??= _dispose();
+
+  Future<void> _dispose() async {
+    // Seal every public entry point before the first await. Otherwise a late
+    // permission result or a second screen can start work during role change.
+    _disposed = true;
+    const cleanupTimeout = Duration(seconds: 10);
+    Object? firstError;
+    StackTrace? firstStack;
 
     Future<void> attempt(FutureOr<void> Function() operation) async {
       try {
         await Future<void>.sync(() async {
           await operation();
         }).timeout(cleanupTimeout);
-      } catch (_) {
-        // Disposal must keep releasing independent transports when a platform
-        // plugin or an in-flight DNS-SD/WebSocket operation does not answer.
+      } catch (error, stack) {
+        firstError ??= error;
+        firstStack ??= stack;
       }
     }
 
-    // Preempt an in-flight media start before closing the serialized queue.
-    // Otherwise a platform/network future could keep camera/audio transports
-    // alive while disposal waits for the queued start to finish.
-    await attempt(stopWatching);
-    _disposed = true;
-    await attempt(_watchOperations.drain);
-    await attempt(_alertOperations.close);
-    await attempt(() async => _networkQualitySubscription?.cancel());
-    await attempt(() async => _alertConnectionSubscription?.cancel());
-    await attempt(() async => _purchaseSubscription?.cancel());
-    await attempt(_cancelEndpointResolution);
-    final session = _state.session;
-    if (session != null && _state.activeStream != null) {
-      await attempt(
-        () async => _stopStream?.call(_activeStreamOwnerSession ?? session),
-      );
-    }
+    // Start independent stops together. Slow room HTTP cleanup must not defer
+    // microphone, alert service or DNS-SD teardown. Queue closure then waits
+    // for starts already accepted before the seal to unwind and release their
+    // late resources. A failed/unknown native stop is never reported as a
+    // successful handover to the opposite role.
+    final stopping = <Future<void>>[
+      for (final teardown in _mediaTeardowns.keys.toList())
+        attempt(() => unregisterMediaTeardown(teardown)),
+      attempt(stopWatching),
+      attempt(_watchOperations.close),
+      attempt(_alertOperations.close),
+      attempt(() async => _networkQualitySubscription?.cancel()),
+      attempt(() async => _alertConnectionSubscription?.cancel()),
+      attempt(() async => _purchaseSubscription?.cancel()),
+      attempt(_cancelEndpointResolution),
+      attempt(() async {
+        try {
+          await _stopAlerts?.call();
+        } finally {
+          _alertOwnerSession = null;
+          _alertTransportConnected = false;
+        }
+      }),
+      attempt(() async => roomControls?.dispose()),
+      attempt(() async => serviceBrowser?.dispose()),
+      attempt(() async => _disposeTransports?.call()),
+    ];
     _activeStreamOwnerSession = null;
-    await attempt(() async => _broadcastAccess?.endAllSessions());
     _cancelBroadcastAccessTimer();
-    await attempt(() async {
-      try {
-        await _stopAlerts?.call();
-      } finally {
-        _alertOwnerSession = null;
-      }
-    });
-    await attempt(() async => roomControls?.dispose());
-    await attempt(() async => serviceBrowser?.dispose());
+    _state = _copyState(
+      phase: _state.session == null
+          ? ClientRuntimePhase.unpaired
+          : ClientRuntimePhase.pairedIdle,
+      clearActiveStream: true,
+      alertsActive: false,
+    );
+    await Future.wait(stopping);
+    await attempt(() async => _broadcastAccess?.endAllSessions());
     await attempt(alertHistory.dispose);
     await attempt(() async => _broadcastAccess?.dispose());
     await attempt(_states.close);
+    if (firstError != null) {
+      Error.throwWithStackTrace(firstError!, firstStack!);
+    }
   }
 
   void _setAlertTransportConnected(bool connected) {
@@ -1161,7 +1217,7 @@ class ClientRuntime implements AppRuntime {
 
   void _startNetworkQuality(PairingSession session) {
     final watch = _watchNetworkQuality;
-    if (watch == null) return;
+    if (watch == null || _disposed) return;
     _networkQualitySubscription?.cancel();
     _networkQualitySubscription = watch(session).listen((update) {
       if (_disposed || _state.session != session) return;
@@ -1371,11 +1427,13 @@ class ClientRuntime implements AppRuntime {
       );
 
   void _emit(ClientRuntimeState state) {
+    if (_disposed) return;
     _state = state;
     if (!_states.isClosed) _states.add(state);
   }
 
   Future<void> _enqueueWatch(Future<void> Function() operation) {
+    if (_disposed) return Future<void>.value();
     return _watchOperations.run(operation);
   }
 }

@@ -190,6 +190,67 @@ void main() {
     expect(stops, 1);
   });
 
+  test('disposing cancels a pending discovery without publishing late rooms',
+      () async {
+    final started = Completer<void>();
+    final finishStart = Completer<nsd.Discovery>();
+    final stopped = <nsd.Discovery>[];
+    final browser = MiuCamServiceBrowser(
+      startDiscovery: (_) {
+        started.complete();
+        return finishStart.future;
+      },
+      stopDiscovery: (discovery) async => stopped.add(discovery),
+    );
+    final updates = <List<MiuCamDiscoveredService>>[];
+    final subscription = browser.updates.listen(updates.add);
+    addTearDown(subscription.cancel);
+    final starting = browser.start();
+    await started.future;
+    final disposing = browser.dispose();
+    expect(browser.dispose(), same(disposing));
+    final discovery = nsd.Discovery('late-discovery')
+      ..add(_service(
+        name: 'Late room',
+        port: 8080,
+        host: '192.168.1.12',
+        id: 'late-room',
+        webRtc: false,
+      ));
+    finishStart.complete(discovery);
+    await starting;
+    await disposing;
+
+    expect(stopped, [discovery]);
+    expect(browser.isRunning, isFalse);
+    expect(browser.services, isEmpty);
+    expect(updates.expand((value) => value), isEmpty);
+    await expectLater(browser.start(), throwsStateError);
+  });
+
+  test('disposing does not retry a failing native discovery start', () async {
+    final entered = Completer<void>();
+    final pending = Completer<nsd.Discovery>();
+    var starts = 0;
+    final browser = MiuCamServiceBrowser(
+      startDiscovery: (_) {
+        starts++;
+        if (!entered.isCompleted) entered.complete();
+        return pending.future;
+      },
+      stopDiscovery: (_) async {},
+      retryPolicy: _noDelayRetry,
+    );
+    final starting = browser.start();
+    final rejected = expectLater(starting, throwsStateError);
+    await entered.future;
+    final disposing = browser.dispose();
+    pending.completeError(StateError('native discovery failed'));
+    await rejected;
+    await disposing;
+    expect(starts, 1);
+  });
+
   test('browser retries discovery and keys metadata refresh by stable ID',
       () async {
     final discovery = nsd.Discovery('discovery');
@@ -377,7 +438,7 @@ void main() {
 
     expect(browser.isRunning, isFalse);
     await expectLater(browser.start(), throwsStateError);
-    await browser.dispose();
+    await expectLater(browser.dispose(), throwsStateError);
   });
 }
 

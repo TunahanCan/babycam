@@ -9,6 +9,7 @@ import 'package:miucam/features/client/client_runtime.dart';
 import 'package:miucam/features/client/media/active_stream_session.dart';
 import 'package:miucam/features/client/pairing/pairing_failure.dart';
 import 'package:miucam/services/monetization/broadcast_access_service.dart';
+import 'package:miucam/services/discovery/miucam_service_discovery.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -22,6 +23,113 @@ void main() {
       expiresAtMs:
           DateTime.now().add(const Duration(minutes: 1)).millisecondsSinceEpoch,
       capabilities: const {});
+
+  test('role exit seals starts and cuts every transport before waiting',
+      () async {
+    final releaseStop = Completer<void>();
+    final calls = <String>[];
+    var streamsStarted = 0;
+    final browser = _RecordingBrowser(calls);
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      startStream: (_, {bool audioEnabled = false}) async {
+        streamsStarted++;
+        return const ActiveStreamSession(streamToken: 'stream');
+      },
+      stopStream: (_) {
+        calls.add('stream');
+        return releaseStop.future;
+      },
+      startAlerts: (_) async {
+        calls.add('alert-start');
+        return true;
+      },
+      stopAlerts: () async => calls.add('alerts'),
+      disposeTransports: () => calls.add('http'),
+      serviceBrowser: browser,
+    );
+    await runtime.pairWithServer(payload());
+    await runtime.startWatching();
+
+    final first = runtime.dispose();
+    final second = runtime.dispose();
+    expect(second, same(first));
+    expect(runtime.isDisposed, isTrue);
+    expect(calls, containsAll(['stream', 'alerts', 'discovery', 'http']));
+    expect(runtime.currentState.activeStream, isNull);
+    expect(runtime.currentState.alertsActive, isFalse);
+    await runtime.startWatching();
+    await runtime.startAlertListening();
+    await runtime.startDiscovery();
+    expect(streamsStarted, 1);
+    expect(calls, isNot(contains('alert-start')));
+    expect(browser.starts, 0);
+
+    var disposed = false;
+    unawaited(first.then((_) => disposed = true));
+    await pumpEventQueue();
+    expect(disposed, isFalse);
+    releaseStop.complete();
+    await first;
+    expect(disposed, isTrue);
+  });
+
+  test('failed resource shutdown remains failed for every disposer', () async {
+    final failure = StateError('native alert service still active');
+    var otherTransportsClosed = false;
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      stopAlerts: () async => throw failure,
+      disposeTransports: () => otherTransportsClosed = true,
+    );
+
+    final first = runtime.dispose();
+    await expectLater(first, throwsA(same(failure)));
+    expect(otherTransportsClosed, isTrue);
+    expect(runtime.dispose(), same(first));
+    await expectLater(runtime.dispose(), throwsA(same(failure)));
+  });
+
+  test('late alert permission cannot revive the previous role', () async {
+    final permission = Completer<bool>();
+    final enteredPermission = Completer<void>();
+    var starts = 0;
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      initializeSystemNotifications: () {
+        enteredPermission.complete();
+        return permission.future;
+      },
+      startAlerts: (_) async {
+        starts++;
+        return true;
+      },
+    );
+    await runtime.pairWithServer(payload());
+    final starting = runtime.startAlertListening();
+    await enteredPermission.future;
+    final disposing = runtime.dispose();
+    permission.complete(true);
+
+    expect(await starting, isFalse);
+    await disposing;
+    expect(starts, 0);
+  });
+
+  testWidgets('uncertain shutdown times out as failure, never success',
+      (tester) async {
+    final pending = Completer<void>();
+    final runtime = ClientRuntime(
+      pair: (p) async => PairingSession(payload: p, sessionToken: 'token'),
+      stopAlerts: () => pending.future,
+    );
+    final disposing = runtime.dispose();
+    final rejected = expectLater(disposing, throwsA(isA<TimeoutException>()));
+    await tester.pump(const Duration(seconds: 11));
+    await rejected;
+    expect(runtime.dispose(), same(disposing));
+    pending.complete();
+  });
 
   test('yeni oda eşleşmesi eski yayın ve uyarıları kapatır', () async {
     var streamsStopped = 0;
@@ -972,6 +1080,19 @@ void main() {
     expect(runtime.currentState.session, same(session));
     await runtime.dispose();
   });
+}
+
+class _RecordingBrowser extends MiuCamServiceBrowser {
+  _RecordingBrowser(this.calls);
+
+  final List<String> calls;
+  var starts = 0;
+
+  @override
+  Future<void> start() async => starts++;
+
+  @override
+  Future<void> dispose() async => calls.add('discovery');
 }
 
 class _FakePurchaseGateway implements BroadcastPurchaseGateway {

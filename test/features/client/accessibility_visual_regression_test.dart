@@ -18,6 +18,8 @@ import 'package:miucam/features/shared/presentation/miucam_design_tokens.dart';
 import 'package:miucam/l10n/app_strings.dart';
 import 'package:miucam/features/shared/presentation/localized_time.dart';
 
+import '../../support/runtime_widget_cleanup.dart';
+
 void main() {
   testWidgets('seçili dil ve oda rolü küçük metinde AA kontrastı sağlar',
       (tester) async {
@@ -37,84 +39,92 @@ void main() {
     );
 
     final runtime = ClientRuntime(pair: (_) => throw UnimplementedError());
-    addTearDown(runtime.dispose);
-    await tester.pumpWidget(
-      _LocalizedApp(
-        home: ClientHomeScreen(
-          runtime: runtime,
-          activeRole: AppRole.client,
-          onRoleSelected: (_) {},
-          initialTab: 3,
-          selectedLocale: const Locale('tr'),
+    try {
+      await tester.pumpWidget(
+        _LocalizedApp(
+          home: ClientHomeScreen(
+            runtime: runtime,
+            activeRole: AppRole.client,
+            onRoleSelected: (_) {},
+            initialTab: 3,
+            selectedLocale: const Locale('tr'),
+          ),
         ),
-      ),
-    );
+      );
 
-    final languageLabel = tester.widget<Text>(find.text('Türkçe'));
-    expect(
-      _contrastRatio(
-        languageLabel.style!.color!,
-        MiuCamDesignTokens.mintSoft,
-      ),
-      greaterThanOrEqualTo(4.5),
-    );
+      final languageLabel = tester.widget<Text>(find.text('Türkçe'));
+      expect(
+        _contrastRatio(
+          languageLabel.style!.color!,
+          MiuCamDesignTokens.mintSoft,
+        ),
+        greaterThanOrEqualTo(4.5),
+      );
+    } finally {
+      await disposeClientRuntime(tester, runtime);
+    }
   });
 
   testWidgets('uyarı zamanlarının kategori renkleri AA kontrastı sağlar',
       (tester) async {
     final runtime = ClientRuntime(pair: (_) => throw UnimplementedError());
-    addTearDown(runtime.dispose);
-    await runtime.recordAlert(
-      _alert('audio', 'cryDetected', DateTime(2026, 7, 29, 12, 10)),
-    );
-    await runtime.recordAlert(
-      _alert('motion', 'motionDetected', DateTime(2026, 7, 29, 12, 20)),
-    );
-    await runtime.recordAlert(
-      _alert('system', 'batteryLow', DateTime(2026, 7, 29, 12, 30)),
-    );
-
-    await tester.pumpWidget(
-      _LocalizedApp(home: WatchScreen(runtime: runtime, initialTab: 1)),
-    );
-    await tester.pumpAndSettle();
-
-    final context = tester.element(find.byType(WatchScreen));
-    for (final minute in [10, 20, 30]) {
-      final time = formatAlertTimestamp(
-          context, DateTime(2026, 7, 29, 12, minute).millisecondsSinceEpoch);
-      final timeText = tester.widget<Text>(find.text(time));
-      expect(
-        _contrastRatio(timeText.style!.color!, Colors.white),
-        greaterThanOrEqualTo(4.5),
-        reason: '$time zaman etiketi beyaz kart üzerinde okunabilir olmalı.',
+    try {
+      await runtime.recordAlert(
+        _alert('audio', 'cryDetected', DateTime(2026, 7, 29, 12, 10)),
       );
+      await runtime.recordAlert(
+        _alert('motion', 'motionDetected', DateTime(2026, 7, 29, 12, 20)),
+      );
+      await runtime.recordAlert(
+        _alert('system', 'batteryLow', DateTime(2026, 7, 29, 12, 30)),
+      );
+
+      await tester.pumpWidget(
+        _LocalizedApp(home: WatchScreen(runtime: runtime, initialTab: 1)),
+      );
+      await tester.pumpAndSettle();
+
+      final context = tester.element(find.byType(WatchScreen));
+      for (final minute in [10, 20, 30]) {
+        final time = formatAlertTimestamp(
+            context, DateTime(2026, 7, 29, 12, minute).millisecondsSinceEpoch);
+        final timeText = tester.widget<Text>(find.text(time));
+        expect(
+          _contrastRatio(timeText.style!.color!, Colors.white),
+          greaterThanOrEqualTo(4.5),
+          reason: '$time zaman etiketi beyaz kart üzerinde okunabilir olmalı.',
+        );
+      }
+    } finally {
+      await disposeClientRuntime(tester, runtime);
     }
   });
 
   testWidgets('istemci ve izleme filtreleri en az 48dp dokunma hedefidir',
       (tester) async {
     final runtime = ClientRuntime(pair: (_) => throw UnimplementedError());
-    addTearDown(runtime.dispose);
-
-    await tester.pumpWidget(
-      _LocalizedApp(
-        home: ClientHomeScreen(
-          runtime: runtime,
-          activeRole: AppRole.client,
-          onRoleSelected: (_) {},
-          initialTab: 2,
+    try {
+      await tester.pumpWidget(
+        _LocalizedApp(
+          home: ClientHomeScreen(
+            runtime: runtime,
+            activeRole: AppRole.client,
+            onRoleSelected: (_) {},
+            initialTab: 2,
+          ),
         ),
-      ),
-    );
-    await tester.pump();
-    _expectFilterTargetsAtLeast48(tester);
+      );
+      await tester.pump();
+      _expectFilterTargetsAtLeast48(tester);
 
-    await tester.pumpWidget(
-      _LocalizedApp(home: WatchScreen(runtime: runtime, initialTab: 1)),
-    );
-    await tester.pumpAndSettle();
-    _expectFilterTargetsAtLeast48(tester);
+      await tester.pumpWidget(
+        _LocalizedApp(home: WatchScreen(runtime: runtime, initialTab: 1)),
+      );
+      await tester.pumpAndSettle();
+      _expectFilterTargetsAtLeast48(tester);
+    } finally {
+      await disposeClientRuntime(tester, runtime);
+    }
   });
 
   testWidgets('konfor chipleri 48dp ve aktif bas-konuş metni AA uyumludur',

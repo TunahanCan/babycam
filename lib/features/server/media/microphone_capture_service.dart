@@ -72,6 +72,10 @@ class MicrophoneCaptureService {
   StreamSubscription<Uint8List>? _subscription;
   Future<({bool granted, bool current})>? _permissionOperation;
   Future<bool>? _startOperation;
+  final _pendingStarts = <Future<void>>{};
+  final _retiredRecorders = <MicrophoneRecorderPort>{};
+  Future<void>? _disposeOperation;
+  bool _shutdownComplete = false;
   Timer? _restartTimer;
   int _restartAttempt = 0;
   int? _terminalHandledGeneration;
@@ -197,6 +201,11 @@ class MicrophoneCaptureService {
       }
     });
     _startOperation = operation;
+    late final Future<void> settled;
+    settled = operation
+        .then<void>((_) {}, onError: (Object _, StackTrace __) {})
+        .whenComplete(() => _pendingStarts.remove(settled));
+    _pendingStarts.add(settled);
     return operation;
   }
 
@@ -322,17 +331,50 @@ class MicrophoneCaptureService {
     await _stopRecorder(recorder);
   }
 
-  Future<void> dispose() async {
-    if (_disposed) return;
+  Future<void> dispose() {
+    final current = _disposeOperation;
+    if (current != null) return current;
+    if (_shutdownComplete) return Future<void>.value();
     _disposed = true;
+    late final Future<void> operation;
+    operation = _disposeCapture().whenComplete(() {
+      if (identical(_disposeOperation, operation)) _disposeOperation = null;
+    });
+    return _disposeOperation = operation;
+  }
+
+  Future<void> _disposeCapture() async {
     await stop();
-    final recorder = _recorder;
-    _recorder = null;
-    if (recorder != null) {
+    Object? firstError;
+    StackTrace? firstStack;
+    try {
+      // Normal stop is bounded to allow a fresh recorder after a plugin stall.
+      // A role handoff is stricter: a late start must finish before the next
+      // role can acquire the microphone.
+      await Future.wait(_pendingStarts.toList()).timeout(cleanupTimeout);
+    } catch (error, stackTrace) {
+      firstError = error;
+      firstStack = stackTrace;
+    }
+    final recorders = {
+      ..._retiredRecorders,
+      if (_recorder case final recorder?) recorder,
+    };
+    for (final recorder in recorders) {
       try {
         await recorder.dispose().timeout(cleanupTimeout);
-      } catch (_) {}
+        _retiredRecorders.remove(recorder);
+        if (identical(_recorder, recorder)) _recorder = null;
+      } catch (error, stackTrace) {
+        _retiredRecorders.add(recorder);
+        firstError ??= error;
+        firstStack ??= stackTrace;
+      }
     }
+    if (firstError != null) {
+      Error.throwWithStackTrace(firstError, firstStack!);
+    }
+    _shutdownComplete = true;
   }
 
   bool _isCurrent(int generation) => !_disposed && generation == _generation;
@@ -422,9 +464,11 @@ class MicrophoneCaptureService {
   }
 
   Future<void> _discardRecorder(MicrophoneRecorderPort recorder) async {
+    _retiredRecorders.add(recorder);
     if (identical(_recorder, recorder)) _recorder = null;
     try {
       await recorder.dispose().timeout(cleanupTimeout);
+      _retiredRecorders.remove(recorder);
     } catch (_) {}
   }
 

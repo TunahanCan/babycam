@@ -250,6 +250,16 @@ class StreamSessionController {
     return operation;
   }
 
+  /// Releases this phone for its other role. An unreachable former room can
+  /// expire its own lease; only uncertain local teardown blocks the handoff.
+  Future<void> stopForRoleExit(PairingSession session) async {
+    try {
+      await stop(session);
+    } catch (_) {
+      if (_lastStopHadLocalFailure) rethrow;
+    }
+  }
+
   Future<void> _stop(PairingSession session) async {
     _lastStopHadLocalFailure = false;
     _operationGeneration++;

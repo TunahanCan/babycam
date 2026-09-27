@@ -10,6 +10,8 @@ import 'package:miucam/features/shared/presentation/localized_time.dart';
 import 'package:miucam/features/shared/presentation/localized_room_name.dart';
 import 'package:miucam/l10n/app_strings.dart';
 
+import '../../support/runtime_widget_cleanup.dart';
+
 void main() {
   test('legacy default room names localize and custom room names survive', () {
     for (final locale in AppStrings.supportedLocales) {
@@ -35,55 +37,61 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final runtime = ClientRuntime(pair: (_) => throw UnimplementedError());
-      addTearDown(runtime.dispose);
-      final timestamp = DateTime(2026, 1, 2, 13, 5).millisecondsSinceEpoch;
-      final alert = AlertEventDto.fromJson(AlertEventDto(
-        id: 'stored-foreign-alert',
-        type: 'motionDetected',
-        severity: 'warning',
-        messageKey: 'parentMotionAlert',
-        message: 'SERVER_LANGUAGE_MUST_NOT_LEAK',
-        score: .7,
-        timestampMs: timestamp,
-        sourceDeviceId: 'server',
-        // Old records lack measurements. The parent must still see a usable
-        // translated event, without made-up percentages.
-      ).toJson())!;
-      await runtime.recordAlert(alert);
-      final strings = AppStrings(locale);
+      try {
+        final timestamp = DateTime(2026, 1, 2, 13, 5).millisecondsSinceEpoch;
+        final alert = AlertEventDto.fromJson(AlertEventDto(
+          id: 'stored-foreign-alert',
+          type: 'motionDetected',
+          severity: 'warning',
+          messageKey: 'parentMotionAlert',
+          message: 'SERVER_LANGUAGE_MUST_NOT_LEAK',
+          score: .7,
+          timestampMs: timestamp,
+          sourceDeviceId: 'server',
+          // Old records lack measurements. The parent must still see a usable
+          // translated event, without made-up percentages.
+        ).toJson())!;
+        await runtime.recordAlert(alert);
+        final strings = AppStrings(locale);
 
-      await tester.pumpWidget(_app(
-        locale,
-        ClientHomeScreen(
-          runtime: runtime,
-          activeRole: AppRole.client,
-          onRoleSelected: (_) {},
-          initialTab: 2,
-        ),
-      ));
-      await tester.pump();
-      expect(find.text(alert.localizedTitle(strings)), findsOneWidget);
-      expect(find.text(alert.localizedMessage(strings)), findsOneWidget);
-      expect(
-          find.textContaining('SERVER_LANGUAGE_MUST_NOT_LEAK'), findsNothing);
-      final context = tester.element(find.byType(ClientHomeScreen));
-      expect(
-          find.text(formatAlertTimestamp(context, timestamp)), findsOneWidget);
-      expect(Directionality.of(context),
-          locale.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr);
-      expect(tester.takeException(), isNull);
+        await tester.pumpWidget(_app(
+          locale,
+          ClientHomeScreen(
+            runtime: runtime,
+            activeRole: AppRole.client,
+            onRoleSelected: (_) {},
+            initialTab: 2,
+          ),
+        ));
+        await tester.pump();
+        expect(find.text(alert.localizedTitle(strings)), findsOneWidget);
+        expect(find.text(alert.localizedMessage(strings)), findsOneWidget);
+        expect(
+            find.textContaining('SERVER_LANGUAGE_MUST_NOT_LEAK'), findsNothing);
+        final context = tester.element(find.byType(ClientHomeScreen));
+        expect(find.text(formatAlertTimestamp(context, timestamp)),
+            findsOneWidget);
+        expect(
+            Directionality.of(context),
+            locale.languageCode == 'ar'
+                ? TextDirection.rtl
+                : TextDirection.ltr);
+        expect(tester.takeException(), isNull);
 
-      await tester.pumpWidget(_app(
-        locale,
-        WatchScreen(runtime: runtime, initialTab: 1, keepScreenAwake: false),
-      ));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 250));
-      expect(find.text(alert.localizedTitle(strings)), findsWidgets);
-      expect(
-          find.textContaining('SERVER_LANGUAGE_MUST_NOT_LEAK'), findsNothing);
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpWidget(_app(
+          locale,
+          WatchScreen(runtime: runtime, initialTab: 1, keepScreenAwake: false),
+        ));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(find.text(alert.localizedTitle(strings)), findsWidgets);
+        expect(
+            find.textContaining('SERVER_LANGUAGE_MUST_NOT_LEAK'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      } finally {
+        await disposeClientRuntime(tester, runtime);
+      }
     });
   }
 

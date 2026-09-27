@@ -12,6 +12,8 @@ import 'package:miucam/features/client/media/watch_screen.dart';
 import 'package:miucam/features/shared/presentation/miucam_shells.dart';
 import 'package:miucam/l10n/app_strings.dart';
 
+import '../../support/runtime_widget_cleanup.dart';
+
 void main() {
   testWidgets(
     'watch gece saati landscape ve büyük metinde taşma üretmez',
@@ -20,55 +22,58 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(844, 320));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final runtime = await _pairedRuntime();
-      addTearDown(runtime.dispose);
-      final strings = AppStrings(const Locale('tr'));
+      try {
+        final strings = AppStrings(const Locale('tr'));
 
-      await tester.pumpWidget(
-        MaterialApp(
-          locale: const Locale('tr'),
-          supportedLocales: AppStrings.supportedLocales,
-          localizationsDelegates: _localizationsDelegates,
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              textScaler: const TextScaler.linear(2),
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: const Locale('tr'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: _localizationsDelegates,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: const TextScaler.linear(2),
+              ),
+              child: child!,
             ),
-            child: child!,
+            home: WatchScreen(
+              runtime: runtime,
+              keepScreenAwake: false,
+            ),
           ),
-          home: WatchScreen(
-            runtime: runtime,
-            keepScreenAwake: false,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
 
-      final nightClockAction = find.text(strings.ui('nightClock'));
-      await tester.scrollUntilVisible(
-        nightClockAction,
-        260,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
+        final nightClockAction = find.text(strings.ui('nightClock'));
+        await tester.scrollUntilVisible(
+          nightClockAction,
+          260,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
 
-      await tester.tap(nightClockAction);
-      await tester.pumpAndSettle();
+        await tester.tap(nightClockAction);
+        await tester.pumpAndSettle();
 
-      expect(
-        find.byTooltip(strings.ui('exitNightClock')),
-        findsOneWidget,
-      );
-      expect(tester.takeException(), isNull);
-      final exitNode = tester
-          .getSemantics(find.bySemanticsLabel(strings.ui('exitNightClock')));
-      expect(exitNode.getSemanticsData().hasAction(ui.SemanticsAction.tap),
-          isTrue);
-      exitNode.owner!.performAction(exitNode.id, ui.SemanticsAction.tap);
-      await tester.pumpAndSettle();
-      expect(find.byTooltip(strings.ui('exitNightClock')), findsNothing);
-      await tester.pumpWidget(const SizedBox.shrink());
-      semantics.dispose();
+        expect(
+          find.byTooltip(strings.ui('exitNightClock')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        final exitNode = tester
+            .getSemantics(find.bySemanticsLabel(strings.ui('exitNightClock')));
+        expect(exitNode.getSemanticsData().hasAction(ui.SemanticsAction.tap),
+            isTrue);
+        exitNode.owner!.performAction(exitNode.id, ui.SemanticsAction.tap);
+        await tester.pumpAndSettle();
+        expect(find.byTooltip(strings.ui('exitNightClock')), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+        semantics.dispose();
+      } finally {
+        await disposeClientRuntime(tester, runtime);
+      }
     },
   );
 
@@ -77,11 +82,76 @@ void main() {
     (tester) async {
       final semantics = tester.ensureSemantics();
       final runtime = await _pairedRuntime();
-      addTearDown(runtime.dispose);
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: const Locale('tr'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: _localizationsDelegates,
+            home: WatchScreen(
+              runtime: runtime,
+              keepScreenAwake: false,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
 
+        final watchNode = tester.getSemantics(find.bySemanticsLabel('İzle'));
+        final historyNode =
+            tester.getSemantics(find.bySemanticsLabel('Geçmiş'));
+        final settingsNode =
+            tester.getSemantics(find.bySemanticsLabel('Ayarlar'));
+
+        for (final node in [watchNode, historyNode, settingsNode]) {
+          final data = node.getSemanticsData();
+          expect(data.flagsCollection.isButton, isTrue);
+          expect(data.hasAction(ui.SemanticsAction.tap), isTrue);
+          expect(data.rect.height, greaterThanOrEqualTo(48));
+        }
+        expect(
+          watchNode.getSemanticsData().flagsCollection.isSelected,
+          ui.Tristate.isTrue,
+        );
+        expect(
+          historyNode.getSemanticsData().flagsCollection.isSelected,
+          ui.Tristate.isFalse,
+        );
+
+        historyNode.owner!.performAction(
+          historyNode.id,
+          ui.SemanticsAction.tap,
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          tester
+              .getSemantics(find.bySemanticsLabel('İzle'))
+              .getSemanticsData()
+              .flagsCollection
+              .isSelected,
+          ui.Tristate.isFalse,
+        );
+        expect(
+          tester
+              .getSemantics(find.bySemanticsLabel('Geçmiş'))
+              .getSemanticsData()
+              .flagsCollection
+              .isSelected,
+          ui.Tristate.isTrue,
+        );
+        semantics.dispose();
+      } finally {
+        await disposeClientRuntime(tester, runtime);
+      }
+    },
+  );
+
+  testWidgets('watch back icon mirrors in RTL', (tester) async {
+    final runtime = await _pairedRuntime();
+    try {
       await tester.pumpWidget(
         MaterialApp(
-          locale: const Locale('tr'),
+          locale: const Locale('ar'),
           supportedLocales: AppStrings.supportedLocales,
           localizationsDelegates: _localizationsDelegates,
           home: WatchScreen(
@@ -92,81 +162,21 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final watchNode = tester.getSemantics(find.bySemanticsLabel('İzle'));
-      final historyNode = tester.getSemantics(find.bySemanticsLabel('Geçmiş'));
-      final settingsNode =
-          tester.getSemantics(find.bySemanticsLabel('Ayarlar'));
-
-      for (final node in [watchNode, historyNode, settingsNode]) {
-        final data = node.getSemanticsData();
-        expect(data.flagsCollection.isButton, isTrue);
-        expect(data.hasAction(ui.SemanticsAction.tap), isTrue);
-        expect(data.rect.height, greaterThanOrEqualTo(48));
-      }
-      expect(
-        watchNode.getSemanticsData().flagsCollection.isSelected,
-        ui.Tristate.isTrue,
+      final backIcon = find.byType(BackButtonIcon);
+      expect(backIcon, findsOneWidget);
+      final renderedIcon = tester.widget<Icon>(
+        find.descendant(of: backIcon, matching: find.byType(Icon)),
       );
-      expect(
-        historyNode.getSemanticsData().flagsCollection.isSelected,
-        ui.Tristate.isFalse,
+      expect(renderedIcon.icon?.matchTextDirection, isTrue);
+
+      final rtlTransform = tester.widget<Transform>(
+        find.descendant(of: backIcon, matching: find.byType(Transform)),
       );
-
-      historyNode.owner!.performAction(
-        historyNode.id,
-        ui.SemanticsAction.tap,
-      );
-      await tester.pumpAndSettle();
-
-      expect(
-        tester
-            .getSemantics(find.bySemanticsLabel('İzle'))
-            .getSemanticsData()
-            .flagsCollection
-            .isSelected,
-        ui.Tristate.isFalse,
-      );
-      expect(
-        tester
-            .getSemantics(find.bySemanticsLabel('Geçmiş'))
-            .getSemanticsData()
-            .flagsCollection
-            .isSelected,
-        ui.Tristate.isTrue,
-      );
-      semantics.dispose();
-    },
-  );
-
-  testWidgets('watch back icon mirrors in RTL', (tester) async {
-    final runtime = await _pairedRuntime();
-    addTearDown(runtime.dispose);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('ar'),
-        supportedLocales: AppStrings.supportedLocales,
-        localizationsDelegates: _localizationsDelegates,
-        home: WatchScreen(
-          runtime: runtime,
-          keepScreenAwake: false,
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final backIcon = find.byType(BackButtonIcon);
-    expect(backIcon, findsOneWidget);
-    final renderedIcon = tester.widget<Icon>(
-      find.descendant(of: backIcon, matching: find.byType(Icon)),
-    );
-    expect(renderedIcon.icon?.matchTextDirection, isTrue);
-
-    final rtlTransform = tester.widget<Transform>(
-      find.descendant(of: backIcon, matching: find.byType(Transform)),
-    );
-    expect(rtlTransform.transform.entry(0, 0), -1);
-    expect(tester.takeException(), isNull);
+      expect(rtlTransform.transform.entry(0, 0), -1);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await disposeClientRuntime(tester, runtime);
+    }
   });
 
   testWidgets('role badge keeps a 48dp minimum tap target', (tester) async {

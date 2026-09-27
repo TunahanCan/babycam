@@ -245,12 +245,13 @@ class MiuCamServiceBrowser {
   Object? _lastError;
   int _generation = 0;
   bool _disposed = false;
+  Future<void>? _disposeOperation;
 
   Stream<List<MiuCamDiscoveredService>> get updates => _updates.stream;
   List<MiuCamDiscoveredService> get services =>
       List.unmodifiable(_services.values);
   Object? get lastError => _lastError;
-  bool get isRunning => _discovery != null;
+  bool get isRunning => !_disposed && _discovery != null;
 
   Future<void> start() => _serialize(_startLocked);
 
@@ -259,16 +260,24 @@ class MiuCamServiceBrowser {
     if (_discovery != null) return;
     try {
       final discovery = await _retry(
-        action: () => _startDiscovery(MiuCamDiscoveryConfig.serviceType),
+        action: () {
+          if (_disposed) throw StateError('Discovery browser is disposed.');
+          return _startDiscovery(MiuCamDiscoveryConfig.serviceType);
+        },
         retryPolicy: _retryPolicy,
         maxAttempts: maxAttempts,
+        shouldRetry: () => !_disposed,
       );
+      _discovery = discovery;
+      // Native discovery may resolve after role teardown began. Retain its
+      // handle for the already queued dispose, without publishing services or
+      // attaching listeners that could revive client endpoint resolution.
+      if (_disposed) return;
       final generation = ++_generation;
       void listener(nsd.Service service, nsd.ServiceStatus status) {
         unawaited(_onService(generation, service, status));
       }
 
-      _discovery = discovery;
       _listener = listener;
       discovery.addServiceListener(listener);
       for (final service in discovery.services) {
@@ -315,15 +324,19 @@ class MiuCamServiceBrowser {
     }
   }
 
-  Future<void> dispose() => _serialize(() async {
-        if (_disposed) return;
-        _disposed = true;
-        try {
-          await _stopLocked();
-        } finally {
-          await _updates.close();
-        }
-      });
+  Future<void> dispose() {
+    final current = _disposeOperation;
+    if (current != null) return current;
+    _disposed = true;
+    _generation++;
+    return _disposeOperation = _serialize(() async {
+      try {
+        await _stopLocked();
+      } finally {
+        await _updates.close();
+      }
+    });
+  }
 
   Future<void> _onService(
     int generation,
@@ -466,6 +479,7 @@ Future<T> _retry<T>({
   required Future<T> Function() action,
   required RetryPolicy retryPolicy,
   required int maxAttempts,
+  bool Function()? shouldRetry,
 }) async {
   Object? lastError;
   StackTrace? lastStackTrace;
@@ -475,6 +489,7 @@ Future<T> _retry<T>({
     } catch (error, stackTrace) {
       lastError = error;
       lastStackTrace = stackTrace;
+      if (shouldRetry?.call() == false) break;
       if (attempt + 1 < maxAttempts) {
         await Future<void>.delayed(retryPolicy.delayForAttempt(attempt));
       }

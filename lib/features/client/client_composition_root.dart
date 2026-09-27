@@ -51,9 +51,10 @@ class ClientCompositionRoot {
       secureTokens: secureTokens,
     );
     final streamHealth = ClientStreamHealthState();
+    final webRtc = FlutterWebRtcClientConnector();
     final streams = StreamSessionController(
       healthState: streamHealth,
-      webRtcConnector: FlutterWebRtcClientConnector(),
+      webRtcConnector: webRtc,
     );
     final networkQuality = NetworkQualityMonitor(healthState: streamHealth);
     final remoteBroadcastAccess = RemoteBroadcastAccessClient();
@@ -82,14 +83,14 @@ class ClientCompositionRoot {
 
     Future<void> stopAlerts() async {
       try {
-        await alerts.stop();
+        await Future.wait([alerts.stop(), alertBackground.stop()]);
       } finally {
-        await alertBackground.stop();
+        await alertDelivery.drain();
       }
-      await alertDelivery.drain();
     }
 
-    final runtime = ClientRuntime(
+    late final ClientRuntime runtime;
+    runtime = ClientRuntime(
       pair: (payload) async {
         try {
           // A new room would otherwise consume a trusted-client slot on the
@@ -114,7 +115,9 @@ class ClientCompositionRoot {
         return renewed;
       },
       startStream: streams.start,
-      stopStream: streams.stop,
+      stopStream: (session) => runtime.isDisposed
+          ? streams.stopForRoleExit(session)
+          : streams.stop(session),
       watchNetworkQuality: networkQuality.watch,
       initializeSystemNotifications: notifications.initialize,
       startAlerts: (session) async {
@@ -123,6 +126,10 @@ class ClientCompositionRoot {
         // armed so alerts reach the in-app history and begin server analysis.
         try {
           await alertBackground.start();
+          if (runtime.isDisposed) {
+            await alertBackground.stop();
+            return false;
+          }
           await alerts.start(session, waitForFirstConnection: false);
           return alerts.isListening;
         } catch (_) {
@@ -131,6 +138,11 @@ class ClientCompositionRoot {
         }
       },
       stopAlerts: stopAlerts,
+      disposeTransports: () async {
+        remoteBroadcastAccess.cancelPendingRequests();
+        streams.dispose();
+        await webRtc.dispose();
+      },
       alertConnectionStates: alerts.connectionStates,
       clearStore: store.clear,
       watchSessionEndpoints: endpointResolver.watch,

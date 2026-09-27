@@ -7,6 +7,96 @@ import 'package:miucam/features/client/media/client_live_audio_pipeline.dart';
 import 'package:miucam/features/client/media/pcm_audio_output.dart';
 
 void main() {
+  for (final hangs in [false, true]) {
+    test(
+        'terminal audio shutdown preserves native stop ${hangs ? 'timeout' : 'failure'}',
+        () async {
+      final server = await _serveLiveAudio();
+      addTearDown(() => server.close(force: true));
+      final sink = _FailingStopPcmAudioSink(hangs: hangs);
+      final pipeline = ClientLiveAudioPipeline(
+        audioOutput: sink,
+        connectTimeout: const Duration(milliseconds: 40),
+      );
+      await pipeline.start(
+        uri: Uri.parse('http://127.0.0.1:${server.port}/audio'),
+        pairedServerHost: '127.0.0.1',
+        pairedServerPort: server.port,
+        shouldRetry: (_) => false,
+      );
+      await _waitUntil(() => sink.starts.isNotEmpty);
+      await pumpEventQueue();
+
+      // Ordinary lifecycle stop remains recoverable, but its hidden native
+      // failure must be visible to the terminal role handoff that follows.
+      await pipeline.stop();
+      final terminating = pipeline.terminate();
+      await expectLater(terminating,
+          throwsA(hangs ? isA<TimeoutException>() : isA<StateError>()));
+      expect(pipeline.terminate(), same(terminating));
+      expect(pipeline.isRunning, isFalse);
+      await pipeline.start(
+        uri: Uri.parse('http://127.0.0.1:${server.port}/audio'),
+        pairedServerHost: '127.0.0.1',
+        pairedServerPort: server.port,
+      );
+      expect(pipeline.isRunning, isFalse);
+      expect(sink.starts, hasLength(1));
+    });
+  }
+
+  test('terminal shutdown waits for a timed-out native start and final stop',
+      () async {
+    final server = await _serveLiveAudio();
+    addTearDown(() => server.close(force: true));
+    final sink = _DelayedStartPcmAudioSink();
+    final pipeline = ClientLiveAudioPipeline(
+      audioOutput: sink,
+      connectTimeout: const Duration(milliseconds: 100),
+    );
+    await pipeline.start(
+      uri: Uri.parse('http://127.0.0.1:${server.port}/audio'),
+      pairedServerHost: '127.0.0.1',
+      pairedServerPort: server.port,
+      shouldRetry: (_) => false,
+    );
+    await sink.startEntered.future;
+    final terminating = pipeline.terminate();
+    var terminated = false;
+    unawaited(terminating.then((_) => terminated = true));
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    expect(terminated, isFalse);
+
+    sink.releaseStart.complete();
+    await terminating;
+    expect(sink.active, isFalse);
+    expect(sink.stops, greaterThanOrEqualTo(2));
+    expect(pipeline.isRunning, isFalse);
+  });
+
+  test('unsettled native output start blocks terminal shutdown', () async {
+    final server = await _serveLiveAudio();
+    addTearDown(() => server.close(force: true));
+    final sink = _DelayedStartPcmAudioSink();
+    final pipeline = ClientLiveAudioPipeline(
+      audioOutput: sink,
+      connectTimeout: const Duration(milliseconds: 30),
+    );
+    await pipeline.start(
+      uri: Uri.parse('http://127.0.0.1:${server.port}/audio'),
+      pairedServerHost: '127.0.0.1',
+      pairedServerPort: server.port,
+      shouldRetry: (_) => false,
+    );
+    await sink.startEntered.future;
+    final terminating = pipeline.terminate();
+    await expectLater(terminating, throwsA(isA<TimeoutException>()));
+    sink.releaseStart.complete();
+    await _waitUntil(() => sink.stops >= 3);
+    expect(sink.active, isFalse);
+    expect(pipeline.terminate(), same(terminating));
+  });
+
   test('stop cancels a start still waiting for previous output cleanup',
       () async {
     var connections = 0;
@@ -635,6 +725,19 @@ void main() {
   });
 }
 
+Future<HttpServer> _serveLiveAudio() async {
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  server.listen((request) async {
+    request.response
+      ..bufferOutput = false
+      ..headers.contentType = ContentType('audio', 'wav')
+      ..add(_wavHeader(pcmBytes: 0))
+      ..add(_pcmFrames(4));
+    await request.response.flush();
+  });
+  return server;
+}
+
 Future<void> _waitUntil(bool Function() predicate) async {
   final deadline = DateTime.now().add(const Duration(seconds: 2));
   while (!predicate()) {
@@ -712,12 +815,34 @@ class _FakePcmAudioSink implements PcmAudioSink {
 class _DelayedStartPcmAudioSink extends _FakePcmAudioSink {
   final startEntered = Completer<void>();
   final releaseStart = Completer<void>();
+  var active = false;
 
   @override
   Future<void> start({required int sampleRate, required int channels}) async {
     starts.add((sampleRate: sampleRate, channels: channels));
     if (!startEntered.isCompleted) startEntered.complete();
     await releaseStart.future;
+    active = true;
+  }
+
+  @override
+  Future<void> stop() async {
+    await super.stop();
+    active = false;
+  }
+}
+
+class _FailingStopPcmAudioSink extends _FakePcmAudioSink {
+  _FailingStopPcmAudioSink({required this.hangs});
+
+  final bool hangs;
+
+  @override
+  Future<void> stop() {
+    stops++;
+    return hangs
+        ? Completer<void>().future
+        : Future.error(StateError('native output remains active'));
   }
 }
 

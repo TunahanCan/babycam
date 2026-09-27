@@ -8,6 +8,33 @@ import 'package:miucam/services/platform/platform_runtime_contract.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('strict shutdown confirmation rejects missing native bridge', () async {
+    const contract = PlatformRuntimeContract(
+      methodChannel: MethodChannel('miucam/missing_shutdown_bridge'),
+    );
+    await expectLater(contract.snapshot(requireNative: true),
+        throwsA(isA<MissingPluginException>()));
+    // Diagnostic surfaces can still render on unsupported test/desktop hosts.
+    expect((await contract.snapshot()).hasActiveRoleResources, isFalse);
+  });
+
+  for (final response in [null, <String, Object>{}]) {
+    test('strict shutdown confirmation rejects an empty response: $response',
+        () async {
+      const channel = MethodChannel('miucam/invalid_shutdown_bridge');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (_) async => response);
+      addTearDown(() => TestDefaultBinaryMessengerBinding
+          .instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null));
+      await expectLater(
+        const PlatformRuntimeContract(methodChannel: channel)
+            .snapshot(requireNative: true),
+        throwsStateError,
+      );
+    });
+  }
+
   test('parses the iOS foreground-only camera contract', () {
     final snapshot = PlatformRuntimeSnapshot.fromMap(const {
       'platform': 'ios',

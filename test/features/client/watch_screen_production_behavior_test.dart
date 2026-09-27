@@ -14,10 +14,30 @@ import 'package:miucam/features/client/media/active_stream_session.dart';
 import 'package:miucam/features/client/media/watch_screen.dart';
 import 'package:miucam/l10n/app_strings.dart';
 
+import '../../support/runtime_widget_cleanup.dart';
+
 const _wakelockChannel = 'dev.flutter.pigeon.wakelock_plus_platform_interface.'
     'WakelockPlusApi.toggle';
 
 void main() {
+  testWidgets('runtime stops screen media before the next widget frame',
+      (tester) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final runtime = _AudioNegotiationRuntime()..negotiatedAudio = false;
+    await tester.pumpWidget(_App(
+      home: WatchScreen(runtime: runtime, keepScreenAwake: false),
+    ));
+    await tester.pump();
+    expect(runtime.mediaRegistrations, 1);
+    final closing = runtime.dispose();
+    expect(runtime.mediaStops, 1);
+    expect(find.byType(WatchScreen), findsOneWidget,
+        reason: 'Role ownership ends without waiting for screen unmount.');
+    await closing;
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('unmute during a muted retry upgrades the resulting stream',
       (tester) async {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -62,7 +82,7 @@ void main() {
       if (!release.isCompleted) release.complete();
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
-      await runtime.dispose();
+      await disposeClientRuntime(tester, runtime);
     }
   });
 
@@ -72,7 +92,9 @@ void main() {
         (tester) async {
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       final runtime = _AudioNegotiationRuntime()..honorsAudio = honorsAudio;
-      addTearDown(runtime.dispose);
+      addTearDown(() async {
+        if (!runtime.isDisposed) await runtime.dispose();
+      });
       await tester.pumpWidget(_App(
         home: WatchScreen(runtime: runtime, keepScreenAwake: false),
       ));
@@ -97,6 +119,7 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
+      await disposeClientRuntime(tester, runtime);
     });
   }
 
@@ -104,7 +127,9 @@ void main() {
       (tester) async {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     final runtime = _AudioNegotiationRuntime();
-    addTearDown(runtime.dispose);
+    addTearDown(() async {
+      if (!runtime.isDisposed) await runtime.dispose();
+    });
     var saves = 0;
     await tester.pumpWidget(_App(
       home: WatchScreen(
@@ -125,6 +150,8 @@ void main() {
     expect(find.text(AppStrings(const Locale('tr')).ui('settingsSaveFailed')),
         findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await disposeClientRuntime(tester, runtime);
   });
 
   for (final locale in const [Locale('tr'), Locale('ar', 'QA')]) {
@@ -148,7 +175,7 @@ void main() {
         roomControls: controls,
       );
       addTearDown(() async {
-        await runtime.dispose();
+        if (!runtime.isDisposed) await runtime.dispose();
         messenger.setMockMessageHandler(_wakelockChannel, null);
       });
       await runtime.pairWithServer(session.payload);
@@ -214,6 +241,7 @@ void main() {
       expect(exit.hitTestable(), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
+      await disposeClientRuntime(tester, runtime);
     });
   }
 
@@ -261,7 +289,7 @@ void main() {
         roomControls: controls,
       );
       addTearDown(() async {
-        await runtime.dispose();
+        if (!runtime.isDisposed) await runtime.dispose();
         await connectionStates.close();
         messenger.setMockMessageHandler(_wakelockChannel, null);
       });
@@ -320,6 +348,7 @@ void main() {
       expect(find.text(strings.ui('nightClockAudioAlertsOn')), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
+      await disposeClientRuntime(tester, runtime);
     });
   }
 
@@ -364,7 +393,7 @@ void main() {
             AppLifecycleState.resumed,
           );
           messenger.setMockMessageHandler(_wakelockChannel, null);
-          if (!disposed) await runtime.dispose();
+          if (!disposed) await disposeClientRuntime(tester, runtime);
         });
         await runtime.pairWithServer(session.payload);
 
@@ -398,7 +427,7 @@ void main() {
 
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pumpAndSettle();
-        await runtime.dispose();
+        await disposeClientRuntime(tester, runtime);
         disposed = true;
         messenger.setMockMessageHandler(_wakelockChannel, null);
       },
@@ -437,7 +466,7 @@ void main() {
         AppLifecycleState.resumed,
       );
       messenger.setMockMessageHandler(_wakelockChannel, null);
-      if (!disposed) await runtime.dispose();
+      if (!disposed) await disposeClientRuntime(tester, runtime);
     });
     await runtime.pairWithServer(session.payload);
 
@@ -463,7 +492,7 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
-    await runtime.dispose();
+    await disposeClientRuntime(tester, runtime);
     disposed = true;
     messenger.setMockMessageHandler(_wakelockChannel, null);
   });
@@ -488,7 +517,9 @@ void main() {
         AppLifecycleState.resumed,
       );
     });
-    addTearDown(runtime.dispose);
+    addTearDown(() async {
+      if (!runtime.isDisposed) await runtime.dispose();
+    });
     await runtime.pairWithServer(session.payload);
 
     await tester.pumpWidget(
@@ -530,6 +561,8 @@ void main() {
 
     expect(settingsCalls, 1);
     semantics.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await disposeClientRuntime(tester, runtime);
   });
 }
 
@@ -649,6 +682,26 @@ class _AudioNegotiationRuntime extends ClientRuntime {
   bool honorsAudio = true;
   Object? streamError;
   Completer<void>? restartRelease;
+  int mediaRegistrations = 0;
+  int mediaStops = 0;
+  final _trackedTeardowns =
+      <Future<void> Function(), Future<void> Function()>{};
+
+  @override
+  bool registerMediaTeardown(Future<void> Function() teardown) {
+    mediaRegistrations++;
+    Future<void> tracked() async {
+      mediaStops++;
+      await teardown();
+    }
+
+    _trackedTeardowns[teardown] = tracked;
+    return super.registerMediaTeardown(tracked);
+  }
+
+  @override
+  Future<void> unregisterMediaTeardown(Future<void> Function() teardown) =>
+      super.unregisterMediaTeardown(_trackedTeardowns[teardown] ?? teardown);
 
   @override
   Stream<ClientRuntimeState> get states => const Stream.empty();

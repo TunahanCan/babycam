@@ -12,6 +12,43 @@ import 'package:miucam/features/server/media/microphone_capture_service.dart';
 import 'package:record/record.dart';
 
 void main() {
+  test('disposed parent controls cannot issue new comfort or talk requests',
+      () async {
+    var clientsCreated = 0;
+    final controls = ClientRoomControls(clientFactory: () {
+      clientsCreated++;
+      return HttpClient();
+    });
+    final first = controls.dispose();
+    expect(controls.dispose(), same(first));
+    await first;
+
+    expect(await controls.refreshComfort(_session(1)), isNull);
+    expect(
+      await controls.setComfort(_session(1), action: 'play'),
+      isNull,
+    );
+    await controls.startTalking(_session(1));
+    expect(clientsCreated, 0);
+  });
+
+  test('role exit aborts an in-flight room control HTTP request', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final requestEntered = Completer<void>();
+    server.listen((request) {
+      requestEntered.complete();
+      // Keep the response open to model an unreachable/stalled room.
+    });
+    final controls = ClientRoomControls();
+    final refreshing = controls.refreshComfort(_session(server.port));
+    final failed = expectLater(refreshing, throwsA(isA<HttpException>()));
+    await requestEntered.future;
+
+    await controls.dispose().timeout(const Duration(seconds: 1));
+    await failed.timeout(const Duration(seconds: 1));
+  });
+
   test('room detection pause reflects another parent talk and clears on idle',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -666,7 +703,7 @@ class _DelayedPermissionRecorder implements MicrophoneRecorderPort {
   final List<String> events;
   final permissionRequested = Completer<void>();
   final _permissionResult = Completer<bool>();
-  final _stream = StreamController<Uint8List>();
+  final _stream = StreamController<Uint8List>.broadcast();
 
   void resolvePermission(bool granted) {
     if (!_permissionResult.isCompleted) _permissionResult.complete(granted);

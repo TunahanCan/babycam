@@ -11,6 +11,8 @@ import 'package:miucam/app/app_role.dart';
 import 'package:miucam/app/install_integrity_guard.dart';
 import 'package:miucam/app/role_repository.dart';
 import 'package:miucam/features/shared/presentation/miucam_shells.dart';
+import 'package:miucam/features/server/media/media_runtime_controller.dart';
+import 'package:miucam/features/server/server_runtime.dart';
 import 'package:miucam/l10n/app_strings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -170,6 +172,8 @@ void main() {
         locale: const Locale('de'),
         home: AppBootstrap(
           preferencesLoader: () async => preferences,
+          serverRuntimeFactory: (_, __, ___) =>
+              ServerRuntime(mediaRuntime: MediaRuntimeController()),
         ),
       ),
     );

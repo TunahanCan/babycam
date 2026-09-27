@@ -313,7 +313,8 @@ void main() {
     await service.dispose();
   });
 
-  test('hic tamamlanmayan eski start sonraki capturei bloke etmez', () async {
+  test('stalled old start allows capture recovery but blocks terminal handoff',
+      () async {
     final neverCompletes = Completer<Stream<Uint8List>>();
     final first = _FakeRecorder(streamResult: neverCompletes.future);
     final second = _FakeRecorder();
@@ -335,6 +336,9 @@ void main() {
     expect(factoryCalls, 2);
     expect(second.startCalls, 1);
     expect(service.isActive, isTrue);
+    await expectLater(service.dispose(), throwsA(isA<TimeoutException>()));
+    neverCompletes.complete(first.stream);
+    await pumpEventQueue();
     await service.dispose();
   });
 

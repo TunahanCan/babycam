@@ -118,9 +118,15 @@ class ClientMediaStreamSupervisor {
   final Set<Future<void>> _detachedAudioStops = {};
 
   HttpClient? _videoClient;
+  Timer? _videoRetryTimer;
+  Completer<void>? _videoRetryWait;
   ClientLiveAudioPipeline? _audioPipeline;
   bool _audioEnabled;
   bool _started = false;
+  bool _terminated = false;
+  Future<void>? _termination;
+  Object? _audioStopError;
+  StackTrace? _audioStopStack;
   bool _terminalHandled = false;
   int _generation = 0;
   int _videoReconnects = 0;
@@ -133,7 +139,7 @@ class ClientMediaStreamSupervisor {
   bool get audioEnabled => _audioEnabled;
 
   Future<void> start() async {
-    if (_started) return;
+    if (_started || _terminated) return;
     _started = true;
     final generation = ++_generation;
     _lastVideoSequence = null;
@@ -191,27 +197,38 @@ class ClientMediaStreamSupervisor {
     );
     if (!_isCurrentAudioPipeline(generation, pipeline)) {
       pipeline.cancelImmediately();
-      await pipeline.stop();
+      await _trackDetachedAudioStop(pipeline);
     }
   }
 
   Future<void> _stopAudioPipeline() async {
     final audio = _audioPipeline;
     _audioPipeline = null;
-    await audio?.stop();
+    if (audio != null) await _trackDetachedAudioStop(audio);
   }
 
   Future<void> stop() async {
-    if (!_started &&
-        _videoClient == null &&
-        _audioPipeline == null &&
-        _detachedAudioStops.isEmpty) {
-      return;
-    }
     final audio = _detachLocalTransports();
     if (audio != null) _trackDetachedAudioStop(audio);
     final pendingStops = List<Future<void>>.from(_detachedAudioStops);
     if (pendingStops.isNotEmpty) await Future.wait(pendingStops);
+    // An accepted start can still be awaiting native setup. Its generation
+    // check releases any late pipeline before the role may hand over.
+    await _audioOperations.drain();
+  }
+
+  /// Permanently relinquishes this screen's media ownership. Normal stop may
+  /// recover later; a role handover must retain an unconfirmed native failure.
+  Future<void> terminate() => _termination ??= _terminate();
+
+  Future<void> _terminate() async {
+    _terminated = true;
+    cancelImmediately();
+    final drained = _audioOperations.close();
+    await stop();
+    await drained;
+    final error = _audioStopError;
+    if (error != null) Error.throwWithStackTrace(error, _audioStopStack!);
   }
 
   /// Stops socket reads and native audio eagerly for lifecycle teardown.
@@ -230,18 +247,27 @@ class ClientMediaStreamSupervisor {
     healthState?.setAudioExpected(false);
     healthState?.setWatchActive(false);
     _closeVideoClient();
+    _videoRetryTimer?.cancel();
+    _videoRetryTimer = null;
+    final retryWait = _videoRetryWait;
+    _videoRetryWait = null;
+    retryWait?.complete();
     final audio = _audioPipeline;
     _audioPipeline = null;
     audio?.cancelImmediately();
     return audio;
   }
 
-  void _trackDetachedAudioStop(ClientLiveAudioPipeline audio) {
+  Future<void> _trackDetachedAudioStop(ClientLiveAudioPipeline audio) {
     late final Future<void> operation;
-    operation = audio.stop().catchError((_) {}).whenComplete(() {
+    operation = audio.terminate().catchError((Object error, StackTrace stack) {
+      _audioStopError ??= error;
+      _audioStopStack ??= stack;
+    }).whenComplete(() {
       _detachedAudioStops.remove(operation);
     });
     _detachedAudioStops.add(operation);
+    return operation;
   }
 
   Future<void> _videoLoop(int generation) async {
@@ -264,12 +290,22 @@ class ClientMediaStreamSupervisor {
         MediaSessionTelemetry.shared.increment(MediaMetricName.reconnectCount);
         healthState?.markReconnectAttempt();
         _emit('video_reconnecting', failure: failure);
-        await Future<void>.delayed(
-          _retryPolicy.delayForAttempt(retryAttempt),
-        );
+        if (!_isCurrent(generation)) return;
+        await _waitForVideoRetry(_retryPolicy.delayForAttempt(retryAttempt));
         retryAttempt++;
       }
     }
+  }
+
+  Future<void> _waitForVideoRetry(Duration delay) {
+    final wait = Completer<void>();
+    _videoRetryWait = wait;
+    _videoRetryTimer = Timer(delay, () {
+      _videoRetryTimer = null;
+      _videoRetryWait = null;
+      wait.complete();
+    });
+    return wait.future;
   }
 
   Future<void> _connectAndReadVideo(int generation) async {

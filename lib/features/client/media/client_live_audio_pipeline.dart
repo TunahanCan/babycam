@@ -53,7 +53,13 @@ class ClientLiveAudioPipeline {
   bool _outputStarted = false;
   bool _audioOutputStartInFlight = false;
   int? _audioOutputOwnerGeneration;
-  Object? _audioOutputLease;
+  _PcmAudioOutputLease? _audioOutputLease;
+  final _settlingNativeStarts = <Future<void>>{};
+  final _pendingNativeStops = <Future<void>>{};
+  Object? _nativeStopError;
+  StackTrace? _nativeStopStack;
+  bool _terminated = false;
+  Future<void>? _termination;
   Future<void>? _immediateAudioOutputStop;
   Future<void> _audioOutputOperation = Future<void>.value();
   final Stopwatch _playoutClock = Stopwatch()..start();
@@ -62,6 +68,8 @@ class ClientLiveAudioPipeline {
   AdaptiveAudioJitterEstimator? _jitterEstimator;
   Timer? _playoutTimer;
   _PipelineRun? _playoutTimerRun;
+  Timer? _retryTimer;
+  Completer<void>? _retryWait;
 
   bool get isRunning => _run != null;
 
@@ -81,6 +89,7 @@ class ClientLiveAudioPipeline {
     ValueChanged<ClientLiveAudioStatus>? onStatus,
     ValueChanged<Object>? onError,
   }) async {
+    if (_terminated) return;
     cancelImmediately();
     final generation = _generation;
     await _stopAudioOutput();
@@ -106,11 +115,42 @@ class ClientLiveAudioPipeline {
     await _stopAudioOutput();
   }
 
+  /// Permanently closes this pipeline for a role handoff. Ordinary stop stays
+  /// recoverable for audio toggles; terminal shutdown must account for native
+  /// starts that outlive a timeout and for every failed native stop.
+  Future<void> terminate() => _termination ??= _terminate();
+
+  Future<void> _terminate() async {
+    _terminated = true;
+    await stop();
+    await Future.wait(_settlingNativeStarts.toList()).timeout(connectTimeout);
+    await Future.wait(_pendingNativeStops.toList()).timeout(connectTimeout);
+    if (_nativeStopError != null) {
+      Error.throwWithStackTrace(_nativeStopError!, _nativeStopStack!);
+    }
+  }
+
+  void _trackSettlingStart(Future<void> settled) {
+    _settlingNativeStarts.add(settled);
+    unawaited(settled.then((_) => _settlingNativeStarts.remove(settled)));
+  }
+
+  void _trackNativeStop(Future<void> stopped) {
+    _pendingNativeStops.add(stopped);
+    unawaited(stopped.then((_) => _pendingNativeStops.remove(stopped)));
+  }
+
+  void _recordNativeStopFailure(Object error, StackTrace stack) {
+    _nativeStopError ??= error;
+    _nativeStopStack ??= stack;
+  }
+
   /// Invalidates the run and closes network/native playback without waiting
   /// behind a pending platform start operation.
   void cancelImmediately() {
     _generation++;
     _run = null;
+    _cancelRetry();
     _closeClient();
     _stopPlayoutTimer();
     _buffer = null;
@@ -150,8 +190,11 @@ class ClientLiveAudioPipeline {
           run.reconnects++;
           run.onError?.call(error);
           _emitStatus(run, 'error');
-          if (run.shouldRetry?.call(error) == false) return;
-          await Future<void>.delayed(
+          final retry = run.shouldRetry?.call(error) ?? true;
+          // Error/status callbacks may synchronously stop this run or start
+          // its replacement. Never leave a new retry timer behind that exit.
+          if (!retry || !_isCurrent(generation, run)) return;
+          await _waitForRetry(
             _retryPolicy.delayForAttempt(retryAttempt),
           );
           retryAttempt++;
@@ -162,6 +205,25 @@ class ClientLiveAudioPipeline {
         _run = null;
       }
     }
+  }
+
+  Future<void> _waitForRetry(Duration delay) {
+    final wait = Completer<void>();
+    _retryWait = wait;
+    _retryTimer = Timer(delay, () {
+      _retryTimer = null;
+      _retryWait = null;
+      wait.complete();
+    });
+    return wait.future;
+  }
+
+  void _cancelRetry() {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    final wait = _retryWait;
+    _retryWait = null;
+    wait?.complete();
   }
 
   Future<void> _connectAndPump(int generation, _PipelineRun run) async {
@@ -491,7 +553,8 @@ class ClientLiveAudioPipeline {
     }
   }
 
-  Future<void> _refreshNativeStatus(_PipelineRun run, Object lease) async {
+  Future<void> _refreshNativeStatus(
+      _PipelineRun run, _PcmAudioOutputLease lease) async {
     run.nativeStatusInFlight = true;
     try {
       // A Future timeout cannot cancel a platform call. Keep this slot until
@@ -518,7 +581,11 @@ class ClientLiveAudioPipeline {
   }) =>
       _queueAudioOutputOperation(() async {
         if (!_isCurrent(generation, run)) return false;
-        final lease = Object();
+        final lease = _PcmAudioOutputLease(
+          onSettlingStart: _trackSettlingStart,
+          onStopping: _trackNativeStop,
+          onStopFailure: _recordNativeStopFailure,
+        );
         _audioOutputLease = lease;
         _audioOutputStartInFlight = true;
         try {
@@ -631,18 +698,30 @@ class ClientLiveAudioPipeline {
   }
 }
 
+class _PcmAudioOutputLease {
+  const _PcmAudioOutputLease({
+    required this.onSettlingStart,
+    required this.onStopping,
+    required this.onStopFailure,
+  });
+
+  final void Function(Future<void> settled) onSettlingStart;
+  final void Function(Future<void> stopped) onStopping;
+  final void Function(Object error, StackTrace stack) onStopFailure;
+}
+
 class _PcmAudioOutputCoordinator {
   _PcmAudioOutputCoordinator(this._output);
 
   final PcmAudioSink _output;
-  final Set<Object> _cancelledOwners = HashSet<Object>.identity();
-  Object? _activeOwner;
-  Object? _startingOwner;
+  final _cancelledOwners = HashSet<_PcmAudioOutputLease>.identity();
+  _PcmAudioOutputLease? _activeOwner;
+  _PcmAudioOutputLease? _startingOwner;
   Future<void>? _settlingStart;
   Completer<void>? _settlingCompleter;
 
   Future<void> start({
-    required Object owner,
+    required _PcmAudioOutputLease owner,
     required int sampleRate,
     required int channels,
     required Duration timeout,
@@ -653,14 +732,15 @@ class _PcmAudioOutputCoordinator {
     _settlingCompleter = settle;
     _settlingStart = settle.future;
     _startingOwner = owner;
+    owner.onSettlingStart(settle.future);
 
     final previousOwner = _activeOwner;
     _activeOwner = null;
     if (previousOwner != null && !identical(previousOwner, owner)) {
-      await _stopNative(timeout);
+      await _stopNative(previousOwner, timeout);
     }
     if (_cancelledOwners.contains(owner)) {
-      await _stopNative(timeout);
+      await _stopNative(owner, timeout);
       _finishStart(owner, settle);
       throw StateError('PCM audio output start was cancelled.');
     }
@@ -672,6 +752,7 @@ class _PcmAudioOutputCoordinator {
         channels: channels,
       );
     } catch (_) {
+      await _stopNative(owner, timeout);
       _finishStart(owner, settle);
       rethrow;
     }
@@ -680,7 +761,7 @@ class _PcmAudioOutputCoordinator {
       await nativeStart.timeout(timeout);
     } on TimeoutException {
       _cancelledOwners.add(owner);
-      unawaited(_stopNative(timeout));
+      unawaited(_stopNative(owner, timeout));
       unawaited(_settleLateStart(
         owner: owner,
         operation: nativeStart,
@@ -689,12 +770,13 @@ class _PcmAudioOutputCoordinator {
       ));
       rethrow;
     } catch (_) {
+      await _stopNative(owner, timeout);
       _finishStart(owner, settle);
       rethrow;
     }
 
     if (_cancelledOwners.contains(owner)) {
-      await _stopNative(timeout);
+      await _stopNative(owner, timeout);
       _finishStart(owner, settle);
       throw StateError('PCM audio output start was cancelled.');
     }
@@ -703,28 +785,29 @@ class _PcmAudioOutputCoordinator {
   }
 
   Future<void> stop({
-    required Object owner,
+    required _PcmAudioOutputLease owner,
     required Duration timeout,
   }) async {
     if (identical(_startingOwner, owner)) {
       _cancelledOwners.add(owner);
-      await _stopNative(timeout);
+      await _stopNative(owner, timeout);
       return;
     }
     if (!identical(_activeOwner, owner)) return;
     _activeOwner = null;
-    await _stopNative(timeout);
+    await _stopNative(owner, timeout);
   }
 
   Future<bool> write({
-    required Object owner,
+    required _PcmAudioOutputLease owner,
     required Uint8List pcm16le,
   }) async {
     if (!identical(_activeOwner, owner)) return false;
     return _output.write(pcm16le);
   }
 
-  Future<Map<String, Object?>> status({required Object owner}) async {
+  Future<Map<String, Object?>> status(
+      {required _PcmAudioOutputLease owner}) async {
     if (!identical(_activeOwner, owner)) return const {};
     return _output.status();
   }
@@ -744,7 +827,7 @@ class _PcmAudioOutputCoordinator {
   }
 
   Future<void> _settleLateStart({
-    required Object owner,
+    required _PcmAudioOutputLease owner,
     required Future<void> operation,
     required Completer<void> settle,
     required Duration timeout,
@@ -755,17 +838,19 @@ class _PcmAudioOutputCoordinator {
       // The start failed after its caller timed out. The native stop below is
       // still required because platform calls can fail after partial setup.
     }
-    await _stopNative(timeout);
+    await _stopNative(owner, timeout);
     _finishStart(owner, settle);
   }
 
-  Future<void> _stopNative(Duration timeout) async {
-    try {
-      await _output.stop().timeout(timeout);
-    } catch (_) {}
+  Future<void> _stopNative(_PcmAudioOutputLease owner, Duration timeout) {
+    final stopped = Future<void>.sync(_output.stop).timeout(timeout).catchError(
+          (Object error, StackTrace stack) => owner.onStopFailure(error, stack),
+        );
+    owner.onStopping(stopped);
+    return stopped;
   }
 
-  void _finishStart(Object owner, Completer<void> settle) {
+  void _finishStart(_PcmAudioOutputLease owner, Completer<void> settle) {
     _cancelledOwners.remove(owner);
     if (identical(_startingOwner, owner)) _startingOwner = null;
     if (identical(_settlingCompleter, settle)) {

@@ -228,6 +228,7 @@ class _LatestAlertCard extends StatelessWidget {
 
 class _VideoPanel extends StatelessWidget {
   const _VideoPanel({
+    required this.runtime,
     required this.session,
     required this.activeStream,
     required this.error,
@@ -243,6 +244,7 @@ class _VideoPanel extends StatelessWidget {
     required this.retryBusy,
   });
 
+  final ClientRuntime runtime;
   final PairingSession? session;
   final ActiveStreamSession? activeStream;
   final Object? error;
@@ -279,6 +281,7 @@ class _VideoPanel extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             _StreamSurface(
+              runtime: runtime,
               session: session,
               activeStream: activeStream,
               audioEnabled: audioEnabled,

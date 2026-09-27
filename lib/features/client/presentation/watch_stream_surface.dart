@@ -2,6 +2,7 @@ part of '../media/watch_screen.dart';
 
 class _StreamSurface extends StatefulWidget {
   const _StreamSurface({
+    required this.runtime,
     required this.session,
     required this.activeStream,
     required this.audioEnabled,
@@ -14,6 +15,7 @@ class _StreamSurface extends StatefulWidget {
     required this.retryBusy,
   });
 
+  final ClientRuntime runtime;
   final PairingSession? session;
   final ActiveStreamSession? activeStream;
   final bool audioEnabled;
@@ -33,6 +35,8 @@ class _StreamSurfaceState extends State<_StreamSurface>
     with WidgetsBindingObserver {
   ClientMediaStreamSupervisor? _supervisor;
   WebRtcClientMediaSupervisor? _webRtcSupervisor;
+  Future<void> Function()? _releaseSupervisor;
+  Future<void> Function()? _releaseWebRtcSupervisor;
   Uint8List? _latestFrame;
   Object? _streamError;
   String? _streamKey;
@@ -47,6 +51,9 @@ class _StreamSurfaceState extends State<_StreamSurface>
   @override
   void didUpdateWidget(covariant _StreamSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.runtime, widget.runtime)) {
+      _stopLocalSupervisors();
+    }
     _syncSupervisor();
   }
 
@@ -131,6 +138,10 @@ class _StreamSurfaceState extends State<_StreamSurface>
   }
 
   void _syncSupervisor() {
+    if (widget.runtime.isDisposed) {
+      _stopLocalSupervisors();
+      return;
+    }
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
     if (lifecycleState != null && lifecycleState != AppLifecycleState.resumed) {
       _stopLocalSupervisors();
@@ -147,15 +158,8 @@ class _StreamSurfaceState extends State<_StreamSurface>
       _updateAudioPlayback(activeStream);
       return;
     }
+    _stopLocalSupervisors();
     _streamKey = nextKey;
-    final previous = _supervisor;
-    _supervisor = null;
-    previous?.cancelImmediately();
-    unawaited(previous?.stop());
-    final previousWebRtc = _webRtcSupervisor;
-    _webRtcSupervisor = null;
-    unawaited(previousWebRtc?.stop());
-    _latestFrame = null;
     _streamError = null;
     if (session == null || activeStream == null) {
       if (mounted) setState(() {});
@@ -177,6 +181,10 @@ class _StreamSurfaceState extends State<_StreamSurface>
           widget.onFatalError(error);
         },
       );
+      final owner = widget.runtime;
+      final teardown = supervisor.stop;
+      if (!owner.registerMediaTeardown(teardown)) return;
+      _releaseWebRtcSupervisor = () => owner.unregisterMediaTeardown(teardown);
       _webRtcSupervisor = supervisor;
       unawaited(supervisor.start().catchError((Object error) {
         if (!mounted || !identical(_webRtcSupervisor, supervisor)) return;
@@ -215,6 +223,14 @@ class _StreamSurfaceState extends State<_StreamSurface>
         widget.onFatalError(failure);
       },
     );
+    final owner = widget.runtime;
+    Future<void> teardown() {
+      supervisor.cancelImmediately();
+      return supervisor.terminate();
+    }
+
+    if (!owner.registerMediaTeardown(teardown)) return;
+    _releaseSupervisor = () => owner.unregisterMediaTeardown(teardown);
     _supervisor = supervisor;
     unawaited(supervisor.start().catchError((Object error) {
       if (!mounted || !identical(_supervisor, supervisor)) return;
@@ -226,13 +242,16 @@ class _StreamSurfaceState extends State<_StreamSurface>
 
   void _stopLocalSupervisors() {
     _streamKey = null;
-    final supervisor = _supervisor;
     _supervisor = null;
-    supervisor?.cancelImmediately();
-    unawaited(supervisor?.stop());
-    final webRtcSupervisor = _webRtcSupervisor;
+    final release = _releaseSupervisor;
+    _releaseSupervisor = null;
+    if (release != null) unawaited(release().catchError((_) {}));
     _webRtcSupervisor = null;
-    unawaited(webRtcSupervisor?.stop());
+    final releaseWebRtc = _releaseWebRtcSupervisor;
+    _releaseWebRtcSupervisor = null;
+    if (releaseWebRtc != null) {
+      unawaited(releaseWebRtc().catchError((_) {}));
+    }
     _latestFrame = null;
   }
 

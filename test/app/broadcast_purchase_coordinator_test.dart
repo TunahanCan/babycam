@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miucam/app/broadcast_purchase_coordinator.dart';
+import 'package:miucam/core/network/retry_policy.dart';
 import 'package:miucam/core/protocol/pairing_payload.dart';
 import 'package:miucam/core/protocol/pairing_session.dart';
 import 'package:miucam/features/client/client_runtime.dart';
@@ -18,6 +19,126 @@ import '../support/license_token_fixture.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('inactive client role cannot attach rooms, inherit grants or check out',
+      () async {
+    final h = await _Harness.create(clientActive: false);
+    try {
+      h.coordinator.attachSession(_session('A'));
+      expect(await h.coordinator.purchaseForRoom(_session('A')), isNull);
+      await h.coordinator.onForeground();
+      await h.coordinator.retryPending();
+      expect(h.remote.supportReads, 0);
+      expect(h.remote.snapshotReads, 0);
+      expect(h.remote.activated, isEmpty);
+      expect(h.gateway.purchases, 0);
+    } finally {
+      await h.coordinator.dispose();
+    }
+  });
+
+  test('leaving client role cancels retries until a fresh session is attached',
+      () async {
+    final h = await _Harness.create(
+      activationRetryPolicy: ExponentialBackoffPolicy(
+        initialDelay: const Duration(milliseconds: 10),
+        maxDelay: const Duration(milliseconds: 10),
+      ),
+    );
+    h.remote.offline = true;
+    try {
+      await h.coordinator.purchaseForRoom(_session('A'));
+      await _until(() => !h.coordinator.operationInProgress);
+      h.coordinator.setClientActive(false);
+      final attempts = h.remote.activationAttempts;
+      expect(h.remote.cancellations, 1);
+      await h.coordinator.onForeground();
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      expect(h.remote.activationAttempts, attempts);
+      expect(h.preferences.getStringList('broadcast_purchase.pending_rooms'),
+          ['A']);
+
+      h.remote.offline = false;
+      h.coordinator.setClientActive(true);
+      await h.coordinator.retryPending();
+      expect(h.remote.activationAttempts, attempts,
+          reason: 'A previous role session must never be resurrected.');
+      h.coordinator.attachSession(_session('A', token: 'current-parent'));
+      await _until(() => h.remote.activated.isNotEmpty);
+      expect(h.remote.activated.single.sessionToken, 'current-parent');
+      expect(h.gateway.purchases, 1);
+    } finally {
+      await h.coordinator.dispose();
+    }
+  });
+
+  test('checkout finishing in server role keeps payment but does no room work',
+      () async {
+    final h = await _Harness.create();
+    h.gateway.hold = Completer<void>();
+    try {
+      final purchase = h.coordinator.purchaseForRoom(_session('A'));
+      await h.gateway.entered.future;
+      final reads = h.remote.snapshotReads;
+      h.coordinator.setClientActive(false);
+      h.gateway.hold!.complete();
+      expect(await purchase, isNull);
+      await h.coordinator.onForeground();
+      expect(h.access.licenseToken, h.token);
+      expect(h.gateway.disposed, isFalse);
+      expect(h.remote.snapshotReads, reads);
+      expect(h.remote.activated, isEmpty);
+      expect(h.preferences.getStringList('broadcast_purchase.pending_rooms'),
+          ['A']);
+
+      h.coordinator.setClientActive(true);
+      h.coordinator.attachSession(_session('A', token: 'new-parent-session'));
+      await _until(() => h.remote.activated.isNotEmpty);
+      expect(h.remote.activated.single.sessionToken, 'new-parent-session');
+      expect(h.gateway.purchases, 1);
+    } finally {
+      await h.coordinator.dispose();
+    }
+  });
+
+  test('reentering client role cannot resume an old checkout preflight',
+      () async {
+    final h = await _Harness.create();
+    h.remote.holdSupport = Completer<void>();
+    try {
+      final purchase = h.coordinator.purchaseForRoom(_session('A'));
+      await h.remote.supportEntered.future;
+      h.coordinator.setClientActive(false);
+      h.coordinator.setClientActive(true);
+      h.coordinator.attachSession(_session('A', token: 'new-session'));
+      h.remote.holdSupport!.complete();
+      expect(await purchase, isNull);
+      expect(h.gateway.purchases, 0);
+      expect(h.remote.activated, isEmpty);
+    } finally {
+      await h.coordinator.dispose();
+    }
+  });
+
+  test('late room inheritance cannot apply a grant after leaving client role',
+      () async {
+    final h = await _Harness.create();
+    h.remote.roomSnapshots['A'] = _locked.copyWith(unlocked: true);
+    h.remote.roomTokens['A'] = h.token;
+    h.remote.holdFirstSnapshot = Completer<void>();
+    try {
+      h.coordinator.attachSession(_session('A'));
+      await h.remote.snapshotEntered.future;
+      h.coordinator.setClientActive(false);
+      h.remote.holdFirstSnapshot!.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(h.remote.licenseReads, 0);
+      expect(h.access.licenseToken, isNull);
+      expect(h.coordinator.stateFor('A').phase, ParentPurchasePhase.ready);
+    } finally {
+      await h.coordinator.dispose();
+    }
+  });
 
   test('forgetting a room during preflight prevents checkout', () async {
     final h = await _Harness.create();
@@ -461,6 +582,8 @@ class _Harness {
   static Future<_Harness> create(
       {bool keyConfigured = true,
       bool legacy = false,
+      bool clientActive = true,
+      RetryPolicy? activationRetryPolicy,
       PendingRoomActivationRepository? pendingActivations}) async {
     SharedPreferences.setMockInitialValues(legacy
         ? {
@@ -488,6 +611,8 @@ class _Harness {
       remote: remote,
       licenseVerifier: verifier,
       licenseVerificationConfigured: keyConfigured,
+      clientActive: clientActive,
+      activationRetryPolicy: activationRetryPolicy,
     );
     await access.snapshot();
     await Future<void>.delayed(Duration.zero);
@@ -543,7 +668,10 @@ class _Gateway extends BroadcastPurchaseGateway
   Future<void> dispose() async => disposed = true;
 }
 
-class _Remote implements RoomBroadcastAccessGateway {
+class _Remote
+    implements
+        RoomBroadcastAccessGateway,
+        CancelableRoomBroadcastAccessGateway {
   bool supported = true;
   bool offline = false;
   final activated = <PairingSession>[];
@@ -553,6 +681,10 @@ class _Remote implements RoomBroadcastAccessGateway {
   String? revokedToken;
   String? rejectedToken;
   int snapshotReads = 0;
+  int supportReads = 0;
+  int licenseReads = 0;
+  int activationAttempts = 0;
+  int cancellations = 0;
   final snapshotEntered = Completer<void>();
   Completer<void>? holdFirstSnapshot;
   final roomSnapshots = <String, BroadcastAccessSnapshot>{};
@@ -560,7 +692,11 @@ class _Remote implements RoomBroadcastAccessGateway {
   Completer<void>? holdSupport;
   final supportEntered = Completer<void>();
   @override
+  void cancelPendingRequests() => cancellations++;
+
+  @override
   Future<bool> supportsActivation(PairingSession session) async {
+    supportReads++;
     if (!supportEntered.isCompleted) supportEntered.complete();
     await holdSupport?.future;
     return supported;
@@ -576,11 +712,15 @@ class _Remote implements RoomBroadcastAccessGateway {
   }
 
   @override
-  Future<String?> readLicense(PairingSession session) async =>
-      roomTokens[session.deviceId];
+  Future<String?> readLicense(PairingSession session) async {
+    licenseReads++;
+    return roomTokens[session.deviceId];
+  }
+
   @override
   Future<BroadcastAccessSnapshot> activate(
       PairingSession session, String licenseToken) async {
+    activationAttempts++;
     if (offline) throw StateError('Room disconnected after checkout');
     activated.add(session);
     activationTokens.add(licenseToken);
